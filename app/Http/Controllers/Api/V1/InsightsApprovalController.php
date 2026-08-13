@@ -8,6 +8,7 @@ use App\Http\Controllers\Controller;
 use App\Models\Approval;
 use App\Models\Space;
 use App\Support\ApprovalVoider;
+use App\Support\Workspace;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Validation\ValidationException;
@@ -42,7 +43,7 @@ class InsightsApprovalController extends Controller
      */
     private function sent(Request $request): array
     {
-        $spaces = $request->user()->spaces()
+        $spaces = Workspace::owner($request->user())->spaces()
             ->where('approval_enabled', true)
             ->with(['items.driveFile', 'items.approvals.client'])
             ->latest('updated_at')
@@ -120,7 +121,7 @@ class InsightsApprovalController extends Controller
         ]);
 
         $approval->load(['spaceItem.space', 'notes']);
-        abort_unless($approval->spaceItem->space->user_id === $request->user()->id, 404);
+        abort_unless($approval->spaceItem->space->user_id === Workspace::owner($request->user())->id, 404);
 
         if ($approval->notes->contains('author_type', NoteAuthor::Owner)) {
             throw ValidationException::withMessages([
@@ -141,7 +142,7 @@ class InsightsApprovalController extends Controller
      */
     public function reset(Request $request, Space $space): JsonResponse
     {
-        abort_unless($space->user_id === $request->user()->id, 404);
+        abort_unless($space->user_id === Workspace::owner($request->user())->id, 404);
 
         return response()->json([
             'data' => ['reset' => ApprovalVoider::resetSpace($space)],

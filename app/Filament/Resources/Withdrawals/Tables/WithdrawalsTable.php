@@ -26,6 +26,9 @@ class WithdrawalsTable
                 TextColumn::make('user.name')
                     ->label('Creator')
                     ->searchable(),
+                TextColumn::make('wallet')
+                    ->badge()
+                    ->color(fn (string $state): string => $state === 'affiliate' ? 'warning' : 'gray'),
                 TextColumn::make('amount')
                     ->money('IDR', 1)
                     ->sortable(),
@@ -100,6 +103,11 @@ class WithdrawalsTable
 
                         // A new credit, not an undo: the debit stays on the
                         // record so the history says what happened.
+                        //
+                        // The wallet comes from the row, never a default —
+                        // returning an affiliate payout into the sales
+                        // balance would be money in the wrong place, and
+                        // nothing downstream would notice.
                         Wallet::credit(
                             $record->user,
                             WalletTransactionType::WithdrawalFailedCredit,
@@ -107,6 +115,7 @@ class WithdrawalsTable
                             'withdrawal',
                             $record->id,
                             $data['reason'],
+                            wallet: $record->wallet,
                         );
 
                         Notification::make()

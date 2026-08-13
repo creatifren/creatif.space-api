@@ -115,6 +115,22 @@ class Space extends Model
         return $this->hasMany(SpaceItem::class)->orderBy('sort_order');
     }
 
+    /**
+     * @return HasMany<SpaceEvent, $this>
+     */
+    public function events(): HasMany
+    {
+        return $this->hasMany(SpaceEvent::class);
+    }
+
+    /**
+     * @return HasMany<SpaceDailyStat, $this>
+     */
+    public function dailyStats(): HasMany
+    {
+        return $this->hasMany(SpaceDailyStat::class);
+    }
+
     public function isPublished(): bool
     {
         return $this->status === SpaceStatus::Published;

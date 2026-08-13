@@ -4,6 +4,7 @@ namespace App\Services;
 
 use App\Enums\DriveAccountStatus;
 use App\Models\DriveAccount;
+use GuzzleHttp\Psr7\Utils;
 use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Support\Facades\Http;
 use RuntimeException;
@@ -21,6 +22,8 @@ class GoogleDriveService
     private const TOKEN_URL = 'https://oauth2.googleapis.com/token';
 
     private const API = 'https://www.googleapis.com/drive/v3';
+
+    private const UPLOAD = 'https://www.googleapis.com/upload/drive/v3';
 
     public const FILE_FIELDS = 'id,name,mimeType,size,md5Checksum,version,thumbnailLink,parents,trashed,imageMediaMetadata';
 
@@ -110,6 +113,89 @@ class GoogleDriveService
             'files' => $response->json('files', []),
             'nextPageToken' => $response->json('nextPageToken'),
         ];
+    }
+
+    /**
+     * Put one file into a folder the owner picked — the File Request path,
+     * and the only place this app ever writes to someone's Drive.
+     *
+     * Resumable rather than multipart: the bytes are already a temp file on
+     * disk, and streaming them keeps a 100 MB submission out of PHP's
+     * memory. Two calls — ask for a session, then PUT the body at the URL
+     * Google hands back.
+     *
+     * drive.file reaches this folder because the owner chose it in the
+     * Picker; a folder we were never given stays invisible, which is the
+     * scope working, not a bug.
+     *
+     * Verified live against a folder this app created. The Picker-chosen
+     * case follows the same grant but has not been exercised end-to-end —
+     * a null return here on a real request is the first place to look.
+     *
+     * Returns the new file's provider id, or null when Drive refused — the
+     * folder was deleted, or the grant no longer covers it.
+     *
+     * @throws ConnectionException
+     */
+    public function upload(
+        DriveAccount $account,
+        string $folderId,
+        string $path,
+        string $name,
+        string $mimeType,
+    ): ?string {
+        $token = $this->accessToken($account);
+        $size = filesize($path);
+
+        if ($size === false) {
+            throw new RuntimeException("Cannot read upload at {$path}.");
+        }
+
+        $start = Http::withToken($token)
+            ->withHeaders([
+                'X-Upload-Content-Type' => $mimeType,
+                'X-Upload-Content-Length' => (string) $size,
+            ])
+            ->post(self::UPLOAD.'/files?uploadType=resumable', [
+                'name' => $name,
+                'parents' => [$folderId],
+            ]);
+
+        if (in_array($start->status(), [401, 403, 404], true)) {
+            return null;
+        }
+
+        $start->throw();
+
+        $session = $start->header('Location');
+
+        if ($session === '') {
+            return null;
+        }
+
+        $handle = fopen($path, 'r');
+
+        if ($handle === false) {
+            throw new RuntimeException("Cannot open upload at {$path}.");
+        }
+
+        // A PSR-7 stream, not the raw contents: 100 MB must never be a
+        // string in memory. Utils::streamFor closes the handle with it.
+        $stream = Utils::streamFor($handle);
+
+        try {
+            $finish = Http::withToken($token)
+                ->withBody($stream, $mimeType)
+                ->put($session);
+        } finally {
+            $stream->close();
+        }
+
+        if ($finish->failed()) {
+            return null;
+        }
+
+        return $finish->json('id');
     }
 
     private function markReconnectNeeded(DriveAccount $account): void

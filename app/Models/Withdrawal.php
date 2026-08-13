@@ -15,6 +15,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
  * @property int $id
  * @property string $ulid
  * @property int $user_id
+ * @property string $wallet
  * @property int $amount
  * @property string $bank_code
  * @property string $account_number
@@ -35,6 +36,7 @@ class Withdrawal extends Model
     public const MINIMUM = 50_000;
 
     protected $fillable = [
+        'wallet',
         'amount',
         'bank_code',
         'account_number',

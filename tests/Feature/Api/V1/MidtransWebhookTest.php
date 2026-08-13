@@ -2,8 +2,11 @@
 
 use App\Enums\InvoiceStatus;
 use App\Enums\SubscriptionStatus;
+use App\Models\Affiliate;
+use App\Models\Commission;
 use App\Models\Invoice;
 use App\Models\Plan;
+use App\Models\Referral;
 use App\Models\Subscription;
 use App\Models\User;
 use App\Notifications\SubscriptionStarted;
@@ -208,5 +211,55 @@ describe('failure', function () {
         ))->assertOk();
 
         expect($invoice->refresh()->status)->toBe(InvoiceStatus::Failed);
+    });
+});
+
+describe('affiliate commission', function () {
+    it('earns twelve parts when the customer was referred', function () {
+        Notification::fake();
+        [$user, , $invoice] = pendingCheckout();
+
+        $affiliate = Affiliate::factory()->approved()->create();
+        Referral::factory()->for($affiliate)->create([
+            'referred_user_id' => $user->id,
+        ]);
+
+        $this->postJson('/api/v1/webhooks/midtrans', midtransPayload($invoice->midtrans_order_id))
+            ->assertOk();
+
+        $rows = Commission::query()->get();
+        expect($rows)->toHaveCount(12)
+            // 20% of 94.000, whole rupiah, nothing lost in the split.
+            ->and($rows->sum('amount'))->toBe(18_800)
+            ->and($affiliate->fresh()->paid_referrals_count)->toBe(1);
+    });
+
+    it('creates no thirteenth row however many times Midtrans retries', function () {
+        Notification::fake();
+        [$user, , $invoice] = pendingCheckout();
+
+        $affiliate = Affiliate::factory()->approved()->create();
+        Referral::factory()->for($affiliate)->create([
+            'referred_user_id' => $user->id,
+        ]);
+
+        $payload = midtransPayload($invoice->midtrans_order_id);
+        $this->postJson('/api/v1/webhooks/midtrans', $payload)->assertOk();
+        $this->postJson('/api/v1/webhooks/midtrans', $payload)->assertOk();
+
+        // The settled invoice absorbs the repeat before the engine is even
+        // reached; the unique index is the second line of defence.
+        expect(Commission::query()->count())->toBe(12)
+            ->and($affiliate->fresh()->paid_referrals_count)->toBe(1);
+    });
+
+    it('earns nothing on a payment nobody referred', function () {
+        Notification::fake();
+        [, , $invoice] = pendingCheckout();
+
+        $this->postJson('/api/v1/webhooks/midtrans', midtransPayload($invoice->midtrans_order_id))
+            ->assertOk();
+
+        expect(Commission::query()->count())->toBe(0);
     });
 });

@@ -16,6 +16,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
  * @property int $id
  * @property string $ulid
  * @property int $user_id
+ * @property string $wallet
  * @property WalletTransactionType $type
  * @property int $amount
  * @property int $balance_after
@@ -34,6 +35,7 @@ class WalletTransaction extends Model
 
     protected $fillable = [
         'user_id',
+        'wallet',
         'type',
         'amount',
         'balance_after',

@@ -1,9 +1,12 @@
 <?php
 
+use App\Http\Controllers\Api\V1\AffiliateController;
+use App\Http\Controllers\Api\V1\AnalyticsController;
 use App\Http\Controllers\Api\V1\ApprovalController;
 use App\Http\Controllers\Api\V1\DriveAccountController;
 use App\Http\Controllers\Api\V1\DriveFileController;
 use App\Http\Controllers\Api\V1\EarningController;
+use App\Http\Controllers\Api\V1\FileRequestController;
 use App\Http\Controllers\Api\V1\HandleController;
 use App\Http\Controllers\Api\V1\InsightsApprovalController;
 use App\Http\Controllers\Api\V1\MeController;
@@ -12,10 +15,13 @@ use App\Http\Controllers\Api\V1\MyProfileController;
 use App\Http\Controllers\Api\V1\NotificationController;
 use App\Http\Controllers\Api\V1\OfferController;
 use App\Http\Controllers\Api\V1\OrderController;
+use App\Http\Controllers\Api\V1\PublicFileRequestController;
 use App\Http\Controllers\Api\V1\PublicProfileController;
 use App\Http\Controllers\Api\V1\PublicSpaceController;
 use App\Http\Controllers\Api\V1\SpaceController;
+use App\Http\Controllers\Api\V1\SpaceEventController;
 use App\Http\Controllers\Api\V1\SubscriptionController;
+use App\Http\Controllers\Api\V1\TeamController;
 use Illuminate\Support\Facades\Route;
 
 // Public
@@ -36,6 +42,28 @@ Route::get('/profiles/{handle}/spaces/{slug}', [PublicSpaceController::class, 's
 Route::post('/profiles/{handle}/spaces/{slug}/unlock', [PublicSpaceController::class, 'unlock'])
     ->middleware('throttle:10,1')
     ->name('api.v1.profiles.spaces.unlock');
+
+// A referral link was opened. Answers 204 whatever the code was: an
+// unknown one must not tell a stranger which codes exist.
+Route::post('/referrals/{code}/click', [AffiliateController::class, 'click'])
+    ->middleware('throttle:30,1')
+    ->name('api.v1.referrals.click');
+
+// File Request — the link a stranger opens. No account by design, so the
+// throttle and the size caps are the whole defence.
+Route::get('/r/{slug}', [PublicFileRequestController::class, 'show'])
+    ->name('api.v1.file-requests.public');
+Route::post('/r/{slug}/submissions', [PublicFileRequestController::class, 'store'])
+    ->middleware('throttle:5,1')
+    ->name('api.v1.file-requests.submit');
+
+// The analytics beacon. Deliberately unguarded: it is called from the
+// visitor's browser, and most visitors are strangers. Adding auth:client
+// here would silence it for nearly everyone — the guard still resolves on
+// its own when the visitor happens to be signed in.
+Route::post('/spaces/{space}/events', SpaceEventController::class)
+    ->middleware('throttle:60,1')
+    ->name('api.v1.spaces.events');
 
 // The client approving in someone else's Space — the `client` guard, not
 // the creator's. Same gates as the viewer: 404 → 410 → 423.
@@ -75,6 +103,14 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('/files', [DriveFileController::class, 'index'])->name('api.v1.files.index');
     Route::get('/files/{driveFile}', [DriveFileController::class, 'show'])->name('api.v1.files.show');
 
+    // File Request — the owner's side
+    Route::get('/file-requests', [FileRequestController::class, 'index'])->name('api.v1.file-requests.index');
+    Route::post('/file-requests', [FileRequestController::class, 'store'])
+        ->middleware('throttle:20,1')
+        ->name('api.v1.file-requests.store');
+    Route::patch('/file-requests/{fileRequest}', [FileRequestController::class, 'update'])->name('api.v1.file-requests.update');
+    Route::delete('/file-requests/{fileRequest}', [FileRequestController::class, 'destroy'])->name('api.v1.file-requests.destroy');
+
     // Spaces
     Route::get('/spaces', [SpaceController::class, 'index'])->name('api.v1.spaces.index');
     Route::post('/spaces', [SpaceController::class, 'store'])->name('api.v1.spaces.store');
@@ -98,6 +134,9 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::patch('/offers/{offer}', [OfferController::class, 'update'])->name('api.v1.offers.update');
     Route::delete('/offers/{offer}', [OfferController::class, 'destroy'])->name('api.v1.offers.destroy');
 
+    // Analytics — Insights → Analytics
+    Route::get('/me/analytics', AnalyticsController::class)->name('api.v1.me.analytics');
+
     // Earnings — Insights → Orders
     Route::get('/me/earnings', [EarningController::class, 'summary'])->name('api.v1.me.earnings');
     Route::get('/me/orders', [EarningController::class, 'orders'])->name('api.v1.me.orders');
@@ -106,11 +145,28 @@ Route::middleware('auth:sanctum')->group(function () {
         ->middleware('throttle:10,1')
         ->name('api.v1.me.withdrawals.store');
 
+    // Team — Settings → Team. The owner's screen; a seat cannot invite.
+    Route::get('/team/members', [TeamController::class, 'index'])->name('api.v1.team.index');
+    Route::post('/team/members', [TeamController::class, 'store'])
+        ->middleware('throttle:20,1')
+        ->name('api.v1.team.store');
+    Route::patch('/team/members/{teamMember}', [TeamController::class, 'update'])->name('api.v1.team.update');
+    Route::delete('/team/members/{teamMember}', [TeamController::class, 'destroy'])->name('api.v1.team.destroy');
+
+    // Affiliate — /referral, hidden by a 404 until somebody is approved
+    Route::get('/me/affiliate', [AffiliateController::class, 'show'])->name('api.v1.me.affiliate');
+    Route::post('/affiliates/apply', [AffiliateController::class, 'apply'])
+        ->middleware('throttle:5,1')
+        ->name('api.v1.affiliates.apply');
+
     // Subscription — Settings → Subscription
     Route::get('/me/subscription', [SubscriptionController::class, 'show'])->name('api.v1.me.subscription');
     Route::post('/me/subscription/checkout', [SubscriptionController::class, 'checkout'])
         ->middleware('throttle:10,1')
         ->name('api.v1.me.subscription.checkout');
+    Route::post('/me/subscription/seats', [SubscriptionController::class, 'seats'])
+        ->middleware('throttle:10,1')
+        ->name('api.v1.me.subscription.seats');
     Route::post('/me/subscription/cancel', [SubscriptionController::class, 'cancel'])->name('api.v1.me.subscription.cancel');
     Route::get('/me/invoices', [SubscriptionController::class, 'invoices'])->name('api.v1.me.invoices');
 

@@ -15,6 +15,7 @@
         "laravel/sanctum": "^4.0",
         "laravel/socialite": "^5.29",
         "laravel/tinker": "^3.0",
+        "resend/resend-laravel": "*",
         "spatie/laravel-permission": "^8.3"
     },
     "require-dev": {

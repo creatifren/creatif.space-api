@@ -21,6 +21,7 @@ class WithdrawalResource extends JsonResource
     {
         return [
             'id' => $this->ulid,
+            'wallet' => $this->wallet,
             'amount' => $this->amount,
             'bank_code' => $this->bank_code,
             'account_masked' => $this->maskedAccount(),

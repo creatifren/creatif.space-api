@@ -16,16 +16,26 @@ use RuntimeException;
  * rule §3). `balance_after` is written alongside for auditing — if it ever
  * disagrees with the sum, the sum is the truth and the row is the evidence
  * of when things went wrong.
+ *
+ * Two wallets since Fase 6: `main` is what selling earns, `affiliate` is
+ * commission, and the product promises they stay apart. Every sum below is
+ * scoped by wallet — a total that spans both is nobody's balance, which is
+ * why doing the sum anywhere else is not allowed.
  */
 final class Wallet
 {
+    public const MAIN = 'main';
+
+    public const AFFILIATE = 'affiliate';
+
     /**
-     * What this user can withdraw right now.
+     * What this user can withdraw from one wallet right now.
      */
-    public static function balance(User $user): int
+    public static function balance(User $user, string $wallet = self::MAIN): int
     {
         return (int) WalletTransaction::query()
             ->where('user_id', $user->id)
+            ->where('wallet', $wallet)
             ->sum('amount');
     }
 
@@ -40,12 +50,13 @@ final class Wallet
         ?string $referenceType = null,
         ?int $referenceId = null,
         ?string $note = null,
+        string $wallet = self::MAIN,
     ): WalletTransaction {
         if ($amount <= 0) {
             throw new RuntimeException('A credit must be positive.');
         }
 
-        return self::write($user, $type, $amount, $referenceType, $referenceId, $note);
+        return self::write($user, $type, $amount, $referenceType, $referenceId, $note, $wallet);
     }
 
     /**
@@ -63,12 +74,13 @@ final class Wallet
         ?string $referenceType = null,
         ?int $referenceId = null,
         ?string $note = null,
+        string $wallet = self::MAIN,
     ): WalletTransaction {
         if ($amount <= 0) {
             throw new RuntimeException('A debit must be positive.');
         }
 
-        return self::write($user, $type, -$amount, $referenceType, $referenceId, $note);
+        return self::write($user, $type, -$amount, $referenceType, $referenceId, $note, $wallet);
     }
 
     /**
@@ -81,14 +93,18 @@ final class Wallet
         ?string $referenceType,
         ?int $referenceId,
         ?string $note,
+        string $wallet,
     ): WalletTransaction {
         return DB::transaction(function () use (
-            $user, $type, $signedAmount, $referenceType, $referenceId, $note
+            $user, $type, $signedAmount, $referenceType, $referenceId, $note, $wallet
         ) {
             // Lock this user's ledger for the length of the write, so the
-            // balance we check is the balance we act on.
+            // balance we check is the balance we act on. Scoped to the one
+            // wallet: an affiliate payout must not read a total that has
+            // sales money in it, and must not queue behind one either.
             $current = (int) WalletTransaction::query()
                 ->where('user_id', $user->id)
+                ->where('wallet', $wallet)
                 ->lockForUpdate()
                 ->sum('amount');
 
@@ -100,6 +116,7 @@ final class Wallet
 
             return WalletTransaction::query()->create([
                 'user_id' => $user->id,
+                'wallet' => $wallet,
                 'type' => $type,
                 'amount' => $signedAmount,
                 'balance_after' => $after,

@@ -58,6 +58,9 @@ class PublicSpaceResource extends JsonResource
         }
 
         return [
+            // The beacon needs something to POST to, and the ULID is the
+            // only id that ever leaves the server.
+            'id' => $this->ulid,
             'title' => $this->title,
             'slug' => $this->slug,
             'owner' => [

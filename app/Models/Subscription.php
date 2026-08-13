@@ -21,6 +21,8 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
  * @property BillingPeriod $billing_period
  * @property SubscriptionStatus $status
  * @property int $seats
+ * @property int|null $seats_pending
+ * @property int|null $seats_at_renewal
  * @property CarbonImmutable|null $current_period_start
  * @property CarbonImmutable|null $current_period_end
  * @property CarbonImmutable|null $grace_ends_at
@@ -58,6 +60,8 @@ class Subscription extends Model
             'billing_period' => BillingPeriod::class,
             'status' => SubscriptionStatus::class,
             'seats' => 'integer',
+            'seats_pending' => 'integer',
+            'seats_at_renewal' => 'integer',
             'current_period_start' => 'datetime',
             'current_period_end' => 'datetime',
             'grace_ends_at' => 'datetime',

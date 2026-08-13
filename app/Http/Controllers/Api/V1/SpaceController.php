@@ -10,6 +10,7 @@ use App\Models\DriveFile;
 use App\Models\Space;
 use App\Models\SpaceItem;
 use App\Support\PlanQuota;
+use App\Support\Workspace;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -30,7 +31,7 @@ class SpaceController extends Controller
         ]);
 
         $tab = $validated['tab'] ?? 'all';
-        $user = $request->user();
+        $user = Workspace::owner($request->user());
 
         $query = $user->spaces()->with(['items.driveFile'])->latest('updated_at');
 
@@ -56,13 +57,14 @@ class SpaceController extends Controller
      */
     public function store(Request $request): JsonResponse
     {
+        abort_unless(Workspace::canWrite($request->user()), 403);
         $validated = $request->validate([
             'title' => ['required', 'string', 'max:255'],
             'purpose' => ['required', 'string', 'in:portfolio,approval'],
             'view_mode' => ['required', 'string', 'in:editorial,grid,board'],
         ]);
 
-        $user = $request->user();
+        $user = Workspace::owner($request->user());
 
         if (! PlanQuota::canCreate($user)) {
             throw ValidationException::withMessages([
@@ -93,7 +95,7 @@ class SpaceController extends Controller
      */
     public function show(Request $request, Space $space): SpaceResource
     {
-        abort_unless($space->user_id === $request->user()->id, 404);
+        abort_unless($space->user_id === Workspace::owner($request->user())->id, 404);
 
         return new SpaceResource($space->load('items.driveFile'));
     }
@@ -104,7 +106,8 @@ class SpaceController extends Controller
      */
     public function update(Request $request, Space $space): SpaceResource
     {
-        abort_unless($space->user_id === $request->user()->id, 404);
+        abort_unless($space->user_id === Workspace::owner($request->user())->id, 404);
+        abort_unless(Workspace::canWrite($request->user()), 403);
 
         $validated = $request->validate([
             'title' => ['sometimes', 'string', 'max:255'],
@@ -180,7 +183,8 @@ class SpaceController extends Controller
      */
     public function publish(Request $request, Space $space): SpaceResource
     {
-        abort_unless($space->user_id === $request->user()->id, 404);
+        abort_unless($space->user_id === Workspace::owner($request->user())->id, 404);
+        abort_unless(Workspace::canWrite($request->user()), 403);
 
         if (! $space->isPublished()) {
             if (! PlanQuota::canPublish($request->user())) {
@@ -201,7 +205,8 @@ class SpaceController extends Controller
 
     public function unpublish(Request $request, Space $space): SpaceResource
     {
-        abort_unless($space->user_id === $request->user()->id, 404);
+        abort_unless($space->user_id === Workspace::owner($request->user())->id, 404);
+        abort_unless(Workspace::canWrite($request->user()), 403);
 
         $space->forceFill(['status' => SpaceStatus::Draft])->save();
 
@@ -210,7 +215,8 @@ class SpaceController extends Controller
 
     public function archive(Request $request, Space $space): SpaceResource
     {
-        abort_unless($space->user_id === $request->user()->id, 404);
+        abort_unless($space->user_id === Workspace::owner($request->user())->id, 404);
+        abort_unless(Workspace::canWrite($request->user()), 403);
 
         $space->forceFill([
             'status' => SpaceStatus::Archived,
@@ -226,7 +232,8 @@ class SpaceController extends Controller
      */
     public function reactivate(Request $request, Space $space): SpaceResource
     {
-        abort_unless($space->user_id === $request->user()->id, 404);
+        abort_unless($space->user_id === Workspace::owner($request->user())->id, 404);
+        abort_unless(Workspace::canWrite($request->user()), 403);
 
         if ($space->published_at !== null) {
             if (! PlanQuota::canPublish($request->user())) {
@@ -247,9 +254,10 @@ class SpaceController extends Controller
      */
     public function duplicate(Request $request, Space $space): JsonResponse
     {
-        abort_unless($space->user_id === $request->user()->id, 404);
+        abort_unless($space->user_id === Workspace::owner($request->user())->id, 404);
+        abort_unless(Workspace::canWrite($request->user()), 403);
 
-        $user = $request->user();
+        $user = Workspace::owner($request->user());
 
         if (! PlanQuota::canCreate($user)) {
             throw ValidationException::withMessages([
@@ -326,7 +334,8 @@ class SpaceController extends Controller
      */
     public function destroy(Request $request, Space $space): JsonResponse
     {
-        abort_unless($space->user_id === $request->user()->id, 404);
+        abort_unless($space->user_id === Workspace::owner($request->user())->id, 404);
+        abort_unless(Workspace::canWrite($request->user()), 403);
 
         $request->validate(['revoke_access' => ['sometimes', 'boolean']]);
 

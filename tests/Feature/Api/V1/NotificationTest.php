@@ -15,7 +15,9 @@ describe('preferences', function () {
         $response = $this->actingAs(User::factory()->create())
             ->getJson('/api/v1/me/notification-preferences')
             ->assertOk()
-            ->assertJsonCount(5, 'data');
+            // Every switchable type. Fase 6 added "files received" —
+            // money notifications stay deliberately absent.
+            ->assertJsonCount(count(NotificationType::switchable()), 'data');
 
         expect($response->json('data.0.type'))->toBe('approval.decided')
             ->and($response->json('data.0.email_enabled'))->toBeTrue();

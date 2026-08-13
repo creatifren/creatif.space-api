@@ -13,6 +13,7 @@ use App\Models\Subscription;
 use App\Notifications\OrderPaid;
 use App\Notifications\SubscriptionStarted;
 use App\Services\MidtransService;
+use App\Support\CommissionEngine;
 use App\Support\Wallet;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -82,6 +83,9 @@ class MidtransWebhookController extends Controller
 
             if ($outcome === 'paid') {
                 $this->activate($invoice->subscription);
+                // Whoever referred this customer earns on the payment —
+                // twelve parts, written once, released a month apart.
+                CommissionEngine::forInvoice($invoice);
             }
         });
 
@@ -173,6 +177,15 @@ class MidtransWebhookController extends Controller
                 ? $from->addYear()
                 : $from->addMonth(),
             'grace_ends_at' => null,
+            // Two pending seat changes can be waiting, and they resolve in
+            // this order: seats just bought take effect because the money
+            // has now arrived; otherwise a release takes effect because a
+            // new period is exactly what it was waiting for.
+            'seats' => $subscription->seats_pending
+                ?? $subscription->seats_at_renewal
+                ?? $subscription->seats,
+            'seats_pending' => null,
+            'seats_at_renewal' => null,
         ])->save();
     }
 }

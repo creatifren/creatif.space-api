@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Api\V1;
 use App\Http\Controllers\Controller;
 use App\Http\Resources\DriveFileResource;
 use App\Models\DriveFile;
+use App\Support\Workspace;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
 
@@ -28,7 +29,7 @@ class DriveFileController extends Controller
         ]);
 
         $query = DriveFile::query()
-            ->whereHas('account', fn ($q) => $q->where('user_id', $request->user()->id))
+            ->whereHas('account', fn ($q) => $q->where('user_id', Workspace::owner($request->user())->id))
             ->whereNull('trashed_at')
             ->with('account');
 
@@ -72,7 +73,7 @@ class DriveFileController extends Controller
     public function show(Request $request, DriveFile $driveFile): DriveFileResource
     {
         abort_unless(
-            $driveFile->account->user_id === $request->user()->id,
+            $driveFile->account->user_id === Workspace::owner($request->user())->id,
             404,
         );
 

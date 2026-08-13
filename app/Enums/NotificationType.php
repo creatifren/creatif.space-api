@@ -13,6 +13,7 @@ enum NotificationType: string
     case ApprovalDecided = 'approval.decided';
     case ApprovalCancelled = 'approval.cancelled';
     case SpaceOpened = 'space.opened';
+    case FilesReceived = 'files.received';
     case WeeklyDigest = 'digest.weekly';
     case ProductNews = 'product.news';
 
@@ -35,6 +36,7 @@ enum NotificationType: string
             self::ApprovalDecided,
             self::ApprovalCancelled,
             self::SpaceOpened,
+            self::FilesReceived,
             self::WeeklyDigest,
             self::ProductNews,
         ];

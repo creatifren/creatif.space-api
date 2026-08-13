@@ -10,6 +10,7 @@ use App\Http\Resources\OrderResource;
 use App\Http\Resources\WithdrawalResource;
 use App\Models\Withdrawal;
 use App\Support\Wallet;
+use App\Support\Workspace;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
@@ -28,6 +29,7 @@ class EarningController extends Controller
      */
     public function summary(Request $request): JsonResponse
     {
+        Workspace::ownerOnly($request->user());
         $user = $request->user();
 
         $paid = $user->orders()->where('status', OrderStatus::Paid);
@@ -59,6 +61,8 @@ class EarningController extends Controller
      */
     public function orders(Request $request): AnonymousResourceCollection
     {
+        Workspace::ownerOnly($request->user());
+
         return OrderResource::collection(
             $request->user()->orders()
                 ->with(['offer', 'client', 'space'])
@@ -70,6 +74,8 @@ class EarningController extends Controller
 
     public function withdrawals(Request $request): AnonymousResourceCollection
     {
+        Workspace::ownerOnly($request->user());
+
         return WithdrawalResource::collection(
             $request->user()->withdrawals()->latest('id')->limit(50)->get(),
         );
@@ -81,24 +87,31 @@ class EarningController extends Controller
      */
     public function withdraw(Request $request): JsonResponse
     {
+        Workspace::ownerOnly($request->user());
         $validated = $request->validate([
             'amount' => ['required', 'integer', 'min:'.Withdrawal::MINIMUM],
             'bank_code' => ['required', 'string', 'max:20'],
             'account_number' => ['required', 'string', 'max:40'],
             'account_name' => ['required', 'string', 'max:255'],
+            // Sales and affiliate commission are separate balances, so they
+            // are separate payouts — one cannot be spent out of the other.
+            'wallet' => ['sometimes', 'string', 'in:main,affiliate'],
         ]);
 
         $user = $request->user();
+        $wallet = $validated['wallet'] ?? Wallet::MAIN;
 
-        if ($validated['amount'] > Wallet::balance($user)) {
+        if ($validated['amount'] > Wallet::balance($user, $wallet)) {
             throw ValidationException::withMessages([
                 'amount' => 'That’s more than your balance.',
             ]);
         }
 
-        // One at a time: a second request while the first is in flight would
-        // be paid out of a balance the first already spent.
+        // One at a time per wallet: a second request while the first is in
+        // flight would be paid out of a balance the first already spent.
+        // Scoped, or an affiliate payout would block a sales payout.
         $inFlight = $user->withdrawals()
+            ->where('wallet', $wallet)
             ->whereIn('status', [WithdrawalStatus::Pending, WithdrawalStatus::Processing])
             ->exists();
 
@@ -108,8 +121,9 @@ class EarningController extends Controller
             ]);
         }
 
-        $withdrawal = DB::transaction(function () use ($user, $validated) {
+        $withdrawal = DB::transaction(function () use ($user, $validated, $wallet) {
             $withdrawal = $user->withdrawals()->create([
+                'wallet' => $wallet,
                 'amount' => $validated['amount'],
                 'bank_code' => $validated['bank_code'],
                 'account_number' => $validated['account_number'],
@@ -125,6 +139,7 @@ class EarningController extends Controller
                 $withdrawal->amount,
                 'withdrawal',
                 $withdrawal->id,
+                wallet: $wallet,
             );
 
             return $withdrawal;

@@ -23,6 +23,9 @@ class ReservedHandleSeeder extends Seeder
             'home', 'files', 'spaces', 'space-editor', 'insights', 'profile',
             'settings', 'referral', 'foundations', 'components', 'public-profile',
             'space-viewer', 'studio',
+            // File Request links live at /r/{slug} — a creator holding the
+            // handle "r" would collide with every one of them.
+            'r', 'req',
 
             // Infrastructure & app
             'admin', 'api', 'auth', 'webhooks', 'app', 'dashboard', 'www',

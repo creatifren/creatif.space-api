@@ -71,12 +71,20 @@ return [
     |--------------------------------------------------------------------------
     |
     | Here you may specify the default timezone for your application, which
-    | will be used by the PHP date and date-time functions. The timezone
-    | is set to "UTC" by default as it is suitable for most use cases.
+    | will be used by the PHP date and date-time functions.
+    |
+    | Asia/Jakarta, not UTC: every customer is in Indonesia, and this is the
+    | timezone the product speaks in. Analytics groups traffic by hour and
+    | prints the zone in its own caption, so a server on UTC would draw the
+    | "when clients open your links" chart seven hours out and label it
+    | correctly at the same time — wrong in the least visible way.
+    |
+    | Stored timestamps are unaffected in meaning: they are absolute either
+    | way. What changes is which day and which hour a moment is filed under.
     |
     */
 
-    'timezone' => 'UTC',
+    'timezone' => env('APP_TIMEZONE', 'Asia/Jakarta'),
 
     /*
     |--------------------------------------------------------------------------

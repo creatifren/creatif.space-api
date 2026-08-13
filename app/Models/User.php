@@ -123,6 +123,14 @@ class User extends Authenticatable implements FilamentUser
     }
 
     /**
+     * @return HasMany<FileRequest, $this>
+     */
+    public function fileRequests(): HasMany
+    {
+        return $this->hasMany(FileRequest::class);
+    }
+
+    /**
      * @return HasMany<NotificationPreference, $this>
      */
     public function notificationPreferences(): HasMany
@@ -171,6 +179,36 @@ class User extends Authenticatable implements FilamentUser
     public function withdrawals(): HasMany
     {
         return $this->hasMany(Withdrawal::class);
+    }
+
+    /**
+     * The seats on this person's own Team plan.
+     *
+     * @return HasMany<TeamMember, $this>
+     */
+    public function teamMembers(): HasMany
+    {
+        return $this->hasMany(TeamMember::class, 'owner_id');
+    }
+
+    /**
+     * Their side of the affiliate program, if they applied at all.
+     *
+     * @return HasOne<Affiliate, $this>
+     */
+    public function affiliate(): HasOne
+    {
+        return $this->hasOne(Affiliate::class);
+    }
+
+    /**
+     * How this person came to be a customer — null for almost everyone.
+     *
+     * @return HasOne<Referral, $this>
+     */
+    public function referral(): HasOne
+    {
+        return $this->hasOne(Referral::class, 'referred_user_id');
     }
 
     /**
