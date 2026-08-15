@@ -3,6 +3,7 @@
 use App\Http\Controllers\Api\V1\AffiliateController;
 use App\Http\Controllers\Api\V1\AnalyticsController;
 use App\Http\Controllers\Api\V1\ApprovalController;
+use App\Http\Controllers\Api\V1\DeliveryLogController;
 use App\Http\Controllers\Api\V1\DriveAccountController;
 use App\Http\Controllers\Api\V1\DriveFileController;
 use App\Http\Controllers\Api\V1\EarningController;
@@ -139,6 +140,10 @@ Route::middleware('auth:sanctum')->group(function () {
 
     // Earnings — Insights → Orders
     Route::get('/me/earnings', [EarningController::class, 'summary'])->name('api.v1.me.earnings');
+
+    // Proof of delivery. Deliberately not gated on a plan: "on every plan"
+    // is what the screen promises, and evidence is not an upsell.
+    Route::get('/me/deliveries', DeliveryLogController::class)->name('api.v1.me.deliveries');
     Route::get('/me/orders', [EarningController::class, 'orders'])->name('api.v1.me.orders');
     Route::get('/me/withdrawals', [EarningController::class, 'withdrawals'])->name('api.v1.me.withdrawals');
     Route::post('/me/withdrawals', [EarningController::class, 'withdraw'])

@@ -10,6 +10,7 @@ use App\Http\Controllers\Controller;
 use App\Models\Invoice;
 use App\Models\Order;
 use App\Models\Subscription;
+use App\Notifications\InvoiceFailed;
 use App\Notifications\OrderPaid;
 use App\Notifications\SubscriptionStarted;
 use App\Services\MidtransService;
@@ -89,9 +90,25 @@ class MidtransWebhookController extends Controller
             }
         });
 
+        /*
+         * Notified outside the transaction, like the paid branch below it:
+         * a queued notification must not be dispatched from inside a write
+         * that could still roll back.
+         */
         if ($outcome === 'paid') {
             $subscription = $invoice->subscription->fresh()->load('plan');
             $subscription->user->notify(new SubscriptionStarted($subscription, $invoice));
+        }
+
+        /*
+         * Money that did not arrive is news too. Both branches are worth
+         * sending: 'failed' is a refusal the owner can retry, 'expired' is a
+         * window that closed. Until now neither said anything, so a lapsing
+         * plan was first noticed when a feature stopped working.
+         */
+        if (in_array($outcome, ['failed', 'expired'], true)) {
+            $invoice->load('subscription.plan', 'subscription.user');
+            $invoice->subscription->user->notify(new InvoiceFailed($invoice));
         }
 
         return response()->json(['message' => 'ok']);

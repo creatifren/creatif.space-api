@@ -80,7 +80,42 @@ class SpaceEventController extends Controller
             $this->tellTheOwner($space, $client?->user_id);
         }
 
+        $this->stampDelivery($space, $type, $crawler['is_crawler']);
+
         return response()->json(null, 204);
+    }
+
+    /**
+     * The delivery log's milestones, written onto the Space itself.
+     *
+     * The raw event above answers the same question, but PruneSpaceEvents
+     * drops it after 90 days and the log promises a record that outlives the
+     * Space entirely. So the first open and the first download are copied to
+     * columns that nothing prunes.
+     *
+     * First-write-wins on both: the card asks when the work was delivered,
+     * not how many times it was looked at. Crawlers never count — GPTBot
+     * fetching a page is not a client opening it.
+     */
+    private function stampDelivery(Space $space, SpaceEventType $type, bool $isCrawler): void
+    {
+        if ($isCrawler) {
+            return;
+        }
+
+        if ($type === SpaceEventType::View && $space->first_opened_at === null) {
+            $space->forceFill(['first_opened_at' => now()])->save();
+
+            return;
+        }
+
+        if ($type === SpaceEventType::Download && $space->first_downloaded_at === null) {
+            $space->forceFill([
+                'first_downloaded_at' => now(),
+                // How much was taken, so the line can read "24 files · 13 Jul".
+                'downloaded_files' => $space->items()->count(),
+            ])->save();
+        }
     }
 
     /**

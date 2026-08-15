@@ -31,7 +31,10 @@ class DriveFileController extends Controller
         $query = DriveFile::query()
             ->whereHas('account', fn ($q) => $q->where('user_id', Workspace::owner($request->user())->id))
             ->whereNull('trashed_at')
-            ->with('account');
+            // spaceItems.space feeds the "in a Space" chip and the filter that
+            // asks about it. Eager-loaded, so it is two extra queries for the
+            // whole page rather than two per row.
+            ->with(['account', 'spaceItems.space']);
 
         if (($validated['search'] ?? null) !== null && $validated['search'] !== '') {
             $query->where('name', 'like', '%'.str_replace(['%', '_'], ['\%', '\_'], $validated['search']).'%');
@@ -77,6 +80,8 @@ class DriveFileController extends Controller
             404,
         );
 
-        return new DriveFileResource($driveFile->load('account'));
+        return new DriveFileResource(
+            $driveFile->load(['account', 'spaceItems.space']),
+        );
     }
 }

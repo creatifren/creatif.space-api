@@ -78,8 +78,10 @@ it('soft deletes and frees the total slot', function () {
     $user = User::factory()->create();
     Space::factory()->for($user)->count(10)->create();
 
+    // No revoke_access: this test is about the quota slot, and the flag is
+    // now refused outright (see SpaceTest) rather than silently ignored.
     $this->actingAs($user)
-        ->deleteJson('/api/v1/spaces/'.$user->spaces()->first()->ulid, ['revoke_access' => true])
+        ->deleteJson('/api/v1/spaces/'.$user->spaces()->first()->ulid)
         ->assertNoContent();
 
     expect($user->spaces()->count())->toBe(9)

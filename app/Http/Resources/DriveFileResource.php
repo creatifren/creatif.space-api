@@ -31,6 +31,22 @@ class DriveFileResource extends JsonResource
             'exif' => $this->exif,
             'access_lost' => $this->access_lost_at !== null,
             'last_synced_at' => $this->last_synced_at,
+
+            /* The Spaces this file appears in — the drawer's "Used in Space"
+             * chips and the list's "in a Space" pill. Guarded by whenLoaded so
+             * a caller that forgets the eager load gets no key rather than a
+             * silent query per row. A file can sit in one Space twice, in
+             * different sections, so ids are made unique before they become
+             * chips. */
+            'spaces' => $this->whenLoaded('spaceItems', fn () => $this->spaceItems
+                ->pluck('space')
+                ->filter()
+                ->unique('id')
+                ->values()
+                ->map(fn ($space) => [
+                    'id' => $space->ulid,
+                    'title' => $space->title,
+                ])),
         ];
     }
 }

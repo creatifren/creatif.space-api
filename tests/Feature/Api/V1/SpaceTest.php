@@ -189,6 +189,36 @@ describe('update', function () {
             ->assertUnprocessable();
     });
 
+    it('refuses revoke_access rather than accepting it and doing nothing', function () {
+        $user = User::factory()->create();
+        $space = Space::factory()->for($user)->create();
+
+        // The old behaviour: 204, and the caller believes Drive sharing was
+        // withdrawn. Nothing had been withdrawn — nothing was ever granted.
+        $this->actingAs($user)
+            ->deleteJson("/api/v1/spaces/{$space->ulid}", ['revoke_access' => true])
+            ->assertStatus(422)
+            ->assertJsonValidationErrors('revoke_access');
+
+        expect($space->fresh())->not->toBeNull();
+    });
+
+    it('still deletes when revoke_access is absent or false', function () {
+        $user = User::factory()->create();
+        $a = Space::factory()->for($user)->create();
+        $b = Space::factory()->for($user)->create();
+
+        $this->actingAs($user)->deleteJson("/api/v1/spaces/{$a->ulid}")->assertNoContent();
+        $this->actingAs($user)
+            ->deleteJson("/api/v1/spaces/{$b->ulid}", ['revoke_access' => false])
+            ->assertNoContent();
+
+        // Soft deleted: "the link dies; history stays", so the row survives
+        // and only the trashed scope can still see it.
+        expect($a->fresh()->trashed())->toBeTrue()
+            ->and($b->fresh()->trashed())->toBeTrue();
+    });
+
     it('404s for foreign spaces on every endpoint', function () {
         $foreign = Space::factory()->create();
         $me = User::factory()->create();

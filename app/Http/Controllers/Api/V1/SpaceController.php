@@ -327,17 +327,32 @@ class SpaceController extends Controller
     }
 
     /**
-     * Soft delete. The link dies; history stays. `revoke_access` accepted
-     * but a no-op: with drive.file scope we never touched Drive sharing,
-     * so there is nothing to revoke yet. TODO when Drive permission
-     * management lands.
+     * Soft delete. The link dies; history stays.
+     *
+     * `revoke_access` used to be validated here and then never read: a client
+     * could send `true`, get a 204 back, and reasonably conclude that Drive
+     * sharing had been withdrawn. Nothing had happened. A security-relevant
+     * flag that is silently dropped is worse than one that is refused, so it
+     * is now refused — 422 with a sentence saying why.
+     *
+     * The reason it cannot be honoured is structural, not a missing feature:
+     * with the `drive.file` scope Crefile never grants Drive sharing in the
+     * first place (there is no permissions call anywhere in
+     * GoogleDriveService), and public Spaces render cached thumbnail URLs
+     * rather than the Drive file itself. There is nothing to revoke. If
+     * per-file permission management ever lands, this becomes real work; it
+     * should not pretend to be done until then.
      */
     public function destroy(Request $request, Space $space): JsonResponse
     {
         abort_unless($space->user_id === Workspace::owner($request->user())->id, 404);
         abort_unless(Workspace::canWrite($request->user()), 403);
 
-        $request->validate(['revoke_access' => ['sometimes', 'boolean']]);
+        if ($request->boolean('revoke_access')) {
+            throw ValidationException::withMessages([
+                'revoke_access' => 'Creatif Space never changed this file’s sharing in Drive, so there is nothing here to revoke. Change it in Google Drive itself.',
+            ]);
+        }
 
         $space->delete();
 

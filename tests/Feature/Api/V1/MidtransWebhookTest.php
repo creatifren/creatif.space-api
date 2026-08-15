@@ -1,6 +1,7 @@
 <?php
 
 use App\Enums\InvoiceStatus;
+use App\Enums\NotificationType;
 use App\Enums\SubscriptionStatus;
 use App\Models\Affiliate;
 use App\Models\Commission;
@@ -9,6 +10,7 @@ use App\Models\Plan;
 use App\Models\Referral;
 use App\Models\Subscription;
 use App\Models\User;
+use App\Notifications\InvoiceFailed;
 use App\Notifications\SubscriptionStarted;
 use Illuminate\Support\Facades\Notification;
 
@@ -198,7 +200,8 @@ describe('failure', function () {
             ->and($subscription->refresh()->status)->toBe(SubscriptionStatus::Expired)
             ->and($user->fresh()->plan()->key->value)->toBe('free');
 
-        Notification::assertNothingSent();
+        // The plan must not be entitled — but the owner is still told.
+        Notification::assertNotSentTo($user, SubscriptionStarted::class);
     });
 
     it('records a denial', function () {
@@ -211,6 +214,66 @@ describe('failure', function () {
         ))->assertOk();
 
         expect($invoice->refresh()->status)->toBe(InvoiceStatus::Failed);
+    });
+
+    it('tells the owner when the payment is refused', function () {
+        Notification::fake();
+        [$user, , $invoice] = pendingCheckout();
+
+        $this->postJson('/api/v1/webhooks/midtrans', midtransPayload(
+            $invoice->midtrans_order_id,
+            ['transaction_status' => 'deny'],
+        ))->assertOk();
+
+        Notification::assertSentTo($user, InvoiceFailed::class);
+    });
+
+    it('tells the owner when the payment window closes', function () {
+        Notification::fake();
+        [$user, , $invoice] = pendingCheckout();
+
+        $this->postJson('/api/v1/webhooks/midtrans', midtransPayload(
+            $invoice->midtrans_order_id,
+            ['transaction_status' => 'expire'],
+        ))->assertOk();
+
+        Notification::assertSentTo($user, InvoiceFailed::class);
+    });
+
+    it('says nothing extra while a payment is still pending', function () {
+        Notification::fake();
+        [$user, , $invoice] = pendingCheckout();
+
+        $this->postJson('/api/v1/webhooks/midtrans', midtransPayload(
+            $invoice->midtrans_order_id,
+            ['transaction_status' => 'pending'],
+        ))->assertOk();
+
+        // A bank transfer that has not landed yet is not bad news.
+        Notification::assertNotSentTo($user, InvoiceFailed::class);
+    });
+
+    it('cannot be silenced — billing failure is not a preference', function () {
+        Notification::fake();
+        [$user, , $invoice] = pendingCheckout();
+
+        // Switch off everything the user is allowed to switch off.
+        foreach (NotificationType::switchable() as $type) {
+            $user->notificationPreferences()->create([
+                'type' => $type,
+                'email_enabled' => false,
+                'bell_enabled' => false,
+            ]);
+        }
+
+        $this->postJson('/api/v1/webhooks/midtrans', midtransPayload(
+            $invoice->midtrans_order_id,
+            ['transaction_status' => 'deny'],
+        ))->assertOk();
+
+        Notification::assertSentTo($user, InvoiceFailed::class, function ($notification, array $channels) {
+            return in_array('mail', $channels, true);
+        });
     });
 });
 

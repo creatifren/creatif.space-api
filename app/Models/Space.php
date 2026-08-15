@@ -33,6 +33,9 @@ use Illuminate\Support\Str;
  * @property array<string, mixed>|null $seo
  * @property CarbonImmutable|null $published_at
  * @property CarbonImmutable|null $archived_at
+ * @property CarbonImmutable|null $first_opened_at
+ * @property CarbonImmutable|null $first_downloaded_at
+ * @property int|null $downloaded_files
  * @property CarbonImmutable|null $created_at
  * @property CarbonImmutable|null $updated_at
  */
@@ -81,6 +84,9 @@ class Space extends Model
             'seo' => 'array',
             'published_at' => 'datetime',
             'archived_at' => 'datetime',
+            // Delivery-log milestones: written once, never recomputed.
+            'first_opened_at' => 'datetime',
+            'first_downloaded_at' => 'datetime',
         ];
     }
 

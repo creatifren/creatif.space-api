@@ -17,12 +17,28 @@ return [
     'google' => [
         'client_id' => env('GOOGLE_CLIENT_ID'),
         'client_secret' => env('GOOGLE_CLIENT_SECRET'),
-        'redirect' => env('GOOGLE_REDIRECT_URI', '/auth/google/callback'),
+        /*
+         * All three redirects are env-only, with no fallback on purpose.
+         *
+         * Two of them used to default to http://localhost:8000. A production
+         * deploy that forgot the variable would not fail — it would build a
+         * consent URL pointing at plaintext localhost and send the user
+         * there, which looks like a broken login rather than a missing
+         * config. Worse, these are the values Google matches against the
+         * registered redirect list, so the failure surfaces as an opaque
+         * redirect_uri_mismatch far from its cause.
+         *
+         * Unset now yields null, Google rejects it immediately, and the
+         * missing variable is named in .env.example. Same reasoning as
+         * client_id/client_secret above, which never had fallbacks, and as
+         * MidtransService throwing when its key is absent.
+         */
+        'redirect' => env('GOOGLE_REDIRECT_URI'),
         // Separate callback for the Drive connect flow (scope drive.file).
-        'drive_redirect' => env('GOOGLE_DRIVE_REDIRECT_URI', 'http://localhost:8000/auth/google/drive/callback'),
+        'drive_redirect' => env('GOOGLE_DRIVE_REDIRECT_URI'),
         // Third pass: the client signing in to approve. Identity only — no
         // Drive scope ever travels on this one.
-        'approver_redirect' => env('GOOGLE_APPROVER_REDIRECT_URI', 'http://localhost:8000/auth/google/client/callback'),
+        'approver_redirect' => env('GOOGLE_APPROVER_REDIRECT_URI'),
     ],
 
     // Payments — subscription checkout (Snap) and its webhook. The server
