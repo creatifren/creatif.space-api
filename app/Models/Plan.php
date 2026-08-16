@@ -74,6 +74,19 @@ class Plan extends Model
     }
 
     /**
+     * The backing string, not the enum case. `getRouteKey()` defaults to
+     * `getAttribute('key')`, which the cast hands back as a PlanKey object —
+     * and every URL built from it (Filament's row Edit links, route('...',
+     * $plan), redirects) dies stringifying it. Casting the column and routing
+     * on it is the combination that needs this; without it /admin/plans
+     * cannot render a single row.
+     */
+    public function getRouteKey(): string
+    {
+        return $this->key->value;
+    }
+
+    /**
      * @return HasMany<Subscription, $this>
      */
     public function subscriptions(): HasMany

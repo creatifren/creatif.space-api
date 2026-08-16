@@ -6,6 +6,7 @@ use App\Enums\UserStatus;
 use App\Http\Controllers\Controller;
 use App\Models\User;
 use App\Support\ReferralAttribution;
+use App\Support\SafePath;
 use App\Support\TeamInvite;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -32,6 +33,16 @@ class GoogleAuthController extends Controller
 
         if (is_string($code) && $code !== '') {
             $request->session()->put('referral_code', substr($code, 0, 30));
+        }
+
+        // Where they were headed before the guard sent them to /login. Travels
+        // through the session for the same reason as the referral code, and is
+        // checked here as well as on the way back — the value came from a URL
+        // a stranger could have written.
+        $next = $request->query('next');
+
+        if (is_string($next) && $next !== '') {
+            $request->session()->put('next_path', SafePath::of($next));
         }
 
         return Socialite::driver('google')->redirect();
@@ -83,7 +94,19 @@ class GoogleAuthController extends Controller
         Auth::login($user, remember: true);
         request()->session()->regenerate();
 
-        $destination = $user->onboarded_at === null ? '/onboarding' : '/home';
+        /* Where to land. An account that has not been through onboarding goes
+           there whatever it asked for — `next` is a convenience, never a way
+           to skip picking an address. Otherwise honour the page the guard
+           interrupted, checked a second time because a session value is only
+           as trustworthy as what was put in it. */
+        $next = request()->session()->pull('next_path');
+        $wanted = SafePath::of($next);
+
+        $destination = match (true) {
+            $user->onboarded_at === null => '/onboarding',
+            $wanted !== '/' => $wanted,
+            default => '/home',
+        };
 
         return redirect(config('app.frontend_url').$destination);
     }

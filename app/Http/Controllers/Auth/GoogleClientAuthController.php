@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Auth;
 use App\Http\Controllers\Controller;
 use App\Models\Client;
 use App\Models\User;
+use App\Support\SafePath;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response;
@@ -35,7 +36,7 @@ class GoogleClientAuthController extends Controller
         $request->session()->put('client_oauth_state', $state);
         $request->session()->put(
             'client_oauth_return',
-            $this->safeReturn($request->query('return')),
+            SafePath::of($request->query('return')),
         );
 
         return redirect(self::AUTH_URL.'?'.http_build_query([
@@ -54,7 +55,7 @@ class GoogleClientAuthController extends Controller
     public function callback(Request $request): RedirectResponse
     {
         $frontend = config('app.frontend_url');
-        $return = $this->safeReturn($request->session()->pull('client_oauth_return'));
+        $return = SafePath::of($request->session()->pull('client_oauth_return'));
 
         if (
             $request->query('state') !== $request->session()->pull('client_oauth_state')
@@ -117,18 +118,5 @@ class GoogleClientAuthController extends Controller
         Auth::guard('client')->logout();
 
         return response()->noContent();
-    }
-
-    /**
-     * Only ever return to a path on our own frontend. An open redirect here
-     * would let a stranger's link bounce off our domain.
-     */
-    private function safeReturn(mixed $return): string
-    {
-        $path = is_string($return) ? $return : '';
-
-        return str_starts_with($path, '/') && ! str_starts_with($path, '//')
-            ? $path
-            : '/';
     }
 }
