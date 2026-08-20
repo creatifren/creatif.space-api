@@ -28,6 +28,14 @@ class OrderResource extends JsonResource
             'fee_amount' => $this->fee_amount,
             'net_amount' => $this->net_amount,
             'status' => $this->status,
+            /* Only once paid: a pending order's buyer has not bought it yet,
+               and handing out the link early makes checkout decorative. The
+               creator's own listings don't need it — it's their file. */
+            'delivery_url' => $this->when(
+                $this->status === \App\Enums\OrderStatus::Paid
+                    && $request->user('client')?->id === $this->client_id,
+                fn () => $this->deliveryUrl(),
+            ),
             'payment_method' => $this->payment_method,
             'paid_at' => $this->paid_at,
             'created_at' => $this->created_at,

@@ -184,6 +184,41 @@ describe('my profile', function () {
             ->assertJsonPath('data.freelance.status', 'Taking projects');
     });
 
+    it('saves and clears the avatar', function () {
+        $user = User::factory()->create(['avatar_url' => 'https://lh3.googleusercontent.com/x']);
+
+        $this->actingAs($user)
+            ->patchJson('/api/v1/me/profile', ['avatar_url' => 'https://assets.creatif.space/f/abc.jpg'])
+            ->assertOk()
+            ->assertJsonPath('data.avatar_url', 'https://assets.creatif.space/f/abc.jpg');
+
+        $this->actingAs($user)
+            ->patchJson('/api/v1/me/profile', ['avatar_url' => null])
+            ->assertOk()
+            ->assertJsonPath('data.avatar_url', null);
+
+        $this->actingAs($user)
+            ->patchJson('/api/v1/me/profile', ['avatar_url' => 'not-a-url'])
+            ->assertUnprocessable();
+    });
+
+    it('saves and validates the seo override', function () {
+        $user = User::factory()->create();
+
+        $this->actingAs($user)
+            ->patchJson('/api/v1/me/profile', [
+                'seo' => ['title' => 'Rani — Foto', 'description' => 'Wedding photographer.'],
+            ])
+            ->assertOk()
+            ->assertJsonPath('data.seo.title', 'Rani — Foto');
+
+        $this->actingAs($user)
+            ->patchJson('/api/v1/me/profile', [
+                'seo' => ['title' => str_repeat('a', 61)],
+            ])
+            ->assertUnprocessable();
+    });
+
     it('validates locale and field lengths', function () {
         $user = User::factory()->create();
 

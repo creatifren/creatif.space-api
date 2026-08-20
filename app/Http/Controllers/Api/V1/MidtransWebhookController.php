@@ -11,6 +11,7 @@ use App\Models\Invoice;
 use App\Models\Order;
 use App\Models\Subscription;
 use App\Notifications\InvoiceFailed;
+use App\Notifications\OrderDelivered;
 use App\Notifications\OrderPaid;
 use App\Notifications\SubscriptionStarted;
 use App\Services\MidtransService;
@@ -170,6 +171,9 @@ class MidtransWebhookController extends Controller
 
         if ($outcome === 'paid') {
             $order->creator->notify(new OrderPaid($order));
+            // The buyer's side: receipt + the delivery link, if the offer
+            // carries one. Mail-only — a client has no dashboard.
+            $order->client->notify(new OrderDelivered($order));
         }
 
         return response()->json(['message' => 'ok']);

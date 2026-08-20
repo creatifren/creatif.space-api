@@ -125,6 +125,28 @@ class Order extends Model
     }
 
     /**
+     * Where the buyer collects the goods — the offer's `details.source_ref`
+     * (a file link, Drive link, or a private Space address), normalised to
+     * an absolute URL. Null for tips, offers without one, and junk values:
+     * a delivery link that is not a URL is worse than none.
+     */
+    public function deliveryUrl(): ?string
+    {
+        $ref = $this->offer?->details['source_ref'] ?? null;
+
+        if (! is_string($ref) || $ref === '') {
+            return null;
+        }
+
+        // A pasted Space address usually arrives without a scheme.
+        if (! preg_match('/^https?:\/\//i', $ref)) {
+            $ref = 'https://'.$ref;
+        }
+
+        return filter_var($ref, FILTER_VALIDATE_URL) ? $ref : null;
+    }
+
+    /**
      * @return BelongsTo<Space, $this>
      */
     public function space(): BelongsTo

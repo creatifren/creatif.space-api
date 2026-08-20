@@ -8,6 +8,7 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Foundation\Auth\User as Authenticatable;
+use Illuminate\Notifications\Notifiable;
 
 /**
  * Whoever approves. Authenticatable because approving requires signing in
@@ -27,6 +28,10 @@ class Client extends Authenticatable
 {
     /** @use HasFactory<ClientFactory> */
     use HasFactory;
+
+    /* Notifiable for one purpose: the order-delivered email. Clients have no
+       dashboard, so mail is the only channel that reaches them. */
+    use Notifiable;
 
     protected $fillable = [
         'google_id',

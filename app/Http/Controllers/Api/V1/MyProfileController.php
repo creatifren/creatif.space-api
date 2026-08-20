@@ -44,6 +44,12 @@ class MyProfileController extends Controller
             'socials.whatsapp' => ['sometimes', 'nullable', 'string', 'max:32'],
             'appearance' => ['sometimes', 'array'],
 
+            /* Share-card overrides. Limits mirror what the platforms crop
+               at (60/160) and what the Settings screen counts against. */
+            'seo' => ['sometimes', 'nullable', 'array'],
+            'seo.title' => ['sometimes', 'nullable', 'string', 'max:60'],
+            'seo.description' => ['sometimes', 'nullable', 'string', 'max:160'],
+
             /* Freelance-only sections. Values persist in portfolio mode
                ("kept for the trip back") — the public page just omits them. */
             'freelance' => ['sometimes', 'array'],
@@ -78,11 +84,13 @@ class MyProfileController extends Controller
             'categories' => ['sometimes', 'array', 'max:3'],
             'categories.*' => ['string', 'max:40'],
             'cover_url' => ['sometimes', 'nullable', 'url', 'max:2048'],
+            // Set from an uploaded library file's URL; null returns to initials.
+            'avatar_url' => ['sometimes', 'nullable', 'url', 'max:2048'],
         ]);
 
         $user = $request->user();
 
-        $accountFields = array_intersect_key($validated, array_flip(['name', 'locale', 'theme']));
+        $accountFields = array_intersect_key($validated, array_flip(['name', 'locale', 'theme', 'avatar_url']));
         $profileFields = array_diff_key($validated, $accountFields);
 
         $user->fill($accountFields);

@@ -254,6 +254,47 @@ describe('the buyer’s own list', function () {
             ->assertJsonCount(1, 'data')
             ->assertJsonPath('data.0.status', 'paid');
     });
+
+    it('hands a paid buyer the delivery link, and only then', function () {
+        $me = Client::factory()->create();
+        [$user, $offer] = seller([
+            'details' => ['source_ref' => 'creatif.space/rani/noel-preset-files'],
+        ]);
+        Order::factory()->for($me)->for($user, 'creator')->for($offer)->paid()->create();
+        Order::factory()->for($me)->for($user, 'creator')->for($offer)->create(); // pending
+
+        $rows = $this->actingAs($me, 'client')->getJson('/api/v1/orders/mine')
+            ->assertOk()->json('data');
+
+        $paid = collect($rows)->firstWhere('status', 'paid');
+        $pending = collect($rows)->firstWhere('status', 'pending');
+        expect($paid['delivery_url'])->toBe('https://creatif.space/rani/noel-preset-files')
+            ->and($pending)->not->toHaveKey('delivery_url');
+    });
+});
+
+describe('delivery to the buyer', function () {
+    it('emails the buyer their link when the webhook settles', function () {
+        Notification::fake();
+        $me = Client::factory()->create();
+        [$user, $offer] = seller([
+            'details' => ['source_ref' => 'https://drive.google.com/file/d/abc'],
+        ]);
+        $order = Order::factory()->for($me)->for($user, 'creator')->for($offer)->create();
+
+        $this->postJson('/api/v1/webhooks/midtrans', orderPayload($order))->assertOk();
+
+        Notification::assertSentToTimes($me, \App\Notifications\OrderDelivered::class, 1);
+        expect($order->refresh()->deliveryUrl())
+            ->toBe('https://drive.google.com/file/d/abc');
+    });
+
+    it('turns junk source_ref into no link rather than a broken one', function () {
+        [$user, $offer] = seller(['details' => ['source_ref' => 'not a url at all']]);
+        $order = Order::factory()->for($user, 'creator')->for($offer)->paid()->create();
+
+        expect($order->deliveryUrl())->toBeNull();
+    });
 });
 
 describe('offers on the public pages', function () {
