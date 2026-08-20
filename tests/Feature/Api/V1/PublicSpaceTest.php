@@ -1,8 +1,7 @@
 <?php
 
 use App\Enums\UserStatus;
-use App\Models\DriveAccount;
-use App\Models\DriveFile;
+use App\Models\File;
 use App\Models\Handle;
 use App\Models\Space;
 use App\Models\User;
@@ -20,14 +19,11 @@ describe('public space', function () {
     it('serves a published space with sections, dropping hidden and empty blocks', function () {
         $user = User::factory()->create();
         $space = publishedSpaceFor($user);
-        $account = DriveAccount::factory()->for($user)->create();
-        $shown = DriveFile::factory()->for($account, 'account')->create(['name' => 'shown.jpg']);
-        $hidden = DriveFile::factory()->for($account, 'account')->create(['name' => 'hidden.jpg']);
-        $lost = DriveFile::factory()->for($account, 'account')->create(['name' => 'lost.jpg', 'access_lost_at' => now()]);
+        $shown = File::factory()->for($user)->create(['name' => 'shown.jpg']);
+        $hidden = File::factory()->for($user)->create(['name' => 'hidden.jpg']);
 
-        $itemShown = $space->items()->create(['drive_file_id' => $shown->id, 'sort_order' => 0, 'caption' => 'The cup']);
-        $itemHidden = $space->items()->create(['drive_file_id' => $hidden->id, 'sort_order' => 1]);
-        $itemLost = $space->items()->create(['drive_file_id' => $lost->id, 'sort_order' => 2]);
+        $itemShown = $space->items()->create(['file_id' => $shown->id, 'sort_order' => 0, 'caption' => 'The cup']);
+        $itemHidden = $space->items()->create(['file_id' => $hidden->id, 'sort_order' => 1]);
 
         $space->forceFill(['design' => array_merge(Space::emptyDesign(), [
             'sections' => [[
@@ -37,7 +33,6 @@ describe('public space', function () {
                     ['t' => 'text', 'key' => 'empty'],
                     ['t' => 'item', 'id' => $itemShown->ulid],
                     ['t' => 'item', 'id' => $itemHidden->ulid],
-                    ['t' => 'item', 'id' => $itemLost->ulid],
                 ],
             ]],
             'texts' => [
@@ -53,12 +48,12 @@ describe('public space', function () {
         $response = $this->getJson('/api/v1/profiles/rani/spaces/winter-noel')->assertOk();
 
         $blocks = $response->json('data.sections.0.blocks');
-        expect($blocks)->toHaveCount(3) // written text + shown + lost (flagged, not dropped)
+        expect($blocks)->toHaveCount(2) // written text + shown; hidden never ships
             ->and($blocks[0]['type'])->toBe('text')
             ->and($blocks[1]['photo']['name'])->toBe('shown.jpg')
             ->and($blocks[1]['photo']['size'])->toBe('Large')
             ->and($blocks[1]['photo']['caption'])->toBe('The cup')
-            ->and($blocks[2]['photo']['missing'])->toBeTrue();
+            ->and($blocks[1]['photo']['src'])->toBeString()->toContain($shown->path);
 
         expect($response->json('data.owner.handle'))->toBe('rani')
             ->and($response->json('data.layout'))->toBe('grid');

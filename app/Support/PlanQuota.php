@@ -62,6 +62,32 @@ class PlanQuota
     }
 
     /**
+     * Bytes counted against the storage quota. Pending rows count too —
+     * otherwise presigning N huge files in parallel bypasses the check.
+     */
+    public static function storageUsed(User $user): int
+    {
+        return (int) $user->files()
+            ->whereIn('status', [\App\Models\File::STATUS_PENDING, \App\Models\File::STATUS_READY])
+            ->sum('size_bytes');
+    }
+
+    public static function storageLimit(User $user): ?int
+    {
+        return $user->plan()->quota('storage_bytes');
+    }
+
+    /**
+     * Room for $bytes more?
+     */
+    public static function canStore(User $user, int $bytes): bool
+    {
+        $limit = static::storageLimit($user);
+
+        return $limit === null || static::storageUsed($user) + $bytes <= $limit;
+    }
+
+    /**
      * @return array{active_used: int, active_limit: int|null, total_used: int, total_limit: int|null, plan: string}
      */
     public static function meta(User $user): array

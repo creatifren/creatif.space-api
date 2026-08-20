@@ -42,7 +42,7 @@ class ApprovalDecided extends Notification implements ShouldQueue
         $approved = $this->approval->status === ApprovalStatus::Approved;
         $what = $this->count > 1
             ? "{$this->count} files"
-            : $this->approval->spaceItem->driveFile->name;
+            : $this->approval->spaceItem->file->name;
 
         $message = (new MailMessage)
             ->subject(($approved ? 'Approved: ' : 'Revision asked: ').$this->space->title)
@@ -71,7 +71,7 @@ class ApprovalDecided extends Notification implements ShouldQueue
             'space_id' => $this->space->ulid,
             'space_title' => $this->space->title,
             'client_name' => $this->approval->client->displayName(),
-            'file_name' => $this->approval->spaceItem->driveFile->name,
+            'file_name' => $this->approval->spaceItem->file->name,
             'status' => $this->approval->status->value,
             'count' => $this->count,
         ];

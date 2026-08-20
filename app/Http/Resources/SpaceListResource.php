@@ -21,9 +21,8 @@ class SpaceListResource extends JsonResource
     public function toArray(Request $request): array
     {
         $firstPhoto = $this->items->first(
-            fn ($item) => $item->driveFile !== null
-                && ! $item->driveFile->is_folder
-                && $item->driveFile->thumbnail_url !== null,
+            fn ($item) => $item->file !== null
+                && str_starts_with($item->file->mime_type, 'image/'),
         );
 
         return [
@@ -39,7 +38,7 @@ class SpaceListResource extends JsonResource
             'has_password' => $this->password_hash !== null,
             'expires_at' => $this->expires_at,
             'items_count' => $this->items->count(),
-            'cover_url' => $firstPhoto?->driveFile?->thumbnail_url,
+            'cover_url' => $firstPhoto?->file?->url(),
             'published_at' => $this->published_at,
             'updated_at' => $this->updated_at,
         ];

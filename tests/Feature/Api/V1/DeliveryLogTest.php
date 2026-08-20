@@ -4,8 +4,7 @@ use App\Enums\ApprovalStatus;
 use App\Enums\SpaceEventType;
 use App\Models\Approval;
 use App\Models\Client;
-use App\Models\DriveAccount;
-use App\Models\DriveFile;
+use App\Models\File;
 use App\Models\Space;
 use App\Models\SpaceItem;
 use App\Models\User;
@@ -82,14 +81,13 @@ describe('delivery log', function () {
 
     it('groups approvals into one verified mark per client', function () {
         $user = User::factory()->create();
-        $account = DriveAccount::factory()->for($user)->create();
         $space = Space::factory()->for($user)->published()->create();
         $client = Client::factory()->create(['email' => 'andi@winternoel.com']);
 
         // One client signing off three files is one verdict, not three rows.
         foreach (range(1, 3) as $i) {
-            $file = DriveFile::factory()->for($account, 'account')->create();
-            $item = SpaceItem::factory()->for($space)->create(['drive_file_id' => $file->id]);
+            $file = File::factory()->for($user)->create();
+            $item = SpaceItem::factory()->for($space)->create(['file_id' => $file->id]);
             Approval::factory()->for($item, 'spaceItem')->for($client)->create([
                 'status' => ApprovalStatus::Approved,
                 'approved_at' => now()->subDays(4 - $i),
@@ -107,19 +105,18 @@ describe('delivery log', function () {
 
     it('counts only files a client actually approved', function () {
         $user = User::factory()->create();
-        $account = DriveAccount::factory()->for($user)->create();
         $space = Space::factory()->for($user)->published()->create();
         $client = Client::factory()->create();
 
-        $approvedFile = DriveFile::factory()->for($account, 'account')->create();
-        $approvedItem = SpaceItem::factory()->for($space)->create(['drive_file_id' => $approvedFile->id]);
+        $approvedFile = File::factory()->for($user)->create();
+        $approvedItem = SpaceItem::factory()->for($space)->create(['file_id' => $approvedFile->id]);
         Approval::factory()->for($approvedItem, 'spaceItem')->for($client)->create([
             'status' => ApprovalStatus::Approved,
             'approved_at' => now(),
         ]);
 
-        $pendingFile = DriveFile::factory()->for($account, 'account')->create();
-        $pendingItem = SpaceItem::factory()->for($space)->create(['drive_file_id' => $pendingFile->id]);
+        $pendingFile = File::factory()->for($user)->create();
+        $pendingItem = SpaceItem::factory()->for($space)->create(['file_id' => $pendingFile->id]);
         Approval::factory()->for($pendingItem, 'spaceItem')->for($client)->create([
             'status' => ApprovalStatus::Pending,
         ]);
@@ -172,12 +169,11 @@ describe('delivery milestones', function () {
     it('stamps the first download with how much was taken', function () {
         Notification::fake();
         $user = User::factory()->create();
-        $account = DriveAccount::factory()->for($user)->create();
         $space = Space::factory()->for($user)->published()->create();
 
         foreach (range(1, 3) as $i) {
-            $file = DriveFile::factory()->for($account, 'account')->create();
-            SpaceItem::factory()->for($space)->create(['drive_file_id' => $file->id]);
+            $file = File::factory()->for($user)->create();
+            SpaceItem::factory()->for($space)->create(['file_id' => $file->id]);
         }
 
         $this->postJson("/api/v1/spaces/{$space->ulid}/events", [

@@ -1,7 +1,6 @@
 <?php
 
-use App\Models\DriveAccount;
-use App\Models\DriveFile;
+use App\Models\File;
 use App\Models\Space;
 use App\Models\User;
 
@@ -102,15 +101,14 @@ describe('update', function () {
     it('round-trips design with interleaved text and item refs plus items sync', function () {
         $user = User::factory()->create();
         $space = Space::factory()->for($user)->create();
-        $account = DriveAccount::factory()->for($user)->create();
-        $fileA = DriveFile::factory()->for($account, 'account')->create();
-        $fileB = DriveFile::factory()->for($account, 'account')->create();
+        $fileA = File::factory()->for($user)->create();
+        $fileB = File::factory()->for($user)->create();
 
         // First save: two files.
         $response = $this->actingAs($user)->patchJson("/api/v1/spaces/{$space->ulid}", [
             'items' => [
-                ['drive_file_id' => $fileA->ulid, 'section' => 'Hero', 'sort_order' => 0, 'caption' => 'First'],
-                ['drive_file_id' => $fileB->ulid, 'section' => 'Hero', 'sort_order' => 1],
+                ['file_id' => $fileA->ulid, 'section' => 'Hero', 'sort_order' => 0, 'caption' => 'First'],
+                ['file_id' => $fileB->ulid, 'section' => 'Hero', 'sort_order' => 1],
             ],
         ])->assertOk();
 
@@ -136,7 +134,7 @@ describe('update', function () {
         $this->actingAs($user)->patchJson("/api/v1/spaces/{$space->ulid}", [
             'design' => $design,
             'items' => [
-                ['id' => $itemIds[0], 'drive_file_id' => $fileA->ulid, 'section' => 'Hero', 'sort_order' => 0, 'caption' => 'First'],
+                ['id' => $itemIds[0], 'file_id' => $fileA->ulid, 'section' => 'Hero', 'sort_order' => 0, 'caption' => 'First'],
             ],
         ])->assertOk()
             ->assertJsonCount(1, 'data.items')
@@ -146,14 +144,25 @@ describe('update', function () {
         expect($space->items()->count())->toBe(1);
     });
 
-    it('rejects items referencing another users drive file', function () {
+    it('rejects items referencing another users file', function () {
         $user = User::factory()->create();
         $space = Space::factory()->for($user)->create();
-        $foreign = DriveFile::factory()->create();
+        $foreign = File::factory()->create();
 
         $this->actingAs($user)->patchJson("/api/v1/spaces/{$space->ulid}", [
-            'items' => [['drive_file_id' => $foreign->ulid]],
+            'items' => [['file_id' => $foreign->ulid]],
         ])->assertUnprocessable();
+    });
+
+    it('rejects items referencing a file that is not ready yet', function () {
+        $user = User::factory()->create();
+        $space = Space::factory()->for($user)->create();
+        $pending = File::factory()->for($user)->pending()->create();
+
+        $this->actingAs($user)->patchJson("/api/v1/spaces/{$space->ulid}", [
+            'items' => [['file_id' => $pending->ulid]],
+        ])->assertUnprocessable()
+            ->assertJsonPath('errors.items.0', 'One or more files do not exist in your library.');
     });
 
     it('stores password write-only and clears it with null', function () {
@@ -233,10 +242,9 @@ describe('update', function () {
 describe('duplicate', function () {
     it('copies items and remaps design refs with a fresh slug', function () {
         $user = User::factory()->create();
-        $account = DriveAccount::factory()->for($user)->create();
-        $file = DriveFile::factory()->for($account, 'account')->create();
+        $file = File::factory()->for($user)->create();
         $space = Space::factory()->for($user)->published()->passworded()->create(['title' => 'Noel', 'slug' => 'noel']);
-        $item = $space->items()->create(['drive_file_id' => $file->id, 'sort_order' => 0]);
+        $item = $space->items()->create(['file_id' => $file->id, 'sort_order' => 0]);
         $space->forceFill(['design' => array_merge(Space::emptyDesign(), [
             'sections' => [['key' => 's1', 'blocks' => [['t' => 'item', 'id' => $item->ulid]]]],
             'items' => [$item->ulid => ['size' => 'Large']],

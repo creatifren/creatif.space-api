@@ -25,7 +25,7 @@ class ApprovalResource extends JsonResource
         return [
             'id' => $this->ulid,
             'item_id' => $this->spaceItem->ulid,
-            'file_name' => $this->spaceItem->driveFile->name,
+            'file_name' => $this->spaceItem->file->name,
             'status' => $this->status,
             'approved_at' => $this->approved_at,
             'cancelled_reason' => $this->cancelled_reason,

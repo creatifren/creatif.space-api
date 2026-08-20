@@ -12,7 +12,7 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Support\Str;
 
 /**
- * A link that collects files into the owner's Drive.
+ * A link that collects files into the owner's library.
  *
  * @property int $id
  * @property string $ulid
@@ -20,8 +20,6 @@ use Illuminate\Support\Str;
  * @property string $slug
  * @property string $title
  * @property string|null $note
- * @property int $drive_account_id
- * @property string $target_folder_id
  * @property int $max_files
  * @property int $max_mb
  * @property FileRequestStatus $status
@@ -29,7 +27,6 @@ use Illuminate\Support\Str;
  * @property CarbonImmutable|null $created_at
  * @property CarbonImmutable|null $updated_at
  * @property-read User $user
- * @property-read DriveAccount $driveAccount
  */
 class FileRequest extends Model
 {
@@ -48,19 +45,9 @@ class FileRequest extends Model
     protected $fillable = [
         'title',
         'note',
-        'drive_account_id',
-        'target_folder_id',
         'max_files',
         'max_mb',
         'expires_at',
-    ];
-
-    /**
-     * @var list<string>
-     */
-    protected $hidden = [
-        // The folder id is the owner's Drive, not the sender's business.
-        'target_folder_id',
     ];
 
     /**
@@ -100,14 +87,6 @@ class FileRequest extends Model
     public function user(): BelongsTo
     {
         return $this->belongsTo(User::class);
-    }
-
-    /**
-     * @return BelongsTo<DriveAccount, $this>
-     */
-    public function driveAccount(): BelongsTo
-    {
-        return $this->belongsTo(DriveAccount::class);
     }
 
     /**

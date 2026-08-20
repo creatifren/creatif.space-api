@@ -45,7 +45,7 @@ class InsightsApprovalController extends Controller
     {
         $spaces = Workspace::owner($request->user())->spaces()
             ->where('approval_enabled', true)
-            ->with(['items.driveFile', 'items.approvals.client'])
+            ->with(['items.file', 'items.approvals.client'])
             ->latest('updated_at')
             ->get();
 
@@ -86,7 +86,7 @@ class InsightsApprovalController extends Controller
         $approvals = Approval::query()
             ->whereIn('client_id', $clientIds)
             ->whereIn('status', [ApprovalStatus::Approved, ApprovalStatus::Revision])
-            ->with(['spaceItem.space.user.handle', 'spaceItem.driveFile', 'notes'])
+            ->with(['spaceItem.space.user.handle', 'spaceItem.file', 'notes'])
             ->latest('updated_at')
             ->get();
 

@@ -23,8 +23,6 @@ class DriveAccountResource extends JsonResource
             'provider' => $this->provider,
             'email' => $this->email,
             'status' => $this->status,
-            'last_synced_at' => $this->last_synced_at,
-            'files_count' => $this->whenCounted('files'),
             'connected_at' => $this->created_at,
         ];
     }

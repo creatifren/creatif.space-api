@@ -52,7 +52,21 @@ class MyProfileController extends Controller
             'freelance.show_rate' => ['sometimes', 'boolean'],
             'freelance.rates' => ['sometimes', 'array', 'max:5'],
             'freelance.rates.*.unit' => ['required_with:freelance.rates', 'string', 'in:hour,day,month,year,project'],
-            'freelance.rates.*.amount' => ['required_with:freelance.rates', 'nullable', 'integer', 'min:0'],
+            /*
+             * `present`, not `required_with`. A rate row exists for every
+             * unit the owner has touched, and its amount is null until they
+             * type one — "Per hour, switched on, price still blank" is a
+             * normal half-filled form, not an error.
+             *
+             * `required_with` rejected exactly that: it treats null as
+             * absent however `nullable` is spelled after it, so any rate row
+             * with an empty amount failed the whole PATCH — and because this
+             * screen sends one merged patch, a single blank rate took every
+             * other field on the profile down with it. `present` asks only
+             * that the key be there, which the client always sends, and
+             * leaves `nullable` to accept the empty value.
+             */
+            'freelance.rates.*.amount' => ['present', 'nullable', 'integer', 'min:0'],
             'freelance.rates.*.on' => ['sometimes', 'boolean'],
             'freelance.contact_whatsapp' => ['sometimes', 'boolean'],
             'freelance.contact_email' => ['sometimes', 'boolean'],

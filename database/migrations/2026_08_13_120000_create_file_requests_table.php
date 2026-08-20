@@ -8,14 +8,11 @@ return new class extends Migration
 {
     /**
      * "Send me your files" as a link. The other side needs no account —
-     * they open the link, pick files, and the files land in the folder the
-     * owner already chose in the Picker.
+     * they open the link, pick files, and the files land in the owner's
+     * storage under requests/{request_ulid}/.
      *
      * Carries a short `slug` as well as the ULID: this address gets pasted
      * into WhatsApp, and 26 characters of base32 is hostile there.
-     *
-     * The Drive account is restricted rather than cascaded — disconnecting
-     * a Drive must not silently erase the record of what people sent.
      */
     public function up(): void
     {
@@ -26,8 +23,6 @@ return new class extends Migration
             $table->string('slug', 30)->unique();
             $table->string('title');
             $table->text('note')->nullable();
-            $table->foreignId('drive_account_id')->constrained()->restrictOnDelete();
-            $table->string('target_folder_id', 128);
             // Shown to the sender so the page states its own limits rather
             // than failing after the upload has started.
             $table->unsignedTinyInteger('max_files')->default(5);

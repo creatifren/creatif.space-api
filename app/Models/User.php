@@ -115,6 +115,14 @@ class User extends Authenticatable implements FilamentUser
     }
 
     /**
+     * @return HasMany<File, $this>
+     */
+    public function files(): HasMany
+    {
+        return $this->hasMany(File::class);
+    }
+
+    /**
      * @return HasMany<Space, $this>
      */
     public function spaces(): HasMany

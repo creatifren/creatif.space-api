@@ -9,13 +9,13 @@ return new class extends Migration
     /**
      * One delivery: who sent it, and what arrived.
      *
-     * `status` exists because the upload to Drive happens in a job, after
+     * `status` exists because the push to R2 happens in a job, after
      * the sender has already been told their files went through. Without
      * it the owner cannot tell "4 files received" from "4 files still in
      * flight" — and that is the exact sentence the screen renders.
      *
-     * `files` is the JSON list of what landed: name plus the Drive id, so
-     * the owner can be linked straight to the file rather than to a folder.
+     * `files` is the JSON list of what landed: name plus the files-row
+     * ulid, so the owner can be linked straight to the file.
      */
     public function up(): void
     {
@@ -26,7 +26,7 @@ return new class extends Migration
             $table->string('sender_name');
             $table->string('sender_email');
             $table->text('message')->nullable();
-            // [{name, provider_file_id}] — written by the job as each file
+            // [{name, file_id}] — written by the job as each file
             // lands, so a partial upload still shows what got through.
             $table->json('files');
             $table->string('status', 20)->default('uploading');

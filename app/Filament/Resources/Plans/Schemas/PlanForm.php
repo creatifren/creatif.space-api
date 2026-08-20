@@ -45,7 +45,7 @@ class PlanForm
                 KeyValue::make('quotas')
                     ->keyLabel('Limit')
                     ->valueLabel('Ceiling')
-                    ->helperText('Leave a value empty for "no limit". Keys: drives, spaces_total, spaces_active, seats, custom_domains.'),
+                    ->helperText('Leave a value empty for "no limit". Keys: storage_bytes, spaces_total, spaces_active, seats, custom_domains.'),
                 KeyValue::make('features')
                     ->keyLabel('Feature')
                     ->valueLabel('On')

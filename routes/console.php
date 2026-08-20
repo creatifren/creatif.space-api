@@ -3,7 +3,7 @@
 use App\Jobs\AggregateSpaceStats;
 use App\Jobs\ExpireSubscriptions;
 use App\Jobs\PruneSpaceEvents;
-use App\Jobs\RecheckDriveFiles;
+use App\Jobs\PruneStaleUploads;
 use App\Jobs\ReleaseCommissions;
 use Illuminate\Foundation\Inspiring;
 use Illuminate\Support\Facades\Artisan;
@@ -38,13 +38,8 @@ Schedule::job(new PruneSpaceEvents)->dailyAt('02:40');
 Schedule::job(new ReleaseCommissions)->dailyAt('02:55');
 
 /*
- * The Drive re-check: what changed in someone's Drive overnight, and what we
- * can no longer reach. Runs first, at 01:30, because both of the things it
- * discovers are read by screens people open in the morning — a voided
- * approval and a lost file both surface in "Needs Attention".
- *
- * It only selects and dispatches; SyncDriveFile does the work, one queued job
- * per file. So this returns in milliseconds and the actual Drive calls spread
- * across the queue rather than pinning one worker for the whole sweep.
+ * Uploads that were presigned but never completed leave pending rows (and
+ * possibly orphaned R2 objects). A daily sweep is plenty — the presign
+ * window is 15 minutes.
  */
-Schedule::job(new RecheckDriveFiles)->dailyAt('01:30');
+Schedule::job(new PruneStaleUploads)->dailyAt('01:30');

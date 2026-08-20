@@ -4,7 +4,7 @@ namespace App\Http\Controllers\Api\V1;
 
 use App\Http\Controllers\Controller;
 use App\Http\Resources\DriveAccountResource;
-use App\Jobs\SyncDriveFile;
+use App\Jobs\ImportDriveFile;
 use App\Models\DriveAccount;
 use App\Services\GoogleDriveService;
 use Illuminate\Http\JsonResponse;
@@ -15,30 +15,31 @@ use Illuminate\Support\Facades\Gate;
 class DriveAccountController extends Controller
 {
     /**
-     * The user's connected Drives (Settings → Google Drive, onboarding).
+     * The user's connected Drive accounts (Settings → import, Files page).
      */
     public function index(Request $request): AnonymousResourceCollection
     {
         return DriveAccountResource::collection(
-            $request->user()->driveAccounts()->withCount('files')->get(),
+            $request->user()->driveAccounts()->get(),
         );
     }
 
     /**
-     * Register files chosen in the Google Picker: one sync job per id.
-     * The Picker's own metadata is untrusted — jobs re-fetch from Drive.
+     * Import files chosen in the Google Picker: one copy job per id. The
+     * Picker's own metadata is untrusted — jobs re-fetch from Drive. Capped
+     * at 50: each id is a full byte copy now, not a metadata fetch.
      */
     public function pick(Request $request, DriveAccount $driveAccount): JsonResponse
     {
         Gate::allowIf(fn ($user) => $driveAccount->user_id === $user->id);
 
         $validated = $request->validate([
-            'file_ids' => ['required', 'array', 'min:1', 'max:500'],
+            'file_ids' => ['required', 'array', 'min:1', 'max:50'],
             'file_ids.*' => ['string', 'max:128'],
         ]);
 
         foreach (array_unique($validated['file_ids']) as $fileId) {
-            SyncDriveFile::dispatch($driveAccount, $fileId);
+            ImportDriveFile::dispatch($driveAccount, $fileId);
         }
 
         return response()->json(['data' => [
@@ -62,8 +63,8 @@ class DriveAccountController extends Controller
     }
 
     /**
-     * Disconnect a Drive. Metadata rows go with it (cascade); Space items
-     * pointing at them will show "access lost" once Spaces exist.
+     * Disconnect a Drive account. Imported files stay — they are copies on
+     * our storage, not references into the Drive.
      */
     public function destroy(Request $request, DriveAccount $driveAccount): JsonResponse
     {

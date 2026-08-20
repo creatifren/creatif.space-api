@@ -5,7 +5,7 @@ use App\Http\Controllers\Api\V1\AnalyticsController;
 use App\Http\Controllers\Api\V1\ApprovalController;
 use App\Http\Controllers\Api\V1\DeliveryLogController;
 use App\Http\Controllers\Api\V1\DriveAccountController;
-use App\Http\Controllers\Api\V1\DriveFileController;
+use App\Http\Controllers\Api\V1\FileController;
 use App\Http\Controllers\Api\V1\EarningController;
 use App\Http\Controllers\Api\V1\FileRequestController;
 use App\Http\Controllers\Api\V1\HandleController;
@@ -92,7 +92,7 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('/me/profile', [MyProfileController::class, 'show'])->name('api.v1.me.profile.show');
     Route::patch('/me/profile', [MyProfileController::class, 'update'])->name('api.v1.me.profile.update');
 
-    // Crefile — Drive accounts & file browser
+    // Crefile — Drive import accounts (one-way copy into R2, no live sync)
     Route::get('/drive-accounts', [DriveAccountController::class, 'index'])->name('api.v1.drive-accounts.index');
     Route::post('/drive-accounts/{driveAccount}/pick', [DriveAccountController::class, 'pick'])
         ->middleware('throttle:30,1')
@@ -101,8 +101,17 @@ Route::middleware('auth:sanctum')->group(function () {
         ->middleware('throttle:20,1')
         ->name('api.v1.drive-accounts.picker-token');
     Route::delete('/drive-accounts/{driveAccount}', [DriveAccountController::class, 'destroy'])->name('api.v1.drive-accounts.destroy');
-    Route::get('/files', [DriveFileController::class, 'index'])->name('api.v1.files.index');
-    Route::get('/files/{driveFile}', [DriveFileController::class, 'show'])->name('api.v1.files.show');
+
+    // Crefile — the file library (R2-hosted)
+    Route::get('/files', [FileController::class, 'index'])->name('api.v1.files.index');
+    Route::post('/files/presign', [FileController::class, 'presign'])
+        ->middleware('throttle:30,1')
+        ->name('api.v1.files.presign');
+    Route::post('/files/{file}/complete', [FileController::class, 'complete'])
+        ->middleware('throttle:60,1')
+        ->name('api.v1.files.complete');
+    Route::get('/files/{file}', [FileController::class, 'show'])->name('api.v1.files.show');
+    Route::delete('/files/{file}', [FileController::class, 'destroy'])->name('api.v1.files.destroy');
 
     // File Request — the owner's side
     Route::get('/file-requests', [FileRequestController::class, 'index'])->name('api.v1.file-requests.index');

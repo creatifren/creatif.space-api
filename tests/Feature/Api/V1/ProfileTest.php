@@ -110,6 +110,46 @@ describe('my profile', function () {
             ->assertUnprocessable();
     });
 
+    /*
+     * The Profile screen sends one merged patch for the whole page, and it
+     * sends a rate row for every unit the owner has touched — amount still
+     * null until they type a number. `required_with` rejected those rows,
+     * so a half-filled rate table failed the save for every other field on
+     * the profile too. Both spellings of "no price yet" are covered: the
+     * key present and null, and the switch on with the price still blank.
+     */
+    it('accepts a rate row whose amount has not been typed yet', function () {
+        $user = User::factory()->create();
+
+        $this->actingAs($user)
+            ->patchJson('/api/v1/me/profile', [
+                'name' => 'Rani',
+                'freelance' => [
+                    'rates' => [
+                        ['unit' => 'hour', 'amount' => null, 'on' => true],
+                        ['unit' => 'day', 'amount' => null, 'on' => false],
+                    ],
+                ],
+            ])
+            ->assertOk()
+            ->assertJsonPath('data.name', 'Rani')
+            ->assertJsonPath('data.freelance.rates.0.amount', null);
+
+        // Still a number when it is one: nullable widened the gate, it did
+        // not remove it.
+        $this->actingAs($user)
+            ->patchJson('/api/v1/me/profile', [
+                'freelance' => ['rates' => [['unit' => 'hour', 'amount' => -1]]],
+            ])
+            ->assertUnprocessable();
+
+        $this->actingAs($user)
+            ->patchJson('/api/v1/me/profile', [
+                'freelance' => ['rates' => [['unit' => 'hour', 'amount' => 'gratis']]],
+            ])
+            ->assertUnprocessable();
+    });
+
     it('omits the freelance block publicly in portfolio mode but keeps the data', function () {
         $user = User::factory()->create();
         Handle::factory()->for($user)->create(['name' => 'rani']);

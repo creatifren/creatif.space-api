@@ -26,7 +26,7 @@ class PlanSeeder extends Seeder
                 'fee_percent' => '5.00',
                 'seat_price_monthly' => 0,
                 'quotas' => [
-                    'drives' => 1,
+                    'storage_bytes' => 2 * 1024 * 1024 * 1024,
                     'spaces_total' => 10,
                     'spaces_active' => 3,
                     'seats' => 1,
@@ -49,7 +49,7 @@ class PlanSeeder extends Seeder
                 'fee_percent' => '2.50',
                 'seat_price_monthly' => 0,
                 'quotas' => [
-                    'drives' => 3,
+                    'storage_bytes' => 50 * 1024 * 1024 * 1024,
                     // null = no limit. Not zero, which would mean none.
                     'spaces_total' => null,
                     'spaces_active' => null,
@@ -72,7 +72,7 @@ class PlanSeeder extends Seeder
                 'fee_percent' => '2.50',
                 'seat_price_monthly' => 44_000,
                 'quotas' => [
-                    'drives' => null,
+                    'storage_bytes' => null,
                     'spaces_total' => null,
                     'spaces_active' => null,
                     'seats' => 3,

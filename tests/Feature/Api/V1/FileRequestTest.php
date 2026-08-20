@@ -3,38 +3,19 @@
 use App\Enums\FileRequestStatus;
 use App\Enums\SubmissionStatus;
 use App\Jobs\UploadSubmissionFiles;
-use App\Models\DriveAccount;
+use App\Models\File;
 use App\Models\FileRequest;
 use App\Models\FileRequestSubmission;
 use App\Models\User;
 use App\Notifications\FilesReceived;
-use App\Services\GoogleDriveService;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Bus;
-use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Notification;
 use Illuminate\Support\Facades\Storage;
 
-/**
- * A creator with a Drive connected — a request cannot exist without one,
- * since it has to land somewhere.
- *
- * @return array{0: User, 1: DriveAccount}
- */
-function creatorWithDrive(): array
+function requestPayload(array $overrides = []): array
 {
-    $user = User::factory()->create();
-
-    return [$user, DriveAccount::factory()->for($user)->create()];
-}
-
-function requestPayload(DriveAccount $account, array $overrides = []): array
-{
-    return array_merge([
-        'title' => 'Send me the brief',
-        'drive_account_id' => $account->ulid,
-        'folder_id' => 'folder-abc',
-    ], $overrides);
+    return array_merge(['title' => 'Send me the brief'], $overrides);
 }
 
 /** A file the allowlist accepts, at a size it accepts. */
@@ -45,10 +26,10 @@ function goodFile(string $name = 'brief.pdf'): UploadedFile
 
 describe('making a request', function () {
     it('mints a short slug and a link the owner can paste anywhere', function () {
-        [$user, $account] = creatorWithDrive();
+        $user = User::factory()->create();
 
         $response = $this->actingAs($user)
-            ->postJson('/api/v1/file-requests', requestPayload($account))
+            ->postJson('/api/v1/file-requests', requestPayload())
             ->assertCreated();
 
         $slug = $response->json('data.slug');
@@ -61,29 +42,15 @@ describe('making a request', function () {
     });
 
     it('gives a link an end date even when nobody picks one', function () {
-        [$user, $account] = creatorWithDrive();
-
-        $this->actingAs($user)->postJson('/api/v1/file-requests', requestPayload($account));
+        $this->actingAs(User::factory()->create())
+            ->postJson('/api/v1/file-requests', requestPayload());
 
         expect(FileRequest::query()->sole()->expires_at)->not->toBeNull();
     });
 
-    it('refuses a Drive that is not theirs, with a sentence', function () {
-        [$user] = creatorWithDrive();
-        $stranger = DriveAccount::factory()->create();
-
-        $this->actingAs($user)
-            ->postJson('/api/v1/file-requests', requestPayload($stranger))
-            ->assertUnprocessable()
-            ->assertJsonPath(
-                'errors.drive_account_id.0',
-                'Connect that Drive again before asking for files.',
-            );
-    });
-
     it('lists only this creator’s requests', function () {
-        [$user, $account] = creatorWithDrive();
-        FileRequest::factory()->for($user)->create(['drive_account_id' => $account->id]);
+        $user = User::factory()->create();
+        FileRequest::factory()->for($user)->create();
         FileRequest::factory()->create();
 
         $this->actingAs($user)->getJson('/api/v1/file-requests')
@@ -104,35 +71,26 @@ describe('making a request', function () {
             ->assertNotFound();
     });
 
-    it('closes on request, and the folder stays where it was', function () {
+    it('closes on request', function () {
         $request = FileRequest::factory()->create();
 
         $this->actingAs($request->user)
-            ->patchJson("/api/v1/file-requests/{$request->ulid}", [
-                'status' => 'closed',
-                // Not a field — a request that changes destination halfway
-                // makes its own delivery history a lie.
-                'folder_id' => 'somewhere-else',
-            ])
+            ->patchJson("/api/v1/file-requests/{$request->ulid}", ['status' => 'closed'])
             ->assertOk();
 
-        $fresh = $request->fresh();
-        expect($fresh->status)->toBe(FileRequestStatus::Closed)
-            ->and($fresh->target_folder_id)->toBe($request->target_folder_id);
+        expect($request->fresh()->status)->toBe(FileRequestStatus::Closed);
     });
 });
 
 describe('the public link', function () {
-    it('says who is asking and what the limits are — and nothing about the Drive', function () {
+    it('says who is asking and what the limits are', function () {
         $request = FileRequest::factory()->create(['title' => 'Send me the brief']);
 
         $data = $this->getJson("/api/v1/r/{$request->slug}")->assertOk()->json('data');
 
         expect($data['title'])->toBe('Send me the brief')
             ->and($data['owner_name'])->toBe($request->user->name)
-            ->and($data['max_files'])->toBe(5)
-            ->and($data)->not->toHaveKey('folder_id')
-            ->and($data)->not->toHaveKey('drive_account_id');
+            ->and($data['max_files'])->toBe(5);
     });
 
     it('answers 404 unknown, 410 expired, 409 closed — in that order', function () {
@@ -149,7 +107,7 @@ describe('the public link', function () {
 });
 
 describe('sending files', function () {
-    it('takes the delivery, stages the files, and answers 202 without waiting on Drive', function () {
+    it('takes the delivery, stages the files, and answers 202 without waiting on storage', function () {
         Storage::fake('local');
         Bus::fake();
         $request = FileRequest::factory()->create();
@@ -161,8 +119,8 @@ describe('sending files', function () {
             'files' => [goodFile('brief.pdf'), goodFile('shot-list.pdf')],
         ])->assertAccepted();
 
-        // 202, not 201: the files are not in Drive yet and the sender is
-        // told so rather than being held on the line.
+        // 202, not 201: the files are not in the library yet and the sender
+        // is told so rather than being held on the line.
         expect($response->json('data.status'))->toBe('uploading')
             ->and($response->json('data.files'))->toBe(2);
 
@@ -186,7 +144,7 @@ describe('sending files', function () {
 
         Bus::assertDispatched(function (UploadSubmissionFiles $job): bool {
             // The stored path is a name we chose; the sender's name travels
-            // as metadata for Drive and nothing else.
+            // as metadata and nothing else.
             return ! str_contains($job->staged[0]['path'], '..')
                 && str_starts_with($job->staged[0]['path'], 'submissions/');
         });
@@ -262,55 +220,64 @@ describe('sending files', function () {
 });
 
 describe('the upload job', function () {
-    it('puts the files in Drive, records what landed, and tells the owner', function () {
+    it('lands the files in the owner’s library, records what landed, and tells the owner', function () {
         Notification::fake();
         Storage::fake('local');
-
-        Http::fake([
-            'oauth2.googleapis.com/*' => Http::response(['access_token' => 'fresh', 'expires_in' => 3600]),
-            'www.googleapis.com/upload/*' => Http::sequence()
-                ->push([], 200, ['Location' => 'https://upload.googleapis.com/session/1'])
-                ->push(['id' => 'drive-file-1']),
-            'upload.googleapis.com/*' => Http::response(['id' => 'drive-file-1']),
-        ]);
+        Storage::fake('s3');
 
         $submission = FileRequestSubmission::factory()->create();
+        $request = $submission->fileRequest;
         Storage::disk('local')->put('submissions/'.$submission->ulid.'/tmp', 'bytes');
 
         (new UploadSubmissionFiles($submission, [
             ['path' => 'submissions/'.$submission->ulid.'/tmp', 'name' => 'brief.pdf', 'mime' => 'application/pdf'],
-        ]))->handle(app(GoogleDriveService::class));
+        ]))->handle();
+
+        $file = File::query()->sole();
+        expect($file->status)->toBe(File::STATUS_READY)
+            ->and($file->user_id)->toBe($request->user_id)
+            ->and($file->name)->toBe('brief.pdf')
+            ->and($file->source)->toBe('request')
+            ->and($file->path)->toStartWith('requests/'.$request->ulid.'/');
+
+        Storage::disk('s3')->assertExists($file->path);
 
         $fresh = $submission->fresh();
         expect($fresh->status)->toBe(SubmissionStatus::Stored)
-            ->and($fresh->files)->toBe([['name' => 'brief.pdf', 'provider_file_id' => 'drive-file-1']]);
+            ->and($fresh->files)->toBe([['name' => 'brief.pdf', 'file_id' => $file->ulid]]);
 
-        // This app stores no files — the staged copy goes either way.
+        // The staged copy goes either way.
         expect(Storage::disk('local')->exists('submissions/'.$submission->ulid.'/tmp'))->toBeFalse();
 
-        Notification::assertSentTo($submission->fileRequest->user, FilesReceived::class);
+        Notification::assertSentTo($request->user, FilesReceived::class);
     });
 
-    it('says so rather than going quiet when Drive refuses the folder', function () {
+    it('says so rather than going quiet when storage is full', function () {
         Notification::fake();
         Storage::fake('local');
-
-        Http::fake([
-            'oauth2.googleapis.com/*' => Http::response(['access_token' => 'fresh', 'expires_in' => 3600]),
-            'www.googleapis.com/upload/*' => Http::response([], 404),
-        ]);
+        Storage::fake('s3');
 
         $submission = FileRequestSubmission::factory()->create();
+
+        // Free plan: 2 GB, all of it spoken for.
+        File::factory()->for($submission->fileRequest->user)->create([
+            'size_bytes' => 2 * 1024 * 1024 * 1024,
+        ]);
+
         Storage::disk('local')->put('submissions/'.$submission->ulid.'/tmp', 'bytes');
 
         (new UploadSubmissionFiles($submission, [
             ['path' => 'submissions/'.$submission->ulid.'/tmp', 'name' => 'brief.pdf', 'mime' => 'application/pdf'],
-        ]))->handle(app(GoogleDriveService::class));
+        ]))->handle();
 
         // The sender was already told their files went through, so a
         // failure that nobody hears about is the worst outcome.
         expect($submission->fresh()->status)->toBe(SubmissionStatus::Failed)
-            ->and($submission->fresh()->failure_reason)->toContain('can’t be reached');
+            ->and($submission->fresh()->failure_reason)
+            ->toBe('Storage is full — free some space or upgrade the plan.');
+
+        // The staging is cleaned whichever way this ends.
+        expect(Storage::disk('local')->exists('submissions/'.$submission->ulid.'/tmp'))->toBeFalse();
 
         Notification::assertSentTo($submission->fileRequest->user, FilesReceived::class);
     });

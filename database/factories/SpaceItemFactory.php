@@ -2,7 +2,7 @@
 
 namespace Database\Factories;
 
-use App\Models\DriveFile;
+use App\Models\File;
 use App\Models\Space;
 use App\Models\SpaceItem;
 use Illuminate\Database\Eloquent\Factories\Factory;
@@ -21,7 +21,7 @@ class SpaceItemFactory extends Factory
     {
         return [
             'space_id' => Space::factory(),
-            'drive_file_id' => DriveFile::factory(),
+            'file_id' => File::factory(),
             'sort_order' => fake()->numberBetween(0, 50),
         ];
     }

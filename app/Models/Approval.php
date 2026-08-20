@@ -21,7 +21,6 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
  * @property ApprovalStatus $status
  * @property CarbonImmutable|null $approved_at
  * @property ApprovalCancelReason|null $cancelled_reason
- * @property string|null $version_hash_at_approval
  * @property CarbonImmutable|null $created_at
  * @property CarbonImmutable|null $updated_at
  */
@@ -36,7 +35,6 @@ class Approval extends Model
         'status',
         'approved_at',
         'cancelled_reason',
-        'version_hash_at_approval',
     ];
 
     /**

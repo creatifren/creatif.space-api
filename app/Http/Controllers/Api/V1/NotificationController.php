@@ -2,12 +2,8 @@
 
 namespace App\Http\Controllers\Api\V1;
 
-use App\Enums\ApprovalCancelReason;
-use App\Enums\ApprovalStatus;
 use App\Enums\NotificationType;
 use App\Http\Controllers\Controller;
-use App\Models\Approval;
-use App\Models\DriveFile;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
@@ -57,45 +53,14 @@ class NotificationController extends Controller
     }
 
     /**
-     * Home → Needs Attention. Only what is actually broken: approvals a
-     * file change voided, and files we can no longer reach. Empty means
-     * the strip disappears, which is the whole point of it.
+     * Home → Needs Attention. Files are hosted on our storage now, so the
+     * old alerts (version-voided approvals, lost Drive access) can no
+     * longer happen. The endpoint stays for the Home strip; today it has
+     * nothing to report.
      */
     public function attention(Request $request): JsonResponse
     {
-        $user = $request->user();
-
-        $voided = Approval::query()
-            ->where('status', ApprovalStatus::Cancelled)
-            ->where('cancelled_reason', ApprovalCancelReason::FileVersionChanged)
-            ->whereHas('spaceItem.space', fn ($q) => $q->where('user_id', $user->id))
-            ->with(['spaceItem.driveFile', 'spaceItem.space'])
-            ->get();
-
-        /** @var list<array<string, mixed>> $items */
-        $items = $voided->groupBy(fn (Approval $a) => $a->spaceItem->drive_file_id)
-            ->map(fn ($group) => [
-                'kind' => 'approval_void',
-                'tone' => 'clay',
-                'file_name' => $group->first()->spaceItem->driveFile->name,
-                'space_title' => $group->first()->spaceItem->space->title,
-                'count' => $group->count(),
-            ])->values()->all();
-
-        $lost = DriveFile::query()
-            ->whereNotNull('access_lost_at')
-            ->whereHas('account', fn ($q) => $q->where('user_id', $user->id))
-            ->count();
-
-        if ($lost > 0) {
-            $items[] = [
-                'kind' => 'access_lost',
-                'tone' => 'rust',
-                'count' => $lost,
-            ];
-        }
-
-        return response()->json(['data' => $items]);
+        return response()->json(['data' => []]);
     }
 
     /**

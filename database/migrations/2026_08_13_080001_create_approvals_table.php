@@ -23,9 +23,6 @@ return new class extends Migration
             $table->string('status', 20)->default('pending');
             $table->timestamp('approved_at')->nullable();
             $table->string('cancelled_reason', 30)->nullable();
-            // Snapshot, not a reference: the file may move on, this is what
-            // was signed off. The comparison that voids the approval.
-            $table->string('version_hash_at_approval', 64)->nullable();
             $table->timestamps();
 
             $table->unique(['space_item_id', 'client_id']);

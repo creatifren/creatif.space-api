@@ -4,8 +4,7 @@ use App\Enums\SpaceEventType;
 use App\Jobs\AggregateSpaceStats;
 use App\Jobs\PruneSpaceEvents;
 use App\Models\Client;
-use App\Models\DriveAccount;
-use App\Models\DriveFile;
+use App\Models\File;
 use App\Models\Space;
 use App\Models\SpaceDailyStat;
 use App\Models\SpaceEvent;
@@ -22,10 +21,9 @@ function beaconSpace(array $attributes = []): Space
 
 function itemIn(Space $space): SpaceItem
 {
-    $account = DriveAccount::factory()->for($space->user)->create();
-    $file = DriveFile::factory()->for($account, 'account')->create();
+    $file = File::factory()->for($space->user)->create();
 
-    return $space->items()->create(['drive_file_id' => $file->id, 'sort_order' => 0]);
+    return $space->items()->create(['file_id' => $file->id, 'sort_order' => 0]);
 }
 
 describe('beacon', function () {

@@ -27,9 +27,8 @@ use Illuminate\Validation\ValidationException;
 class ApprovalController extends Controller
 {
     /**
-     * One decision on one file. Approving snapshots the file's version so
-     * a later change can tell that this sign-off is no longer about the
-     * bytes that are there now.
+     * One decision on one file. Files are immutable once ready, so the
+     * sign-off is always about the bytes that are there.
      */
     public function store(Request $request, string $handle, string $slug): JsonResponse
     {
@@ -64,7 +63,7 @@ class ApprovalController extends Controller
             fn () => $this->decide($item, $client, $validated),
         );
 
-        $approval->load(['client', 'notes', 'spaceItem.driveFile']);
+        $approval->load(['client', 'notes', 'spaceItem.file']);
         $space->user->notify(new ApprovalDecided($approval, $space));
 
         return (new ApprovalResource($approval))->response()->setStatusCode(201);
@@ -103,12 +102,7 @@ class ApprovalController extends Controller
             $noteSpent = false;
 
             foreach ($space->items as $item) {
-                // A file we can no longer reach can't be signed off, and a
-                // decision already given is not overwritten by a bulk press.
-                if ($item->driveFile->access_lost_at !== null) {
-                    continue;
-                }
-
+                // A decision already given is not overwritten by a bulk press.
                 $existing = Approval::query()
                     ->where('space_item_id', $item->id)
                     ->where('client_id', $client->id)
@@ -131,11 +125,11 @@ class ApprovalController extends Controller
 
         // One gesture, one email — never a message per file.
         if ($approvals !== []) {
-            $first = $approvals[0]->load(['client', 'notes', 'spaceItem.driveFile']);
+            $first = $approvals[0]->load(['client', 'notes', 'spaceItem.file']);
             $space->user->notify(new ApprovalDecided($first, $space, count($approvals)));
 
             foreach (array_slice($approvals, 1) as $approval) {
-                $approval->load(['client', 'notes', 'spaceItem.driveFile']);
+                $approval->load(['client', 'notes', 'spaceItem.file']);
             }
         }
 
@@ -161,8 +155,6 @@ class ApprovalController extends Controller
             'status' => $approve ? ApprovalStatus::Approved : ApprovalStatus::Revision,
             'approved_at' => $approve ? now() : null,
             'cancelled_reason' => null,
-            // The snapshot the auto-cancel compares against.
-            'version_hash_at_approval' => $approve ? $item->driveFile->version_hash : null,
         ])->save();
 
         $note = trim((string) ($input['note'] ?? ''));
@@ -197,7 +189,7 @@ class ApprovalController extends Controller
             ->where('user_id', $record->user->id)
             ->where('slug', $slug)
             ->where('status', 'published')
-            ->with(['items.driveFile', 'user'])
+            ->with(['items.file', 'user'])
             ->first();
 
         abort_if($space === null, 404);

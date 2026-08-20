@@ -8,7 +8,7 @@ use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
 
 /**
- * The owner's view of a request — theirs, so it may name the folder.
+ * The owner's view of a request.
  *
  * @mixin FileRequest
  */
@@ -25,8 +25,6 @@ class FileRequestResource extends JsonResource
             'url' => config('app.frontend_url').'/r/'.$this->slug,
             'title' => $this->title,
             'note' => $this->note,
-            'folder_id' => $this->target_folder_id,
-            'drive_account_id' => $this->driveAccount->ulid,
             'max_files' => $this->max_files,
             'max_mb' => $this->max_mb,
             'status' => $this->status,

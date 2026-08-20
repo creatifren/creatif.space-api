@@ -3,12 +3,13 @@
 use App\Enums\NotificationType;
 use App\Models\Approval;
 use App\Models\Client;
+use App\Models\File;
 use App\Models\NotificationPreference;
 use App\Models\Space;
 use App\Models\SpaceItem;
 use App\Models\User;
 use App\Notifications\ApprovalDecided;
-use App\Notifications\ApprovalsVoided;
+use App\Notifications\SpaceOpened;
 
 describe('preferences', function () {
     it('reports every type as on before anything is touched', function () {
@@ -52,7 +53,7 @@ describe('delivery', function () {
         $space = Space::factory()->for($user)->create();
         $approval = Approval::factory()->approved()->create();
 
-        expect((new ApprovalsVoided($space, 'a.jpg', 1))->via($user))
+        expect((new SpaceOpened($space))->via($user))
             ->toBe(['mail', 'database'])
             ->and((new ApprovalDecided($approval, $space))->via($user))
             ->toBe(['mail', 'database']);
@@ -61,23 +62,23 @@ describe('delivery', function () {
     it('drops the channel the user switched off', function () {
         $user = User::factory()->create();
         NotificationPreference::factory()->for($user)->create([
-            'type' => 'approval.cancelled',
+            'type' => 'space.opened',
             'email_enabled' => false,
         ]);
         $space = Space::factory()->for($user)->create();
 
-        expect((new ApprovalsVoided($space, 'a.jpg', 1))->via($user->fresh()))
+        expect((new SpaceOpened($space))->via($user->fresh()))
             ->toBe(['database']);
     });
 
     it('sends nothing at all when both are off', function () {
         $user = User::factory()->create();
         NotificationPreference::factory()->for($user)->silenced()->create([
-            'type' => 'approval.cancelled',
+            'type' => 'space.opened',
         ]);
         $space = Space::factory()->for($user)->create();
 
-        expect((new ApprovalsVoided($space, 'a.jpg', 1))->via($user->fresh()))->toBe([]);
+        expect((new SpaceOpened($space))->via($user->fresh()))->toBe([]);
     });
 });
 
@@ -85,8 +86,13 @@ describe('the bell', function () {
     it('lists notifications with an unread count, then marks them read', function () {
         $user = User::factory()->create();
         $space = Space::factory()->for($user)->create(['title' => 'Winter Noel']);
+        $item = SpaceItem::factory()->for($space)->create([
+            'file_id' => File::factory()->for($user)->create(['name' => 'winter-noel-07.jpg'])->id,
+        ]);
+        $approval = Approval::factory()->for($item, 'spaceItem')->approved()->create();
+        $approval->load(['client', 'notes', 'spaceItem.file']);
 
-        $user->notify(new ApprovalsVoided($space, 'winter-noel-07.jpg', 2));
+        $user->notify(new ApprovalDecided($approval, $space, 2));
 
         $response = $this->actingAs($user)->getJson('/api/v1/me/notifications')
             ->assertOk()

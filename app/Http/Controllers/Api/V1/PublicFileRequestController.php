@@ -25,26 +25,6 @@ use Illuminate\Support\Str;
  */
 class PublicFileRequestController extends Controller
 {
-    /**
-     * What a file may be. An allowlist, checked against the sniffed
-     * content type rather than the extension — `mimes:` reads the filename,
-     * and a filename is whatever the sender says it is.
-     *
-     * @var list<string>
-     */
-    private const ACCEPTED = [
-        'image/jpeg', 'image/png', 'image/gif', 'image/webp', 'image/heic', 'image/heif',
-        'image/tiff', 'image/avif',
-        'video/mp4', 'video/quicktime',
-        'audio/mpeg', 'audio/wav',
-        'application/pdf', 'application/zip', 'application/x-zip-compressed',
-        'application/msword', 'application/vnd.ms-excel',
-        'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-        'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-        'application/vnd.openxmlformats-officedocument.presentationml.presentation',
-        'text/plain', 'text/csv',
-    ];
-
     public function show(string $slug): JsonResponse
     {
         $fileRequest = $this->resolve($slug);
@@ -57,8 +37,8 @@ class PublicFileRequestController extends Controller
 
     /**
      * Take a delivery. Answers 202, not 201: the files are staged here and
-     * pushed to Drive by a job, because somebody uploading from a phone
-     * must not hold the connection open through a Drive round-trip.
+     * pushed to storage by a job, because somebody uploading from a phone
+     * must not hold the connection open through a storage round-trip.
      */
     public function store(Request $request, string $slug): JsonResponse
     {
@@ -74,7 +54,7 @@ class PublicFileRequestController extends Controller
             'files.*' => [
                 'file',
                 'max:'.($fileRequest->max_mb * 1024),
-                'mimetypes:'.implode(',', self::ACCEPTED),
+                'mimetypes:'.implode(',', \App\Support\AcceptedUploads::MIMES),
             ],
         ]);
 
@@ -100,7 +80,7 @@ class PublicFileRequestController extends Controller
         $staged = [];
 
         foreach ($files as $file) {
-            // The sender's filename is metadata for Drive and nothing else:
+            // The sender's filename is display metadata and nothing else:
             // the stored path is a name we chose, so a crafted filename
             // cannot reach outside the staging directory.
             $staged[] = [

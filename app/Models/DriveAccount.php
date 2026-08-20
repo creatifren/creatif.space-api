@@ -8,7 +8,6 @@ use Database\Factories\DriveAccountFactory;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
-use Illuminate\Database\Eloquent\Relations\HasMany;
 
 /**
  * @property int $id
@@ -21,7 +20,6 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
  * @property string|null $refresh_token
  * @property CarbonImmutable|null $token_expires_at
  * @property DriveAccountStatus $status
- * @property CarbonImmutable|null $last_synced_at
  */
 class DriveAccount extends Model
 {
@@ -60,7 +58,6 @@ class DriveAccount extends Model
             'access_token' => 'encrypted',
             'refresh_token' => 'encrypted',
             'token_expires_at' => 'datetime',
-            'last_synced_at' => 'datetime',
             'status' => DriveAccountStatus::class,
         ];
     }
@@ -88,11 +85,4 @@ class DriveAccount extends Model
         return $this->belongsTo(User::class);
     }
 
-    /**
-     * @return HasMany<DriveFile, $this>
-     */
-    public function files(): HasMany
-    {
-        return $this->hasMany(DriveFile::class);
-    }
 }

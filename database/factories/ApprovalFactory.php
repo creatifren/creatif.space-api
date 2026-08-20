@@ -31,7 +31,6 @@ class ApprovalFactory extends Factory
         return $this->state(fn (array $attributes) => [
             'status' => 'approved',
             'approved_at' => now()->subHour(),
-            'version_hash_at_approval' => 'hash-at-approval',
         ]);
     }
 
@@ -43,13 +42,13 @@ class ApprovalFactory extends Factory
     }
 
     /**
-     * An approval the file itself invalidated.
+     * An approval the owner reset.
      */
     public function cancelled(): static
     {
         return $this->state(fn (array $attributes) => [
             'status' => 'cancelled',
-            'cancelled_reason' => 'file_version_changed',
+            'cancelled_reason' => 'owner_reset',
         ]);
     }
 }

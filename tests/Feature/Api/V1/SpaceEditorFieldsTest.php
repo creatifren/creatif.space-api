@@ -1,7 +1,6 @@
 <?php
 
-use App\Models\DriveAccount;
-use App\Models\DriveFile;
+use App\Models\File;
 use App\Models\Space;
 use App\Models\User;
 use Illuminate\Support\Facades\Hash;
@@ -17,20 +16,19 @@ use Illuminate\Support\Facades\Hash;
 
 function editorSpace(User $user): Space
 {
-    $account = DriveAccount::factory()->for($user)->create();
     $space = Space::factory()->for($user)->create(['slug' => 'winter-noel']);
 
     foreach (['one', 'two'] as $n) {
-        $file = DriveFile::factory()->for($account, 'account')->create();
+        $file = File::factory()->for($user)->create();
         $space->items()->create([
-            'drive_file_id' => $file->id,
+            'file_id' => $file->id,
             'sort_order' => 0,
             'caption' => null,
         ]);
     }
 
     // Eager-loaded: this app disables lazy loading.
-    return $space->fresh(['items.driveFile']);
+    return $space->fresh(['items.file']);
 }
 
 it('saves captions, alt text, seo and the address', function () {
@@ -49,8 +47,8 @@ it('saves captions, alt text, seo and the address', function () {
                 ],
             ],
             'items' => [
-                ['id' => $items[0]->ulid, 'drive_file_id' => $items[0]->driveFile->ulid, 'sort_order' => 0, 'caption' => 'First caption'],
-                ['id' => $items[1]->ulid, 'drive_file_id' => $items[1]->driveFile->ulid, 'sort_order' => 1, 'caption' => 'Second caption'],
+                ['id' => $items[0]->ulid, 'file_id' => $items[0]->file->ulid, 'sort_order' => 0, 'caption' => 'First caption'],
+                ['id' => $items[1]->ulid, 'file_id' => $items[1]->file->ulid, 'sort_order' => 1, 'caption' => 'Second caption'],
             ],
         ])
         ->assertOk();

@@ -1,8 +1,7 @@
 <?php
 
 use App\Models\Client;
-use App\Models\DriveAccount;
-use App\Models\DriveFile;
+use App\Models\File;
 use App\Models\Handle;
 use App\Models\Space;
 use App\Models\SpaceItem;
@@ -20,24 +19,19 @@ function approvalSpace(array $attributes = []): Space
         'approval_enabled' => true,
     ], $attributes));
 
-    $account = DriveAccount::factory()->for($owner)->create();
-
     foreach (['one.jpg', 'two.jpg'] as $index => $name) {
-        $file = DriveFile::factory()->for($account, 'account')->create([
-            'name' => $name,
-            'version_hash' => 'v1-'.$name,
-        ]);
+        $file = File::factory()->for($owner)->create(['name' => $name]);
         SpaceItem::factory()->for($space)->create([
-            'drive_file_id' => $file->id,
+            'file_id' => $file->id,
             'sort_order' => $index,
         ]);
     }
 
-    return $space->refresh()->load('items.driveFile');
+    return $space->refresh()->load('items.file');
 }
 
 describe('client decisions', function () {
-    it('records an approval with the file version snapshotted', function () {
+    it('records an approval with its timestamp', function () {
         Notification::fake();
         $space = approvalSpace();
         $item = $space->items->first();
@@ -53,8 +47,7 @@ describe('client decisions', function () {
             ->assertJsonPath('data.file_name', 'one.jpg');
 
         $approval = $item->approvals()->first();
-        expect($approval->version_hash_at_approval)->toBe('v1-one.jpg')
-            ->and($approval->approved_at)->not->toBeNull();
+        expect($approval->approved_at)->not->toBeNull();
 
         Notification::assertSentTo($space->user, ApprovalDecided::class);
     });
@@ -103,16 +96,15 @@ describe('client decisions', function () {
         expect($item->approvals()->count())->toBe(1);
     });
 
-    it('approves everything at once, skipping files we cannot reach', function () {
+    it('approves everything at once', function () {
         Notification::fake();
         $space = approvalSpace();
-        $space->items->first()->driveFile->forceFill(['access_lost_at' => now()])->save();
         $client = Client::factory()->create();
 
         $this->actingAs($client, 'client')
             ->postJson('/api/v1/profiles/rani/spaces/winter-noel/approvals/all')
             ->assertOk()
-            ->assertJsonCount(1, 'data');
+            ->assertJsonCount(2, 'data');
 
         // One gesture, one email — never a message per file.
         Notification::assertSentToTimes($space->user, ApprovalDecided::class, 1);

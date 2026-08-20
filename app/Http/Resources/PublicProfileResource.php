@@ -31,7 +31,7 @@ class PublicProfileResource extends JsonResource
         $spaces = $this->user === null ? collect() : $this->user->spaces()
             ->where('status', 'published')
             ->where('visibility', 'public')
-            ->with('items.driveFile')
+            ->with('items.file')
             ->latest('published_at')
             ->get()
             ->map(fn ($space) => [
@@ -39,10 +39,9 @@ class PublicProfileResource extends JsonResource
                 'slug' => $space->slug,
                 'items_count' => $space->items->count(),
                 'cover_url' => $space->items->first(
-                    fn ($item) => $item->driveFile !== null
-                        && ! $item->driveFile->is_folder
-                        && $item->driveFile->thumbnail_url !== null,
-                )?->driveFile?->thumbnail_url,
+                    fn ($item) => $item->file !== null
+                        && str_starts_with($item->file->mime_type, 'image/'),
+                )?->file?->url(),
                 'published_at' => $space->published_at,
             ])
             ->values();

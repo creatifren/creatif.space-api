@@ -114,9 +114,7 @@ class PublicSpaceResource extends JsonResource
             return $block;
         }
 
-        $block['total'] = $this->items
-            ->filter(fn (SpaceItem $item) => $item->driveFile->access_lost_at === null)
-            ->count();
+        $block['total'] = $this->items->count();
 
         if ($client === null) {
             return $block;
@@ -228,18 +226,17 @@ class PublicSpaceResource extends JsonResource
             return null; // "Hide from the Space" is the promise it never ships
         }
 
-        $file = $item->driveFile;
+        $file = $item->file;
 
         return ['type' => 'photo', 'photo' => [
             'id' => $item->ulid,
             'name' => $file->name,
-            'src' => $file->thumbnail_url,
+            'src' => $file->url(),
             'alt' => $meta['alt'] ?? null,
             'size' => $meta['size'] ?? 'Medium',
             'size_bytes' => $file->size_bytes,
             'mime_type' => $file->mime_type,
             'is_video' => str_starts_with($file->mime_type, 'video/'),
-            'missing' => $file->access_lost_at !== null,
             'plan_type' => $meta['plan_type'] ?? 'Feed',
             'caption' => $item->caption,
             'approval' => $this->photoApproval($item, $request),

@@ -2,14 +2,14 @@
 
 namespace App\Http\Resources;
 
-use App\Models\DriveFile;
+use App\Models\File;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
 
 /**
- * @mixin DriveFile
+ * @mixin File
  */
-class DriveFileResource extends JsonResource
+class FileResource extends JsonResource
 {
     /**
      * Transform the resource into an array.
@@ -20,17 +20,16 @@ class DriveFileResource extends JsonResource
     {
         return [
             'id' => $this->ulid,
-            'account_id' => $this->account->ulid,
-            'provider_file_id' => $this->provider_file_id,
-            'parent_folder_id' => $this->parent_folder_id,
             'name' => $this->name,
             'mime_type' => $this->mime_type,
             'size_bytes' => $this->size_bytes,
-            'thumbnail_url' => $this->thumbnail_url,
-            'is_folder' => $this->is_folder,
+            'url' => $this->url(),
+            'width' => $this->width,
+            'height' => $this->height,
+            'status' => $this->status,
+            'source' => $this->source,
             'exif' => $this->exif,
-            'access_lost' => $this->access_lost_at !== null,
-            'last_synced_at' => $this->last_synced_at,
+            'created_at' => $this->created_at,
 
             /* The Spaces this file appears in — the drawer's "Used in Space"
              * chips and the list's "in a Space" pill. Guarded by whenLoaded so

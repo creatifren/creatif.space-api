@@ -2,7 +2,6 @@
 
 namespace Database\Factories;
 
-use App\Models\DriveAccount;
 use App\Models\FileRequest;
 use App\Models\User;
 use Illuminate\Database\Eloquent\Factories\Factory;
@@ -19,14 +18,10 @@ class FileRequestFactory extends Factory
      */
     public function definition(): array
     {
-        $user = User::factory();
-
         return [
-            'user_id' => $user,
+            'user_id' => User::factory(),
             'title' => fake()->words(3, true),
             'note' => null,
-            'drive_account_id' => DriveAccount::factory()->for($user),
-            'target_folder_id' => 'folder-'.fake()->unique()->numerify('########'),
             'max_files' => 5,
             'max_mb' => 100,
             'status' => 'open',

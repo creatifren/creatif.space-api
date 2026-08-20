@@ -6,7 +6,7 @@ use App\Enums\SpaceStatus;
 use App\Http\Controllers\Controller;
 use App\Http\Resources\SpaceListResource;
 use App\Http\Resources\SpaceResource;
-use App\Models\DriveFile;
+use App\Models\File;
 use App\Models\Space;
 use App\Models\SpaceItem;
 use App\Support\PlanQuota;
@@ -33,7 +33,7 @@ class SpaceController extends Controller
         $tab = $validated['tab'] ?? 'all';
         $user = Workspace::owner($request->user());
 
-        $query = $user->spaces()->with(['items.driveFile'])->latest('updated_at');
+        $query = $user->spaces()->with(['items.file'])->latest('updated_at');
 
         match ($tab) {
             'archived' => $query->where('status', SpaceStatus::Archived),
@@ -85,7 +85,7 @@ class SpaceController extends Controller
         ])->save();
 
         // refresh(): status/visibility come from column defaults.
-        return (new SpaceResource($space->refresh()->load('items.driveFile')))
+        return (new SpaceResource($space->refresh()->load('items.file')))
             ->response()
             ->setStatusCode(201);
     }
@@ -97,7 +97,7 @@ class SpaceController extends Controller
     {
         abort_unless($space->user_id === Workspace::owner($request->user())->id, 404);
 
-        return new SpaceResource($space->load('items.driveFile'));
+        return new SpaceResource($space->load('items.file'));
     }
 
     /**
@@ -124,7 +124,7 @@ class SpaceController extends Controller
             'seo' => ['sometimes', 'nullable', 'array'],
             'items' => ['sometimes', 'array', 'max:500'],
             'items.*.id' => ['sometimes', 'nullable', 'string', 'max:26'],
-            'items.*.drive_file_id' => ['required_with:items', 'string', 'max:26'],
+            'items.*.file_id' => ['required_with:items', 'string', 'max:26'],
             'items.*.section' => ['sometimes', 'nullable', 'string', 'max:120'],
             'items.*.sort_order' => ['sometimes', 'integer', 'min:0'],
             'items.*.caption' => ['sometimes', 'nullable', 'string', 'max:2000'],
@@ -175,7 +175,7 @@ class SpaceController extends Controller
             }
         });
 
-        return new SpaceResource($space->refresh()->load('items.driveFile'));
+        return new SpaceResource($space->refresh()->load('items.file'));
     }
 
     /**
@@ -200,7 +200,7 @@ class SpaceController extends Controller
             ])->save();
         }
 
-        return new SpaceResource($space->load('items.driveFile'));
+        return new SpaceResource($space->load('items.file'));
     }
 
     public function unpublish(Request $request, Space $space): SpaceResource
@@ -210,7 +210,7 @@ class SpaceController extends Controller
 
         $space->forceFill(['status' => SpaceStatus::Draft])->save();
 
-        return new SpaceResource($space->load('items.driveFile'));
+        return new SpaceResource($space->load('items.file'));
     }
 
     public function archive(Request $request, Space $space): SpaceResource
@@ -223,7 +223,7 @@ class SpaceController extends Controller
             'archived_at' => now(),
         ])->save();
 
-        return new SpaceResource($space->load('items.driveFile'));
+        return new SpaceResource($space->load('items.file'));
     }
 
     /**
@@ -246,7 +246,7 @@ class SpaceController extends Controller
             $space->forceFill(['status' => SpaceStatus::Draft, 'archived_at' => null])->save();
         }
 
-        return new SpaceResource($space->load('items.driveFile'));
+        return new SpaceResource($space->load('items.file'));
     }
 
     /**
@@ -286,7 +286,7 @@ class SpaceController extends Controller
             $map = [];
             foreach ($space->items as $item) {
                 $new = $copy->items()->create([
-                    'drive_file_id' => $item->drive_file_id,
+                    'file_id' => $item->file_id,
                     'section' => $item->section,
                     'sort_order' => $item->sort_order,
                     'caption' => $item->caption,
@@ -321,7 +321,7 @@ class SpaceController extends Controller
             return $copy;
         });
 
-        return (new SpaceResource($copy->refresh()->load('items.driveFile')))
+        return (new SpaceResource($copy->refresh()->load('items.file')))
             ->response()
             ->setStatusCode(201);
     }
@@ -361,22 +361,23 @@ class SpaceController extends Controller
 
     /**
      * Reconcile the items list: create, update, delete-absent — and check
-     * every referenced Drive file belongs to the caller.
+     * every referenced file belongs to the caller.
      *
      * @param  list<array<string, mixed>>  $incoming
      */
     private function syncItems(Space $space, array $incoming, int $userId): void
     {
-        $fileUlids = array_values(array_unique(array_column($incoming, 'drive_file_id')));
-        $files = DriveFile::query()
+        $fileUlids = array_values(array_unique(array_column($incoming, 'file_id')));
+        $files = File::query()
             ->whereIn('ulid', $fileUlids)
-            ->whereHas('account', fn ($q) => $q->where('user_id', $userId))
+            ->where('user_id', $userId)
+            ->where('status', File::STATUS_READY)
             ->get()
             ->keyBy('ulid');
 
         if ($files->count() !== count($fileUlids)) {
             throw ValidationException::withMessages([
-                'items' => 'One or more files do not exist in your Drive.',
+                'items' => 'One or more files do not exist in your library.',
             ]);
         }
 
@@ -384,9 +385,9 @@ class SpaceController extends Controller
         $keep = [];
 
         foreach ($incoming as $row) {
-            $file = $files[$row['drive_file_id']];
+            $file = $files[$row['file_id']];
             $attributes = [
-                'drive_file_id' => $file->id,
+                'file_id' => $file->id,
                 'section' => $row['section'] ?? null,
                 'sort_order' => (int) ($row['sort_order'] ?? 0),
                 'caption' => $row['caption'] ?? null,
@@ -394,7 +395,7 @@ class SpaceController extends Controller
 
             /** @var SpaceItem|null $item */
             $item = isset($row['id']) ? $existing->get($row['id']) : null;
-            $item ??= $space->items()->firstOrCreate(['drive_file_id' => $file->id], $attributes);
+            $item ??= $space->items()->firstOrCreate(['file_id' => $file->id], $attributes);
 
             // firstOrCreate may hit an existing row for the same file; make
             // sure its position fields are current either way.

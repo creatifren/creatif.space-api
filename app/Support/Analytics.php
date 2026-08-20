@@ -221,7 +221,7 @@ final class Analytics
 
         $items = SpaceItem::query()
             ->whereIn('id', $rows->pluck('space_item_id'))
-            ->with(['driveFile', 'space'])
+            ->with(['file', 'space'])
             ->get()
             ->keyBy('id');
 
@@ -234,9 +234,9 @@ final class Analytics
                 }
 
                 return [
-                    'name' => (string) $item->driveFile->name,
+                    'name' => (string) $item->file->name,
                     'space' => (string) $item->space->title,
-                    'thumb' => $item->driveFile->thumbnail_url,
+                    'thumb' => $item->file->url(),
                     'views' => (int) $row->opens,
                     'downloads' => (int) $row->downloads,
                 ];

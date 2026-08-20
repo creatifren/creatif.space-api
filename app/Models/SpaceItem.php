@@ -12,7 +12,7 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
  * @property int $id
  * @property string $ulid
  * @property int $space_id
- * @property int $drive_file_id
+ * @property int $file_id
  * @property string|null $section
  * @property int $sort_order
  * @property string|null $caption
@@ -23,7 +23,7 @@ class SpaceItem extends Model
     use HasFactory;
 
     protected $fillable = [
-        'drive_file_id',
+        'file_id',
         'section',
         'sort_order',
         'caption',
@@ -53,11 +53,11 @@ class SpaceItem extends Model
     }
 
     /**
-     * @return BelongsTo<DriveFile, $this>
+     * @return BelongsTo<File, $this>
      */
-    public function driveFile(): BelongsTo
+    public function file(): BelongsTo
     {
-        return $this->belongsTo(DriveFile::class);
+        return $this->belongsTo(File::class);
     }
 
     /**

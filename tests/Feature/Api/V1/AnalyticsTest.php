@@ -2,8 +2,7 @@
 
 use App\Enums\SpaceEventType;
 use App\Models\Client;
-use App\Models\DriveAccount;
-use App\Models\DriveFile;
+use App\Models\File;
 use App\Models\Plan;
 use App\Models\Space;
 use App\Models\SpaceDailyStat;
@@ -33,10 +32,9 @@ function premiumCreator(): User
 
 function photoIn(Space $space): SpaceItem
 {
-    $account = DriveAccount::factory()->for($space->user)->create();
-    $file = DriveFile::factory()->for($account, 'account')->create();
+    $file = File::factory()->for($space->user)->create();
 
-    return $space->items()->create(['drive_file_id' => $file->id, 'sort_order' => 0]);
+    return $space->items()->create(['file_id' => $file->id, 'sort_order' => 0]);
 }
 
 function statsFor(Space $space, int $views, int $unique = 1, ?string $date = null): SpaceDailyStat
