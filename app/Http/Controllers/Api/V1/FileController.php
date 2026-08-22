@@ -29,6 +29,9 @@ class FileController extends Controller
             'search' => ['sometimes', 'nullable', 'string', 'max:255'],
             'type' => ['sometimes', 'nullable', 'string', 'in:image,video,pdf'],
             'sort' => ['sometimes', 'nullable', 'string', 'in:recent,name,size'],
+            // Home wants `meta.total` and nothing else; without this it pays
+            // for 60 rows and their eager-loaded Spaces to read one integer.
+            'per_page' => ['sometimes', 'integer', 'min:1', 'max:60'],
         ]);
 
         $user = Workspace::owner($request->user());
@@ -58,7 +61,9 @@ class FileController extends Controller
             default => $query->latest('id'),
         };
 
-        return FileResource::collection($query->paginate(60)->appends($request->query()))
+        $perPage = $validated['per_page'] ?? 60;
+
+        return FileResource::collection($query->paginate($perPage)->appends($request->query()))
             ->additional(['meta' => [
                 'storage_used' => PlanQuota::storageUsed($user),
                 'storage_limit' => PlanQuota::storageLimit($user),

@@ -64,6 +64,29 @@ class Client extends Authenticatable
     }
 
     /**
+     * There is no password. Clients sign in through Google and nothing else,
+     * so `clients` has no such column.
+     *
+     * The remember-me cookie asks for one anyway: SessionGuard writes
+     * `id|remember_token|hmac(password)` into the recaller, and the default
+     * `getAuthPassword()` reaches for `$this->password` — which, under
+     * `Model::shouldBeStrict()`, threw "attribute [password] either does not
+     * exist or was not retrieved" and dropped the visitor back on the Space
+     * with `?approve=error` instead of signed in.
+     *
+     * Returning a constant is safe because nothing ever checks this value.
+     * The recaller's third segment is written but never read back — the
+     * cookie is validated by `retrieveByToken()`, which compares
+     * `remember_token` and nothing else — and password login is impossible
+     * on this guard: `attempt()` is never called, and Hash::check against a
+     * non-hash returns false regardless.
+     */
+    public function getAuthPassword(): string
+    {
+        return '';
+    }
+
+    /**
      * The creator account behind this email, when there is one. Set at
      * login so Insights can show the decisions this person gave elsewhere.
      *

@@ -216,4 +216,21 @@ describe('the viewer payload', function () {
         expect($response->json('data.approval.viewer.name'))->toBe('Andi')
             ->and($response->json('data.approval.approved'))->toBe(0);
     });
+
+    /* A Space that only sells still has to say who is reading it: `viewer`
+       is what the offer dock reads to decide between "Sign in to buy" and
+       "Buy this". Without it a buyer who had just signed in was shown the
+       sign-in button again, and pressing it sent them back to Google and
+       round to the same page. */
+    it('names the signed-in client even where approval is off', function () {
+        approvalSpace(['approval_enabled' => false]);
+        $client = Client::factory()->create(['name' => 'Andi']);
+
+        $response = $this->actingAs($client, 'client')
+            ->getJson('/api/v1/profiles/rani/spaces/winter-noel')
+            ->assertOk();
+
+        expect($response->json('data.approval.enabled'))->toBeFalse()
+            ->and($response->json('data.approval.viewer.name'))->toBe('Andi');
+    });
 });

@@ -120,6 +120,26 @@ it('never bounces an off-site return path', function () {
         ->assertRedirect(config('app.frontend_url').'/?approve=ready');
 });
 
+/**
+ * `login(remember: true)` writes `id|remember_token|hmac(password)` into the
+ * recaller cookie, and `clients` has no password column. Under
+ * `Model::shouldBeStrict()` that threw MissingAttributeException and sent the
+ * buyer back to the Space with ?approve=error instead of signed in.
+ *
+ * The callback tests above miss it: a brand-new Client is `wasRecentlyCreated`
+ * (strict mode stays quiet), and a returning one is re-hydrated by
+ * `fill()->save()`. Only a client read fresh from the database — every real
+ * second visit — takes the path that broke, so this test loads one that way.
+ */
+it('remembers a client read fresh from the database, though it has no password', function () {
+    Client::factory()->create(['email' => 'andi@winternoel.com']);
+    $client = Client::query()->where('email', 'andi@winternoel.com')->firstOrFail();
+
+    auth('client')->login($client, remember: true);
+
+    expect(auth('client')->id())->toBe($client->id);
+});
+
 it('signs the client out without touching the creator session', function () {
     $creator = User::factory()->create();
     $client = Client::factory()->create();
