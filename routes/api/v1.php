@@ -5,8 +5,8 @@ use App\Http\Controllers\Api\V1\AnalyticsController;
 use App\Http\Controllers\Api\V1\ApprovalController;
 use App\Http\Controllers\Api\V1\DeliveryLogController;
 use App\Http\Controllers\Api\V1\DriveAccountController;
-use App\Http\Controllers\Api\V1\FileController;
 use App\Http\Controllers\Api\V1\EarningController;
+use App\Http\Controllers\Api\V1\FileController;
 use App\Http\Controllers\Api\V1\FileRequestController;
 use App\Http\Controllers\Api\V1\HandleController;
 use App\Http\Controllers\Api\V1\InsightsApprovalController;
@@ -16,9 +16,12 @@ use App\Http\Controllers\Api\V1\MyProfileController;
 use App\Http\Controllers\Api\V1\NotificationController;
 use App\Http\Controllers\Api\V1\OfferController;
 use App\Http\Controllers\Api\V1\OrderController;
+use App\Http\Controllers\Api\V1\PostForMeWebhookController;
 use App\Http\Controllers\Api\V1\PublicFileRequestController;
 use App\Http\Controllers\Api\V1\PublicProfileController;
 use App\Http\Controllers\Api\V1\PublicSpaceController;
+use App\Http\Controllers\Api\V1\SocialAccountController;
+use App\Http\Controllers\Api\V1\SocialPostController;
 use App\Http\Controllers\Api\V1\SpaceController;
 use App\Http\Controllers\Api\V1\SpaceEventController;
 use App\Http\Controllers\Api\V1\SubscriptionController;
@@ -32,6 +35,11 @@ Route::get('/plans', [SubscriptionController::class, 'plans'])->name('api.v1.pla
 // none), and the sha512 signature is the authentication.
 Route::post('/webhooks/midtrans', MidtransWebhookController::class)
     ->name('api.v1.webhooks.midtrans');
+
+// Post for Me calls this on account and post events: no auth, the shared
+// secret header is the authentication.
+Route::post('/webhooks/postforme', PostForMeWebhookController::class)
+    ->name('api.v1.webhooks.postforme');
 
 Route::get('/handles/availability', [HandleController::class, 'availability'])
     ->middleware('throttle:30,1')
@@ -101,6 +109,23 @@ Route::middleware('auth:sanctum')->group(function () {
         ->middleware('throttle:20,1')
         ->name('api.v1.drive-accounts.picker-token');
     Route::delete('/drive-accounts/{driveAccount}', [DriveAccountController::class, 'destroy'])->name('api.v1.drive-accounts.destroy');
+
+    // Social — accounts connected through Post for Me
+    Route::get('/social-accounts', [SocialAccountController::class, 'index'])->name('api.v1.social-accounts.index');
+    Route::post('/social-accounts/auth-url', [SocialAccountController::class, 'authUrl'])
+        ->middleware('throttle:30,1')
+        ->name('api.v1.social-accounts.auth-url');
+    Route::post('/social-accounts/sync', [SocialAccountController::class, 'sync'])
+        ->middleware('throttle:30,1')
+        ->name('api.v1.social-accounts.sync');
+    Route::delete('/social-accounts/{socialAccount}', [SocialAccountController::class, 'destroy'])->name('api.v1.social-accounts.destroy');
+
+    // Social — posts relayed to the platforms
+    Route::get('/social-posts', [SocialPostController::class, 'index'])->name('api.v1.social-posts.index');
+    Route::post('/social-posts', [SocialPostController::class, 'store'])
+        ->middleware('throttle:30,1')
+        ->name('api.v1.social-posts.store');
+    Route::delete('/social-posts/{socialPost}', [SocialPostController::class, 'destroy'])->name('api.v1.social-posts.destroy');
 
     // Crefile — the file library (R2-hosted)
     Route::get('/files', [FileController::class, 'index'])->name('api.v1.files.index');

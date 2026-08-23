@@ -115,6 +115,22 @@ class User extends Authenticatable implements FilamentUser
     }
 
     /**
+     * @return HasMany<SocialAccount, $this>
+     */
+    public function socialAccounts(): HasMany
+    {
+        return $this->hasMany(SocialAccount::class);
+    }
+
+    /**
+     * @return HasMany<SocialPost, $this>
+     */
+    public function socialPosts(): HasMany
+    {
+        return $this->hasMany(SocialPost::class);
+    }
+
+    /**
      * @return HasMany<File, $this>
      */
     public function files(): HasMany

@@ -49,6 +49,16 @@ return [
         'is_production' => (bool) env('MIDTRANS_IS_PRODUCTION', false),
     ],
 
+    // Social posting — Post for Me relays posts to the nine platforms. One
+    // API key, one shared workspace: tenancy lives in external_id (our user
+    // ulid), enforced on our side. The webhook secret is issued when the
+    // webhook is registered with them.
+    'postforme' => [
+        'key' => env('POSTFORME_API_KEY'),
+        'base_url' => env('POSTFORME_BASE_URL', 'https://api.postforme.dev/v1'),
+        'webhook_secret' => env('POSTFORME_WEBHOOK_SECRET'),
+    ],
+
     'postmark' => [
         'key' => env('POSTMARK_API_KEY'),
     ],
