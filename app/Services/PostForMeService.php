@@ -27,10 +27,26 @@ class PostForMeService
      */
     public function authUrl(string $platform, string $externalId): string
     {
-        $response = $this->client()->post('/social-accounts/auth-url', [
+        // Where the browser lands after granting is the PROJECT's redirect
+        // URL, set once in the Post for Me dashboard — point it at
+        // {frontend}/social/connect?social=connected. Quickstart projects
+        // reject a per-request redirect_url_override outright (400), so it
+        // is deliberately not sent here.
+        $payload = [
             'platform' => $platform,
             'external_id' => $externalId,
-        ]);
+        ];
+
+        // Two platforms demand a connection_type, and on the provider's own
+        // system credentials only one value works: Instagram must go through
+        // Login with Facebook, LinkedIn through "organization".
+        if ($platform === 'instagram') {
+            $payload['platform_data'] = ['instagram' => ['connection_type' => 'facebook']];
+        } elseif ($platform === 'linkedin') {
+            $payload['platform_data'] = ['linkedin' => ['connection_type' => 'organization']];
+        }
+
+        $response = $this->client()->post('/social-accounts/auth-url', $payload);
 
         $response->throw();
 

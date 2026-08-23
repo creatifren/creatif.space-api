@@ -66,6 +66,54 @@ describe('earnings', function () {
             ->assertOk()
             ->assertJsonCount(1, 'data');
     });
+
+    it('saves a payout account and hands it back masked', function () {
+        $user = User::factory()->create();
+
+        $this->actingAs($user)->putJson('/api/v1/me/payout-account', [
+            'bank_code' => 'bca',
+            'account_number' => '1234564471',
+            'account_name' => 'Rani Prameswari',
+        ])
+            ->assertOk()
+            ->assertJsonPath('data.bank_code', 'bca')
+            ->assertJsonPath('data.account_masked', '••••4471')
+            ->assertJsonPath('data.account_name', 'Rani Prameswari');
+
+        // The summary carries it too, still masked.
+        $this->actingAs($user)->getJson('/api/v1/me/earnings')
+            ->assertOk()
+            ->assertJsonPath('data.payout_account.account_masked', '••••4471');
+    });
+
+    it('reports no payout account before one is saved', function () {
+        $this->actingAs(User::factory()->create())
+            ->getJson('/api/v1/me/earnings')
+            ->assertOk()
+            ->assertJsonPath('data.payout_account', null);
+    });
+
+    it('withdraws to the saved account when no details are sent', function () {
+        $user = funded();
+        $user->forceFill([
+            'payout_bank_code' => 'bni',
+            'payout_account_number' => '9876541234',
+            'payout_account_name' => 'Rani Prameswari',
+        ])->save();
+
+        $this->actingAs($user)
+            ->postJson('/api/v1/me/withdrawals', ['amount' => 100_000])
+            ->assertCreated()
+            ->assertJsonPath('data.bank_code', 'bni')
+            ->assertJsonPath('data.account_masked', '••••1234');
+    });
+
+    it('refuses a detail-less withdrawal when nothing is saved', function () {
+        $this->actingAs(funded())
+            ->postJson('/api/v1/me/withdrawals', ['amount' => 100_000])
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors('account_number');
+    });
 });
 
 describe('withdrawing', function () {

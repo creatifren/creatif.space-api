@@ -41,6 +41,13 @@ Route::post('/webhooks/midtrans', MidtransWebhookController::class)
 Route::post('/webhooks/postforme', PostForMeWebhookController::class)
     ->name('api.v1.webhooks.postforme');
 
+// The same URL doubles as the project's OAuth return: the browser arrives
+// here with GET after granting an account (the dashboard's redirect URL is
+// this public tunnel), and is handed on to the connect page, which syncs.
+Route::get('/webhooks/postforme', function () {
+    return redirect(config('app.frontend_url').'/social/connect?social=connected');
+})->name('api.v1.webhooks.postforme.return');
+
 Route::get('/handles/availability', [HandleController::class, 'availability'])
     ->middleware('throttle:30,1')
     ->name('api.v1.handles.availability');
@@ -183,6 +190,8 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::post('/me/withdrawals', [EarningController::class, 'withdraw'])
         ->middleware('throttle:10,1')
         ->name('api.v1.me.withdrawals.store');
+    Route::put('/me/payout-account', [EarningController::class, 'savePayoutAccount'])
+        ->name('api.v1.me.payout-account');
 
     // Team — Settings → Team. The owner's screen; a seat cannot invite.
     Route::get('/team/members', [TeamController::class, 'index'])->name('api.v1.team.index');

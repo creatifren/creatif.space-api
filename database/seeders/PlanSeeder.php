@@ -31,6 +31,8 @@ class PlanSeeder extends Seeder
                     'spaces_active' => 3,
                     'seats' => 1,
                     'custom_domains' => 0,
+                    // Zero, not null: Free gets no social posts at all.
+                    'social_posts_monthly' => 0,
                 ],
                 'features' => [
                     'branding_removed' => false,
@@ -49,12 +51,13 @@ class PlanSeeder extends Seeder
                 'fee_percent' => '2.50',
                 'seat_price_monthly' => 0,
                 'quotas' => [
-                    'storage_bytes' => 50 * 1024 * 1024 * 1024,
+                    'storage_bytes' => 25 * 1024 * 1024 * 1024,
                     // null = no limit. Not zero, which would mean none.
                     'spaces_total' => null,
                     'spaces_active' => null,
                     'seats' => 1,
                     'custom_domains' => 1,
+                    'social_posts_monthly' => 60,
                 ],
                 'features' => [
                     'branding_removed' => true,
@@ -72,11 +75,14 @@ class PlanSeeder extends Seeder
                 'fee_percent' => '2.50',
                 'seat_price_monthly' => 44_000,
                 'quotas' => [
-                    'storage_bytes' => null,
+                    // Per-seat: PlanQuota multiplies storage and social posts
+                    // by the seats bought, pooled across the workspace.
+                    'storage_bytes' => 25 * 1024 * 1024 * 1024,
                     'spaces_total' => null,
                     'spaces_active' => null,
                     'seats' => 3,
                     'custom_domains' => 1,
+                    'social_posts_monthly' => 60,
                 ],
                 'features' => [
                     'branding_removed' => true,

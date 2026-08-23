@@ -72,9 +72,16 @@ class PlanQuota
             ->sum('size_bytes');
     }
 
+    /**
+     * Storage is a per-seat number, pooled: Team at 3 seats shares 3× the
+     * plan's storage_bytes across the workspace. Free and Premium have one
+     * seat, so the multiplier is invisible there.
+     */
     public static function storageLimit(User $user): ?int
     {
-        return $user->plan()->quota('storage_bytes');
+        $limit = $user->plan()->quota('storage_bytes');
+
+        return $limit === null ? null : $limit * Workspace::seats($user);
     }
 
     /**
@@ -85,6 +92,49 @@ class PlanQuota
         $limit = static::storageLimit($user);
 
         return $limit === null || static::storageUsed($user) + $bytes <= $limit;
+    }
+
+    /**
+     * Social posts created this calendar month, cancelled ones excluded —
+     * cancelling gives the slot back. Counted at creation (scheduled or
+     * immediate), so scheduling ahead spends quota up front.
+     *
+     * Pooled across the workspace: the owner's and every active member's
+     * posts draw from the same monthly pot, mirroring storage.
+     */
+    public static function socialPostsUsed(User $user): int
+    {
+        $owner = Workspace::owner($user);
+
+        $userIds = $owner->teamMembers()
+            ->where('status', \App\Enums\TeamMemberStatus::Active)
+            ->pluck('member_id')
+            ->push($owner->id);
+
+        return \App\Models\SocialPost::query()
+            ->whereIn('user_id', $userIds)
+            ->where('status', '!=', \App\Enums\SocialPostStatus::Cancelled)
+            ->where('created_at', '>=', now()->startOfMonth())
+            ->count();
+    }
+
+    /**
+     * Per-seat and pooled, like storage. Zero is a real ceiling (Free),
+     * null means no limit.
+     */
+    public static function socialPostsLimit(User $user): ?int
+    {
+        $owner = Workspace::owner($user);
+        $limit = $owner->plan()->quota('social_posts_monthly');
+
+        return $limit === null ? null : $limit * Workspace::seats($owner);
+    }
+
+    public static function canPostSocial(User $user): bool
+    {
+        $limit = static::socialPostsLimit($user);
+
+        return $limit === null || static::socialPostsUsed($user) < $limit;
     }
 
     /**

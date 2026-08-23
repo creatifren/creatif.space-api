@@ -9,6 +9,7 @@ use App\Http\Controllers\Controller;
 use App\Http\Resources\SocialPostResource;
 use App\Models\SocialPost;
 use App\Services\PostForMeService;
+use App\Support\PlanQuota;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
@@ -36,7 +37,11 @@ class SocialPostController extends Controller
                 ->with('targets.account')
                 ->latest()
                 ->get(),
-        );
+        )->additional(['meta' => [
+            // The composer's "x of y left this month" line. null limit = no cap.
+            'posts_used' => PlanQuota::socialPostsUsed($request->user()),
+            'posts_limit' => PlanQuota::socialPostsLimit($request->user()),
+        ]]);
     }
 
     /**
@@ -61,6 +66,19 @@ class SocialPostController extends Controller
         ]);
 
         $user = $request->user();
+
+        // Quota gate before anything reaches the provider. Free's limit is
+        // zero, so this is also the "social is a paid feature" wall.
+        if (! PlanQuota::canPostSocial($user)) {
+            $limit = PlanQuota::socialPostsLimit($user);
+
+            throw ValidationException::withMessages([
+                'caption' => $limit === 0
+                    ? 'Social posting is not included on the Free plan — upgrade to Premium to publish.'
+                    : "You've reached your {$limit} posts for this month.",
+            ]);
+        }
+
         $ids = array_values(array_unique($validated['account_ids']));
 
         $accounts = $user->socialAccounts()

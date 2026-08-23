@@ -2,6 +2,7 @@
 
 use App\Models\SocialAccount;
 use App\Models\SocialPost;
+use App\Models\Subscription;
 use App\Models\User;
 use Illuminate\Support\Facades\Http;
 
@@ -12,12 +13,21 @@ beforeEach(function () {
     ]);
 });
 
+/** Social posting is a paid feature — creators in these tests are Premium. */
+function premiumUser(): User
+{
+    $user = User::factory()->create();
+    Subscription::factory()->for($user)->create();
+
+    return $user;
+}
+
 describe('creating posts', function () {
     it('creates a scheduled post with pending targets and per-account captions', function () {
         Http::fake([
             'api.postforme.test/*' => Http::response(['id' => 'post_abc', 'status' => 'scheduled']),
         ]);
-        $user = User::factory()->create();
+        $user = premiumUser();
         $ig = SocialAccount::factory()->for($user)->create(['platform' => 'instagram']);
         $x = SocialAccount::factory()->for($user)->create(['platform' => 'x']);
 
@@ -52,7 +62,7 @@ describe('creating posts', function () {
         Http::fake([
             'api.postforme.test/*' => Http::response(['id' => 'post_now', 'status' => 'processed']),
         ]);
-        $user = User::factory()->create();
+        $user = premiumUser();
         $account = SocialAccount::factory()->for($user)->create();
 
         $this->actingAs($user)
@@ -68,7 +78,7 @@ describe('creating posts', function () {
         Http::fake();
         $foreign = SocialAccount::factory()->create();
 
-        $this->actingAs(User::factory()->create())
+        $this->actingAs(premiumUser())
             ->postJson('/api/v1/social-posts', [
                 'caption' => 'Sneaky.',
                 'account_ids' => [$foreign->ulid],
@@ -80,7 +90,7 @@ describe('creating posts', function () {
 
     it('refuses a disconnected account of your own', function () {
         Http::fake();
-        $user = User::factory()->create();
+        $user = premiumUser();
         $account = SocialAccount::factory()->for($user)->disconnected()->create();
 
         $this->actingAs($user)
@@ -94,7 +104,7 @@ describe('creating posts', function () {
     });
 
     it('validates caption length, media scheme, and past schedule', function () {
-        $user = User::factory()->create();
+        $user = premiumUser();
         $account = SocialAccount::factory()->for($user)->create();
 
         $base = ['account_ids' => [$account->ulid]];
@@ -116,6 +126,66 @@ describe('creating posts', function () {
                 'scheduled_at' => now()->subHour()->toIso8601String(),
             ])
             ->assertUnprocessable();
+    });
+});
+
+describe('plan quota', function () {
+    it('refuses a Free user with an upgrade message and sends nothing', function () {
+        Http::fake();
+        $user = User::factory()->create(); // no subscription = Free, 0 posts
+        $account = SocialAccount::factory()->for($user)->create();
+
+        $this->actingAs($user)
+            ->postJson('/api/v1/social-posts', [
+                'caption' => 'Free tier.',
+                'account_ids' => [$account->ulid],
+            ])
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors('caption');
+
+        Http::assertNothingSent();
+    });
+
+    it('caps Premium at 60 posts a month, cancelled ones not counted', function () {
+        Http::fake([
+            'api.postforme.test/*' => Http::response(['id' => 'post_61', 'status' => 'scheduled']),
+        ]);
+        $user = premiumUser();
+        $account = SocialAccount::factory()->for($user)->create();
+
+        SocialPost::factory()->for($user)->count(60)->create();
+
+        $payload = ['caption' => 'One too many.', 'account_ids' => [$account->ulid]];
+
+        $this->actingAs($user)
+            ->postJson('/api/v1/social-posts', $payload)
+            ->assertUnprocessable();
+
+        // Cancelling one frees the slot.
+        $user->socialPosts()->first()->update(['status' => 'cancelled']);
+
+        $this->actingAs($user)
+            ->postJson('/api/v1/social-posts', $payload)
+            ->assertCreated();
+    });
+
+    it("ignores last month's posts", function () {
+        Http::fake([
+            'api.postforme.test/*' => Http::response(['id' => 'post_new', 'status' => 'scheduled']),
+        ]);
+        $user = premiumUser();
+        $account = SocialAccount::factory()->for($user)->create();
+
+        SocialPost::factory()->for($user)->count(60)->create([
+            'created_at' => now()->subMonth(),
+        ]);
+
+        $this->actingAs($user)
+            ->postJson('/api/v1/social-posts', [
+                'caption' => 'Fresh month.',
+                'account_ids' => [$account->ulid],
+            ])
+            ->assertCreated();
     });
 });
 
