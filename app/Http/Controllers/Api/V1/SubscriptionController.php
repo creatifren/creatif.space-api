@@ -259,8 +259,7 @@ class SubscriptionController extends Controller
     }
 
     /**
-     * Billing history — Settings → Subscription, and the "Open Settings →
-     * Billing" link the Orders tab has always pointed at.
+     * Billing history — Settings → Subscription.
      */
     public function invoices(Request $request): AnonymousResourceCollection
     {

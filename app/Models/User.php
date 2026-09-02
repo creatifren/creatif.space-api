@@ -171,25 +171,6 @@ class User extends Authenticatable implements FilamentUser
     }
 
     /**
-     * @return HasMany<Offer, $this>
-     */
-    public function offers(): HasMany
-    {
-        return $this->hasMany(Offer::class)->orderBy('sort_order');
-    }
-
-    /**
-     * Sales, not purchases — this user is the seller. What they bought
-     * elsewhere hangs off their Client identity.
-     *
-     * @return HasMany<Order, $this>
-     */
-    public function orders(): HasMany
-    {
-        return $this->hasMany(Order::class, 'creator_id');
-    }
-
-    /**
      * @return HasMany<WalletTransaction, $this>
      */
     public function walletTransactions(): HasMany

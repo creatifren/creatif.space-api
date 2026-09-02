@@ -119,8 +119,7 @@ final class CommissionEngine
         $total = (int) floor($invoice->amount * $tier / 100);
         $each = intdiv($total, Affiliate::INSTALMENTS);
         // The remainder rides on the first instalment, so the twelve parts
-        // add back to exactly the commission — the same arithmetic
-        // discipline as Order::split().
+        // add back to exactly the commission.
         $remainder = $total - $each * Affiliate::INSTALMENTS;
 
         if ($total <= 0) {

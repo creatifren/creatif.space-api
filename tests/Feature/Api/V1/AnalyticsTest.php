@@ -70,7 +70,7 @@ describe('the free headline', function () {
 
         // null means "not on your plan"; [] would mean "yours, and empty".
         // The blur-and-upgrade layout depends on telling those apart.
-        foreach (['unique', 'sources', 'files', 'viewers', 'crawlers', 'hours', 'sales', 'aeo'] as $key) {
+        foreach (['unique', 'sources', 'files', 'viewers', 'crawlers', 'hours', 'aeo'] as $key) {
             expect($data)->toHaveKey($key)
                 ->and($data[$key])->toBeNull();
         }

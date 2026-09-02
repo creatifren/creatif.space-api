@@ -179,16 +179,6 @@ describe('update', function () {
             ->assertJsonPath('data.has_password', false);
     });
 
-    it('turns approval off when selling turns on', function () {
-        $user = User::factory()->create();
-        $space = Space::factory()->for($user)->create(['approval_enabled' => true]);
-
-        $this->actingAs($user)->patchJson("/api/v1/spaces/{$space->ulid}", ['selling_enabled' => true])
-            ->assertOk()
-            ->assertJsonPath('data.selling_enabled', true)
-            ->assertJsonPath('data.approval_enabled', false);
-    });
-
     it('rejects a slug already used by another of the users spaces', function () {
         $user = User::factory()->create();
         Space::factory()->for($user)->create(['slug' => 'taken']);

@@ -201,7 +201,6 @@ describe('what a seat buys', function () {
         $member = seatedMember($owner);
 
         // A seat is for the work, not the till.
-        $this->actingAs($member)->getJson('/api/v1/me/earnings')->assertForbidden();
         $this->actingAs($member)->getJson('/api/v1/me/withdrawals')->assertForbidden();
         $this->actingAs($member)->getJson('/api/v1/me/subscription')->assertForbidden();
         $this->actingAs($member)->getJson('/api/v1/me/affiliate')->assertForbidden();

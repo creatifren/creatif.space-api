@@ -3,12 +3,9 @@
 namespace App\Support;
 
 use App\Enums\ApprovalStatus;
-use App\Enums\OrderStatus;
 use App\Enums\SpaceEventType;
 use App\Models\Approval;
 use App\Models\Client;
-use App\Models\Offer;
-use App\Models\Order;
 use App\Models\Space;
 use App\Models\SpaceDailyStat;
 use App\Models\SpaceEvent;
@@ -426,82 +423,6 @@ final class Analytics
             ->all();
 
         return ['median_hours' => $median, 'stuck' => $stuck];
-    }
-
-    /**
-     * What sells: every offer with the orders it actually produced.
-     *
-     * @return list<array{name: string, kind: string, sold: int, gross: int}>
-     */
-    public static function sales(User $owner, CarbonInterface $from, CarbonInterface $to): array
-    {
-        $offers = $owner->offers()->get();
-
-        $sold = Order::query()
-            ->selectRaw('offer_id, COUNT(*) AS sold, SUM(amount) AS gross')
-            ->where('creator_id', $owner->id)
-            ->where('status', OrderStatus::Paid)
-            ->whereBetween('paid_at', [$from, $to])
-            ->whereNotNull('offer_id')
-            ->groupBy('offer_id')
-            ->toBase()
-            ->get()
-            ->keyBy('offer_id');
-
-        // Every offer, including the ones that sold nothing — a zero is the
-        // answer the creator came for.
-        return $offers
-            ->map(fn (Offer $offer): array => [
-                'name' => $offer->title,
-                'kind' => $offer->type->value,
-                'sold' => (int) ($sold[$offer->id]->sold ?? 0),
-                'gross' => (int) ($sold[$offer->id]->gross ?? 0),
-            ])
-            ->all();
-    }
-
-    /**
-     * Clients who came back — more than one paid order, ever. Deliberately
-     * not scoped to the range: "came back" is a fact about the relationship.
-     *
-     * @return list<array{who: string, projects: int, last_at: string, value: int}>
-     */
-    public static function repeatClients(User $owner): array
-    {
-        $rows = Order::query()
-            ->selectRaw('client_id, COUNT(*) AS projects, SUM(amount) AS value, MAX(paid_at) AS last_at')
-            ->where('creator_id', $owner->id)
-            ->where('status', OrderStatus::Paid)
-            ->groupBy('client_id')
-            ->havingRaw('COUNT(*) > 1')
-            ->orderByDesc('value')
-            ->limit(5)
-            ->toBase()
-            ->get();
-
-        $clients = Client::query()
-            ->whereIn('id', $rows->pluck('client_id'))
-            ->get()
-            ->keyBy('id');
-
-        return $rows
-            ->map(function ($row) use ($clients): ?array {
-                $client = $clients[$row->client_id] ?? null;
-
-                if ($client === null) {
-                    return null;
-                }
-
-                return [
-                    'who' => $client->displayName(),
-                    'projects' => (int) $row->projects,
-                    'last_at' => (string) $row->last_at,
-                    'value' => (int) $row->value,
-                ];
-            })
-            ->filter()
-            ->values()
-            ->all();
     }
 
     /**

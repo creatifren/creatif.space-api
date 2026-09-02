@@ -82,8 +82,6 @@ class AnalyticsController extends Controller
             'ai_refs' => null,
             'hours' => null,
             'approval' => null,
-            'repeat' => null,
-            'sales' => null,
             'aeo' => null,
         ];
 
@@ -102,8 +100,6 @@ class AnalyticsController extends Controller
                 'ai_refs' => Analytics::assistantReferrers($spaceIds, $from, $to),
                 'hours' => Analytics::hours($spaceIds, $from, $to),
                 'approval' => Analytics::approval($spaceIds),
-                'repeat' => Analytics::repeatClients($user),
-                'sales' => Analytics::sales($user, $from, $to),
                 'aeo' => Analytics::answerReadiness($user),
             ]);
         }

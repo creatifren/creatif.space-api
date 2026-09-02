@@ -3,7 +3,6 @@
 namespace App\Services;
 
 use App\Models\Invoice;
-use App\Models\Order;
 use App\Models\User;
 use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Support\Facades\Http;
@@ -40,28 +39,6 @@ class MidtransService
             buyerName: $user->name,
             buyerEmail: $user->email,
             finishUrl: config('app.frontend_url').'/settings?section=subscription',
-        );
-    }
-
-    /**
-     * A Snap token for a creator's sale. Same call as a subscription bill —
-     * only who is paying and where they land afterwards differ.
-     *
-     * @throws ConnectionException
-     */
-    public function snapTokenForOrder(Order $order, string $finishUrl): string
-    {
-        $order->loadMissing(['client', 'offer']);
-
-        return $this->token(
-            orderId: (string) $order->midtrans_order_id,
-            amount: $order->amount,
-            itemId: $order->ulid,
-            itemName: $order->offerTitle(),
-            buyerName: $order->client->displayName(),
-            buyerEmail: $order->client->email,
-            finishUrl: $finishUrl,
-            expiryHours: Order::DUE_HOURS,
         );
     }
 

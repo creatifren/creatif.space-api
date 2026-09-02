@@ -29,13 +29,9 @@ describe('plans', function () {
         $premium = collect($response->json('data'))->firstWhere('key', 'premium');
 
         expect($free['price_monthly'])->toBe(0)
-            // A whole percent serialises as 5, a fractional one as 2.5 —
-            // either way it is a number the frontend can multiply with.
-            ->and((float) $free['fee_percent'])->toBe(5.0)
             ->and($free['quotas']['spaces_total'])->toBe(10)
             ->and($premium['price_monthly'])->toBe(94_000)
             ->and($premium['price_yearly'])->toBe(840_000)
-            ->and($premium['fee_percent'])->toBe(2.5)
             // No limit is null, never zero — zero would read as "none".
             ->and($premium['quotas']['spaces_total'])->toBeNull();
     });

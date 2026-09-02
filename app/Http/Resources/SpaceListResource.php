@@ -34,7 +34,6 @@ class SpaceListResource extends JsonResource
             'view_mode' => $this->view_mode,
             'approval_enabled' => $this->approval_enabled,
             'approval_state' => $this->approvalState(),
-            'selling_enabled' => $this->selling_enabled,
             'has_password' => $this->password_hash !== null,
             'expires_at' => $this->expires_at,
             'items_count' => $this->items->count(),

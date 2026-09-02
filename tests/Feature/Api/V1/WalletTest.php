@@ -1,7 +1,6 @@
 <?php
 
 use App\Enums\WalletTransactionType;
-use App\Models\Order;
 use App\Models\User;
 use App\Models\WalletTransaction;
 use App\Support\Wallet;
@@ -79,18 +78,17 @@ it('keeps one balance per creator', function () {
 
 it('holds a reference back to what moved the money', function () {
     $user = User::factory()->create();
-    $order = Order::factory()->for($user, 'creator')->paid()->create();
 
     $line = Wallet::credit(
         $user,
-        WalletTransactionType::SaleCredit,
-        $order->net_amount,
-        'order',
-        $order->id,
+        WalletTransactionType::CommissionCredit,
+        141_550,
+        'commission',
+        4242,
     );
 
-    expect($line->reference_type)->toBe('order')
-        ->and($line->reference_id)->toBe($order->id);
+    expect($line->reference_type)->toBe('commission')
+        ->and($line->reference_id)->toBe(4242);
 });
 
 it('never updates a line once written', function () {

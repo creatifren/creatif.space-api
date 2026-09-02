@@ -5,7 +5,6 @@ namespace App\Http\Resources;
 use App\Enums\ApprovalStatus;
 use App\Enums\NoteAuthor;
 use App\Models\Approval;
-use App\Models\Offer;
 use App\Models\Space;
 use App\Models\SpaceItem;
 use Illuminate\Http\Request;
@@ -68,7 +67,6 @@ class PublicSpaceResource extends JsonResource
                 'handle' => $this->user->handle?->name,
             ],
             'approval' => $this->approvalBlock($request),
-            'offers' => $this->offers(),
             'layout' => $this->view_mode,
             'fit' => $design['fit'] ?? 'cover',
             'labels' => $design['labels'] ?? ['name' => true, 'tags' => true],
@@ -129,40 +127,6 @@ class PublicSpaceResource extends JsonResource
         $block['revision'] = $mine->where('status', ApprovalStatus::Revision)->count();
 
         return $block;
-    }
-
-    /**
-     * The offer dock. Only when this Space is actually selling — the editor
-     * makes selling and approval mutually exclusive, and an offer left over
-     * from before must not reappear.
-     *
-     * @return list<array<string, mixed>>
-     */
-    private function offers(): array
-    {
-        if (! $this->selling_enabled) {
-            return [];
-        }
-
-        return Offer::query()
-            ->where('space_id', $this->id)
-            ->where('is_active', true)
-            ->where('show_on_space', true)
-            ->orderBy('sort_order')
-            ->get()
-            ->map(fn (Offer $offer) => [
-                'id' => $offer->ulid,
-                'type' => $offer->type,
-                'title' => $offer->title,
-                'description' => $offer->description,
-                'price' => $offer->price,
-                'price_from' => $offer->price_from,
-                'details' => $offer->details,
-                'buyable' => $offer->isBuyable(),
-                'needs_amount' => $offer->needsBuyerAmount(),
-            ])
-            ->values()
-            ->all();
     }
 
     /**

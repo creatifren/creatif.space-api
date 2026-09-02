@@ -20,7 +20,6 @@ enum NotificationType: string
     // without being told. See switchable().
     case BillingReminder = 'billing.reminder';
     case BillingFailed = 'billing.failed';
-    case OrderPaid = 'order.paid';
 
     // Storage nearly/completely full is not a preference either: silencing
     // it would mean client uploads start bouncing without a word.

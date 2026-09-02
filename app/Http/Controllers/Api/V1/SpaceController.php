@@ -116,7 +116,6 @@ class SpaceController extends Controller
             'visibility' => ['sometimes', 'string', 'in:private,public'],
             'view_mode' => ['sometimes', 'string', 'in:editorial,grid,board'],
             'approval_enabled' => ['sometimes', 'boolean'],
-            'selling_enabled' => ['sometimes', 'boolean'],
             'expires_at' => ['sometimes', 'nullable', 'date'],
             'password' => ['sometimes', 'nullable', 'string', 'min:4', 'max:255'],
             'design' => ['sometimes', 'array'],
@@ -129,12 +128,6 @@ class SpaceController extends Controller
             'items.*.sort_order' => ['sometimes', 'integer', 'min:0'],
             'items.*.caption' => ['sometimes', 'nullable', 'string', 'max:2000'],
         ]);
-
-        // Selling and approval are mutually exclusive (product rule).
-        $selling = $validated['selling_enabled'] ?? $space->selling_enabled;
-        if ($selling && ($validated['approval_enabled'] ?? $space->approval_enabled)) {
-            $validated['approval_enabled'] = false;
-        }
 
         if (strlen(json_encode($validated['design'] ?? []) ?: '') > 200_000) {
             throw ValidationException::withMessages(['design' => 'The design document is too large.']);
@@ -159,9 +152,6 @@ class SpaceController extends Controller
 
             if (array_key_exists('approval_enabled', $validated)) {
                 $space->approval_enabled = $validated['approval_enabled'];
-            }
-            if (array_key_exists('selling_enabled', $validated)) {
-                $space->selling_enabled = $validated['selling_enabled'];
             }
             if (array_key_exists('password', $validated)) {
                 $space->password_hash = $validated['password'] === null
@@ -279,7 +269,6 @@ class SpaceController extends Controller
             ]);
             $copy->forceFill([
                 'approval_enabled' => $space->approval_enabled,
-                'selling_enabled' => $space->selling_enabled,
             ])->save();
 
             // Copy items; remap old item ulid → new in design.items + blocks.

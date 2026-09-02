@@ -106,16 +106,6 @@ class Client extends Authenticatable
     }
 
     /**
-     * What this person bought — the buyer's side of the till.
-     *
-     * @return HasMany<Order, $this>
-     */
-    public function orders(): HasMany
-    {
-        return $this->hasMany(Order::class);
-    }
-
-    /**
      * The name to show when the client never gave one — an email's local
      * part is a better label than a blank space.
      */

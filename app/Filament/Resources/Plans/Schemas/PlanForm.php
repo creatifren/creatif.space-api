@@ -30,13 +30,6 @@ class PlanForm
                     ->numeric()
                     ->minValue(0)
                     ->required(),
-                TextInput::make('fee_percent')
-                    ->label('Transaction fee (%)')
-                    ->numeric()
-                    ->minValue(0)
-                    ->maxValue(99.99)
-                    ->step(0.01)
-                    ->required(),
                 TextInput::make('seat_price_monthly')
                     ->label('Extra seat / month (Rp)')
                     ->numeric()

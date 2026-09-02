@@ -18,7 +18,6 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
  * @property string $name
  * @property int $price_monthly
  * @property int $price_yearly
- * @property string $fee_percent
  * @property int $seat_price_monthly
  * @property array<string, mixed> $quotas
  * @property array<string, mixed> $features
@@ -37,7 +36,6 @@ class Plan extends Model
         'name',
         'price_monthly',
         'price_yearly',
-        'fee_percent',
         'seat_price_monthly',
         'quotas',
         'features',

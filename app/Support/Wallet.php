@@ -17,10 +17,12 @@ use RuntimeException;
  * disagrees with the sum, the sum is the truth and the row is the evidence
  * of when things went wrong.
  *
- * Two wallets since Fase 6: `main` is what selling earns, `affiliate` is
- * commission, and the product promises they stay apart. Every sum below is
- * scoped by wallet — a total that spans both is nobody's balance, which is
- * why doing the sum anywhere else is not allowed.
+ * Two wallets: `affiliate` is commission, and `main` is the older balance
+ * that selling used to earn — it takes no new credits since that module
+ * was removed, but historical rows and their payouts still live there.
+ * Every sum below is scoped by wallet — a total that spans both is
+ * nobody's balance, which is why doing the sum anywhere else is not
+ * allowed.
  */
 final class Wallet
 {

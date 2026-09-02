@@ -23,7 +23,6 @@ class PlanSeeder extends Seeder
                 'name' => 'Free',
                 'price_monthly' => 0,
                 'price_yearly' => 0,
-                'fee_percent' => '5.00',
                 'seat_price_monthly' => 0,
                 'quotas' => [
                     'storage_bytes' => 2 * 1024 * 1024 * 1024,
@@ -48,7 +47,6 @@ class PlanSeeder extends Seeder
                 'price_monthly' => 94_000,
                 // Three months free: ten months paid, twelve used.
                 'price_yearly' => 840_000,
-                'fee_percent' => '2.50',
                 'seat_price_monthly' => 0,
                 'quotas' => [
                     'storage_bytes' => 25 * 1024 * 1024 * 1024,
@@ -72,7 +70,6 @@ class PlanSeeder extends Seeder
                 'name' => 'Team / Agency',
                 'price_monthly' => 270_000,
                 'price_yearly' => 2_430_000,
-                'fee_percent' => '2.50',
                 'seat_price_monthly' => 44_000,
                 'quotas' => [
                     // Per-seat: PlanQuota multiplies storage and social posts

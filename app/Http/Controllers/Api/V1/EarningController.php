@@ -2,11 +2,9 @@
 
 namespace App\Http\Controllers\Api\V1;
 
-use App\Enums\OrderStatus;
 use App\Enums\WalletTransactionType;
 use App\Enums\WithdrawalStatus;
 use App\Http\Controllers\Controller;
-use App\Http\Resources\OrderResource;
 use App\Http\Resources\WithdrawalResource;
 use App\Models\Withdrawal;
 use App\Support\Wallet;
@@ -18,45 +16,11 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 
 /**
- * Insights → Orders → Earnings. The creator's side of the till: what came
- * in, what the platform took, and what can be withdrawn.
+ * Payouts: the destination account, the withdrawal history, and the
+ * request that moves money out of a wallet.
  */
 class EarningController extends Controller
 {
-    /**
-     * The summary strip. Every figure is derived — nothing here is a stored
-     * counter that could drift.
-     */
-    public function summary(Request $request): JsonResponse
-    {
-        Workspace::ownerOnly($request->user());
-        $user = $request->user();
-
-        $paid = $user->orders()->where('status', OrderStatus::Paid);
-
-        $monthStart = now()->startOfMonth();
-        $thisMonth = (clone $paid)->where('paid_at', '>=', $monthStart);
-
-        return response()->json([
-            'data' => [
-                'balance' => Wallet::balance($user),
-                // Sold but not settled: money that exists but can't be
-                // withdrawn yet.
-                'pending' => (int) $user->orders()
-                    ->where('status', OrderStatus::Pending)
-                    ->sum('net_amount'),
-                'month_gross' => (int) (clone $thisMonth)->sum('amount'),
-                'month_fee' => (int) (clone $thisMonth)->sum('fee_amount'),
-                'month_orders' => (clone $thisMonth)->count(),
-                'lifetime_net' => (int) (clone $paid)->sum('net_amount'),
-                'fee_percent' => (float) $user->plan()->fee_percent,
-                'plan' => $user->plan()->key,
-                'minimum_withdrawal' => Withdrawal::MINIMUM,
-                'payout_account' => self::payoutAccount($user),
-            ],
-        ]);
-    }
-
     /**
      * Save the default payout destination without withdrawing anything.
      * The withdraw form starts from this; each payout still copies the
@@ -105,22 +69,6 @@ class EarningController extends Controller
             'account_masked' => '••••'.substr((string) ($attrs['payout_account_number'] ?? ''), -4),
             'account_name' => (string) ($attrs['payout_account_name'] ?? ''),
         ];
-    }
-
-    /**
-     * Sales, newest first — the creator's own ledger of who bought what.
-     */
-    public function orders(Request $request): AnonymousResourceCollection
-    {
-        Workspace::ownerOnly($request->user());
-
-        return OrderResource::collection(
-            $request->user()->orders()
-                ->with(['offer', 'client', 'space'])
-                ->latest('id')
-                ->limit(50)
-                ->get(),
-        );
     }
 
     public function withdrawals(Request $request): AnonymousResourceCollection

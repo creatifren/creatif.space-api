@@ -12,12 +12,11 @@ enum SpaceEventType: string
     case LightboxOpen = 'lightbox_open';
     case Download = 'download';
     case PasswordPass = 'password_pass';
-    case OrderClick = 'order_click';
 
     /**
-     * The types the public beacon accepts. Password and order events are
-     * recorded server-side where they actually happen, so a browser must
-     * not be able to claim them.
+     * The types the public beacon accepts. Password events are recorded
+     * server-side where they actually happen, so a browser must not be
+     * able to claim them.
      *
      * @return list<string>
      */

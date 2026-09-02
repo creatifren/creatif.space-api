@@ -27,7 +27,6 @@ use Illuminate\Support\Str;
  * @property string|null $password_hash
  * @property CarbonImmutable|null $expires_at
  * @property bool $approval_enabled
- * @property bool $selling_enabled
  * @property array<string, mixed> $design
  * @property array<string, mixed> $settings
  * @property array<string, mixed>|null $seo
@@ -52,7 +51,6 @@ class Space extends Model
         'view_mode',
         'expires_at',
         'approval_enabled',
-        'selling_enabled',
         'design',
         'settings',
         'seo',
@@ -78,7 +76,6 @@ class Space extends Model
             'view_mode' => SpaceViewMode::class,
             'expires_at' => 'datetime',
             'approval_enabled' => 'boolean',
-            'selling_enabled' => 'boolean',
             'design' => 'array',
             'settings' => 'array',
             'seo' => 'array',

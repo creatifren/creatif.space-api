@@ -11,7 +11,7 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
 /**
- * Insights → Orders → Delivery: proof of what was sent, opened, taken and
+ * Insights → Approval → Delivery: proof of what was sent, opened, taken and
  * signed off, for every Space that was ever published.
  *
  * The screen's own promise sets the rules: "this record only grows; it is

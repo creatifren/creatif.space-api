@@ -63,37 +63,6 @@ class PublicProfileResource extends JsonResource
             // the freelance block simply does not exist on the public page.
             'freelance' => $freelance ? ($profile->freelance ?? (object) []) : null,
             'spaces' => $spaces,
-            'offers' => $this->offers(),
         ];
-    }
-
-    /**
-     * The price list — offers the owner chose to show here. An offer that
-     * lives only on a Space stays on that Space.
-     *
-     * @return list<array<string, mixed>>
-     */
-    private function offers(): array
-    {
-        if ($this->user === null) {
-            return [];
-        }
-
-        return $this->user->offers()
-            ->where('is_active', true)
-            ->where('show_on_profile', true)
-            ->get()
-            ->map(fn ($offer) => [
-                'id' => $offer->ulid,
-                'type' => $offer->type,
-                'title' => $offer->title,
-                'description' => $offer->description,
-                'price' => $offer->price,
-                'price_from' => $offer->price_from,
-                'buyable' => $offer->isBuyable(),
-                'needs_amount' => $offer->needsBuyerAmount(),
-            ])
-            ->values()
-            ->all();
     }
 }

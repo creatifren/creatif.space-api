@@ -3,20 +3,14 @@
 namespace App\Http\Controllers\Api\V1;
 
 use App\Enums\InvoiceStatus;
-use App\Enums\OrderStatus;
 use App\Enums\SubscriptionStatus;
-use App\Enums\WalletTransactionType;
 use App\Http\Controllers\Controller;
 use App\Models\Invoice;
-use App\Models\Order;
 use App\Models\Subscription;
 use App\Notifications\InvoiceFailed;
-use App\Notifications\OrderDelivered;
-use App\Notifications\OrderPaid;
 use App\Notifications\SubscriptionStarted;
 use App\Services\MidtransService;
 use App\Support\CommissionEngine;
-use App\Support\Wallet;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -42,17 +36,8 @@ class MidtransWebhookController extends Controller
             return response()->json(['message' => 'Invalid signature.'], 403);
         }
 
-        $orderId = (string) ($payload['order_id'] ?? '');
-
-        // Two things get paid for here: a subscription bill (CS-…) and a
-        // creator's sale (OR-…). The prefix says which, and the id is unique
-        // either way, so a lookup can't cross the streams.
-        if (str_starts_with($orderId, 'OR-')) {
-            return $this->handleOrder($orderId, $payload, $midtrans);
-        }
-
         $invoice = Invoice::query()
-            ->where('midtrans_order_id', $orderId)
+            ->where('midtrans_order_id', (string) ($payload['order_id'] ?? ''))
             ->with('subscription')
             ->first();
 
@@ -92,9 +77,8 @@ class MidtransWebhookController extends Controller
         });
 
         /*
-         * Notified outside the transaction, like the paid branch below it:
-         * a queued notification must not be dispatched from inside a write
-         * that could still roll back.
+         * Notified outside the transaction: a queued notification must not
+         * be dispatched from inside a write that could still roll back.
          */
         if ($outcome === 'paid') {
             $subscription = $invoice->subscription->fresh()->load('plan');
@@ -110,70 +94,6 @@ class MidtransWebhookController extends Controller
         if (in_array($outcome, ['failed', 'expired'], true)) {
             $invoice->load('subscription.plan', 'subscription.user');
             $invoice->subscription->user->notify(new InvoiceFailed($invoice));
-        }
-
-        return response()->json(['message' => 'ok']);
-    }
-
-    /**
-     * A creator's sale. The money is credited to their balance here and
-     * nowhere else — and only once, however many times Midtrans retries.
-     *
-     * @param  array<string, mixed>  $payload
-     */
-    private function handleOrder(
-        string $orderId,
-        array $payload,
-        MidtransService $midtrans,
-    ): JsonResponse {
-        $order = Order::query()
-            ->where('midtrans_order_id', $orderId)
-            ->with(['creator', 'offer', 'client'])
-            ->first();
-
-        if ($order === null) {
-            return response()->json(['message' => 'Unknown order.'], 404);
-        }
-
-        if ($order->isSettled()) {
-            $order->forceFill(['raw_notification' => $payload])->save();
-
-            return response()->json(['message' => 'Already processed.']);
-        }
-
-        $outcome = $midtrans->outcome($payload);
-
-        DB::transaction(function () use ($order, $payload, $outcome) {
-            $order->forceFill([
-                'status' => match ($outcome) {
-                    'paid' => OrderStatus::Paid,
-                    'failed' => OrderStatus::Failed,
-                    'expired' => OrderStatus::Expired,
-                    default => OrderStatus::Pending,
-                },
-                'payment_method' => $payload['payment_type'] ?? $order->payment_method,
-                'paid_at' => $outcome === 'paid' ? now() : null,
-                'raw_notification' => $payload,
-            ])->save();
-
-            if ($outcome === 'paid') {
-                // net_amount, not amount: the platform fee never lands in
-                // the creator's balance in the first place.
-                Wallet::credit(
-                    $order->creator,
-                    WalletTransactionType::SaleCredit,
-                    $order->net_amount,
-                    'order',
-                    $order->id,
-                );
-            }
-        });
-
-        if ($outcome === 'paid') {
-            $order->creator->notify(new OrderPaid($order));
-            // The buyer's side: receipt + the delivery link, if the offer
-            // carries one. Mail-only — a client has no dashboard.
-            $order->client->notify(new OrderDelivered($order));
         }
 
         return response()->json(['message' => 'ok']);

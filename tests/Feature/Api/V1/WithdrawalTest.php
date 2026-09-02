@@ -2,7 +2,6 @@
 
 use App\Enums\WalletTransactionType;
 use App\Enums\WithdrawalStatus;
-use App\Models\Order;
 use App\Models\User;
 use App\Models\Withdrawal;
 use App\Support\Wallet;
@@ -29,44 +28,7 @@ function payoutDetails(int $amount): array
     ];
 }
 
-describe('earnings', function () {
-    it('reports a zero balance before anything is sold', function () {
-        $this->actingAs(User::factory()->create())
-            ->getJson('/api/v1/me/earnings')
-            ->assertOk()
-            ->assertJsonPath('data.balance', 0)
-            ->assertJsonPath('data.fee_percent', 5)
-            ->assertJsonPath('data.minimum_withdrawal', 50_000);
-    });
-
-    it('separates what is settled from what is still pending', function () {
-        $user = funded(141_550);
-        Order::factory()->for($user, 'creator')->paid()->create([
-            'amount' => 149_000, 'fee_amount' => 7_450, 'net_amount' => 141_550,
-        ]);
-        // Sold but unpaid: real, but not yet withdrawable.
-        Order::factory()->for($user, 'creator')->create([
-            'amount' => 100_000, 'fee_amount' => 5_000, 'net_amount' => 95_000,
-        ]);
-
-        $this->actingAs($user)->getJson('/api/v1/me/earnings')
-            ->assertOk()
-            ->assertJsonPath('data.balance', 141_550)
-            ->assertJsonPath('data.pending', 95_000)
-            ->assertJsonPath('data.month_gross', 149_000)
-            ->assertJsonPath('data.month_fee', 7_450);
-    });
-
-    it('lists my sales and nobody else’s', function () {
-        $user = User::factory()->create();
-        Order::factory()->for($user, 'creator')->paid()->create();
-        Order::factory()->paid()->create();
-
-        $this->actingAs($user)->getJson('/api/v1/me/orders')
-            ->assertOk()
-            ->assertJsonCount(1, 'data');
-    });
-
+describe('payout account', function () {
     it('saves a payout account and hands it back masked', function () {
         $user = User::factory()->create();
 
@@ -80,17 +42,6 @@ describe('earnings', function () {
             ->assertJsonPath('data.account_masked', '••••4471')
             ->assertJsonPath('data.account_name', 'Rani Prameswari');
 
-        // The summary carries it too, still masked.
-        $this->actingAs($user)->getJson('/api/v1/me/earnings')
-            ->assertOk()
-            ->assertJsonPath('data.payout_account.account_masked', '••••4471');
-    });
-
-    it('reports no payout account before one is saved', function () {
-        $this->actingAs(User::factory()->create())
-            ->getJson('/api/v1/me/earnings')
-            ->assertOk()
-            ->assertJsonPath('data.payout_account', null);
     });
 
     it('withdraws to the saved account when no details are sent', function () {
@@ -181,7 +132,7 @@ describe('withdrawing', function () {
 
     it('rejects guests', function () {
         $this->postJson('/api/v1/me/withdrawals', payoutDetails(50_000))->assertUnauthorized();
-        $this->getJson('/api/v1/me/earnings')->assertUnauthorized();
+        $this->getJson('/api/v1/me/withdrawals')->assertUnauthorized();
     });
 
     it('lists my payout history', function () {

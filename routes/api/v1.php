@@ -14,8 +14,6 @@ use App\Http\Controllers\Api\V1\MeController;
 use App\Http\Controllers\Api\V1\MidtransWebhookController;
 use App\Http\Controllers\Api\V1\MyProfileController;
 use App\Http\Controllers\Api\V1\NotificationController;
-use App\Http\Controllers\Api\V1\OfferController;
-use App\Http\Controllers\Api\V1\OrderController;
 use App\Http\Controllers\Api\V1\PostForMeWebhookController;
 use App\Http\Controllers\Api\V1\PublicFileRequestController;
 use App\Http\Controllers\Api\V1\PublicProfileController;
@@ -90,12 +88,6 @@ Route::middleware('auth:client')->group(function () {
     Route::post('/profiles/{handle}/spaces/{slug}/approvals/all', [ApprovalController::class, 'storeAll'])
         ->middleware('throttle:20,1')
         ->name('api.v1.approvals.store-all');
-
-    // Buying. The buyer is the same identity that approves files.
-    Route::post('/orders', [OrderController::class, 'store'])
-        ->middleware('throttle:20,1')
-        ->name('api.v1.orders.store');
-    Route::get('/orders/mine', [OrderController::class, 'mine'])->name('api.v1.orders.mine');
 });
 
 // Authenticated (Sanctum SPA cookie)
@@ -170,22 +162,14 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::post('/approvals/{approval}/reply', [InsightsApprovalController::class, 'reply'])->name('api.v1.approvals.reply');
     Route::post('/spaces/{space}/approvals/reset', [InsightsApprovalController::class, 'reset'])->name('api.v1.approvals.reset');
 
-    // Selling — offers the creator owns
-    Route::get('/offers', [OfferController::class, 'index'])->name('api.v1.offers.index');
-    Route::post('/offers', [OfferController::class, 'store'])->name('api.v1.offers.store');
-    Route::patch('/offers/{offer}', [OfferController::class, 'update'])->name('api.v1.offers.update');
-    Route::delete('/offers/{offer}', [OfferController::class, 'destroy'])->name('api.v1.offers.destroy');
-
     // Analytics — Insights → Analytics
     Route::get('/me/analytics', AnalyticsController::class)->name('api.v1.me.analytics');
-
-    // Earnings — Insights → Orders
-    Route::get('/me/earnings', [EarningController::class, 'summary'])->name('api.v1.me.earnings');
 
     // Proof of delivery. Deliberately not gated on a plan: "on every plan"
     // is what the screen promises, and evidence is not an upsell.
     Route::get('/me/deliveries', DeliveryLogController::class)->name('api.v1.me.deliveries');
-    Route::get('/me/orders', [EarningController::class, 'orders'])->name('api.v1.me.orders');
+
+    // Payouts — the affiliate wallet's side.
     Route::get('/me/withdrawals', [EarningController::class, 'withdrawals'])->name('api.v1.me.withdrawals');
     Route::post('/me/withdrawals', [EarningController::class, 'withdraw'])
         ->middleware('throttle:10,1')

@@ -25,9 +25,6 @@ class PlansTable
                     ->label('Yearly')
                     ->money('IDR', 1)
                     ->sortable(),
-                TextColumn::make('fee_percent')
-                    ->label('Fee %')
-                    ->suffix('%'),
                 TextColumn::make('subscriptions_count')
                     ->label('Subscribers')
                     ->counts('subscriptions'),
