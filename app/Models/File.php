@@ -10,8 +10,12 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Support\Facades\Storage;
 
 /**
- * An asset hosted on our storage (R2 via the s3 disk). Immutable once
- * ready — replacing a file means a new row.
+ * An asset hosted on our storage (R2 via the s3 disk).
+ *
+ * The row is the file: its ulid is what Space items and URLs point at, and
+ * that never moves. The bytes underneath it can be replaced — the ones it
+ * had before move to `file_versions`, so a replacement is reversible and
+ * nothing that referenced the file has to be rewritten.
  *
  * @property int $id
  * @property string $ulid
@@ -120,5 +124,25 @@ class File extends Model
     public function spaceItems(): HasMany
     {
         return $this->hasMany(SpaceItem::class);
+    }
+
+    /**
+     * Older bytes, newest first. The current bytes are on this row and are
+     * never duplicated here.
+     *
+     * @return HasMany<FileVersion, $this>
+     */
+    public function versions(): HasMany
+    {
+        return $this->hasMany(FileVersion::class)->orderByDesc('number');
+    }
+
+    /**
+     * What the next version to be filed away should be numbered. v1 is the
+     * first bytes ever stored, so a file with no history is already at 1.
+     */
+    public function currentVersionNumber(): int
+    {
+        return (int) $this->versions()->max('number') + 1;
     }
 }

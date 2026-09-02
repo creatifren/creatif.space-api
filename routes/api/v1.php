@@ -8,6 +8,7 @@ use App\Http\Controllers\Api\V1\DriveAccountController;
 use App\Http\Controllers\Api\V1\EarningController;
 use App\Http\Controllers\Api\V1\FileController;
 use App\Http\Controllers\Api\V1\FileRequestController;
+use App\Http\Controllers\Api\V1\FileVersionController;
 use App\Http\Controllers\Api\V1\HandleController;
 use App\Http\Controllers\Api\V1\InsightsApprovalController;
 use App\Http\Controllers\Api\V1\MeController;
@@ -135,6 +136,21 @@ Route::middleware('auth:sanctum')->group(function () {
         ->middleware('throttle:60,1')
         ->name('api.v1.files.complete');
     Route::get('/files/{file}', [FileController::class, 'show'])->name('api.v1.files.show');
+
+    /* Replacing a file's bytes. Same two steps as an upload — the browser
+       PUTs straight to storage — but the file keeps its id, so Spaces and
+       links that already point at it stay pointed at it. */
+    Route::get('/files/{file}/versions', [FileVersionController::class, 'index'])->name('api.v1.files.versions.index');
+    Route::post('/files/{file}/versions/presign', [FileVersionController::class, 'presign'])
+        ->middleware('throttle:30,1')
+        ->name('api.v1.files.versions.presign');
+    Route::post('/files/{file}/versions/complete', [FileVersionController::class, 'complete'])
+        ->middleware('throttle:60,1')
+        ->name('api.v1.files.versions.complete');
+    Route::post('/files/{file}/versions/{version}/restore', [FileVersionController::class, 'restore'])
+        ->middleware('throttle:30,1')
+        ->name('api.v1.files.versions.restore');
+    Route::delete('/files/{file}/versions/{version}', [FileVersionController::class, 'destroy'])->name('api.v1.files.versions.destroy');
     Route::delete('/files/{file}', [FileController::class, 'destroy'])->name('api.v1.files.destroy');
 
     // File Request — the owner's side

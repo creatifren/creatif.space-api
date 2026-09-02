@@ -64,12 +64,22 @@ class PlanQuota
     /**
      * Bytes counted against the storage quota. Pending rows count too —
      * otherwise presigning N huge files in parallel bypasses the check.
+     *
+     * Old versions are charged for as well. They are real objects sitting in
+     * the bucket, and billing them is what makes "you can free up 340 MB"
+     * a true sentence rather than an invitation to hoard.
      */
     public static function storageUsed(User $user): int
     {
-        return (int) $user->files()
+        $current = (int) $user->files()
             ->whereIn('status', [\App\Models\File::STATUS_PENDING, \App\Models\File::STATUS_READY])
             ->sum('size_bytes');
+
+        $history = (int) \App\Models\FileVersion::query()
+            ->whereIn('file_id', $user->files()->select('id'))
+            ->sum('size_bytes');
+
+        return $current + $history;
     }
 
     /**

@@ -27,6 +27,16 @@ class FileResource extends JsonResource
             'width' => $this->width,
             'height' => $this->height,
             'status' => $this->status,
+            /* How many sets of bytes this file has had, counting the
+               current ones — so a file that was never replaced is "v1",
+               not "v0". The list itself is its own request.
+
+               whenCounted, because a caller that skipped withCount should
+               get no key rather than a 500 or a confident wrong number. */
+            'version' => $this->whenCounted(
+                'versions',
+                fn () => 1 + $this->versions_count,
+            ),
             'source' => $this->source,
             'exif' => $this->exif,
             'created_at' => $this->created_at,

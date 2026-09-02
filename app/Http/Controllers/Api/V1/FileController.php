@@ -42,7 +42,9 @@ class FileController extends Controller
             // spaceItems.space feeds the "in a Space" chip and the filter that
             // asks about it. Eager-loaded, so it is two extra queries for the
             // whole page rather than two per row.
-            ->with(['spaceItems.space']);
+            ->with(['spaceItems.space'])
+            // Counted, not loaded: the row only needs the number.
+            ->withCount('versions');
 
         if (($validated['search'] ?? null) !== null && $validated['search'] !== '') {
             $query->where('name', 'like', '%'.str_replace(['%', '_'], ['\%', '\_'], $validated['search']).'%');
@@ -78,7 +80,9 @@ class FileController extends Controller
     {
         abort_unless($file->user_id === Workspace::owner($request->user())->id, 404);
 
-        return new FileResource($file->load('spaceItems.space'));
+        return new FileResource(
+            $file->load('spaceItems.space')->loadCount('versions'),
+        );
     }
 
     /**
