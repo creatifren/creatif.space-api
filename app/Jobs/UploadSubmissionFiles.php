@@ -6,6 +6,7 @@ use App\Enums\SubmissionStatus;
 use App\Models\File;
 use App\Models\FileRequestSubmission;
 use App\Notifications\FilesReceived;
+use App\Notifications\StorageAlmostFull;
 use App\Support\PlanQuota;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Queue\Queueable;
@@ -108,6 +109,8 @@ class UploadSubmissionFiles implements ShouldQueue
         $this->cleanUp();
 
         $owner->notify(new FilesReceived($this->submission));
+
+        StorageAlmostFull::checkAndSend($owner);
     }
 
     /**

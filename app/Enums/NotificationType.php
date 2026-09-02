@@ -3,18 +3,15 @@
 namespace App\Enums;
 
 /**
- * The five switches on Settings → Notifications, plus the billing pair.
- * Of the switchable five, only the first two are sent in Fase 4; the rest
- * are stored preferences waiting for the events that raise them
- * (space_events and the digest job land in Fase 6).
+ * The five switches on Settings → Notifications, plus the always-on set.
+ * Every switchable type has a notification that actually raises it.
  */
 enum NotificationType: string
 {
     case ApprovalDecided = 'approval.decided';
-    case ApprovalCancelled = 'approval.cancelled';
     case SpaceOpened = 'space.opened';
     case FilesReceived = 'files.received';
-    case WeeklyDigest = 'digest.weekly';
+    case SocialPostFailed = 'social.post.failed';
     case ProductNews = 'product.news';
 
     // Money. Deliberately absent from the Settings screen: "your
@@ -25,6 +22,10 @@ enum NotificationType: string
     case BillingFailed = 'billing.failed';
     case OrderPaid = 'order.paid';
 
+    // Storage nearly/completely full is not a preference either: silencing
+    // it would mean client uploads start bouncing without a word.
+    case StorageQuota = 'storage.quota';
+
     /**
      * The types a user may switch off — what Settings → Notifications shows.
      *
@@ -34,10 +35,9 @@ enum NotificationType: string
     {
         return [
             self::ApprovalDecided,
-            self::ApprovalCancelled,
             self::SpaceOpened,
             self::FilesReceived,
-            self::WeeklyDigest,
+            self::SocialPostFailed,
             self::ProductNews,
         ];
     }

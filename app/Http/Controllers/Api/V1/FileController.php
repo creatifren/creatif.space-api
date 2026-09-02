@@ -178,6 +178,8 @@ class FileController extends Controller
             'status' => File::STATUS_READY,
         ]);
 
+        \App\Notifications\StorageAlmostFull::checkAndSend($user);
+
         return new FileResource($file->refresh());
     }
 

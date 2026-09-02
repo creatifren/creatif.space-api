@@ -106,11 +106,19 @@ class SocialPost extends Model
             fn (SocialPostTarget $t) => $t->status === SocialPostTargetStatus::Published,
         );
 
+        $wasFailed = $this->status === SocialPostStatus::Failed;
+
         $this->update($anyPublished
             ? ['status' => SocialPostStatus::Published, 'fail_reason' => null]
             : [
                 'status' => SocialPostStatus::Failed,
                 'fail_reason' => $targets->firstWhere('fail_reason', '!=', null)?->fail_reason,
             ]);
+
+        // Only on the transition into Failed — webhook retries recompute
+        // again and must not notify twice.
+        if (! $anyPublished && ! $wasFailed) {
+            $this->user->notify(new \App\Notifications\SocialPostFailed($this));
+        }
     }
 }

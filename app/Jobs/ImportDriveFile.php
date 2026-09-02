@@ -94,6 +94,8 @@ class ImportDriveFile implements ShouldQueue
                 'size_bytes' => Storage::disk($file->disk)->size($file->path),
                 'status' => File::STATUS_READY,
             ]);
+
+            \App\Notifications\StorageAlmostFull::checkAndSend($owner);
         } finally {
             if ($tmp !== false && is_file($tmp)) {
                 @unlink($tmp);
