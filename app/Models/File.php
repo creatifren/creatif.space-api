@@ -20,6 +20,7 @@ use Illuminate\Support\Facades\Storage;
  * @property int $id
  * @property string $ulid
  * @property int $user_id
+ * @property int|null $folder_id
  * @property string $disk
  * @property string $path
  * @property string $name
@@ -49,6 +50,7 @@ class File extends Model
         // mass-assigns it beyond validated fields.
         'ulid',
         'user_id',
+        'folder_id',
         'disk',
         'path',
         'name',

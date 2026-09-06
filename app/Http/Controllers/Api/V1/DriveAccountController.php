@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Http\Resources\DriveAccountResource;
 use App\Jobs\ImportDriveFile;
 use App\Models\DriveAccount;
+use App\Models\Folder;
 use App\Services\GoogleDriveService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -36,10 +37,13 @@ class DriveAccountController extends Controller
         $validated = $request->validate([
             'file_ids' => ['required', 'array', 'min:1', 'max:50'],
             'file_ids.*' => ['string', 'max:128'],
+            'folder_id' => ['sometimes', 'nullable', 'string', 'max:26'],
         ]);
 
+        $folder = Folder::ownedBy($driveAccount->user, $validated['folder_id'] ?? null);
+
         foreach (array_unique($validated['file_ids']) as $fileId) {
-            ImportDriveFile::dispatch($driveAccount, $fileId);
+            ImportDriveFile::dispatch($driveAccount, $fileId, $folder?->id);
         }
 
         return response()->json(['data' => [

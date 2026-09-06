@@ -4,7 +4,9 @@ namespace App\Http\Controllers\Api\V1;
 
 use App\Http\Controllers\Controller;
 use App\Http\Resources\FileResource;
+use App\Http\Resources\FolderResource;
 use App\Models\File;
+use App\Models\Folder;
 use App\Support\AcceptedUploads;
 use App\Support\PlanQuota;
 use App\Support\Workspace;
@@ -22,6 +24,10 @@ class FileController extends Controller
      * pdf. Sort: newest first by default, ?sort=name for A-Z. Failed rows
      * are noise and never listed; pending ones appear so an import in
      * flight is honest about itself.
+     *
+     * ?folder_id= scopes to one folder (empty value = the root) and adds
+     * `meta.folders` (its sub-folders) and `meta.breadcrumb`. Without
+     * the key the listing stays global — every other caller wants that.
      */
     public function index(Request $request): JsonResponse
     {
@@ -32,9 +38,13 @@ class FileController extends Controller
             // Home wants `meta.total` and nothing else; without this it pays
             // for 60 rows and their eager-loaded Spaces to read one integer.
             'per_page' => ['sometimes', 'integer', 'min:1', 'max:60'],
+            'folder_id' => ['sometimes', 'nullable', 'string', 'max:26'],
         ]);
 
         $user = Workspace::owner($request->user());
+
+        $inFolder = $request->has('folder_id');
+        $folder = $inFolder ? Folder::ownedBy($user, $validated['folder_id'] ?? null) : null;
 
         $query = File::query()
             ->where('user_id', $user->id)
@@ -45,6 +55,11 @@ class FileController extends Controller
             ->with(['spaceItems.space'])
             // Counted, not loaded: the row only needs the number.
             ->withCount('versions');
+
+        if ($inFolder) {
+            // where(col, null) compiles to IS NULL — the root.
+            $query->where('folder_id', $folder?->id);
+        }
 
         if (($validated['search'] ?? null) !== null && $validated['search'] !== '') {
             $query->where('name', 'like', '%'.str_replace(['%', '_'], ['\%', '\_'], $validated['search']).'%');
@@ -65,11 +80,26 @@ class FileController extends Controller
 
         $perPage = $validated['per_page'] ?? 60;
 
+        $meta = [
+            'storage_used' => PlanQuota::storageUsed($user),
+            'storage_limit' => PlanQuota::storageLimit($user),
+        ];
+
+        if ($inFolder) {
+            $meta['folders'] = FolderResource::collection(
+                Folder::query()
+                    ->where('user_id', $user->id)
+                    ->where('parent_id', $folder?->id)
+                    ->withCount(['files', 'children'])
+                    ->orderBy('name')
+                    ->get(),
+            );
+            // Not `path`: the paginator already owns that key in meta.
+            $meta['breadcrumb'] = $folder?->ancestorsAndSelf() ?? [];
+        }
+
         return FileResource::collection($query->paginate($perPage)->appends($request->query()))
-            ->additional(['meta' => [
-                'storage_used' => PlanQuota::storageUsed($user),
-                'storage_limit' => PlanQuota::storageLimit($user),
-            ]])
+            ->additional(['meta' => $meta])
             ->response();
     }
 
@@ -98,9 +128,11 @@ class FileController extends Controller
             'name' => ['required', 'string', 'max:200'],
             'mime_type' => ['required', 'string', 'in:'.implode(',', AcceptedUploads::MIMES)],
             'size_bytes' => ['required', 'integer', 'min:1', 'max:'.AcceptedUploads::MAX_BYTES],
+            'folder_id' => ['sometimes', 'nullable', 'string', 'max:26'],
         ]);
 
         $user = Workspace::owner($request->user());
+        $folder = Folder::ownedBy($user, $validated['folder_id'] ?? null);
 
         if (! PlanQuota::canStore($user, (int) $validated['size_bytes'])) {
             throw ValidationException::withMessages([
@@ -112,6 +144,7 @@ class FileController extends Controller
 
         $file = File::create([
             'user_id' => $user->id,
+            'folder_id' => $folder?->id,
             'ulid' => $ulid,
             'path' => File::keyFor($user, $ulid, $validated['name']),
             'name' => $validated['name'],

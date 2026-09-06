@@ -9,6 +9,7 @@ use App\Http\Controllers\Api\V1\EarningController;
 use App\Http\Controllers\Api\V1\FileController;
 use App\Http\Controllers\Api\V1\FileRequestController;
 use App\Http\Controllers\Api\V1\FileVersionController;
+use App\Http\Controllers\Api\V1\FolderController;
 use App\Http\Controllers\Api\V1\HandleController;
 use App\Http\Controllers\Api\V1\InsightsApprovalController;
 use App\Http\Controllers\Api\V1\MeController;
@@ -129,6 +130,9 @@ Route::middleware('auth:sanctum')->group(function () {
 
     // Crefile — the file library (R2-hosted)
     Route::get('/files', [FileController::class, 'index'])->name('api.v1.files.index');
+    Route::post('/folders', [FolderController::class, 'store'])
+        ->middleware('throttle:30,1')
+        ->name('api.v1.folders.store');
     Route::post('/files/presign', [FileController::class, 'presign'])
         ->middleware('throttle:30,1')
         ->name('api.v1.files.presign');

@@ -28,6 +28,8 @@ class ImportDriveFile implements ShouldQueue
     public function __construct(
         public DriveAccount $account,
         public string $fileId,
+        // Default null: jobs queued before this argument existed still unserialize.
+        public ?int $folderId = null,
     ) {}
 
     public function handle(GoogleDriveService $drive): void
@@ -55,6 +57,7 @@ class ImportDriveFile implements ShouldQueue
 
         $file = File::create([
             'user_id' => $owner->id,
+            'folder_id' => $this->folderId,
             'ulid' => $ulid,
             // Explicit, not the column default: $file->disk is read below
             // before any refresh would hydrate the DB default.
