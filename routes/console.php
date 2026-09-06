@@ -2,6 +2,7 @@
 
 use App\Jobs\AggregateSpaceStats;
 use App\Jobs\ExpireSubscriptions;
+use App\Jobs\PruneSpaceArchives;
 use App\Jobs\PruneSpaceEvents;
 use App\Jobs\BackfillFileChecksums;
 use App\Jobs\PruneStaleUploads;
@@ -52,6 +53,13 @@ Schedule::job(new PruneStaleUploads)->dailyAt('01:30');
  * the time this looks.
  */
 Schedule::job(new PurgeTrashedFiles)->dailyAt('01:45');
+
+/*
+ * Built "Download all" archives live 24 hours. Without this every press
+ * ever made stays in the bucket, billed monthly, for a zip nobody will
+ * open again.
+ */
+Schedule::job(new PruneSpaceArchives)->dailyAt('01:50');
 
 /*
  * Fills in checksums for files stored before the upload path recorded one.

@@ -4,6 +4,8 @@ namespace App\Http\Controllers\Api\V1;
 
 use App\Enums\UserStatus;
 use App\Http\Controllers\Controller;
+use App\Jobs\BuildSpaceArchive;
+use App\Models\SpaceArchive;
 use App\Http\Resources\PublicSpaceResource;
 use App\Models\Handle;
 use App\Models\Space;
@@ -88,6 +90,69 @@ class PublicSpaceController extends Controller
         abort_if($record?->file === null, 404);
 
         return response()->json(['data' => ['url' => $record->file->downloadUrl()]]);
+    }
+
+    /**
+     * "Download all": ask for the Space's zip, and find out where it is.
+     *
+     * One route for both, because they are the same question asked twice —
+     * the first press starts a build, every press after polls it. A request
+     * that waited for the zip would time out long before a 500-photo Space
+     * finished.
+     *
+     * Keyed by the Space's content, not its id: publish another photo and
+     * the signature changes, so the next visitor gets a fresh build instead
+     * of yesterday's archive quietly missing a file.
+     */
+    public function archive(Request $request, string $handle, string $slug): JsonResponse
+    {
+        $space = $this->resolve($handle, $slug);
+
+        if ($space->isExpired()) {
+            return response()->json(['expired' => true], 410);
+        }
+
+        if (
+            $space->password_hash !== null
+            && ! SpaceUnlockToken::verify($space, $request->query('st'))
+        ) {
+            return response()->json(['locked' => true], 423);
+        }
+
+        if (($space->settings['allow_download'] ?? true) !== true) {
+            return response()->json([
+                'message' => 'Downloads are off for this Space.',
+            ], 403);
+        }
+
+        $signature = SpaceArchive::signatureFor($space);
+
+        $archive = SpaceArchive::query()
+            ->where('space_id', $space->id)
+            ->where('signature', $signature)
+            /* A failed build is not reused: whoever presses next should get
+               another attempt, not yesterday's error. */
+            ->whereIn('status', [SpaceArchive::STATUS_PENDING, SpaceArchive::STATUS_READY])
+            ->where(fn ($q) => $q->whereNull('expires_at')->orWhere('expires_at', '>', now()))
+            ->latest('id')
+            ->first();
+
+        if ($archive === null) {
+            $archive = SpaceArchive::create([
+                'space_id' => $space->id,
+                'signature' => $signature,
+                'status' => SpaceArchive::STATUS_PENDING,
+            ]);
+
+            BuildSpaceArchive::dispatch($archive);
+        }
+
+        return response()->json(['data' => [
+            'status' => $archive->status,
+            'url' => $archive->status === SpaceArchive::STATUS_READY ? $archive->url() : null,
+            'size_bytes' => $archive->size_bytes,
+            'reason' => $archive->failure_reason,
+        ]]);
     }
 
     public function unlock(Request $request, string $handle, string $slug): JsonResponse
