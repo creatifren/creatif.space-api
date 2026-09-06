@@ -253,3 +253,42 @@ describe('duplicate', function () {
             ->and($response->json("data.design.items.{$newItemId}.size"))->toBe('Large');
     });
 });
+
+describe('the default layout for a new Space', function () {
+    it('takes the account default when the caller names none', function () {
+        $user = User::factory()->create();
+        $this->actingAs($user)
+            ->patchJson('/api/v1/me/profile', ['default_view_mode' => 'grid'])
+            ->assertOk()
+            ->assertJsonPath('data.default_view_mode', 'grid');
+
+        $this->actingAs($user)
+            ->postJson('/api/v1/spaces', ['title' => 'Winter Noel', 'purpose' => 'portfolio'])
+            ->assertCreated()
+            ->assertJsonPath('data.view_mode', 'grid');
+    });
+
+    it('still lets the modal ask, and the answer wins', function () {
+        $user = User::factory()->create();
+        $this->actingAs($user)->patchJson('/api/v1/me/profile', ['default_view_mode' => 'grid']);
+
+        // The setting is for people who answer the same way every time,
+        // not a replacement for the question.
+        $this->actingAs($user)
+            ->postJson('/api/v1/spaces', [
+                'title' => 'Board one',
+                'purpose' => 'portfolio',
+                'view_mode' => 'board',
+            ])
+            ->assertCreated()
+            ->assertJsonPath('data.view_mode', 'board');
+    });
+
+    it('falls back to editorial for an account with no profile yet', function () {
+        // A Space can be made before the profile screen is ever opened.
+        $this->actingAs(User::factory()->create())
+            ->postJson('/api/v1/spaces', ['title' => 'First', 'purpose' => 'portfolio'])
+            ->assertCreated()
+            ->assertJsonPath('data.view_mode', 'editorial');
+    });
+});

@@ -38,6 +38,19 @@ class FileResource extends JsonResource
                 fn () => 1 + $this->versions_count,
             ),
             'source' => $this->source,
+            /* Which Drive brought it, when one did. whenLoaded: the list
+               eager-loads the relation, a single-file read does not need
+               it, and neither should invent an email. */
+            'source_account' => $this->whenLoaded(
+                'sourceAccount',
+                /* $this->resource, not $this: the resource proxies property
+                   reads through __get, which erases the model type, and the
+                   relation is typed on File itself. */
+                fn () => $this->resource->sourceAccount === null ? null : [
+                    'id' => $this->resource->sourceAccount->ulid,
+                    'email' => $this->resource->sourceAccount->email,
+                ],
+            ),
             'exif' => $this->exif,
             'created_at' => $this->created_at,
 
@@ -53,9 +66,13 @@ class FileResource extends JsonResource
                query per row. */
             'folder' => $this->whenLoaded(
                 'folder',
-                fn () => $this->folder === null
+                // $this->resource for the same reason as source_account below.
+                fn () => $this->resource->folder === null
                     ? null
-                    : ['id' => $this->folder->ulid, 'name' => $this->folder->name],
+                    : [
+                        'id' => $this->resource->folder->ulid,
+                        'name' => $this->resource->folder->name,
+                    ],
             ),
 
             /* The Spaces this file appears in — the drawer's "Used in Space"

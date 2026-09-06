@@ -35,6 +35,41 @@ class FileRequestResource extends JsonResource
             'expires_at' => $this->expires_at,
             'created_at' => $this->created_at,
             'submissions_count' => $this->whenCounted('submissions'),
+            /* What the card actually renders: how many people sent
+               something, how many files arrived, and how much. Counted
+               server-side because the client was deriving them from the
+               embedded submissions and getting people wrong — two
+               deliveries from one person read as two people.
+               Only `stored` rows count: a failed push delivered nothing. */
+            'people_count' => $this->whenLoaded(
+                'submissions',
+                fn () => $this->storedSubmissions()
+                    ->pluck('sender_email')
+                    ->unique()
+                    ->count(),
+            ),
+            'files_count' => $this->whenLoaded(
+                'submissions',
+                fn () => $this->storedSubmissions()
+                    ->sum(fn (FileRequestSubmission $s): int => count($s->files ?? [])),
+            ),
+            /* Null, not 0, when nothing has arrived — the card shows a dash
+               for "nothing yet" and 0 B would be a different claim. Old
+               submissions predate the byte record and contribute nothing,
+               so a long-lived request can under-report rather than lie
+               about individual files. */
+            'size_bytes' => $this->whenLoaded('submissions', function (): ?int {
+                $stored = $this->storedSubmissions();
+
+                if ($stored->isEmpty()) {
+                    return null;
+                }
+
+                return $stored->sum(
+                    fn (FileRequestSubmission $s): int => collect($s->files ?? [])
+                        ->sum(fn (array $f): int => (int) ($f['bytes'] ?? 0)),
+                );
+            }),
             'submissions' => $this->whenLoaded(
                 'submissions',
                 fn () => $this->submissions
@@ -44,6 +79,8 @@ class FileRequestResource extends JsonResource
                         'sender_email' => $s->sender_email,
                         'message' => $s->message,
                         'files' => $s->files,
+                        'bytes' => collect($s->files ?? [])
+                            ->sum(fn (array $f): int => (int) ($f['bytes'] ?? 0)),
                         'status' => $s->status,
                         'failure_reason' => $s->failure_reason,
                         'created_at' => $s->created_at,

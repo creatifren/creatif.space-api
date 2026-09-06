@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Api\V1;
 use App\Models\Activity;
 use App\Enums\ActivityAction;
 use App\Enums\SpaceStatus;
+use App\Enums\SpaceViewMode;
 use App\Http\Controllers\Controller;
 use App\Http\Resources\SpaceListResource;
 use App\Http\Resources\SpaceResource;
@@ -63,7 +64,11 @@ class SpaceController extends Controller
         $validated = $request->validate([
             'title' => ['required', 'string', 'max:255'],
             'purpose' => ['required', 'string', 'in:portfolio,approval'],
-            'view_mode' => ['required', 'string', 'in:editorial,grid,board'],
+            /* Optional now: without it the Space takes the account's
+               default. Still accepted, because the new-Space modal asks —
+               the setting is for people who answer the same way every
+               time, not a replacement for the question. */
+            'view_mode' => ['sometimes', 'string', 'in:editorial,grid,board'],
         ]);
 
         $user = Workspace::owner($request->user());
@@ -77,7 +82,12 @@ class SpaceController extends Controller
         $space = $user->spaces()->create([
             'title' => $validated['title'],
             'slug' => Space::generateSlug($user, $validated['title']),
-            'view_mode' => $validated['view_mode'],
+            /* The account's default when the caller named nothing. Read
+               through the profile, which may not exist yet — a Space can
+               be made before the profile screen is ever opened. */
+            'view_mode' => $validated['view_mode']
+                ?? $user->profile?->default_view_mode
+                ?? SpaceViewMode::Editorial,
             'design' => Space::emptyDesign(),
             'settings' => Space::defaultSettings(),
         ]);

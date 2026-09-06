@@ -37,10 +37,10 @@ class FileController extends Controller
         $validated = $request->validate([
             'search' => ['sometimes', 'nullable', 'string', 'max:255'],
             'type' => ['sometimes', 'nullable', 'string', 'in:image,video,pdf'],
-            /* Where a file came from. Not *which* Drive account — that link
-               is denormalised text inside source_meta with no foreign key,
-               so filtering by account would need a column first. */
+            // Where a file came from, and — for a Drive import — which
+            // account brought it.
             'source' => ['sometimes', 'nullable', 'string', 'in:upload,drive_import,request'],
+            'source_account_id' => ['sometimes', 'nullable', 'string', 'max:26'],
             // "Show me only the files I have more than one copy of."
             'duplicates' => ['sometimes', 'boolean'],
             'sort' => ['sometimes', 'nullable', 'string', 'in:recent,name,size'],
@@ -48,6 +48,9 @@ class FileController extends Controller
             // for 60 rows and their eager-loaded Spaces to read one integer.
             'per_page' => ['sometimes', 'integer', 'min:1', 'max:60'],
             'folder_id' => ['sometimes', 'nullable', 'string', 'max:26'],
+            // "All subfolders": everything beneath this folder rather than
+            // only what sits directly in it.
+            'recursive' => ['sometimes', 'boolean'],
         ]);
 
         $user = Workspace::owner($request->user());
@@ -61,11 +64,18 @@ class FileController extends Controller
             // spaceItems.space feeds the "in a Space" chip and the filter that
             // asks about it. Eager-loaded, so it is two extra queries for the
             // whole page rather than two per row.
-            ->with(['spaceItems.space'])
+            ->with(['spaceItems.space', 'sourceAccount:id,ulid,email'])
             // Counted, not loaded: the row only needs the number.
             ->withCount('versions');
 
-        if ($inFolder) {
+        /* Recursive at the root needs no clause at all: "this folder and
+           everything under it" is the whole library, which is what an
+           unscoped listing already returns. Only a named folder narrows. */
+        $recursive = (bool) ($validated['recursive'] ?? false);
+
+        if ($inFolder && $recursive && $folder !== null) {
+            $query->whereIn('folder_id', $folder->descendantIds());
+        } elseif ($inFolder && ! $recursive) {
             // where(col, null) compiles to IS NULL — the root.
             $query->where('folder_id', $folder?->id);
         }
@@ -83,6 +93,17 @@ class FileController extends Controller
 
         if (($validated['source'] ?? null) !== null) {
             $query->where('source', $validated['source']);
+        }
+
+        if (($validated['source_account_id'] ?? null) !== null) {
+            /* Resolved against this user, so an id belonging to somebody
+               else is a 404 rather than an empty list that looks like an
+               account with no files. */
+            $account = $user->driveAccounts()
+                ->where('ulid', $validated['source_account_id'])
+                ->firstOrFail();
+
+            $query->where('source_account_id', $account->id);
         }
 
         if ($validated['duplicates'] ?? false) {

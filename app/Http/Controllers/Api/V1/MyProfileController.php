@@ -32,6 +32,9 @@ class MyProfileController extends Controller
             'locale' => ['sometimes', 'string', 'in:en,id'],
             'theme' => ['sometimes', 'string', 'in:light,dark,system'],
             'mode' => ['sometimes', 'string', 'in:portfolio,freelance'],
+            // Which layout the next new Space starts in — an account
+            // setting, not a claim about any Space that exists.
+            'default_view_mode' => ['sometimes', 'string', 'in:editorial,grid,board'],
             'headline' => ['sometimes', 'nullable', 'string', 'max:120'],
             'bio' => ['sometimes', 'nullable', 'string', 'max:2000'],
             'location' => ['sometimes', 'nullable', 'string', 'max:120'],

@@ -94,7 +94,14 @@ class UploadSubmissionFiles implements ShouldQueue
                     ),
                 ]);
 
-                $landed[] = ['name' => $stagedFile['name'], 'file_id' => $file->ulid];
+                /* The size travels with the row rather than being joined
+                   back from `files` later: a file the owner deletes should
+                   not shrink the record of what was delivered. */
+                $landed[] = [
+                    'name' => $stagedFile['name'],
+                    'file_id' => $file->ulid,
+                    'bytes' => $size,
+                ];
             }
         } catch (Throwable $e) {
             // A network blip should retry; the last attempt gives up loudly.

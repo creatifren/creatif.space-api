@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use App\Enums\FileRequestStatus;
+use App\Enums\SubmissionStatus;
 use Carbon\CarbonImmutable;
 use Database\Factories\FileRequestFactory;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
@@ -109,6 +110,20 @@ class FileRequest extends Model
     public function submissions(): HasMany
     {
         return $this->hasMany(FileRequestSubmission::class);
+    }
+
+    /**
+     * The deliveries that actually landed. A submission still uploading has
+     * no files yet and a failed one never will, so neither belongs in a
+     * count of what arrived.
+     *
+     * @return \Illuminate\Support\Collection<int, FileRequestSubmission>
+     */
+    public function storedSubmissions(): \Illuminate\Support\Collection
+    {
+        return $this->submissions
+            ->where('status', SubmissionStatus::Stored)
+            ->values();
     }
 
     public function isOpen(): bool

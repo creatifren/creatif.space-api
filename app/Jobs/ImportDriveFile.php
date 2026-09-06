@@ -72,6 +72,10 @@ class ImportDriveFile implements ShouldQueue
             'height' => $meta['imageMediaMetadata']['height'] ?? null,
             'exif' => $meta['imageMediaMetadata'] ?? null,
             'source' => 'drive_import',
+            'source_account_id' => $this->account->id,
+            /* The email stays alongside the key. It is what the file was
+               imported under, and an account that later changes address
+               should not rewrite the history of what it brought. */
             'source_meta' => [
                 'provider_file_id' => $this->fileId,
                 'drive_email' => $this->account->email,

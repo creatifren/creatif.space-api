@@ -401,7 +401,13 @@ describe('the upload job', function () {
 
         $fresh = $submission->fresh();
         expect($fresh->status)->toBe(SubmissionStatus::Stored)
-            ->and($fresh->files)->toBe([['name' => 'brief.pdf', 'file_id' => $file->ulid]]);
+            // The size travels with the row: a file the owner later deletes
+            // must not shrink the record of what was delivered.
+            ->and($fresh->files)->toBe([[
+                'name' => 'brief.pdf',
+                'file_id' => $file->ulid,
+                'bytes' => 5,
+            ]]);
 
         // The staged copy goes either way.
         expect(Storage::disk('local')->exists('submissions/'.$submission->ulid.'/tmp'))->toBeFalse();
@@ -437,5 +443,79 @@ describe('the upload job', function () {
         expect(Storage::disk('local')->exists('submissions/'.$submission->ulid.'/tmp'))->toBeFalse();
 
         Notification::assertSentTo($submission->fileRequest->user, FilesReceived::class);
+    });
+});
+
+describe('what the card counts', function () {
+    it('counts people, not deliveries', function () {
+        $request = FileRequest::factory()->create();
+
+        // The same person, twice. The icon beside the number is a person.
+        FileRequestSubmission::factory()->count(2)->for($request)->create([
+            'sender_email' => 'andi@winternoel.com',
+            'status' => SubmissionStatus::Stored,
+            'files' => [['name' => 'a.pdf', 'file_id' => 'x', 'bytes' => 1_000]],
+        ]);
+        FileRequestSubmission::factory()->for($request)->create([
+            'sender_email' => 'budi@winternoel.com',
+            'status' => SubmissionStatus::Stored,
+            'files' => [['name' => 'b.pdf', 'file_id' => 'y', 'bytes' => 2_000]],
+        ]);
+
+        $row = $this->actingAs($request->user)
+            ->getJson('/api/v1/file-requests')
+            ->assertOk()
+            ->json('data.0');
+
+        expect($row['people_count'])->toBe(2)
+            ->and($row['files_count'])->toBe(3)
+            ->and($row['size_bytes'])->toBe(4_000);
+    });
+
+    it('ignores what never landed', function () {
+        $request = FileRequest::factory()->create();
+        FileRequestSubmission::factory()->for($request)->create([
+            'status' => SubmissionStatus::Failed,
+            'files' => [],
+        ]);
+        FileRequestSubmission::factory()->for($request)->create([
+            'status' => SubmissionStatus::Uploading,
+            'files' => [],
+        ]);
+
+        $row = $this->actingAs($request->user)
+            ->getJson('/api/v1/file-requests')
+            ->json('data.0');
+
+        // A failed push delivered nothing, and one still in flight has not
+        // delivered yet.
+        expect($row['people_count'])->toBe(0)
+            ->and($row['files_count'])->toBe(0)
+            ->and($row['size_bytes'])->toBeNull();
+    });
+
+    it('says null rather than 0 B when nothing has arrived', function () {
+        $request = FileRequest::factory()->create();
+
+        // "Nothing yet" and "zero bytes" are different claims.
+        expect($this->actingAs($request->user)
+            ->getJson('/api/v1/file-requests')
+            ->json('data.0.size_bytes'))->toBeNull();
+    });
+
+    it('under-reports rather than lies about submissions that predate the byte record', function () {
+        $request = FileRequest::factory()->create();
+        FileRequestSubmission::factory()->for($request)->create([
+            'status' => SubmissionStatus::Stored,
+            // No `bytes` key — how the job used to write these.
+            'files' => [['name' => 'old.pdf', 'file_id' => 'z']],
+        ]);
+
+        $row = $this->actingAs($request->user)
+            ->getJson('/api/v1/file-requests')
+            ->json('data.0');
+
+        expect($row['files_count'])->toBe(1)
+            ->and($row['size_bytes'])->toBe(0);
     });
 });

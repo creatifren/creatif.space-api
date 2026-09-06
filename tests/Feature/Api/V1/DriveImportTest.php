@@ -185,3 +185,58 @@ describe('the import job', function () {
         expect(File::query()->count())->toBe(1); // only the pre-existing one
     });
 });
+
+describe('which Drive it came from', function () {
+    it('records the account on import and filters by it', function () {
+        $user = User::factory()->create();
+        $first = DriveAccount::factory()->for($user)->create(['email' => 'one@studio.com']);
+        $second = DriveAccount::factory()->for($user)->create(['email' => 'two@studio.com']);
+
+        File::factory()->for($user)->create([
+            'source' => 'drive_import',
+            'source_account_id' => $first->id,
+        ]);
+        File::factory()->for($user)->create([
+            'source' => 'drive_import',
+            'source_account_id' => $second->id,
+        ]);
+        File::factory()->for($user)->create(['source' => 'upload']);
+
+        $response = $this->actingAs($user)
+            ->getJson("/api/v1/files?source_account_id={$first->ulid}")
+            ->assertOk()
+            ->assertJsonCount(1, 'data');
+
+        expect($response->json('data.0.source_account.email'))->toBe('one@studio.com');
+
+        // The wider filter still holds both imports.
+        $this->actingAs($user)
+            ->getJson('/api/v1/files?source=drive_import')
+            ->assertJsonCount(2, 'data');
+    });
+
+    it('404s on an account that is not mine, rather than returning nothing', function () {
+        $theirs = DriveAccount::factory()->create();
+
+        // An empty list would read as "that account has no files".
+        $this->actingAs(User::factory()->create())
+            ->getJson("/api/v1/files?source_account_id={$theirs->ulid}")
+            ->assertNotFound();
+    });
+
+    it('keeps the files when the account is revoked', function () {
+        $user = User::factory()->create();
+        $account = DriveAccount::factory()->for($user)->create();
+        $file = File::factory()->for($user)->create([
+            'source' => 'drive_import',
+            'source_account_id' => $account->id,
+        ]);
+
+        $account->delete();
+
+        // The import was a one-way copy. Those bytes are ours now.
+        expect($file->fresh())->not->toBeNull()
+            ->and($file->fresh()->source_account_id)->toBeNull()
+            ->and($file->fresh()->source)->toBe('drive_import');
+    });
+});

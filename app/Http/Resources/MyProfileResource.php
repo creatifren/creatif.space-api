@@ -25,6 +25,9 @@ class MyProfileResource extends JsonResource
             'avatar_url' => $this->user->avatar_url,
             'handle' => $this->user->handle?->name,
             'mode' => $this->mode,
+            /* Which layout a new Space starts in. Never public — this is a
+               preference about Spaces that do not exist yet. */
+            'default_view_mode' => $this->default_view_mode,
             'headline' => $this->headline,
             'bio' => $this->bio,
             'location' => $this->location,

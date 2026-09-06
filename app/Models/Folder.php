@@ -68,6 +68,40 @@ class Folder extends Model
     }
 
     /**
+     * This folder's id and every id beneath it — what "All subfolders" asks
+     * for.
+     *
+     * A level-at-a-time walk rather than a materialised path column. The
+     * column would be faster and is the usual answer, but it has to be kept
+     * true on every rename and every move, including moves that drag a
+     * subtree along; that is a new invariant to maintain forever in exchange
+     * for a query these trees never make slow. A person's library is a
+     * handful of folders two or three deep, so this is two or three queries.
+     *
+     * The depth cap is the same guard isSelfOrDescendantOf carries, for the
+     * same reason: a cycle already in the table must not become a loop.
+     *
+     * @return list<int>
+     */
+    public function descendantIds(): array
+    {
+        $all = [$this->id];
+        $frontier = [$this->id];
+
+        for ($depth = 0; $frontier !== [] && $depth < 20; $depth++) {
+            $frontier = self::query()
+                ->where('user_id', $this->user_id)
+                ->whereIn('parent_id', $frontier)
+                ->pluck('id')
+                ->all();
+
+            $all = array_merge($all, $frontier);
+        }
+
+        return $all;
+    }
+
+    /**
      * Would moving under $ancestor put this folder inside itself?
      *
      * Walks up from here, so the cost is the depth of the destination, not

@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use App\Enums\ProfileMode;
+use App\Enums\SpaceViewMode;
 use Database\Factories\ProfileFactory;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
@@ -29,6 +30,7 @@ class Profile extends Model
 
     protected $fillable = [
         'mode',
+        'default_view_mode',
         'headline',
         'bio',
         'location',
@@ -49,6 +51,7 @@ class Profile extends Model
     {
         return [
             'mode' => ProfileMode::class,
+            'default_view_mode' => SpaceViewMode::class,
             'socials' => 'array',
             'appearance' => 'array',
             'seo' => 'array',

@@ -18,7 +18,13 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
  * @property string $sender_name
  * @property string $sender_email
  * @property string|null $message
- * @property list<array{name: string, provider_file_id: string}> $files
+ * What landed. `bytes` is absent on rows written before the job recorded
+ * it, so a reader has to tolerate its absence rather than assume a number.
+ * The old annotation said `provider_file_id` — a leftover from when a
+ * submission pointed at a Drive object; the job has written `file_id`, our
+ * own library ulid, since the files started landing in R2.
+ *
+ * @property list<array{name: string, file_id: string, bytes?: int}> $files
  * @property SubmissionStatus $status
  * @property string|null $failure_reason
  * @property CarbonImmutable|null $created_at

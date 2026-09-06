@@ -258,3 +258,73 @@ it("refuses another user's folder", function () {
     expect(File::query()->count())->toBe(0)
         ->and($foreign->fresh()->name)->toBe('Theirs');
 });
+
+describe('all subfolders', function () {
+    it('reaches the whole subtree, not just the children', function () {
+        $user = User::factory()->create();
+        $clients = Folder::create(['user_id' => $user->id, 'name' => 'Clients']);
+        $noel = Folder::create(['user_id' => $user->id, 'parent_id' => $clients->id, 'name' => 'Noel']);
+        $raw = Folder::create(['user_id' => $user->id, 'parent_id' => $noel->id, 'name' => 'Raw']);
+
+        File::factory()->for($user)->create(['folder_id' => $clients->id]);
+        File::factory()->for($user)->create(['folder_id' => $noel->id]);
+        File::factory()->for($user)->create(['folder_id' => $raw->id]);
+        // At the root, so outside the subtree either way.
+        File::factory()->for($user)->create();
+
+        $this->actingAs($user)
+            ->getJson("/api/v1/files?folder_id={$clients->ulid}")
+            ->assertOk()
+            ->assertJsonCount(1, 'data');
+
+        // Three levels down still counts.
+        $this->actingAs($user)
+            ->getJson("/api/v1/files?folder_id={$clients->ulid}&recursive=1")
+            ->assertOk()
+            ->assertJsonCount(3, 'data');
+    });
+
+    it('is the whole library at the root', function () {
+        $user = User::factory()->create();
+        $folder = Folder::create(['user_id' => $user->id, 'name' => 'Shoots']);
+        File::factory()->for($user)->create(['folder_id' => $folder->id]);
+        File::factory()->for($user)->create();
+
+        // "This folder and everything under it" at the root is everything.
+        $this->actingAs($user)
+            ->getJson('/api/v1/files?folder_id=&recursive=1')
+            ->assertOk()
+            ->assertJsonCount(2, 'data');
+
+        $this->actingAs($user)
+            ->getJson('/api/v1/files?folder_id=')
+            ->assertJsonCount(1, 'data');
+    });
+
+    it('still carries the breadcrumb and the sub-folder cards', function () {
+        $user = User::factory()->create();
+        $parent = Folder::create(['user_id' => $user->id, 'name' => 'Clients']);
+        Folder::create(['user_id' => $user->id, 'parent_id' => $parent->id, 'name' => 'Noel']);
+
+        // The toggle changes which files are listed, not where you are.
+        $this->actingAs($user)
+            ->getJson("/api/v1/files?folder_id={$parent->ulid}&recursive=1")
+            ->assertOk()
+            ->assertJsonPath('meta.breadcrumb.0.name', 'Clients')
+            ->assertJsonCount(1, 'meta.folders');
+    });
+
+    it("never reaches into another account's tree", function () {
+        $user = User::factory()->create();
+        $mine = Folder::create(['user_id' => $user->id, 'name' => 'Mine']);
+        $theirUser = User::factory()->create();
+        // Same parent id, different owner: the walk filters on user_id too.
+        $theirs = Folder::create(['user_id' => $theirUser->id, 'parent_id' => $mine->id, 'name' => 'Theirs']);
+        File::factory()->for($theirUser)->create(['folder_id' => $theirs->id]);
+
+        $this->actingAs($user)
+            ->getJson("/api/v1/files?folder_id={$mine->ulid}&recursive=1")
+            ->assertOk()
+            ->assertJsonCount(0, 'data');
+    });
+});
