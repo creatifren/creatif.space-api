@@ -194,6 +194,8 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::post('/me/withdrawals', [EarningController::class, 'withdraw'])
         ->middleware('throttle:10,1')
         ->name('api.v1.me.withdrawals.store');
+    Route::get('/me/payout-account', [EarningController::class, 'showPayoutAccount'])
+        ->name('api.v1.me.payout-account.show');
     Route::put('/me/payout-account', [EarningController::class, 'savePayoutAccount'])
         ->name('api.v1.me.payout-account');
 

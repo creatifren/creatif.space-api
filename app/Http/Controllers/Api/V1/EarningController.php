@@ -22,6 +22,18 @@ use Illuminate\Validation\ValidationException;
 class EarningController extends Controller
 {
     /**
+     * The saved destination, for the withdraw form to start from. Masked —
+     * see payoutAccount(). Null when nothing has been saved yet, which the
+     * form reads as "ask for the details".
+     */
+    public function showPayoutAccount(Request $request): JsonResponse
+    {
+        Workspace::ownerOnly($request->user());
+
+        return response()->json(['data' => self::payoutAccount($request->user())]);
+    }
+
+    /**
      * Save the default payout destination without withdrawing anything.
      * The withdraw form starts from this; each payout still copies the
      * details onto its own row.
