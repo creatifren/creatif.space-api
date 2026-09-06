@@ -193,6 +193,7 @@ Route::middleware('auth:sanctum')->group(function () {
 
     // Analytics — Insights → Analytics
     Route::get('/me/storage', StorageController::class)->name('api.v1.me.storage');
+    Route::get('/me/storage/scan', [StorageController::class, 'scan'])->name('api.v1.me.storage.scan');
     Route::get('/me/analytics', AnalyticsController::class)->name('api.v1.me.analytics');
 
     // Proof of delivery. Deliberately not gated on a plan: "on every plan"

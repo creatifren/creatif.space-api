@@ -1,6 +1,7 @@
 <?php
 
 use App\Models\File;
+use App\Models\Folder;
 use App\Models\User;
 
 describe('storage summary', function () {
@@ -89,6 +90,55 @@ describe('storage summary', function () {
         expect($response->json('data.reclaimable.trash'))->toBe(1_000)
             ->and($response->json('data.reclaimable.duplicates'))->toBe(0)
             ->and($live->fresh())->not->toBeNull();
+    });
+
+    it('itemises the three groups, and names the copy that survives', function () {
+        Storage::fake('s3');
+        $user = User::factory()->create();
+        $folder = Folder::create(['user_id' => $user->id, 'name' => 'Selects']);
+
+        $binned = File::factory()->for($user)->create(['name' => 'gone.jpg', 'size_bytes' => 700]);
+        $binned->delete();
+
+        $current = File::factory()->for($user)->create(['name' => 'cover.jpg', 'size_bytes' => 300]);
+        $current->versions()->create([
+            'number' => 1,
+            'path' => 'v/old/'.str()->ulid().'.jpg',
+            'size_bytes' => 250,
+        ]);
+
+        $keeper = File::factory()->for($user)->create([
+            'name' => 'twice.jpg', 'size_bytes' => 100, 'checksum' => str_repeat('e', 32),
+        ]);
+        $keeper->forceFill(['folder_id' => $folder->id])->save();
+        $copy = File::factory()->for($user)->create([
+            'name' => 'twice.jpg', 'size_bytes' => 100, 'checksum' => str_repeat('e', 32),
+        ]);
+
+        $data = $this->actingAs($user)->getJson('/api/v1/me/storage/scan')
+            ->assertOk()
+            ->json('data');
+
+        expect($data['trash'])->toHaveCount(1)
+            ->and($data['trash'][0]['id'])->toBe($binned->ulid)
+            ->and($data['versions'])->toHaveCount(1)
+            ->and($data['versions'][0]['file_id'])->toBe($current->ulid)
+            /* Only the extra copy is offered; the oldest is the keeper, and
+               every row says where it lives so the screen can name it. */
+            ->and($data['duplicates'])->toHaveCount(1)
+            ->and($data['duplicates'][0]['id'])->toBe($copy->ulid)
+            ->and($data['duplicates'][0]['keeping'])->toBe('Selects');
+    });
+
+    it('scans empty for a fresh account', function () {
+        $data = $this->actingAs(User::factory()->create())
+            ->getJson('/api/v1/me/storage/scan')
+            ->assertOk()
+            ->json('data');
+
+        expect($data['trash'])->toBe([])
+            ->and($data['versions'])->toBe([])
+            ->and($data['duplicates'])->toBe([]);
     });
 
     it('is signed-in only', function () {
