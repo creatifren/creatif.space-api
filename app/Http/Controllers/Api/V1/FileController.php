@@ -259,6 +259,7 @@ class FileController extends Controller
         return FileResource::collection(
             File::onlyTrashed()
                 ->where('user_id', $user->id)
+                ->with('folder')
                 ->orderBy('purge_at')
                 ->get(),
         );

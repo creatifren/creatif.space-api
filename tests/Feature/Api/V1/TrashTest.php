@@ -2,6 +2,7 @@
 
 use App\Jobs\PurgeTrashedFiles;
 use App\Models\File;
+use App\Models\Folder;
 use App\Models\Space;
 use App\Models\User;
 use App\Support\PlanQuota;
@@ -34,6 +35,24 @@ describe('the trash', function () {
         expect($response->json('data'))->toHaveCount(2)
             ->and($response->json('data.0.id'))->toBe($soon->ulid)
             ->and($response->json('data.0.purge_at'))->not->toBeNull();
+    });
+
+    it('names the folder it was in, and sends null at the root', function () {
+        Storage::fake('s3');
+        $user = User::factory()->create();
+        $folder = Folder::create(['user_id' => $user->id, 'name' => 'Selects']);
+        $filed = storedFileFor($user);
+        $filed->forceFill(['folder_id' => $folder->id])->save();
+        $loose = storedFileFor($user);
+
+        $this->actingAs($user)->deleteJson("/api/v1/files/{$filed->ulid}")->assertNoContent();
+        $this->actingAs($user)->deleteJson("/api/v1/files/{$loose->ulid}")->assertNoContent();
+
+        $rows = collect($this->actingAs($user)->getJson('/api/v1/files/trash')->json('data'))
+            ->keyBy('id');
+
+        expect($rows[$filed->ulid]['folder']['name'])->toBe('Selects')
+            ->and($rows[$loose->ulid]['folder'])->toBeNull();
     });
 
     it('restores a file and clears its purge date', function () {

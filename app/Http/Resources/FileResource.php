@@ -48,6 +48,15 @@ class FileResource extends JsonResource
                change later must not move files already in the bin. */
             'deleted_at' => $this->deleted_at,
             'purge_at' => $this->purge_at,
+            /* Where it was — the Trash's "WAS IN" column. whenLoaded, so a
+               caller that skipped the eager load gets no key rather than a
+               query per row. */
+            'folder' => $this->whenLoaded(
+                'folder',
+                fn () => $this->folder === null
+                    ? null
+                    : ['id' => $this->folder->ulid, 'name' => $this->folder->name],
+            ),
 
             /* The Spaces this file appears in — the drawer's "Used in Space"
              * chips and the list's "in a Space" pill. Guarded by whenLoaded so

@@ -148,6 +148,12 @@ class File extends Model
      *
      * @return HasMany<FileVersion, $this>
      */
+    /** The folder it sits in — null at the library root. */
+    public function folder(): BelongsTo
+    {
+        return $this->belongsTo(Folder::class);
+    }
+
     public function versions(): HasMany
     {
         return $this->hasMany(FileVersion::class)->orderByDesc('number');
