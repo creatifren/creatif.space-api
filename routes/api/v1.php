@@ -24,6 +24,7 @@ use App\Http\Controllers\Api\V1\SocialAccountController;
 use App\Http\Controllers\Api\V1\SocialPostController;
 use App\Http\Controllers\Api\V1\SpaceController;
 use App\Http\Controllers\Api\V1\SpaceEventController;
+use App\Http\Controllers\Api\V1\StorageController;
 use App\Http\Controllers\Api\V1\SubscriptionController;
 use App\Http\Controllers\Api\V1\TeamController;
 use Illuminate\Support\Facades\Route;
@@ -183,6 +184,7 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::post('/spaces/{space}/approvals/reset', [InsightsApprovalController::class, 'reset'])->name('api.v1.approvals.reset');
 
     // Analytics — Insights → Analytics
+    Route::get('/me/storage', StorageController::class)->name('api.v1.me.storage');
     Route::get('/me/analytics', AnalyticsController::class)->name('api.v1.me.analytics');
 
     // Proof of delivery. Deliberately not gated on a plan: "on every plan"
