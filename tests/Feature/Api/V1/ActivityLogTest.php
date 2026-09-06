@@ -104,3 +104,43 @@ it('prunes the ledger past its ninety days', function () {
 
     expect(Activity::pluck('summary')->all())->toBe(['Recent']);
 });
+
+describe('this week', function () {
+    it('counts the last seven days by action, and forgets what fell out', function () {
+        $user = User::factory()->create();
+
+        Activity::log($user, ActivityAction::Upload, 'Uploaded a.jpg');
+        Activity::log($user, ActivityAction::Upload, 'Uploaded b.jpg');
+        Activity::log($user, ActivityAction::SpacePublish, 'Published Winter Noel');
+
+        // Inside the 30-day list, outside the seven-day card.
+        $old = Activity::query()->latest('id')->first();
+        Activity::log($user, ActivityAction::Trash, 'Moved c.jpg to the Trash');
+        Activity::query()->latest('id')->first()
+            ->forceFill(['created_at' => now()->subDays(9)])->save();
+
+        $week = $this->actingAs($user)
+            ->getJson('/api/v1/me/activity')
+            ->assertOk()
+            ->json('meta.week');
+
+        expect($week)->toBe(['space.publish' => 1, 'upload' => 2])
+            ->and($old)->not->toBeNull();
+    });
+
+    it('says nothing rather than zeroes when the week was quiet', function () {
+        // The screen renders the keys it gets; a fixed six would invent rows
+        // for actions that have never had a writer.
+        expect($this->actingAs(User::factory()->create())
+            ->getJson('/api/v1/me/activity')
+            ->json('meta.week'))->toBe([]);
+    });
+
+    it('counts only my own week', function () {
+        $user = User::factory()->create();
+        Activity::log(User::factory()->create(), ActivityAction::Upload, 'Theirs');
+
+        expect($this->actingAs($user)->getJson('/api/v1/me/activity')->json('meta.week'))
+            ->toBe([]);
+    });
+});

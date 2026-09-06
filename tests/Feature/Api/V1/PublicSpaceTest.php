@@ -59,6 +59,31 @@ describe('public space', function () {
             ->and($response->json('data.layout'))->toBe('grid');
     });
 
+    it('carries the owner’s city and when the Space last changed', function () {
+        $user = User::factory()->create();
+        $space = publishedSpaceFor($user);
+        $user->profile()->create(['location' => 'Bandung']);
+
+        $response = $this->getJson('/api/v1/profiles/rani/spaces/winter-noel')->assertOk();
+
+        // Both already public elsewhere: the city on the profile page, the
+        // dates on the row that published it.
+        expect($response->json('data.owner.location'))->toBe('Bandung')
+            ->and($response->json('data.updated_at'))->not->toBeNull()
+            ->and($response->json('data.published_at'))->not->toBeNull();
+
+        // Null, not absent, when there is no profile to read it from.
+        $other = User::factory()->create();
+        Handle::factory()->for($other)->create(['name' => 'budi']);
+        Space::factory()->for($other)->published()->create(['slug' => 'no-city']);
+
+        $this->getJson('/api/v1/profiles/budi/spaces/no-city')
+            ->assertOk()
+            ->assertJsonPath('data.owner.location', null);
+
+        expect($space)->not->toBeNull();
+    });
+
     it('carries the owner profile appearance, and an empty object without one', function () {
         $user = User::factory()->create();
         publishedSpaceFor($user);

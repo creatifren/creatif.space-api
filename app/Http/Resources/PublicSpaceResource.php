@@ -66,6 +66,11 @@ class PublicSpaceResource extends JsonResource
             'owner' => [
                 'name' => $this->user->name,
                 'handle' => $this->user->handle?->name,
+                /* Already public on the profile page, and the header here
+                   reads "Winter Noel · Bandung" for the same reason it does
+                   there. `user->profile` is eager-loaded for `appearance`
+                   below, so this costs no query. */
+                'location' => $this->user->profile?->location,
             ],
             /* The owner's palette, the same blob the profile page reads.
                A Space has no appearance of its own — one creator, one look,
@@ -84,6 +89,10 @@ class PublicSpaceResource extends JsonResource
             'seo' => $this->seo,
             'visibility' => $this->visibility,
             'published_at' => $this->published_at,
+            /* "Updated 4 September". Distinct from published_at on purpose:
+               a Space republished with three new photos is not a new Space,
+               and the client checking it wants to know it changed. */
+            'updated_at' => $this->updated_at,
             'sections' => $sections,
         ];
     }

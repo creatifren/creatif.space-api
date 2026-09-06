@@ -37,6 +37,10 @@ class FileController extends Controller
         $validated = $request->validate([
             'search' => ['sometimes', 'nullable', 'string', 'max:255'],
             'type' => ['sometimes', 'nullable', 'string', 'in:image,video,pdf'],
+            /* Where a file came from. Not *which* Drive account — that link
+               is denormalised text inside source_meta with no foreign key,
+               so filtering by account would need a column first. */
+            'source' => ['sometimes', 'nullable', 'string', 'in:upload,drive_import,request'],
             // "Show me only the files I have more than one copy of."
             'duplicates' => ['sometimes', 'boolean'],
             'sort' => ['sometimes', 'nullable', 'string', 'in:recent,name,size'],
@@ -76,6 +80,10 @@ class FileController extends Controller
             'pdf' => $query->where('mime_type', 'application/pdf'),
             default => null,
         };
+
+        if (($validated['source'] ?? null) !== null) {
+            $query->where('source', $validated['source']);
+        }
 
         if ($validated['duplicates'] ?? false) {
             /* Every file whose bytes appear more than once in this account.

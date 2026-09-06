@@ -244,3 +244,29 @@ describe('the library', function () {
         $this->postJson('/api/v1/files/presign', [])->assertUnauthorized();
     });
 });
+
+describe('the source filter', function () {
+    it('narrows to where a file came from', function () {
+        $user = User::factory()->create();
+        File::factory()->for($user)->create(['source' => 'upload']);
+        File::factory()->for($user)->create(['source' => 'drive_import']);
+        File::factory()->for($user)->create(['source' => 'request']);
+
+        foreach (['upload', 'drive_import', 'request'] as $source) {
+            $this->actingAs($user)
+                ->getJson("/api/v1/files?source={$source}")
+                ->assertOk()
+                ->assertJsonCount(1, 'data')
+                ->assertJsonPath('data.0.source', $source);
+        }
+
+        // No key is still everything — every other caller wants that.
+        $this->actingAs($user)->getJson('/api/v1/files')->assertJsonCount(3, 'data');
+    });
+
+    it('refuses a source that is not one of the three', function () {
+        $this->actingAs(User::factory()->create())
+            ->getJson('/api/v1/files?source=ftp')
+            ->assertUnprocessable();
+    });
+});
