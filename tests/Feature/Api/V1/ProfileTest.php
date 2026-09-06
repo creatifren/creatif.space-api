@@ -3,6 +3,7 @@
 use App\Enums\UserStatus;
 use App\Models\Handle;
 use App\Models\Profile;
+use App\Models\Subscription;
 use App\Models\User;
 
 describe('public profile', function () {
@@ -21,6 +22,17 @@ describe('public profile', function () {
             ->assertJsonPath('data.location', 'Bandung')
             ->assertJsonMissingPath('data.email')
             ->assertJsonMissingPath('data.id');
+    });
+
+    it('drops the "Made with" line on a paid plan', function () {
+        $free = User::factory()->create();
+        Handle::factory()->for($free)->create(['name' => 'free']);
+        $paid = User::factory()->create();
+        Handle::factory()->for($paid)->create(['name' => 'paid']);
+        Subscription::factory()->for($paid)->create();
+
+        $this->getJson('/api/v1/profiles/free')->assertJsonPath('data.branding', true);
+        $this->getJson('/api/v1/profiles/paid')->assertJsonPath('data.branding', false);
     });
 
     it('404s for unknown, reserved, and unclaimed handles', function () {

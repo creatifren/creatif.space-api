@@ -5,6 +5,7 @@ namespace App\Http\Resources;
 use App\Enums\ProfileMode;
 use App\Models\Handle;
 use App\Models\Profile;
+use App\Support\Workspace;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
 
@@ -62,6 +63,12 @@ class PublicProfileResource extends JsonResource
             // The Portfolio/Freelance switch is the spine: in portfolio mode
             // the freelance block simply does not exist on the public page.
             'freelance' => $freelance ? ($profile->freelance ?? (object) []) : null,
+            // The "Made with Creatif Space" line. Pricing sells its removal
+            // on paid plans, so the public page has to be told — the plan
+            // itself never leaves the server. A team member's own page
+            // rides on the team's plan.
+            'branding' => $this->user === null
+                || ! Workspace::owner($this->user)->plan()->feature('branding_removed'),
             'spaces' => $spaces,
         ];
     }

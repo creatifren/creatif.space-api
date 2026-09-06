@@ -7,6 +7,7 @@ use App\Enums\NoteAuthor;
 use App\Models\Approval;
 use App\Models\Space;
 use App\Models\SpaceItem;
+use App\Support\Workspace;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
 use Illuminate\Support\Collection;
@@ -71,6 +72,8 @@ class PublicSpaceResource extends JsonResource
             'fit' => $design['fit'] ?? 'cover',
             'labels' => $design['labels'] ?? ['name' => true, 'tags' => true],
             'allow_download' => (bool) ($this->settings['allow_download'] ?? true),
+            // Same rule as the profile: paid plans drop the "Made with" line.
+            'branding' => ! Workspace::owner($this->user)->plan()->feature('branding_removed'),
             'approval_enabled' => $this->approval_enabled,
             'seo' => $this->seo,
             'visibility' => $this->visibility,
