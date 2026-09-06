@@ -35,6 +35,8 @@ class FileController extends Controller
         $validated = $request->validate([
             'search' => ['sometimes', 'nullable', 'string', 'max:255'],
             'type' => ['sometimes', 'nullable', 'string', 'in:image,video,pdf'],
+            // "Show me only the files I have more than one copy of."
+            'duplicates' => ['sometimes', 'boolean'],
             'sort' => ['sometimes', 'nullable', 'string', 'in:recent,name,size'],
             // Home wants `meta.total` and nothing else; without this it pays
             // for 60 rows and their eager-loaded Spaces to read one integer.
@@ -72,6 +74,21 @@ class FileController extends Controller
             'pdf' => $query->where('mime_type', 'application/pdf'),
             default => null,
         };
+
+        if ($validated['duplicates'] ?? false) {
+            /* Every file whose bytes appear more than once in this account.
+               Both copies are shown, not just the extras — the screen is for
+               deciding which to keep, and hiding one of a pair would decide
+               for the person. Files with no checksum cannot be compared and
+               are absent rather than guessed at. */
+            $query->whereNotNull('checksum')
+                ->whereIn('checksum', File::query()
+                    ->where('user_id', $user->id)
+                    ->whereNotNull('checksum')
+                    ->groupBy('checksum')
+                    ->havingRaw('COUNT(*) > 1')
+                    ->select('checksum'));
+        }
 
         match ($validated['sort'] ?? 'recent') {
             'name' => $query->orderBy('name'),

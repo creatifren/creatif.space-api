@@ -186,6 +186,22 @@ describe('the library', function () {
             ->and($response->json('meta.storage_limit'))->toBe(2 * 1024 * 1024 * 1024);
     });
 
+    it('filters to files stored more than once, showing every copy', function () {
+        $user = User::factory()->create();
+        File::factory()->count(2)->for($user)->create(['checksum' => str_repeat('a', 32)]);
+        File::factory()->for($user)->create(['checksum' => str_repeat('b', 32)]);
+        // No checksum: not comparable, so not an answer either way.
+        File::factory()->count(2)->for($user)->create(['checksum' => null]);
+
+        $response = $this->actingAs($user)
+            ->getJson('/api/v1/files?duplicates=1')
+            ->assertOk();
+
+        /* Both copies, not just the extra — the screen is for choosing
+           which to keep. */
+        expect($response->json('data'))->toHaveCount(2);
+    });
+
     it('searches by name and filters by type', function () {
         $user = User::factory()->create();
         File::factory()->for($user)->create(['name' => 'winter-noel-01.jpg']);
