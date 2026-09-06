@@ -88,8 +88,12 @@ Route::get('/t/{slug}/files/{file}/download', [PublicTransferController::class, 
     ->name('api.v1.public.transfers.download');
 Route::get('/r/{slug}', [PublicFileRequestController::class, 'show'])
     ->name('api.v1.file-requests.public');
+/* Optional auth: anyone may submit, and whoever is signed in gets the
+   submission recorded against their account so it shows up under "Asked of
+   you". The guard authenticates when a session is present and shrugs when
+   it is not — it never gates. */
 Route::post('/r/{slug}/submissions', [PublicFileRequestController::class, 'store'])
-    ->middleware('throttle:5,1')
+    ->middleware(['throttle:5,1', 'auth.optional'])
     ->name('api.v1.file-requests.submit');
 
 // The analytics beacon. Deliberately unguarded: it is called from the
@@ -194,6 +198,7 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::patch('/transfers/{transfer}', [TransferController::class, 'update'])->name('api.v1.transfers.update');
     Route::delete('/transfers/{transfer}', [TransferController::class, 'destroy'])->name('api.v1.transfers.destroy');
 
+    Route::get('/file-requests/asked', [FileRequestController::class, 'asked'])->name('api.v1.file-requests.asked');
     Route::get('/file-requests', [FileRequestController::class, 'index'])->name('api.v1.file-requests.index');
     Route::post('/file-requests', [FileRequestController::class, 'store'])
         ->middleware('throttle:20,1')

@@ -15,6 +15,10 @@ return Application::configure(basePath: dirname(__DIR__))
     ->withMiddleware(function (Middleware $middleware): void {
         $middleware->statefulApi();
 
+        $middleware->alias([
+            'auth.optional' => \App\Http\Middleware\OptionalAuth::class,
+        ]);
+
         // No Blade login page here — guests belong on the Next.js frontend.
         // JSON requests still get a clean 401 via shouldRenderJsonWhen below.
         $middleware->redirectGuestsTo(

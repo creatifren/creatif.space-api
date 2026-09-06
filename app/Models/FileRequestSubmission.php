@@ -32,6 +32,7 @@ class FileRequestSubmission extends Model
 
     protected $fillable = [
         'file_request_id',
+        'user_id',
         'sender_name',
         'sender_email',
         'message',

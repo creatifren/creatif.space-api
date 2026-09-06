@@ -4,7 +4,9 @@ namespace App\Http\Controllers\Api\V1;
 
 use App\Enums\FileRequestStatus;
 use App\Http\Controllers\Controller;
+use App\Http\Resources\AskedRequestResource;
 use App\Http\Resources\FileRequestResource;
+use App\Models\FileRequestSubmission;
 use App\Models\FileRequest;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -29,6 +31,29 @@ class FileRequestController extends Controller
                 ->limit(50)
                 ->get(),
         );
+    }
+
+    /**
+     * "Asked of you": requests I have sent files to.
+     *
+     * Only submissions made while signed in appear — that is the one case
+     * where authorship is a fact rather than a claim. Somebody who dropped
+     * files without an account still sent them; they just have no history
+     * here, which is the honest outcome of a link that needs no account.
+     */
+    public function asked(Request $request): AnonymousResourceCollection
+    {
+        $submissions = FileRequestSubmission::query()
+            ->where('user_id', $request->user()->id)
+            ->with('fileRequest.user:id,name')
+            ->latest('id')
+            ->limit(50)
+            ->get()
+            // A request I sent to twice is one row, showing the latest.
+            ->unique('file_request_id')
+            ->values();
+
+        return AskedRequestResource::collection($submissions);
     }
 
     public function store(Request $request): JsonResponse

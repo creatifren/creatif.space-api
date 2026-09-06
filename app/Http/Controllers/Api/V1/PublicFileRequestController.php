@@ -61,8 +61,18 @@ class PublicFileRequestController extends Controller
         /** @var list<UploadedFile> $files */
         $files = $request->file('files');
 
-        $submission = DB::transaction(function () use ($fileRequest, $validated) {
+        /* Resolved outside the closure: the transaction only captures what
+           it is handed, and `$request` is not one of those things. */
+        $senderId = $request->user()?->id;
+
+        $submission = DB::transaction(function () use ($fileRequest, $validated, $senderId) {
             $submission = $fileRequest->submissions()->create([
+                /* Recorded only when the sender happened to be signed in —
+                   the route needs no account and never will. That is the
+                   one case where "I sent this" is a fact rather than a
+                   claim, which is why the (unverified) sender_email is not
+                   used for it. */
+                'user_id' => $senderId,
                 'sender_name' => $validated['sender_name'],
                 'sender_email' => $validated['sender_email'],
                 'message' => $validated['message'] ?? null,
