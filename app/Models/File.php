@@ -130,13 +130,43 @@ class File extends Model
         return 'ulid';
     }
 
+    /** How long a serving URL stays valid. */
+    public const URL_TTL_HOURS = 24;
+
     /**
-     * Public serving URL — AWS_URL + object key. No column: one source
-     * of truth, no stale URLs.
+     * Serving URL — a signed GET, not a public one.
+     *
+     * This used to be `Storage::url()`: the bucket's own public address plus
+     * the object key, which anyone could keep and share forever. Every gate
+     * the backend has — a Space password, an expiry date, a file moved to
+     * the Trash, `allow_download` — guarded the *page* and not the bytes, so
+     * none of them actually withheld anything from someone who had the URL.
+     *
+     * Signed for URL_TTL_HOURS. Long enough that a gallery left open all
+     * afternoon keeps working, short enough that a password changed today
+     * means something tomorrow. No column: one source of truth, and a URL
+     * that is stale by design rather than by accident.
      */
     public function url(): string
     {
-        return Storage::disk($this->disk)->url($this->path);
+        return Storage::disk($this->disk)->temporaryUrl(
+            $this->path,
+            now()->addHours(self::URL_TTL_HOURS),
+        );
+    }
+
+    /**
+     * The same bytes, but as a download rather than something the browser
+     * renders inline. Content-Disposition is signed into the URL, so R2
+     * sends the original filename and the browser saves it.
+     */
+    public function downloadUrl(): string
+    {
+        return Storage::disk($this->disk)->temporaryUrl(
+            $this->path,
+            now()->addHours(self::URL_TTL_HOURS),
+            ['ResponseContentDisposition' => 'attachment; filename="'.addslashes($this->name).'"'],
+        );
     }
 
     /**

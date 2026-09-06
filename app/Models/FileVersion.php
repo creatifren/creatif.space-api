@@ -77,9 +77,13 @@ class FileVersion extends Model
         return $this->belongsTo(User::class);
     }
 
+    /** Signed, same rule and same window as the file's own URL. */
     public function url(): string
     {
-        return Storage::disk($this->disk)->url($this->path);
+        return Storage::disk($this->disk)->temporaryUrl(
+            $this->path,
+            now()->addHours(File::URL_TTL_HOURS),
+        );
     }
 
     /**
