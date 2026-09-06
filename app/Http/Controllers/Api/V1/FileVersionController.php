@@ -2,6 +2,8 @@
 
 namespace App\Http\Controllers\Api\V1;
 
+use App\Models\Activity;
+use App\Enums\ActivityAction;
 use App\Http\Controllers\Controller;
 use App\Http\Resources\FileVersionResource;
 use App\Models\File;
@@ -161,6 +163,14 @@ class FileVersionController extends Controller
                what is on screen. Their decision goes back to pending. */
             return ApprovalVoider::forFile($file);
         });
+
+        Activity::log(
+            $file->user,
+            ActivityAction::Version,
+            "Replaced {$file->name} — now v{$file->versions()->count()}",
+            'file',
+            $file->ulid,
+        );
 
         return response()->json([
             'data' => [

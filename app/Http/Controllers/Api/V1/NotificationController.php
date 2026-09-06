@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Api\V1;
 
 use App\Enums\NotificationType;
 use App\Http\Controllers\Controller;
+use App\Models\Activity;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
@@ -27,6 +28,71 @@ class NotificationController extends Controller
                     'read_at' => $notification->read_at,
                     'created_at' => $notification->created_at,
                 ]),
+            'meta' => ['unread' => $user->unreadNotifications()->count()],
+        ]);
+    }
+
+    /**
+     * The Activity screen: notifications and my own actions, interleaved.
+     *
+     * Two sources on purpose. A notification is somebody interrupting me
+     * and can be marked read; a ledger line is something I did and cannot —
+     * "you published Winter Noel" is not a message, it is a fact, and a
+     * tick box on it would mean nothing. They share a shape here so the
+     * screen renders one list, and each row says which kind it is.
+     */
+    public function activity(Request $request): JsonResponse
+    {
+        $validated = $request->validate([
+            'days' => ['sometimes', 'integer', 'min:1', 'max:90'],
+        ]);
+
+        $user = $request->user();
+        $since = now()->subDays($validated['days'] ?? 30);
+
+        $notifications = $user->notifications()
+            ->where('created_at', '>=', $since)
+            ->limit(100)
+            ->get()
+            ->map(fn ($n) => [
+                'id' => $n->id,
+                'kind' => 'notification',
+                'type' => $n->data['type'] ?? null,
+                'summary' => $n->data['line'] ?? $n->data['title'] ?? null,
+                'data' => $n->data,
+                'read_at' => $n->read_at,
+                'created_at' => $n->created_at,
+            ]);
+
+        $actions = Activity::query()
+            ->where('user_id', $user->id)
+            ->where('created_at', '>=', $since)
+            ->latest('id')
+            ->limit(100)
+            ->get()
+            ->map(fn (Activity $a) => [
+                'id' => 'a'.$a->id,
+                'kind' => 'action',
+                'type' => $a->action->value,
+                'tool' => $a->action->tool(),
+                'summary' => $a->summary,
+                'subject' => $a->subject_type === null
+                    ? null
+                    : ['type' => $a->subject_type, 'id' => $a->subject_id],
+                /* Never unread: a thing I did was never news to me. The
+                   screen's "mark all read" must not appear to leave rows
+                   behind, so these carry a read timestamp of their own. */
+                'read_at' => $a->created_at,
+                'created_at' => $a->created_at,
+            ]);
+
+        $rows = $notifications->concat($actions)
+            ->sortByDesc('created_at')
+            ->values()
+            ->take(100);
+
+        return response()->json([
+            'data' => $rows,
             'meta' => ['unread' => $user->unreadNotifications()->count()],
         ]);
     }

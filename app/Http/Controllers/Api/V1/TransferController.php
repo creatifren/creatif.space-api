@@ -2,6 +2,8 @@
 
 namespace App\Http\Controllers\Api\V1;
 
+use App\Models\Activity;
+use App\Enums\ActivityAction;
 use App\Http\Controllers\Controller;
 use App\Http\Resources\TransferResource;
 use App\Models\File;
@@ -112,6 +114,14 @@ class TransferController extends Controller
         foreach (array_unique($validated['recipients'] ?? []) as $email) {
             $transfer->recipients()->create(['email' => $email]);
         }
+
+        Activity::log(
+            $user,
+            ActivityAction::Transfer,
+            "Sent {$files->count()} ".($files->count() === 1 ? 'file' : 'files')." — {$transfer->title}",
+            'transfer',
+            $transfer->ulid,
+        );
 
         return (new TransferResource(
             $transfer->fresh()->load(['files:id,size_bytes', 'recipients'])->loadCount('files'),

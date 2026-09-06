@@ -269,6 +269,7 @@ Route::middleware('auth:sanctum')->group(function () {
 
     // Bell, Needs Attention, and the five switches
     Route::get('/me/attention', [NotificationController::class, 'attention'])->name('api.v1.me.attention');
+    Route::get('/me/activity', [NotificationController::class, 'activity'])->name('api.v1.me.activity');
     Route::get('/me/notifications', [NotificationController::class, 'index'])->name('api.v1.me.notifications');
     Route::post('/me/notifications/read', [NotificationController::class, 'read'])->name('api.v1.me.notifications.read');
     Route::get('/me/notification-preferences', [NotificationController::class, 'preferences'])->name('api.v1.me.notification-preferences');

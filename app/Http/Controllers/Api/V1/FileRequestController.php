@@ -2,6 +2,8 @@
 
 namespace App\Http\Controllers\Api\V1;
 
+use App\Models\Activity;
+use App\Enums\ActivityAction;
 use App\Enums\FileRequestStatus;
 use App\Http\Controllers\Controller;
 use App\Http\Resources\AskedRequestResource;
@@ -73,6 +75,14 @@ class FileRequestController extends Controller
             'expires_at' => $validated['expires_at']
                 ?? now()->addDays(FileRequest::DEFAULT_DAYS),
         ]);
+
+        Activity::log(
+            $user,
+            ActivityAction::RequestCreate,
+            "Asked for files — {$fileRequest->title}",
+            'file_request',
+            $fileRequest->ulid,
+        );
 
         return (new FileRequestResource(
             $fileRequest->fresh()->loadCount('submissions'),

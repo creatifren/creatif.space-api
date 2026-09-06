@@ -2,6 +2,8 @@
 
 namespace App\Http\Controllers\Api\V1;
 
+use App\Models\Activity;
+use App\Enums\ActivityAction;
 use App\Enums\SpaceStatus;
 use App\Http\Controllers\Controller;
 use App\Http\Resources\SpaceListResource;
@@ -188,6 +190,14 @@ class SpaceController extends Controller
                 'published_at' => now(),
                 'archived_at' => null,
             ])->save();
+
+            Activity::log(
+                Workspace::owner($request->user()),
+                ActivityAction::SpacePublish,
+                "Published {$space->title}",
+                'space',
+                $space->ulid,
+            );
         }
 
         return new SpaceResource($space->load('items.file'));
@@ -212,6 +222,14 @@ class SpaceController extends Controller
             'status' => SpaceStatus::Archived,
             'archived_at' => now(),
         ])->save();
+
+        Activity::log(
+            Workspace::owner($request->user()),
+            ActivityAction::SpaceArchive,
+            "Archived {$space->title}",
+            'space',
+            $space->ulid,
+        );
 
         return new SpaceResource($space->load('items.file'));
     }

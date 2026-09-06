@@ -2,6 +2,8 @@
 
 namespace App\Http\Controllers\Api\V1;
 
+use App\Models\Activity;
+use App\Enums\ActivityAction;
 use App\Http\Controllers\Controller;
 use App\Http\Resources\FileResource;
 use App\Http\Resources\FolderResource;
@@ -238,6 +240,14 @@ class FileController extends Controller
             'status' => File::STATUS_READY,
         ]);
 
+        Activity::log(
+            $user,
+            ActivityAction::Upload,
+            "Uploaded {$file->name}",
+            'file',
+            $file->ulid,
+        );
+
         \App\Notifications\StorageAlmostFull::checkAndSend($user);
 
         return new FileResource($file->refresh());
@@ -266,6 +276,8 @@ class FileController extends Controller
 
         $file->forceFill(['purge_at' => now()->addDays(File::TRASH_DAYS)])->save();
         $file->delete();
+
+        Activity::log($user, ActivityAction::Trash, "Moved {$file->name} to the Trash", 'file', $file->ulid);
 
         return response()->json(null, 204);
     }
@@ -304,6 +316,8 @@ class FileController extends Controller
         $file->restore();
         $file->forceFill(['purge_at' => null])->save();
 
+        Activity::log($user, ActivityAction::Restore, "Restored {$file->name}", 'file', $file->ulid);
+
         return response()->json(['data' => new FileResource($file->fresh())]);
     }
 
@@ -321,6 +335,7 @@ class FileController extends Controller
             ->where('ulid', $ulid)
             ->firstOrFail();
 
+        Activity::log($user, ActivityAction::Purge, "Deleted {$file->name} for good", 'file', $file->ulid);
         static::purge($file);
 
         return response()->json(null, 204);
@@ -335,9 +350,19 @@ class FileController extends Controller
         $user = Workspace::owner($request->user());
         abort_unless(Workspace::canWrite($request->user()), 403);
 
+        $emptied = File::onlyTrashed()->where('user_id', $user->id)->count();
+
         File::onlyTrashed()
             ->where('user_id', $user->id)
             ->each(fn (File $file) => static::purge($file));
+
+        if ($emptied > 0) {
+            Activity::log(
+                $user,
+                ActivityAction::Purge,
+                $emptied === 1 ? 'Emptied the Trash — 1 file' : "Emptied the Trash — {$emptied} files",
+            );
+        }
 
         return response()->json(null, 204);
     }

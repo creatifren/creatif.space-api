@@ -2,6 +2,8 @@
 
 namespace App\Http\Controllers\Api\V1;
 
+use App\Models\Activity;
+use App\Enums\ActivityAction;
 use App\Http\Controllers\Controller;
 use App\Http\Resources\FolderResource;
 use App\Models\Folder;
@@ -32,6 +34,8 @@ class FolderController extends Controller
             'parent_id' => $parent?->id,
             'name' => trim($validated['name']),
         ]);
+
+        Activity::log($user, ActivityAction::FolderCreate, "Created the folder {$folder->name}", 'folder', $folder->ulid);
 
         return (new FolderResource($folder->loadCount(['files', 'children'])))
             ->response()
