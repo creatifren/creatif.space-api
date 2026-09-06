@@ -56,6 +56,9 @@ Route::get('/profiles/{handle}', [PublicProfileController::class, 'show'])
     ->name('api.v1.profiles.show');
 Route::get('/profiles/{handle}/spaces/{slug}', [PublicSpaceController::class, 'show'])
     ->name('api.v1.profiles.spaces.show');
+Route::get('/profiles/{handle}/spaces/{slug}/items/{item}/download', [PublicSpaceController::class, 'download'])
+    ->middleware('throttle:60,1')
+    ->name('api.v1.profiles.spaces.download');
 Route::post('/profiles/{handle}/spaces/{slug}/unlock', [PublicSpaceController::class, 'unlock'])
     ->middleware('throttle:10,1')
     ->name('api.v1.profiles.spaces.unlock');

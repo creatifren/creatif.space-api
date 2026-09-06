@@ -48,6 +48,48 @@ class PublicSpaceController extends Controller
         return new PublicSpaceResource($space);
     }
 
+    /**
+     * A download link for one file in a published Space.
+     *
+     * The same three gates as the page, in the same order — a link that
+     * skipped the password would be a hole beside the door. `allow_download`
+     * is checked here rather than only drawn in the UI: until now it was a
+     * toggle the server never read, so turning it off hid a button and
+     * withheld nothing.
+     *
+     * What this can and cannot do: with the Space open, its images are on
+     * the page and a viewer can always save one from the browser. What the
+     * gate withholds is the original — full resolution, original filename,
+     * and every file that is not an image. That is the difference the
+     * toggle actually describes.
+     */
+    public function download(Request $request, string $handle, string $slug, string $item): JsonResponse
+    {
+        $space = $this->resolve($handle, $slug);
+
+        if ($space->isExpired()) {
+            return response()->json(['expired' => true], 410);
+        }
+
+        if (
+            $space->password_hash !== null
+            && ! SpaceUnlockToken::verify($space, $request->query('st'))
+        ) {
+            return response()->json(['locked' => true], 423);
+        }
+
+        if (($space->settings['allow_download'] ?? true) !== true) {
+            return response()->json([
+                'message' => 'Downloads are off for this Space.',
+            ], 403);
+        }
+
+        $record = $space->items()->where('ulid', $item)->with('file')->first();
+        abort_if($record?->file === null, 404);
+
+        return response()->json(['data' => ['url' => $record->file->downloadUrl()]]);
+    }
+
     public function unlock(Request $request, string $handle, string $slug): JsonResponse
     {
         $validated = $request->validate([
