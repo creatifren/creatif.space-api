@@ -18,6 +18,7 @@ enum ActivityAction: string
     case Upload = 'upload';
     case Version = 'version';
     case FolderCreate = 'folder.create';
+    case FolderDelete = 'folder.delete';
     case Move = 'move';
     case Trash = 'trash';
     case Restore = 'restore';
@@ -34,8 +35,8 @@ enum ActivityAction: string
     public function tool(): string
     {
         return match ($this) {
-            self::Upload, self::Version, self::FolderCreate, self::Move,
-            self::Trash, self::Restore, self::Purge, self::Transfer,
+            self::Upload, self::Version, self::FolderCreate, self::FolderDelete,
+            self::Move, self::Trash, self::Restore, self::Purge, self::Transfer,
             self::Download, self::RequestCreate => 'Files',
             self::SpacePublish, self::SpaceArchive => 'Spaces',
             self::PostSchedule, self::PostPublish => 'Posts',

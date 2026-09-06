@@ -159,6 +159,15 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::post('/folders', [FolderController::class, 'store'])
         ->middleware('throttle:30,1')
         ->name('api.v1.folders.store');
+    Route::patch('/folders/{folder}', [FolderController::class, 'update'])
+        ->name('api.v1.folders.update');
+    Route::delete('/folders/{folder}', [FolderController::class, 'destroy'])
+        ->name('api.v1.folders.destroy');
+    /* Declared before /files/{file} so "move" is never read as a ULID —
+       the same reason the trash routes sit where they do. */
+    Route::post('/files/move', [FileController::class, 'move'])
+        ->middleware('throttle:60,1')
+        ->name('api.v1.files.move');
     Route::post('/files/presign', [FileController::class, 'presign'])
         ->middleware('throttle:30,1')
         ->name('api.v1.files.presign');

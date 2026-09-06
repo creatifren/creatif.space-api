@@ -254,6 +254,62 @@ class FileController extends Controller
     }
 
     /**
+     * Move files into a folder, or out to the root.
+     *
+     * Nothing moves in storage: the object key is fixed at upload and a
+     * folder is only how the owner sees their library. So this is one
+     * UPDATE, and a file that is in a Space or a transfer stays in it —
+     * unlike the Trash, there is nothing here to break.
+     */
+    public function move(Request $request): JsonResponse
+    {
+        abort_unless(Workspace::canWrite($request->user()), 403);
+
+        $validated = $request->validate([
+            'file_ids' => ['required', 'array', 'min:1', 'max:200'],
+            'file_ids.*' => ['string', 'max:26'],
+            // Null is the root, and has to be sent rather than omitted:
+            // "move" with no destination is not a request worth guessing at.
+            'folder_id' => ['present', 'nullable', 'string', 'max:26'],
+        ]);
+
+        $user = Workspace::owner($request->user());
+        $folder = Folder::ownedBy($user, $validated['folder_id']);
+
+        /* Own files only, and resolved before the write: a batch that half
+           applies would leave the screen disagreeing with the library. */
+        $files = File::query()
+            ->where('user_id', $user->id)
+            ->whereIn('ulid', $validated['file_ids'])
+            ->get();
+
+        if ($files->count() !== count(array_unique($validated['file_ids']))) {
+            return response()->json([
+                'message' => 'Some of those files are not in your library any more.',
+            ], 422);
+        }
+
+        File::query()->whereIn('id', $files->pluck('id'))->update([
+            'folder_id' => $folder?->id,
+        ]);
+
+        $where = $folder === null ? 'the main folder' : $folder->name;
+        $count = $files->count();
+
+        Activity::log(
+            $user,
+            ActivityAction::Move,
+            $count === 1
+                ? "Moved {$files->first()->name} to {$where}"
+                : "Moved {$count} files to {$where}",
+            $folder === null ? null : 'folder',
+            $folder?->ulid,
+        );
+
+        return response()->json(null, 204);
+    }
+
+    /**
      * Move a file to the Trash. The object stays in the bucket and keeps
      * counting against the quota; PurgeTrashedFiles takes both after
      * File::TRASH_DAYS, or the owner empties the bin sooner.

@@ -68,6 +68,31 @@ class Folder extends Model
     }
 
     /**
+     * Would moving under $ancestor put this folder inside itself?
+     *
+     * Walks up from here, so the cost is the depth of the destination, not
+     * the size of the subtree. The `$guard` is not paranoia about the data
+     * — it is what stops a cycle that already exists in the table from
+     * turning a bad move into an infinite loop.
+     */
+    public function isSelfOrDescendantOf(self $ancestor): bool
+    {
+        $guard = 0;
+
+        for ($node = $this; $node !== null; $node = $node->parent) {
+            if ($node->id === $ancestor->id) {
+                return true;
+            }
+
+            if (++$guard > 100) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /**
      * @return BelongsTo<User, $this>
      */
     public function user(): BelongsTo
