@@ -52,6 +52,29 @@ class File extends Model
     /** How long a trashed file waits before the purge job takes it. */
     public const TRASH_DAYS = 30;
 
+    /**
+     * R2 hands back an ETag; for a single-part upload it is the object's
+     * MD5, which is the same thing Drive's `md5Checksum` gives us — so the
+     * two sources are comparable and duplicate detection can span both.
+     *
+     * A multipart ETag is an MD5 of the parts' MD5s with a `-N` suffix. It
+     * is stable per upload but says nothing about the bytes: the same file
+     * uploaded with a different part size gets a different one. Storing it
+     * would make two identical files look distinct and, worse, two
+     * different files with matching part counts look identical. Null is the
+     * honest answer for those.
+     */
+    public static function md5FromEtag(string|false|null $etag): ?string
+    {
+        if (! is_string($etag)) {
+            return null;
+        }
+
+        $etag = trim($etag, '"');
+
+        return preg_match('/^[0-9a-f]{32}$/i', $etag) === 1 ? strtolower($etag) : null;
+    }
+
     public const STATUS_PENDING = 'pending';
 
     public const STATUS_READY = 'ready';

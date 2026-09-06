@@ -211,6 +211,11 @@ class FileController extends Controller
 
         $file->update([
             'size_bytes' => $realSize,
+            /* The object's MD5, read from R2 rather than trusted from the
+               browser — it is what "these two files are the same bytes"
+               rests on. Null for a multipart upload, whose ETag is not an
+               MD5 (see File::md5FromEtag). */
+            'checksum' => File::md5FromEtag($disk->checksum($file->path)),
             'width' => $validated['width'] ?? null,
             'height' => $validated['height'] ?? null,
             'status' => File::STATUS_READY,

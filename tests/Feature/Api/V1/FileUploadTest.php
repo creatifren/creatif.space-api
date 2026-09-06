@@ -101,7 +101,22 @@ describe('complete', function () {
             ->assertJsonPath('data.status', 'ready')
             ->assertJsonPath('data.width', 4000);
 
-        expect($file->fresh()->size_bytes)->toBe(strlen('the-actual-bytes'));
+        expect($file->fresh()->size_bytes)->toBe(strlen('the-actual-bytes'))
+            /* The stored checksum is the object's own MD5, read back from
+               storage — it is what duplicate detection rests on, so it must
+               not come from the browser. */
+            ->and($file->fresh()->checksum)->toBe(md5('the-actual-bytes'));
+    });
+
+    it('stores no checksum when storage cannot give a plain MD5', function () {
+        /* A multipart ETag is an MD5 of the parts' MD5s with a -N suffix:
+           stable per upload, but two identical files uploaded with
+           different part sizes would not match. Null is the honest answer. */
+        expect(File::md5FromEtag('"9bb58f26192e4ba00f01e2e7b136bbd8-3"'))->toBeNull()
+            ->and(File::md5FromEtag(false))->toBeNull()
+            ->and(File::md5FromEtag(null))->toBeNull()
+            ->and(File::md5FromEtag('"9BB58F26192E4BA00F01E2E7B136BBD8"'))
+            ->toBe('9bb58f26192e4ba00f01e2e7b136bbd8');
     });
 
     it('answers 409 the second time — an upload completes once', function () {

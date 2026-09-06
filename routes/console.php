@@ -3,6 +3,7 @@
 use App\Jobs\AggregateSpaceStats;
 use App\Jobs\ExpireSubscriptions;
 use App\Jobs\PruneSpaceEvents;
+use App\Jobs\BackfillFileChecksums;
 use App\Jobs\PruneStaleUploads;
 use App\Jobs\PurgeTrashedFiles;
 use App\Jobs\ReleaseCommissions;
@@ -51,3 +52,11 @@ Schedule::job(new PruneStaleUploads)->dailyAt('01:30');
  * the time this looks.
  */
 Schedule::job(new PurgeTrashedFiles)->dailyAt('01:45');
+
+/*
+ * Fills in checksums for files stored before the upload path recorded one.
+ * Bounded per run, so it drains over several nights rather than holding
+ * the queue; once every row has one this is a single indexed query that
+ * finds nothing.
+ */
+Schedule::job(new BackfillFileChecksums)->dailyAt('01:55');

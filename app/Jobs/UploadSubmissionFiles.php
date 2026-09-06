@@ -86,7 +86,13 @@ class UploadSubmissionFiles implements ShouldQueue
                     fclose($stream);
                 }
 
-                $file->update(['status' => File::STATUS_READY]);
+                $file->update([
+                    'status' => File::STATUS_READY,
+                    // Same MD5-or-null rule as a browser upload.
+                    'checksum' => File::md5FromEtag(
+                        Storage::disk($file->disk)->checksum($file->path),
+                    ),
+                ]);
 
                 $landed[] = ['name' => $stagedFile['name'], 'file_id' => $file->ulid];
             }
