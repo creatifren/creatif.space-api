@@ -88,6 +88,9 @@ Route::get('/t/{slug}/files/{file}/download', [PublicTransferController::class, 
     ->name('api.v1.public.transfers.download');
 Route::get('/r/{slug}', [PublicFileRequestController::class, 'show'])
     ->name('api.v1.file-requests.public');
+Route::post('/r/{slug}/unlock', [PublicFileRequestController::class, 'unlock'])
+    ->middleware('throttle:10,1')
+    ->name('api.v1.file-requests.unlock');
 /* Optional auth: anyone may submit, and whoever is signed in gets the
    submission recorded against their account so it shows up under "Asked of
    you". The guard authenticates when a session is present and shrugs when

@@ -8,10 +8,12 @@ use App\Http\Controllers\Controller;
 use App\Http\Resources\PublicFileRequestResource;
 use App\Jobs\UploadSubmissionFiles;
 use App\Models\FileRequest;
+use App\Support\SpaceUnlockToken;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Str;
 
 /**
@@ -20,19 +22,55 @@ use Illuminate\Support\Str;
  * than trusted.
  *
  * Gate order mirrors the Space viewer: 404 unknown → 410 expired → 409
- * closed. Closed is not 404: somebody who was invited deserves "this is
- * closed now", not "you mistyped the link".
+ * closed → 423 locked. Closed is not 404: somebody who was invited
+ * deserves "this is closed now", not "you mistyped the link". And the lock
+ * comes last for the same reason it does there — a dead link must not ask
+ * for a password it was never going to honour.
  */
 class PublicFileRequestController extends Controller
 {
-    public function show(string $slug): JsonResponse
+    public function show(Request $request, string $slug): JsonResponse
     {
         $fileRequest = $this->resolve($slug);
 
+        if ($this->isLocked($fileRequest, $request->query('st'))) {
+            /* Nothing leaks through the lock — not the title, not the note,
+               not the limits. Same rule as a locked Space or Transfer. */
+            return response()->json([
+                'locked' => true,
+                'owner_name' => $fileRequest->user->name,
+            ], 423);
+        }
+
         return response()->json([
             'data' => (new PublicFileRequestResource($fileRequest))
-                ->toArray(request()),
+                ->toArray($request),
         ]);
+    }
+
+    /**
+     * Trade the password for a token. The sender has no session — they have
+     * no account by design — so the signed token is the state.
+     */
+    public function unlock(Request $request, string $slug): JsonResponse
+    {
+        $fileRequest = $this->resolve($slug);
+        $validated = $request->validate([
+            'password' => ['required', 'string', 'max:255'],
+        ]);
+
+        if (
+            $fileRequest->password_hash === null
+            || ! Hash::check($validated['password'], $fileRequest->password_hash)
+        ) {
+            return response()->json([
+                'message' => "That password isn't right — check with {$fileRequest->user->name}.",
+            ], 422);
+        }
+
+        return response()->json(['data' => [
+            'token' => SpaceUnlockToken::issueFor($fileRequest->ulid),
+        ]]);
     }
 
     /**
@@ -43,6 +81,13 @@ class PublicFileRequestController extends Controller
     public function store(Request $request, string $slug): JsonResponse
     {
         $fileRequest = $this->resolve($slug);
+
+        /* The same lock as the page. A submit route that skipped it would
+           be a hole beside the door: the form is trivially reconstructed
+           from the slug alone. */
+        if ($this->isLocked($fileRequest, $request->input('st', $request->query('st')))) {
+            return response()->json(['locked' => true], 423);
+        }
 
         $validated = $request->validate([
             'sender_name' => ['required', 'string', 'max:120'],
@@ -117,6 +162,16 @@ class PublicFileRequestController extends Controller
                 'status' => SubmissionStatus::Uploading->value,
             ],
         ], 202);
+    }
+
+    /**
+     * Locked to this holder: there is a password, and they have not traded
+     * it for a token yet.
+     */
+    private function isLocked(FileRequest $fileRequest, ?string $token): bool
+    {
+        return $fileRequest->password_hash !== null
+            && ! SpaceUnlockToken::verifyFor($fileRequest->ulid, $token);
     }
 
     private function resolve(string $slug): FileRequest

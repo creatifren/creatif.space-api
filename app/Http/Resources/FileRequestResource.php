@@ -27,6 +27,9 @@ class FileRequestResource extends JsonResource
             'note' => $this->note,
             'max_files' => $this->max_files,
             'max_mb' => $this->max_mb,
+            // Whether, never what: the card's Password chip needs one bit,
+            // and the hash is not it.
+            'has_password' => $this->password_hash !== null,
             'status' => $this->status,
             'expired' => $this->isExpired(),
             'expires_at' => $this->expires_at,

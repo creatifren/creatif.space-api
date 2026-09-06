@@ -82,6 +82,163 @@ describe('making a request', function () {
     });
 });
 
+describe('the limits the owner sets', function () {
+    it('takes max_files and max_mb, and falls back to the column defaults', function () {
+        $user = User::factory()->create();
+
+        $this->actingAs($user)
+            ->postJson('/api/v1/file-requests', requestPayload(['max_files' => 12, 'max_mb' => 250]))
+            ->assertCreated()
+            ->assertJsonPath('data.max_files', 12)
+            ->assertJsonPath('data.max_mb', 250);
+
+        $this->actingAs($user)
+            ->postJson('/api/v1/file-requests', requestPayload())
+            ->assertCreated()
+            ->assertJsonPath('data.max_files', 5)
+            ->assertJsonPath('data.max_mb', 100);
+    });
+
+    it('refuses limits past the ceiling', function () {
+        $user = User::factory()->create();
+
+        $this->actingAs($user)
+            ->postJson('/api/v1/file-requests', requestPayload([
+                'max_files' => FileRequest::MAX_FILES_CEILING + 1,
+            ]))
+            ->assertUnprocessable();
+
+        // Past the column's own range, which would silently truncate.
+        $this->actingAs($user)
+            ->postJson('/api/v1/file-requests', requestPayload(['max_mb' => 99_999]))
+            ->assertUnprocessable();
+    });
+
+    it('changes the limits on a link that is already out', function () {
+        $request = FileRequest::factory()->create(['max_files' => 5]);
+
+        $this->actingAs($request->user)
+            ->patchJson("/api/v1/file-requests/{$request->ulid}", ['max_files' => 20])
+            ->assertOk()
+            ->assertJsonPath('data.max_files', 20);
+    });
+
+    it('enforces a raised limit on the public side', function () {
+        Storage::fake('local');
+        Bus::fake();
+        $request = FileRequest::factory()->create(['max_files' => 1]);
+
+        $payload = fn () => [
+            'sender_name' => 'Andi',
+            'sender_email' => 'andi@winternoel.com',
+            'files' => [goodFile('a.pdf'), goodFile('b.pdf')],
+        ];
+
+        $this->postJson("/api/v1/r/{$request->slug}/submissions", $payload())
+            ->assertUnprocessable();
+
+        $this->actingAs($request->user)
+            ->patchJson("/api/v1/file-requests/{$request->ulid}", ['max_files' => 5])
+            ->assertOk();
+
+        // The setting is not decoration: the same submission now goes through.
+        $this->postJson("/api/v1/r/{$request->slug}/submissions", $payload())
+            ->assertAccepted();
+    });
+});
+
+describe('a password on the link', function () {
+    it('reports whether there is one, and never the hash', function () {
+        $user = User::factory()->create();
+
+        $response = $this->actingAs($user)
+            ->postJson('/api/v1/file-requests', requestPayload(['password' => 'winter']))
+            ->assertCreated()
+            ->assertJsonPath('data.has_password', true);
+
+        expect($response->json('data'))->not->toHaveKey('password_hash')
+            ->and(FileRequest::query()->sole()->password_hash)->not->toBe('winter');
+    });
+
+    it('locks the page until the password is traded for a token', function () {
+        $request = FileRequest::factory()->create();
+        $this->actingAs($request->user)
+            ->patchJson("/api/v1/file-requests/{$request->ulid}", ['password' => 'winter'])
+            ->assertOk()
+            ->assertJsonPath('data.has_password', true);
+
+        // Nothing leaks through the lock — not even the title.
+        $locked = $this->getJson("/api/v1/r/{$request->slug}")->assertStatus(423);
+        expect($locked->json())->not->toHaveKey('title');
+
+        $this->postJson("/api/v1/r/{$request->slug}/unlock", ['password' => 'nope'])
+            ->assertUnprocessable();
+
+        $token = $this->postJson("/api/v1/r/{$request->slug}/unlock", ['password' => 'winter'])
+            ->assertOk()
+            ->json('data.token');
+
+        $this->getJson("/api/v1/r/{$request->slug}?st={$token}")
+            ->assertOk()
+            ->assertJsonPath('data.title', $request->title);
+    });
+
+    it('locks the submit route too, not just the page', function () {
+        Storage::fake('local');
+        Bus::fake();
+        $request = FileRequest::factory()->create();
+        $this->actingAs($request->user)
+            ->patchJson("/api/v1/file-requests/{$request->ulid}", ['password' => 'winter']);
+
+        $payload = [
+            'sender_name' => 'Andi',
+            'sender_email' => 'andi@winternoel.com',
+            'files' => [goodFile()],
+        ];
+
+        // The form is trivially rebuilt from the slug — the door and the
+        // window need the same lock.
+        $this->postJson("/api/v1/r/{$request->slug}/submissions", $payload)
+            ->assertStatus(423);
+
+        expect(FileRequestSubmission::query()->count())->toBe(0);
+
+        $token = $this->postJson("/api/v1/r/{$request->slug}/unlock", ['password' => 'winter'])
+            ->json('data.token');
+
+        $this->postJson("/api/v1/r/{$request->slug}/submissions", $payload + ['st' => $token])
+            ->assertAccepted();
+    });
+
+    it('says expired before it asks for a password', function () {
+        $request = FileRequest::factory()->expired()->create();
+        $this->actingAs($request->user)
+            ->patchJson("/api/v1/file-requests/{$request->ulid}", ['password' => 'winter']);
+
+        // A dead link must not ask for a password it will not honour.
+        $this->getJson("/api/v1/r/{$request->slug}")->assertGone();
+    });
+
+    it('clears the password with an explicit null and leaves it alone otherwise', function () {
+        $request = FileRequest::factory()->create();
+        $this->actingAs($request->user)
+            ->patchJson("/api/v1/file-requests/{$request->ulid}", ['password' => 'winter']);
+
+        // A rename must not unlock the link.
+        $this->actingAs($request->user)
+            ->patchJson("/api/v1/file-requests/{$request->ulid}", ['title' => 'Renamed'])
+            ->assertOk()
+            ->assertJsonPath('data.has_password', true);
+
+        $this->actingAs($request->user)
+            ->patchJson("/api/v1/file-requests/{$request->ulid}", ['password' => null])
+            ->assertOk()
+            ->assertJsonPath('data.has_password', false);
+
+        $this->getJson("/api/v1/r/{$request->slug}")->assertOk();
+    });
+});
+
 describe('the public link', function () {
     it('says who is asking and what the limits are', function () {
         $request = FileRequest::factory()->create(['title' => 'Send me the brief']);

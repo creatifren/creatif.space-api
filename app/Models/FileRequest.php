@@ -20,6 +20,7 @@ use Illuminate\Support\Str;
  * @property string $slug
  * @property string $title
  * @property string|null $note
+ * @property string|null $password_hash
  * @property int $max_files
  * @property int $max_mb
  * @property FileRequestStatus $status
@@ -42,6 +43,16 @@ class FileRequest extends Model
     /** How long a link lives when the owner names no date. */
     public const DEFAULT_DAYS = 30;
 
+    /**
+     * Ceilings on what the owner may ask for. The count is the column's own
+     * (unsignedTinyInteger, and the request closes itself at 50 submissions
+     * anyway); the size is the same per-file ceiling a direct upload gets,
+     * because a stranger's file lands in exactly the same library.
+     */
+    public const MAX_FILES_CEILING = 50;
+
+    public const MAX_MB_CEILING = 500;
+
     protected $fillable = [
         'title',
         'note',
@@ -49,6 +60,9 @@ class FileRequest extends Model
         'max_mb',
         'expires_at',
     ];
+
+    /** Never serialised: the hash is the owner's secret, not the page's. */
+    protected $hidden = ['password_hash'];
 
     /**
      * Get the attributes that should be cast.
