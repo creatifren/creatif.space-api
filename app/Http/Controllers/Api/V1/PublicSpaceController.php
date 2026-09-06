@@ -90,7 +90,7 @@ class PublicSpaceController extends Controller
             ->where('user_id', $record->user->id)
             ->where('slug', $slug)
             ->where('status', 'published')
-            ->with(['items.file', 'user'])
+            ->with(['items.file', 'user.profile'])
             ->first();
 
         abort_if($space === null, 404);

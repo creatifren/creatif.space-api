@@ -67,6 +67,12 @@ class PublicSpaceResource extends JsonResource
                 'name' => $this->user->name,
                 'handle' => $this->user->handle?->name,
             ],
+            /* The owner's palette, the same blob the profile page reads.
+               A Space has no appearance of its own — one creator, one look,
+               and a viewer that ignored it was the only public page that
+               did. Empty object, not null: the client treats "no keys" as
+               the default theme and would have to special-case null. */
+            'appearance' => $this->user->profile?->appearance ?? (object) [],
             'approval' => $this->approvalBlock($request),
             'layout' => $this->view_mode,
             'fit' => $design['fit'] ?? 'cover',

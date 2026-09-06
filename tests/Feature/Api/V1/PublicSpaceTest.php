@@ -59,6 +59,25 @@ describe('public space', function () {
             ->and($response->json('data.layout'))->toBe('grid');
     });
 
+    it('carries the owner profile appearance, and an empty object without one', function () {
+        $user = User::factory()->create();
+        publishedSpaceFor($user);
+        $user->profile()->create(['appearance' => ['tone' => 'ink', 'accent' => 'clay']]);
+
+        $this->getJson('/api/v1/profiles/rani/spaces/winter-noel')
+            ->assertOk()
+            ->assertJsonPath('data.appearance.tone', 'ink')
+            ->assertJsonPath('data.appearance.accent', 'clay');
+
+        $other = User::factory()->create();
+        Handle::factory()->for($other)->create(['name' => 'budi']);
+        Space::factory()->for($other)->published()->create(['slug' => 'no-profile']);
+
+        $this->getJson('/api/v1/profiles/budi/spaces/no-profile')
+            ->assertOk()
+            ->assertJsonPath('data.appearance', []);
+    });
+
     it('404s for drafts, archived, deleted, unknown, and suspended owners', function () {
         $user = User::factory()->create();
         Handle::factory()->for($user)->create(['name' => 'rani']);
