@@ -15,13 +15,29 @@ class SpaceUnlockToken
 
     public static function issue(Space $space): string
     {
-        $expires = now()->addHours(self::TTL_HOURS)->getTimestamp();
-        $signature = self::sign($space->ulid, $expires);
+        return self::issueFor($space->ulid);
+    }
 
-        return rtrim(strtr(base64_encode("{$space->ulid}.{$expires}.{$signature}"), '+/', '-_'), '=');
+    /**
+     * The same token for anything else with a password and a ulid — the
+     * Transfer page uses it. Kept here rather than copied: two HMAC
+     * schemes that drift apart is a security bug waiting for a quiet
+     * afternoon.
+     */
+    public static function issueFor(string $ulid): string
+    {
+        $expires = now()->addHours(self::TTL_HOURS)->getTimestamp();
+        $signature = self::sign($ulid, $expires);
+
+        return rtrim(strtr(base64_encode("{$ulid}.{$expires}.{$signature}"), '+/', '-_'), '=');
     }
 
     public static function verify(Space $space, ?string $token): bool
+    {
+        return self::verifyFor($space->ulid, $token);
+    }
+
+    public static function verifyFor(string $subject, ?string $token): bool
     {
         if ($token === null || $token === '') {
             return false;
@@ -39,7 +55,7 @@ class SpaceUnlockToken
 
         [$ulid, $expires, $signature] = $parts;
 
-        return $ulid === $space->ulid
+        return $ulid === $subject
             && ctype_digit($expires)
             && (int) $expires > now()->getTimestamp()
             && hash_equals(self::sign($ulid, (int) $expires), $signature);

@@ -155,6 +155,14 @@ class User extends Authenticatable implements FilamentUser
     }
 
     /**
+     * @return HasMany<Transfer, $this>
+     */
+    public function transfers(): HasMany
+    {
+        return $this->hasMany(Transfer::class);
+    }
+
+    /**
      * @return HasMany<NotificationPreference, $this>
      */
     public function notificationPreferences(): HasMany

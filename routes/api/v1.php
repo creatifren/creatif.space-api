@@ -20,6 +20,7 @@ use App\Http\Controllers\Api\V1\PostForMeWebhookController;
 use App\Http\Controllers\Api\V1\PublicFileRequestController;
 use App\Http\Controllers\Api\V1\PublicProfileController;
 use App\Http\Controllers\Api\V1\PublicSpaceController;
+use App\Http\Controllers\Api\V1\PublicTransferController;
 use App\Http\Controllers\Api\V1\SocialAccountController;
 use App\Http\Controllers\Api\V1\SocialPostController;
 use App\Http\Controllers\Api\V1\SpaceController;
@@ -27,6 +28,7 @@ use App\Http\Controllers\Api\V1\SpaceEventController;
 use App\Http\Controllers\Api\V1\StorageController;
 use App\Http\Controllers\Api\V1\SubscriptionController;
 use App\Http\Controllers\Api\V1\TeamController;
+use App\Http\Controllers\Api\V1\TransferController;
 use Illuminate\Support\Facades\Route;
 
 // Public
@@ -74,6 +76,16 @@ Route::post('/referrals/{code}/click', [AffiliateController::class, 'click'])
 
 // File Request — the link a stranger opens. No account by design, so the
 // throttle and the size caps are the whole defence.
+/* The transfer page. No account by design, same as /r — a link is the
+   whole product. */
+Route::get('/t/{slug}', [PublicTransferController::class, 'show'])
+    ->name('api.v1.public.transfers.show');
+Route::post('/t/{slug}/unlock', [PublicTransferController::class, 'unlock'])
+    ->middleware('throttle:10,1')
+    ->name('api.v1.public.transfers.unlock');
+Route::get('/t/{slug}/files/{file}/download', [PublicTransferController::class, 'download'])
+    ->middleware('throttle:60,1')
+    ->name('api.v1.public.transfers.download');
 Route::get('/r/{slug}', [PublicFileRequestController::class, 'show'])
     ->name('api.v1.file-requests.public');
 Route::post('/r/{slug}/submissions', [PublicFileRequestController::class, 'store'])
@@ -173,6 +185,15 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::delete('/files/{file}', [FileController::class, 'destroy'])->name('api.v1.files.destroy');
 
     // File Request — the owner's side
+    // Transfers — files going out, as a link.
+    Route::get('/transfers', [TransferController::class, 'index'])->name('api.v1.transfers.index');
+    Route::get('/transfers/received', [TransferController::class, 'received'])->name('api.v1.transfers.received');
+    Route::post('/transfers', [TransferController::class, 'store'])
+        ->middleware('throttle:30,1')
+        ->name('api.v1.transfers.store');
+    Route::patch('/transfers/{transfer}', [TransferController::class, 'update'])->name('api.v1.transfers.update');
+    Route::delete('/transfers/{transfer}', [TransferController::class, 'destroy'])->name('api.v1.transfers.destroy');
+
     Route::get('/file-requests', [FileRequestController::class, 'index'])->name('api.v1.file-requests.index');
     Route::post('/file-requests', [FileRequestController::class, 'store'])
         ->middleware('throttle:20,1')
