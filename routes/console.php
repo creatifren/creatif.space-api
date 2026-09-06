@@ -4,6 +4,7 @@ use App\Jobs\AggregateSpaceStats;
 use App\Jobs\ExpireSubscriptions;
 use App\Jobs\PruneSpaceEvents;
 use App\Jobs\PruneStaleUploads;
+use App\Jobs\PurgeTrashedFiles;
 use App\Jobs\ReleaseCommissions;
 use Illuminate\Foundation\Inspiring;
 use Illuminate\Support\Facades\Artisan;
@@ -43,3 +44,10 @@ Schedule::job(new ReleaseCommissions)->dailyAt('02:55');
  * window is 15 minutes.
  */
 Schedule::job(new PruneStaleUploads)->dailyAt('01:30');
+
+/*
+ * The Trash empties itself 30 days after deletion. After the stale-upload
+ * prune, so a file that was both pending and trashed is already gone by
+ * the time this looks.
+ */
+Schedule::job(new PurgeTrashedFiles)->dailyAt('01:45');

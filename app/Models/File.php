@@ -7,6 +7,7 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\SoftDeletes;
 use Illuminate\Support\Facades\Storage;
 
 /**
@@ -33,11 +34,23 @@ use Illuminate\Support\Facades\Storage;
  * @property array<string, mixed>|null $exif
  * @property string $source
  * @property array<string, mixed>|null $source_meta
+ * @property \Carbon\CarbonImmutable|null $deleted_at
+ * @property \Carbon\CarbonImmutable|null $purge_at
  */
 class File extends Model
 {
     /** @use HasFactory<FileFactory> */
     use HasFactory;
+
+    /* Deleting a file puts it in the Trash: the row and the R2 object both
+       stay until PurgeTrashedFiles takes them, so a restore costs nothing.
+       Trashed bytes keep counting against the quota — the object is still
+       in the bucket and still billed, which is what makes "empty the Trash
+       to free 340 MB" a true sentence. */
+    use SoftDeletes;
+
+    /** How long a trashed file waits before the purge job takes it. */
+    public const TRASH_DAYS = 30;
 
     public const STATUS_PENDING = 'pending';
 
@@ -75,6 +88,7 @@ class File extends Model
         return [
             'exif' => 'array',
             'source_meta' => 'array',
+            'purge_at' => 'datetime',
         ];
     }
 

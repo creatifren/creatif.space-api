@@ -137,7 +137,7 @@ describe('delete', function () {
         expect(File::query()->count())->toBe(1);
     });
 
-    it('deletes object and row once nothing references it', function () {
+    it('moves the file to the Trash once nothing references it', function () {
         Storage::fake('s3');
         $user = User::factory()->create();
         $file = File::factory()->for($user)->create();
@@ -147,8 +147,12 @@ describe('delete', function () {
             ->deleteJson("/api/v1/files/{$file->ulid}")
             ->assertNoContent();
 
-        expect(File::query()->count())->toBe(0);
-        Storage::disk('s3')->assertMissing($file->path);
+        /* Row and object both survive: the delete is reversible until the
+           purge date, and the bytes keep counting until then. */
+        expect(File::query()->count())->toBe(0)
+            ->and(File::withTrashed()->count())->toBe(1)
+            ->and($file->fresh()->purge_at?->isFuture())->toBeTrue();
+        Storage::disk('s3')->assertExists($file->path);
     });
 });
 

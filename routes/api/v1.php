@@ -140,6 +140,13 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::post('/files/{file}/complete', [FileController::class, 'complete'])
         ->middleware('throttle:60,1')
         ->name('api.v1.files.complete');
+    /* Trash. Declared before /files/{file} so "trash" is never read as a
+       ULID by the route matcher. */
+    Route::get('/files/trash', [FileController::class, 'trash'])->name('api.v1.files.trash');
+    Route::delete('/files/trash', [FileController::class, 'emptyTrash'])->name('api.v1.files.trash.empty');
+    Route::post('/files/trash/{ulid}/restore', [FileController::class, 'restore'])->name('api.v1.files.trash.restore');
+    Route::delete('/files/trash/{ulid}', [FileController::class, 'forceDestroy'])->name('api.v1.files.trash.force');
+
     Route::get('/files/{file}', [FileController::class, 'show'])->name('api.v1.files.show');
 
     /* Replacing a file's bytes. Same two steps as an upload — the browser
@@ -156,6 +163,7 @@ Route::middleware('auth:sanctum')->group(function () {
         ->middleware('throttle:30,1')
         ->name('api.v1.files.versions.restore');
     Route::delete('/files/{file}/versions/{version}', [FileVersionController::class, 'destroy'])->name('api.v1.files.versions.destroy');
+
     Route::delete('/files/{file}', [FileController::class, 'destroy'])->name('api.v1.files.destroy');
 
     // File Request — the owner's side

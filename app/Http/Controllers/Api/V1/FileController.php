@@ -11,6 +11,7 @@ use App\Support\AcceptedUploads;
 use App\Support\PlanQuota;
 use App\Support\Workspace;
 use Illuminate\Http\JsonResponse;
+use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Validation\ValidationException;
@@ -221,8 +222,13 @@ class FileController extends Controller
     }
 
     /**
-     * Delete a file — object and row. Refused while a Space still shows it
-     * (mirrors the FK restrict with a sentence instead of a 500).
+     * Move a file to the Trash. The object stays in the bucket and keeps
+     * counting against the quota; PurgeTrashedFiles takes both after
+     * File::TRASH_DAYS, or the owner empties the bin sooner.
+     *
+     * Still refused while a Space shows it: soft delete would leave a
+     * published page with a hole in it until somebody noticed and restored.
+     * Remove it from the Space first — that is a decision, not an accident.
      */
     public function destroy(Request $request, File $file): JsonResponse
     {
@@ -236,9 +242,94 @@ class FileController extends Controller
             ], 409);
         }
 
-        Storage::disk($file->disk)->delete($file->path);
+        $file->forceFill(['purge_at' => now()->addDays(File::TRASH_DAYS)])->save();
         $file->delete();
 
         return response()->json(null, 204);
+    }
+
+    /**
+     * What is in the Trash, soonest to go first — the order the screen
+     * reads in, and the only one where "Going soon" means anything.
+     */
+    public function trash(Request $request): AnonymousResourceCollection
+    {
+        $user = Workspace::owner($request->user());
+
+        return FileResource::collection(
+            File::onlyTrashed()
+                ->where('user_id', $user->id)
+                ->orderBy('purge_at')
+                ->get(),
+        );
+    }
+
+    /**
+     * Put one back. `purge_at` is cleared with it: a file restored and
+     * deleted again gets a fresh window, not the remains of the old one.
+     */
+    public function restore(Request $request, string $ulid): JsonResponse
+    {
+        $user = Workspace::owner($request->user());
+        abort_unless(Workspace::canWrite($request->user()), 403);
+
+        $file = File::onlyTrashed()
+            ->where('user_id', $user->id)
+            ->where('ulid', $ulid)
+            ->firstOrFail();
+
+        $file->restore();
+        $file->forceFill(['purge_at' => null])->save();
+
+        return response()->json(['data' => new FileResource($file->fresh())]);
+    }
+
+    /**
+     * Delete for good, now. The one thing on that screen with no undo, so
+     * it is a separate route from destroy() rather than a flag on it.
+     */
+    public function forceDestroy(Request $request, string $ulid): JsonResponse
+    {
+        $user = Workspace::owner($request->user());
+        abort_unless(Workspace::canWrite($request->user()), 403);
+
+        $file = File::onlyTrashed()
+            ->where('user_id', $user->id)
+            ->where('ulid', $ulid)
+            ->firstOrFail();
+
+        static::purge($file);
+
+        return response()->json(null, 204);
+    }
+
+    /**
+     * Empty the bin. Same finality as forceDestroy, one row at a time so a
+     * single unreachable object cannot strand the rest.
+     */
+    public function emptyTrash(Request $request): JsonResponse
+    {
+        $user = Workspace::owner($request->user());
+        abort_unless(Workspace::canWrite($request->user()), 403);
+
+        File::onlyTrashed()
+            ->where('user_id', $user->id)
+            ->each(fn (File $file) => static::purge($file));
+
+        return response()->json(null, 204);
+    }
+
+    /**
+     * Object first, then the row, then the versions' objects. Shared with
+     * PurgeTrashedFiles so the manual and scheduled paths cannot drift.
+     */
+    public static function purge(File $file): void
+    {
+        foreach ($file->versions as $version) {
+            Storage::disk($file->disk)->delete($version->path);
+        }
+
+        Storage::disk($file->disk)->delete($file->path);
+        $file->forceDelete();
     }
 }

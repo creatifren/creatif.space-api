@@ -71,12 +71,18 @@ class PlanQuota
      */
     public static function storageUsed(User $user): int
     {
+        /* withTrashed on both halves. A file in the Trash is still an object
+           in the bucket and still billed, so it still counts — that is what
+           makes "empty the Trash to free 340 MB" a true sentence rather than
+           an invitation to park 20 GB in the bin for a month. Without it the
+           soft delete would have silently handed everyone free storage. */
         $current = (int) $user->files()
+            ->withTrashed()
             ->whereIn('status', [\App\Models\File::STATUS_PENDING, \App\Models\File::STATUS_READY])
             ->sum('size_bytes');
 
         $history = (int) \App\Models\FileVersion::query()
-            ->whereIn('file_id', $user->files()->select('id'))
+            ->whereIn('file_id', $user->files()->withTrashed()->select('id'))
             ->sum('size_bytes');
 
         return $current + $history;

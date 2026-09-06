@@ -16,11 +16,11 @@ use Illuminate\Http\Request;
  * page of files to get it. Usage was fetching `per_page=1` for exactly this.
  *
  * `reclaimable` is only what a control on screen can actually free today:
- * old versions, which `DELETE /files/{file}/versions/{version}` removes.
- * Trashed bytes and duplicates belong here too and are deliberately absent
- * — files are hard-deleted (no soft delete yet) and `files.checksum` is
- * only populated for Drive imports. Reporting a number no button can act
- * on is how "you can free up 340 MB" stops being true.
+ * old versions (`DELETE /files/{file}/versions/{version}`) and the Trash
+ * (`DELETE /files/trash`). Duplicates belong here too and are deliberately
+ * absent — `files.checksum` is only populated for Drive imports, so the
+ * number would be wrong for everyone else. Reporting a figure no button
+ * can act on is how "you can free up 340 MB" stops being true.
  */
 class StorageController extends Controller
 {
@@ -29,8 +29,10 @@ class StorageController extends Controller
         $user = $request->user();
 
         $versions = (int) FileVersion::query()
-            ->whereIn('file_id', $user->files()->select('id'))
+            ->whereIn('file_id', $user->files()->withTrashed()->select('id'))
             ->sum('size_bytes');
+
+        $trashed = (int) $user->files()->onlyTrashed()->sum('size_bytes');
 
         return response()->json([
             'data' => [
@@ -39,6 +41,7 @@ class StorageController extends Controller
                 'limit' => PlanQuota::storageLimit($user),
                 'reclaimable' => [
                     'versions' => $versions,
+                    'trash' => $trashed,
                 ],
             ],
         ]);

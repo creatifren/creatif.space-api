@@ -41,6 +41,14 @@ class FileResource extends JsonResource
             'exif' => $this->exif,
             'created_at' => $this->created_at,
 
+            /* Trash only: when it went in, and the date the purge job will
+               take it. Both null for a live file, so the client can tell
+               the two apart without a second shape. The countdown on screen
+               is this date, not created_at plus a constant — a window we
+               change later must not move files already in the bin. */
+            'deleted_at' => $this->deleted_at,
+            'purge_at' => $this->purge_at,
+
             /* The Spaces this file appears in — the drawer's "Used in Space"
              * chips and the list's "in a Space" pill. Guarded by whenLoaded so
              * a caller that forgets the eager load gets no key rather than a
