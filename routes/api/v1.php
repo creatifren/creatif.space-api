@@ -182,6 +182,12 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::delete('/files/trash/{ulid}', [FileController::class, 'forceDestroy'])->name('api.v1.files.trash.force');
 
     Route::get('/files/{file}', [FileController::class, 'show'])->name('api.v1.files.show');
+    /* The owner's own download. Public Spaces and Transfers have had one
+       since the bucket went private; this is the same signed URL, minted
+       for the person who uploaded the bytes. */
+    Route::get('/files/{file}/download', [FileController::class, 'download'])
+        ->middleware('throttle:60,1')
+        ->name('api.v1.files.download');
 
     /* Replacing a file's bytes. Same two steps as an upload — the browser
        PUTs straight to storage — but the file keeps its id, so Spaces and

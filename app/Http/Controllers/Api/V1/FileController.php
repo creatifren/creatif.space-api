@@ -165,6 +165,26 @@ class FileController extends Controller
     }
 
     /**
+     * The owner's own copy, as a download.
+     *
+     * The public routes have had this since the bucket went private; the
+     * owner never did, so the one person who is certainly allowed to keep
+     * a file was the one who could only open it in a tab. No gates to
+     * re-check here beyond ownership — allow_download is a Space setting,
+     * about what a *client* may do with a link they were sent.
+     *
+     * A pending or failed row has no bytes at the key yet, so it 404s
+     * rather than handing out a URL that resolves to nothing.
+     */
+    public function download(Request $request, File $file): JsonResponse
+    {
+        abort_unless($file->user_id === Workspace::owner($request->user())->id, 404);
+        abort_unless($file->status === File::STATUS_READY, 404);
+
+        return response()->json(['data' => ['url' => $file->downloadUrl()]]);
+    }
+
+    /**
      * Phase one of a direct upload: validate, reserve quota with a pending
      * row, and hand the browser a presigned PUT so the bytes go straight
      * to R2 without passing through here.
