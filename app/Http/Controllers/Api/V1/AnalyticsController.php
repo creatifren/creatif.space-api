@@ -163,9 +163,20 @@ class AnalyticsController extends Controller
             return null;
         }
 
-        $length = (int) $from->diffInDays($to) + 1;
-        $prevTo = $from->subDay()->endOfDay();
-        $prevFrom = $prevTo->subDays($length - 1)->startOfDay();
+        // A calendar month compares with the calendar month before it, not
+        // with the same number of days back. The sentence names the month
+        // ("+100% on August"), and counting 30 days back from 31 August
+        // starts on the 2nd — the first day of the month it claims to be
+        // counting sits outside the window. Only a custom range, which has
+        // no month to name, is measured by length.
+        if ($range === 'custom') {
+            $length = (int) $from->diffInDays($to) + 1;
+            $prevTo = $from->subDay()->endOfDay();
+            $prevFrom = $prevTo->subDays($length - 1)->startOfDay();
+        } else {
+            $prevFrom = $from->subMonthNoOverflow()->startOfMonth();
+            $prevTo = $prevFrom->endOfMonth();
+        }
 
         $previous = Analytics::totals($spaceIds, $prevFrom, $prevTo)['views'];
 
