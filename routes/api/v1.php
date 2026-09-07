@@ -229,6 +229,12 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::post('/spaces', [SpaceController::class, 'store'])->name('api.v1.spaces.store');
     Route::get('/spaces/{space}', [SpaceController::class, 'show'])->name('api.v1.spaces.show');
     Route::patch('/spaces/{space}', [SpaceController::class, 'update'])->name('api.v1.spaces.update');
+    /* Append-only, unlike PATCH /spaces/{space} with an items array — that
+       one reconciles, so "Add to Space" from the Files screen would have to
+       send the whole document back. */
+    Route::post('/spaces/{space}/items', [SpaceController::class, 'addItems'])
+        ->middleware('throttle:60,1')
+        ->name('api.v1.spaces.items.store');
     Route::post('/spaces/{space}/publish', [SpaceController::class, 'publish'])->name('api.v1.spaces.publish');
     Route::post('/spaces/{space}/unpublish', [SpaceController::class, 'unpublish'])->name('api.v1.spaces.unpublish');
     Route::post('/spaces/{space}/archive', [SpaceController::class, 'archive'])->name('api.v1.spaces.archive');

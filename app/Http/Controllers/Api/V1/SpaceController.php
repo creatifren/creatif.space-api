@@ -22,6 +22,9 @@ use Illuminate\Validation\ValidationException;
 
 class SpaceController extends Controller
 {
+    /** How many files one Space holds. Two writers now, so it is a name. */
+    public const MAX_ITEMS = 500;
+
     /**
      * The Space list. Archived is its own drawer: it never appears under
      * the other tabs.
@@ -133,7 +136,7 @@ class SpaceController extends Controller
             'design' => ['sometimes', 'array'],
             'settings' => ['sometimes', 'array'],
             'seo' => ['sometimes', 'nullable', 'array'],
-            'items' => ['sometimes', 'array', 'max:500'],
+            'items' => ['sometimes', 'array', 'max:'.self::MAX_ITEMS],
             'items.*.id' => ['sometimes', 'nullable', 'string', 'max:26'],
             'items.*.file_id' => ['required_with:items', 'string', 'max:26'],
             'items.*.section' => ['sometimes', 'nullable', 'string', 'max:120'],
@@ -341,6 +344,76 @@ class SpaceController extends Controller
         return (new SpaceResource($copy->refresh()->load('items.file')))
             ->response()
             ->setStatusCode(201);
+    }
+
+    /**
+     * Add files to a Space from outside the editor — "Add to Space" on the
+     * Files screen.
+     *
+     * Deliberately not `update()` with an items array. That one reconciles:
+     * it deletes every item the payload leaves out, so adding three photos
+     * would mean the Files screen first fetching the whole document and
+     * sending back all of it. Two things go wrong there — an editor open in
+     * another tab loses whatever it had unsaved, and a Space at the 500
+     * ceiling cannot be topped up at all. This one only appends.
+     *
+     * Files already in the Space are skipped rather than duplicated: the
+     * caller asked for them to be in it, and they are. The response says
+     * how many actually landed so the toast can be honest about it.
+     */
+    public function addItems(Request $request, Space $space): JsonResponse
+    {
+        abort_unless($space->user_id === Workspace::owner($request->user())->id, 404);
+        abort_unless(Workspace::canWrite($request->user()), 403);
+
+        $validated = $request->validate([
+            'file_ids' => ['required', 'array', 'min:1', 'max:100'],
+            'file_ids.*' => ['string', 'max:26'],
+        ]);
+
+        $ulids = array_values(array_unique($validated['file_ids']));
+
+        $files = File::query()
+            ->whereIn('ulid', $ulids)
+            ->where('user_id', $space->user_id)
+            ->where('status', File::STATUS_READY)
+            ->get();
+
+        if ($files->count() !== count($ulids)) {
+            throw ValidationException::withMessages([
+                'file_ids' => 'One or more files do not exist in your library.',
+            ]);
+        }
+
+        $already = $space->items()->pluck('file_id')->all();
+        $new = $files->reject(fn (File $file) => in_array($file->id, $already, true));
+
+        if ($new->isNotEmpty()) {
+            $next = (int) $space->items()->max('sort_order');
+
+            if ($space->items()->count() + $new->count() > self::MAX_ITEMS) {
+                throw ValidationException::withMessages([
+                    'file_ids' => 'A Space holds '.self::MAX_ITEMS.' files. Remove some before adding more.',
+                ]);
+            }
+
+            foreach ($new as $file) {
+                $space->items()->create([
+                    'file_id' => $file->id,
+                    'sort_order' => ++$next,
+                ]);
+            }
+
+            $space->touch();
+        }
+
+        return response()->json([
+            'data' => [
+                'added' => $new->count(),
+                'skipped' => $files->count() - $new->count(),
+                'total' => $space->items()->count(),
+            ],
+        ]);
     }
 
     /**

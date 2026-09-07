@@ -292,3 +292,72 @@ describe('the default layout for a new Space', function () {
             ->assertJsonPath('data.view_mode', 'editorial');
     });
 });
+
+describe('adding files from the Files screen', function () {
+    it('appends without touching what is already there', function () {
+        $user = User::factory()->create();
+        $space = Space::factory()->for($user)->create();
+        $kept = File::factory()->for($user)->create();
+        $space->items()->create(['file_id' => $kept->id, 'sort_order' => 0]);
+        $added = File::factory()->for($user)->create();
+
+        /* The reason this is not PATCH with an items array: that one
+           reconciles, so a caller who did not know about $kept would
+           delete it. */
+        $this->actingAs($user)
+            ->postJson("/api/v1/spaces/{$space->ulid}/items", [
+                'file_ids' => [$added->ulid],
+            ])
+            ->assertOk()
+            ->assertJsonPath('data.added', 1)
+            ->assertJsonPath('data.total', 2);
+
+        expect($space->items()->pluck('file_id')->all())
+            ->toContain($kept->id)
+            ->toContain($added->id);
+    });
+
+    it('skips a file the Space already holds rather than duplicating it', function () {
+        $user = User::factory()->create();
+        $space = Space::factory()->for($user)->create();
+        $file = File::factory()->for($user)->create();
+        $space->items()->create(['file_id' => $file->id, 'sort_order' => 0]);
+
+        // The caller asked for it to be in the Space, and it is.
+        $this->actingAs($user)
+            ->postJson("/api/v1/spaces/{$space->ulid}/items", [
+                'file_ids' => [$file->ulid, $file->ulid],
+            ])
+            ->assertOk()
+            ->assertJsonPath('data.added', 0)
+            ->assertJsonPath('data.skipped', 1)
+            ->assertJsonPath('data.total', 1);
+    });
+
+    it('rejects a file that is not yours, and adds nothing', function () {
+        $user = User::factory()->create();
+        $space = Space::factory()->for($user)->create();
+        $mine = File::factory()->for($user)->create();
+        $theirs = File::factory()->create();
+
+        $this->actingAs($user)
+            ->postJson("/api/v1/spaces/{$space->ulid}/items", [
+                'file_ids' => [$mine->ulid, $theirs->ulid],
+            ])
+            ->assertUnprocessable();
+
+        expect($space->items()->count())->toBe(0);
+    });
+
+    it('is a 404 for somebody elses Space', function () {
+        $space = Space::factory()->for(User::factory()->create())->create();
+        $stranger = User::factory()->create();
+        $file = File::factory()->for($stranger)->create();
+
+        $this->actingAs($stranger)
+            ->postJson("/api/v1/spaces/{$space->ulid}/items", [
+                'file_ids' => [$file->ulid],
+            ])
+            ->assertNotFound();
+    });
+});
