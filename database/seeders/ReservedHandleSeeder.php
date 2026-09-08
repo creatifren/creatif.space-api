@@ -23,9 +23,18 @@ class ReservedHandleSeeder extends Seeder
             'home', 'files', 'spaces', 'space-editor', 'insights', 'profile',
             'settings', 'referral', 'foundations', 'components', 'public-profile',
             'space-viewer', 'studio',
-            // File Request links live at /r/{slug} — a creator holding the
-            // handle "r" would collide with every one of them.
-            'r', 'req',
+            // Single-letter and short prefixes that carry public links. A
+            // creator holding one of these handles would collide with every
+            // link under it, and the collision is silent: the link resolves,
+            // it just resolves to the wrong page.
+            //
+            // 'r'      File Requests      /r/{slug}
+            // 't'      Transfers          /t/{slug}   — was missing, and the
+            //                             route has been live since transfers
+            //                             shipped
+            // 'a'      Approval links     /a/{token}
+            // 'report' Client reports     /report/{slug}
+            'r', 'req', 't', 'a', 'report',
 
             // Infrastructure & app
             'admin', 'api', 'auth', 'webhooks', 'app', 'dashboard', 'www',
