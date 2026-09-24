@@ -22,7 +22,8 @@ class ReservedHandleSeeder extends Seeder
             'landing', 'pricing', 'crefile', 'affiliate', 'login', 'onboarding',
             'home', 'files', 'spaces', 'space-editor', 'insights', 'profile',
             'settings', 'referral', 'foundations', 'components', 'public-profile',
-            'space-viewer', 'studio',
+            'space-viewer', 'studio', 'features', 'solutions', 'changelog',
+            'community', 'guides', 'topik',
             // Single-letter and short prefixes that carry public links. A
             // creator holding one of these handles would collide with every
             // link under it, and the collision is silent: the link resolves,
