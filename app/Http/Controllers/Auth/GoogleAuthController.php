@@ -85,6 +85,13 @@ class GoogleAuthController extends Controller
         } elseif ($user->google_id === null) {
             // Existing account (e.g. staff) signing in with Google for the first time.
             $user->forceFill(['google_id' => $googleUser->getId()])->save();
+
+            // A password signup nobody confirmed: whoever typed that password
+            // never proved this address was theirs, and Google just did. The
+            // password goes, so it can't be a way into the owner's account.
+            if ($user->email_verified_at === null) {
+                $user->forceFill(['password' => null, 'email_verified_at' => now()])->save();
+            }
         }
 
         // Somebody may have invited this address to their team, whether the

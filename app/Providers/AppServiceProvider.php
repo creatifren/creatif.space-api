@@ -2,7 +2,9 @@
 
 namespace App\Providers;
 
+use App\Models\User;
 use Carbon\CarbonImmutable;
+use Illuminate\Auth\Notifications\ResetPassword;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Facades\Date;
 use Illuminate\Support\Facades\DB;
@@ -36,5 +38,9 @@ class AppServiceProvider extends ServiceProvider
         }
 
         Vite::useAggressivePrefetching();
+
+        // The reset form lives on the Next.js side, not in Laravel.
+        ResetPassword::createUrlUsing(fn (User $user, string $token): string => config('app.frontend_url')
+            .'/reset-password?token='.$token.'&email='.urlencode($user->email));
     }
 }
