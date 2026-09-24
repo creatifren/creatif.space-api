@@ -31,6 +31,10 @@ class UserResource extends JsonResource
             // on "approved" — one nullable string here beats a second
             // fetch on every dashboard page.
             'affiliate_status' => $this->affiliate?->status,
+            // Which ways in this account has — Settings shows them. Never the
+            // values themselves: both columns stay $hidden.
+            'has_google' => $this->google_id !== null,
+            'has_password' => $this->password !== null,
             'onboarded_at' => $this->onboarded_at,
             'created_at' => $this->created_at,
         ];
