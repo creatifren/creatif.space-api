@@ -8,10 +8,19 @@ use Illuminate\Support\Facades\Http;
 
 beforeEach(function () {
     config([
-        'services.postforme.key' => 'test-key',
-        'services.postforme.base_url' => 'https://api.postforme.test/v1',
+        'services.outstand.key' => 'test-key',
+        'services.outstand.base_url' => 'https://api.outstand.test/v1',
     ]);
 });
+
+/** Outstand's answer to POST /posts: echoes back every account it accepted. */
+function outstandPost(string $id, array $accounts, string $status = 'pending'): array
+{
+    return ['id' => $id, 'socialAccounts' => array_map(
+        fn ($a) => ['id' => $a, 'status' => $status],
+        $accounts,
+    )];
+}
 
 /** Social posting is a paid feature — creators in these tests are Premium. */
 function premiumUser(): User
@@ -23,45 +32,90 @@ function premiumUser(): User
 }
 
 describe('creating posts', function () {
-    it('creates a scheduled post with pending targets and per-account captions', function () {
-        Http::fake([
-            'api.postforme.test/*' => Http::response(['id' => 'post_abc', 'status' => 'scheduled']),
-        ]);
+    it('sends one provider post per distinct caption, ids on the targets', function () {
         $user = premiumUser();
         $ig = SocialAccount::factory()->for($user)->create(['platform' => 'instagram']);
-        $x = SocialAccount::factory()->for($user)->create(['platform' => 'x']);
+        $fb = SocialAccount::factory()->for($user)->create(['platform' => 'facebook']);
+        $li = SocialAccount::factory()->for($user)->create(['platform' => 'linkedin']);
+
+        Http::fake([
+            'api.outstand.test/*' => Http::sequence()
+                ->push(outstandPost('post_main', [$ig->provider_account_id, $fb->provider_account_id]))
+                ->push(outstandPost('post_li', [$li->provider_account_id])),
+        ]);
 
         $this->actingAs($user)
             ->postJson('/api/v1/social-posts', [
                 'caption' => 'Winter Noel — the full set.',
-                'account_ids' => [$ig->ulid, $x->ulid],
-                'captions' => [$x->ulid => 'Short one for X.'],
+                'account_ids' => [$ig->ulid, $fb->ulid, $li->ulid],
+                'captions' => [$li->ulid => 'Longer one for LinkedIn.'],
                 'media' => [['url' => 'https://assets.creatif.space/winter-noel-03.jpg']],
                 'scheduled_at' => now()->addDay()->toIso8601String(),
             ])
             ->assertCreated()
             ->assertJsonPath('data.status', 'scheduled')
-            ->assertJsonCount(2, 'data.targets');
+            ->assertJsonCount(3, 'data.targets');
 
         $post = SocialPost::query()->first();
-        expect($post->provider_post_id)->toBe('post_abc')
-            ->and($post->targets()->count())->toBe(2)
-            ->and($post->targets()->where('social_account_id', $x->id)->first()->configuration)
-            ->toBe(['caption' => 'Short one for X.']);
+        expect($post->targets()->where('social_account_id', $ig->id)->value('provider_post_id'))->toBe('post_main')
+            ->and($post->targets()->where('social_account_id', $li->id)->first())
+            ->provider_post_id->toBe('post_li')
+            ->configuration->toBe(['caption' => 'Longer one for LinkedIn.']);
 
-        Http::assertSent(function ($request) use ($x) {
-            $body = $request->data();
-
-            return str_ends_with($request->url(), '/social-posts')
-                && count($body['social_accounts']) === 2
-                && $body['account_configurations'][0]['social_account_id'] === $x->provider_account_id;
-        });
+        Http::assertSentCount(2);
+        Http::assertSent(fn ($request) => str_ends_with($request->url(), '/posts')
+            && $request['containers'][0]['content'] === 'Longer one for LinkedIn.'
+            && $request['accounts'] === [$li->provider_account_id]
+            && $request['containers'][0]['media'][0]['filename'] === 'winter-noel-03.jpg'
+            && isset($request['scheduledAt']));
     });
 
-    it('marks an immediate post published when the provider says processed', function () {
+    it('takes back the groups already sent when a later one fails, and records nothing', function () {
+        $user = premiumUser();
+        $ig = SocialAccount::factory()->for($user)->create();
+        $li = SocialAccount::factory()->for($user)->create(['platform' => 'linkedin']);
+
+        Http::fake(fn ($request) => match (true) {
+            $request->method() === 'DELETE' => Http::response(null, 204),
+            $request['accounts'] === [$ig->provider_account_id] => Http::response(outstandPost('post_first', $request['accounts'])),
+            default => Http::response(['message' => 'boom'], 500),
+        });
+
+        $this->actingAs($user)
+            ->postJson('/api/v1/social-posts', [
+                'caption' => 'Main.',
+                'account_ids' => [$ig->ulid, $li->ulid],
+                'captions' => [$li->ulid => 'Other.'],
+            ])
+            ->assertServerError();
+
+        expect(SocialPost::query()->count())->toBe(0);
+        Http::assertSent(fn ($request) => $request->method() === 'DELETE'
+            && str_ends_with($request->url(), '/posts/post_first'));
+    });
+
+    it('refuses when Outstand silently drops an account', function () {
+        $user = premiumUser();
+        $a = SocialAccount::factory()->for($user)->create();
+        $b = SocialAccount::factory()->for($user)->create(['platform' => 'facebook']);
+
         Http::fake([
-            'api.postforme.test/*' => Http::response(['id' => 'post_now', 'status' => 'processed']),
+            'api.outstand.test/*' => Http::response(outstandPost('post_short', [$a->provider_account_id])),
         ]);
+
+        $this->actingAs($user)
+            ->postJson('/api/v1/social-posts', [
+                'caption' => 'Both.',
+                'account_ids' => [$a->ulid, $b->ulid],
+            ])
+            ->assertServerError();
+
+        expect(SocialPost::query()->count())->toBe(0);
+        Http::assertSent(fn ($request) => $request->method() === 'DELETE');
+    });
+
+    it('marks an immediate post published when every account already went out', function () {
+        Http::fake(fn ($request) => Http::response(outstandPost('post_now', $request['accounts'], 'published')));
         $user = premiumUser();
         $account = SocialAccount::factory()->for($user)->create();
 
@@ -126,6 +180,14 @@ describe('creating posts', function () {
                 'scheduled_at' => now()->subHour()->toIso8601String(),
             ])
             ->assertUnprocessable();
+
+        // Outstand's horizon is 30 days.
+        $this->actingAs($user)
+            ->postJson('/api/v1/social-posts', $base + [
+                'caption' => 'ok',
+                'scheduled_at' => now()->addDays(31)->toIso8601String(),
+            ])
+            ->assertUnprocessable();
     });
 });
 
@@ -147,9 +209,7 @@ describe('plan quota', function () {
     });
 
     it('caps Premium at 60 posts a month, cancelled ones not counted', function () {
-        Http::fake([
-            'api.postforme.test/*' => Http::response(['id' => 'post_61', 'status' => 'scheduled']),
-        ]);
+        Http::fake(fn ($request) => Http::response(outstandPost('post_61', $request['accounts'])));
         $user = premiumUser();
         $account = SocialAccount::factory()->for($user)->create();
 
@@ -170,9 +230,7 @@ describe('plan quota', function () {
     });
 
     it("ignores last month's posts", function () {
-        Http::fake([
-            'api.postforme.test/*' => Http::response(['id' => 'post_new', 'status' => 'scheduled']),
-        ]);
+        Http::fake(fn ($request) => Http::response(outstandPost('post_new', $request['accounts'])));
         $user = premiumUser();
         $account = SocialAccount::factory()->for($user)->create();
 
@@ -208,17 +266,25 @@ describe('listing and cancelling', function () {
             ->assertJsonCount(2, 'data');
     });
 
-    it('cancels a scheduled post via the provider', function () {
-        Http::fake(['api.postforme.test/*' => Http::response(['message' => 'ok'])]);
+    it('cancels every provider post behind a scheduled post, once each', function () {
+        Http::fake(['api.outstand.test/*' => Http::response(null, 204)]);
         $user = User::factory()->create();
         $post = SocialPost::factory()->for($user)->create();
+        foreach (['post_a', 'post_a', 'post_b'] as $providerId) {
+            $post->targets()->create([
+                'social_account_id' => SocialAccount::factory()->for($user)->create()->id,
+                'provider_post_id' => $providerId,
+            ]);
+        }
 
         $this->actingAs($user)
             ->deleteJson("/api/v1/social-posts/{$post->ulid}")
             ->assertNoContent();
 
         expect($post->fresh()->status->value)->toBe('cancelled');
-        Http::assertSent(fn ($request) => $request->method() === 'DELETE');
+        Http::assertSentCount(2);
+        Http::assertSent(fn ($request) => $request->method() === 'DELETE'
+            && str_ends_with($request->url(), '/posts/post_b'));
     });
 
     it('refuses to cancel a published post', function () {

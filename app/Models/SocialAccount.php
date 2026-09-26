@@ -11,7 +11,7 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 /**
- * A social account connected through Post for Me. We hold only the mapping
+ * A social account connected through Outstand. We hold only the mapping
  * from our user to the provider's account id — the OAuth tokens live with
  * the provider and never touch this table.
  *

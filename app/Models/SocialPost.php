@@ -15,7 +15,6 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
  * @property int $id
  * @property string $ulid
  * @property int $user_id
- * @property string|null $provider_post_id
  * @property string $caption
  * @property array<int, array{url: string}>|null $media
  * @property CarbonImmutable|null $scheduled_at
@@ -29,11 +28,8 @@ class SocialPost extends Model
     use HasFactory;
 
     protected $fillable = [
-        // Pre-generated in the controller so it can be sent to the provider
-        // as external_id before the row exists.
         'ulid',
         'user_id',
-        'provider_post_id',
         'caption',
         'media',
         'scheduled_at',

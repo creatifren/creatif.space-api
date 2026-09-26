@@ -14,6 +14,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
  * @property int $id
  * @property int $social_post_id
  * @property int $social_account_id
+ * @property string|null $provider_post_id
  * @property array<string, mixed>|null $configuration
  * @property SocialPostTargetStatus $status
  * @property string|null $fail_reason
@@ -25,6 +26,9 @@ class SocialPostTarget extends Model
     protected $fillable = [
         'social_post_id',
         'social_account_id',
+        // One provider post per distinct caption — several targets can
+        // share one.
+        'provider_post_id',
         'configuration',
         'status',
         'fail_reason',

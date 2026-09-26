@@ -8,7 +8,7 @@ use App\Enums\SocialPostTargetStatus;
 use App\Http\Controllers\Controller;
 use App\Http\Resources\SocialPostResource;
 use App\Models\SocialPost;
-use App\Services\PostForMeService;
+use App\Services\OutstandService;
 use App\Support\PlanQuota;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -18,6 +18,7 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
+use Throwable;
 
 class SocialPostController extends Controller
 {
@@ -49,7 +50,7 @@ class SocialPostController extends Controller
      * account_ids is the tenant boundary: only the user's own Connected
      * accounts resolve to provider ids, and nothing is sent otherwise.
      */
-    public function store(Request $request, PostForMeService $postForMe): JsonResponse
+    public function store(Request $request, OutstandService $outstand): JsonResponse
     {
         $validated = $request->validate([
             // Facebook's cap — the largest of the nine; per-platform limits
@@ -62,7 +63,8 @@ class SocialPostController extends Controller
             'captions.*' => ['string', 'max:63206'],
             'media' => ['sometimes', 'array', 'max:10'],
             'media.*.url' => ['required', 'url:https'],
-            'scheduled_at' => ['sometimes', 'nullable', 'date', 'after:now'],
+            // Outstand refuses anything further than 30 days out.
+            'scheduled_at' => ['sometimes', 'nullable', 'date', 'after:now', 'before:+30 days'],
         ]);
 
         $user = $request->user();
@@ -97,63 +99,62 @@ class SocialPostController extends Controller
             ? Carbon::parse($validated['scheduled_at'])
             : null;
 
-        // The post's public ulid doubles as the provider external_id, so a
-        // webhook can find the row even before provider_post_id lands.
-        $ulid = (string) str()->ulid();
+        // Outstand has no per-account caption, so each distinct caption is
+        // its own provider post. Provider first, DB second — never an HTTP
+        // call inside the transaction, and nothing is recorded that was never
+        // sent: a later group failing takes back the groups already sent.
+        $groups = $accounts->groupBy(fn ($a) => $captions[$a->ulid] ?? $validated['caption']);
+        $sent = [];
 
-        $configurations = $accounts
-            ->filter(fn ($a) => isset($captions[$a->ulid]))
-            ->map(fn ($a) => [
-                'social_account_id' => $a->provider_account_id,
-                'configuration' => ['caption' => $captions[$a->ulid]],
-            ])
-            ->values();
+        try {
+            foreach ($groups as $caption => $group) {
+                $remote = $outstand->createPost(
+                    (string) $caption,
+                    $group->pluck('provider_account_id')->all(),
+                    $validated['media'] ?? [],
+                    $scheduledAt,
+                );
 
-        // Provider first, DB second — never an HTTP call inside the
-        // transaction, and nothing is recorded that was never sent.
-        $payload = [
-            'caption' => $validated['caption'],
-            'social_accounts' => $accounts->pluck('provider_account_id')->all(),
-            'external_id' => $ulid,
-        ];
+                $sent[] = ['remote' => $remote, 'accounts' => $group];
+            }
+        } catch (Throwable $e) {
+            foreach ($sent as $s) {
+                $outstand->deletePost((string) $s['remote']['id']);
+            }
 
-        if (isset($validated['media'])) {
-            $payload['media'] = $validated['media'];
+            throw $e;
         }
 
-        if ($scheduledAt !== null) {
-            $payload['scheduled_at'] = $scheduledAt->toIso8601String();
-        }
-
-        if ($configurations->isNotEmpty()) {
-            $payload['account_configurations'] = $configurations->all();
-        }
-
-        $remote = $postForMe->createPost($payload);
-
-        $post = DB::transaction(function () use ($user, $ulid, $validated, $accounts, $captions, $scheduledAt, $remote) {
+        $post = DB::transaction(function () use ($user, $validated, $captions, $scheduledAt, $sent) {
             $post = $user->socialPosts()->create([
-                'ulid' => $ulid,
-                'provider_post_id' => (string) $remote['id'],
                 'caption' => $validated['caption'],
                 'media' => $validated['media'] ?? null,
                 'scheduled_at' => $scheduledAt,
-                // `processed` means it already went out — everything else is
-                // still on its way.
-                'status' => ($remote['status'] ?? null) === 'processed'
-                    ? SocialPostStatus::Published
-                    : SocialPostStatus::Scheduled,
+                'status' => SocialPostStatus::Scheduled,
             ]);
 
-            foreach ($accounts as $account) {
-                $post->targets()->create([
-                    'social_account_id' => $account->id,
-                    'configuration' => isset($captions[$account->ulid])
-                        ? ['caption' => $captions[$account->ulid]]
-                        : null,
-                    'status' => SocialPostTargetStatus::Pending,
-                ]);
+            foreach ($sent as ['remote' => $remote, 'accounts' => $group]) {
+                // An immediate post may already be out by the time we hear back.
+                $published = collect($remote['socialAccounts'] ?? [])
+                    ->filter(fn ($a) => ($a['status'] ?? null) === 'published')
+                    ->map(fn ($a) => (string) ($a['id'] ?? $a['accountId'] ?? ''))
+                    ->all();
+
+                foreach ($group as $account) {
+                    $post->targets()->create([
+                        'social_account_id' => $account->id,
+                        'provider_post_id' => (string) $remote['id'],
+                        'configuration' => isset($captions[$account->ulid])
+                            ? ['caption' => $captions[$account->ulid]]
+                            : null,
+                        'status' => in_array($account->provider_account_id, $published, true)
+                            ? SocialPostTargetStatus::Published
+                            : SocialPostTargetStatus::Pending,
+                    ]);
+                }
             }
+
+            $post->recomputeFromTargets();
 
             return $post;
         });
@@ -171,7 +172,7 @@ class SocialPostController extends Controller
     public function destroy(
         Request $request,
         SocialPost $socialPost,
-        PostForMeService $postForMe,
+        OutstandService $outstand,
     ): JsonResponse {
         Gate::allowIf(fn ($user) => $socialPost->user_id === $user->id);
 
@@ -181,9 +182,11 @@ class SocialPostController extends Controller
             ], 422);
         }
 
-        if ($socialPost->provider_post_id !== null) {
-            $postForMe->deletePost($socialPost->provider_post_id);
-        }
+        $socialPost->targets()
+            ->whereNotNull('provider_post_id')
+            ->distinct()
+            ->pluck('provider_post_id')
+            ->each(fn (string $id) => $outstand->deletePost($id));
 
         $socialPost->update(['status' => SocialPostStatus::Cancelled]);
 
