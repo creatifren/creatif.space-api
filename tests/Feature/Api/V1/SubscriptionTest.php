@@ -213,7 +213,6 @@ describe('quota follows the plan', function () {
 
         $this->actingAs($user)->postJson('/api/v1/spaces', [
             'title' => 'One too many',
-            'purpose' => 'portfolio',
             'view_mode' => 'grid',
         ])->assertUnprocessable();
 
@@ -223,7 +222,6 @@ describe('quota follows the plan', function () {
 
         $this->actingAs($user)->postJson('/api/v1/spaces', [
             'title' => 'Room at last',
-            'purpose' => 'portfolio',
             'view_mode' => 'grid',
         ])->assertCreated();
     });
@@ -243,7 +241,6 @@ describe('quota follows the plan', function () {
         // Only making a new one stops.
         $this->actingAs($user)->postJson('/api/v1/spaces', [
             'title' => 'Not now',
-            'purpose' => 'portfolio',
             'view_mode' => 'grid',
         ])->assertUnprocessable();
     });

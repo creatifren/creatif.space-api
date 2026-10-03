@@ -88,6 +88,6 @@ it('soft deletes and frees the total slot', function () {
         ->and(Space::withTrashed()->where('user_id', $user->id)->count())->toBe(10);
 
     $this->actingAs($user)
-        ->postJson('/api/v1/spaces', ['title' => 'New', 'purpose' => 'portfolio', 'view_mode' => 'grid'])
+        ->postJson('/api/v1/spaces', ['title' => 'New', 'view_mode' => 'grid'])
         ->assertCreated();
 });

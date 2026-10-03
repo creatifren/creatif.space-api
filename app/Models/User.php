@@ -253,17 +253,6 @@ class User extends Authenticatable implements FilamentUser
     }
 
     /**
-     * The client identities signed in with this person's email — the bridge
-     * that lets Insights show approvals they gave in someone else's Space.
-     *
-     * @return HasMany<Client, $this>
-     */
-    public function clientIdentities(): HasMany
-    {
-        return $this->hasMany(Client::class);
-    }
-
-    /**
      * Does this user want `$type` on `$channel` ("email" or "bell")?
      * No stored row means yes: a new notification type starts switched on.
      */

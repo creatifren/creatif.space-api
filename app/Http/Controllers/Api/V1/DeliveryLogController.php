@@ -2,17 +2,15 @@
 
 namespace App\Http\Controllers\Api\V1;
 
-use App\Enums\ApprovalStatus;
 use App\Http\Controllers\Controller;
-use App\Models\Approval;
 use App\Models\Space;
 use App\Support\Workspace;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
 /**
- * Insights → Approval → Delivery: proof of what was sent, opened, taken and
- * signed off, for every Space that was ever published.
+ * Insights → Delivery: proof of what was sent, opened and taken, for every
+ * Space that was ever published.
  *
  * The screen's own promise sets the rules: "this record only grows; it is
  * never edited or deleted. Spaces you have deleted still live here, forever,
@@ -42,7 +40,6 @@ class DeliveryLogController extends Controller
             ->withTrashed()
             ->where('user_id', $owner->id)
             ->whereNotNull('published_at')
-            ->with(['items.approvals.client'])
             ->withCount('items')
             ->orderByDesc('published_at')
             ->get();
@@ -59,45 +56,7 @@ class DeliveryLogController extends Controller
                 'first_downloaded_at' => $space->first_downloaded_at?->toIso8601String(),
                 'downloaded_files' => $space->downloaded_files,
                 'deleted_at' => $space->deleted_at?->toIso8601String(),
-                'marks' => $this->marks($space),
             ])->all(),
         ]);
-    }
-
-    /**
-     * Who signed off, and whether Google vouched for them.
-     *
-     * One mark per client rather than per file: a client who approved
-     * twenty-four photos delivered one verdict, and twenty-four identical
-     * rows would bury it. `verified` is true for every mark here — approving
-     * requires signing in with Google, which is exactly what makes this
-     * evidence rather than a note the creator typed. The flag stays in the
-     * payload because the card renders an unverified variant for the
-     * owner-marked case, which arrives the day that feature does.
-     *
-     * @return list<array<string, mixed>>
-     */
-    private function marks(Space $space): array
-    {
-        return $space->items
-            ->flatMap->approvals
-            ->where('status', ApprovalStatus::Approved)
-            ->groupBy('client_id')
-            ->map(function ($approvals) {
-                /** @var Approval $first */
-                $first = $approvals->first();
-
-                return [
-                    'verified' => true,
-                    'client' => $first->client->displayName(),
-                    'email' => $first->client->email,
-                    'files' => $approvals->count(),
-                    // The last one they signed: the moment the sign-off was
-                    // complete, which is the date worth attesting to.
-                    'at' => $approvals->max('approved_at')?->toIso8601String(),
-                ];
-            })
-            ->values()
-            ->all();
     }
 }

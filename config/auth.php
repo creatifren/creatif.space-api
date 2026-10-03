@@ -1,6 +1,5 @@
 <?php
 
-use App\Models\Client;
 use App\Models\User;
 
 return [
@@ -43,14 +42,6 @@ return [
             'driver' => 'session',
             'provider' => 'users',
         ],
-
-        // Whoever approves. A separate identity from the creator, so both can
-        // be signed in at once in one browser — Rani reviewing a colleague's
-        // Space is a client there and a creator here.
-        'client' => [
-            'driver' => 'session',
-            'provider' => 'clients',
-        ],
     ],
 
     /*
@@ -74,11 +65,6 @@ return [
         'users' => [
             'driver' => 'eloquent',
             'model' => env('AUTH_MODEL', User::class),
-        ],
-
-        'clients' => [
-            'driver' => 'eloquent',
-            'model' => Client::class,
         ],
 
         // 'users' => [

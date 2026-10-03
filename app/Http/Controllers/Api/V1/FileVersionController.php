@@ -9,7 +9,6 @@ use App\Http\Resources\FileVersionResource;
 use App\Models\File;
 use App\Models\FileVersion;
 use App\Support\AcceptedUploads;
-use App\Support\ApprovalVoider;
 use App\Support\PlanQuota;
 use App\Support\Workspace;
 use Illuminate\Http\JsonResponse;
@@ -136,7 +135,7 @@ class FileVersionController extends Controller
         $disk->copy($incoming, $file->path);
         $disk->delete($incoming);
 
-        $voided = DB::transaction(function () use ($file, $user, $validated, $archived, $realSize, $disk) {
+        DB::transaction(function () use ($file, $user, $validated, $archived, $realSize, $disk) {
             $file->versions()->create([
                 'number' => $file->currentVersionNumber(),
                 'disk' => $file->disk,
@@ -158,10 +157,6 @@ class FileVersionController extends Controller
                 'exif' => null,
                 'checksum' => null,
             ]);
-
-            /* A client approved what they were shown, and that is no longer
-               what is on screen. Their decision goes back to pending. */
-            return ApprovalVoider::forFile($file);
         });
 
         Activity::log(
@@ -175,7 +170,6 @@ class FileVersionController extends Controller
         return response()->json([
             'data' => [
                 'versions' => $file->versions()->count(),
-                'approvals_voided' => $voided,
             ],
         ]);
     }
@@ -206,7 +200,7 @@ class FileVersionController extends Controller
         $disk->copy($file->path, $archived);
         $disk->copy($version->path, $file->path);
 
-        $voided = DB::transaction(function () use ($file, $user, $version, $archived, $size) {
+        DB::transaction(function () use ($file, $user, $version, $archived, $size) {
             $file->versions()->create([
                 'number' => $file->currentVersionNumber(),
                 'disk' => $file->disk,
@@ -227,14 +221,11 @@ class FileVersionController extends Controller
                 'exif' => $version->exif,
                 'checksum' => $version->checksum,
             ]);
-
-            return ApprovalVoider::forFile($file);
         });
 
         return response()->json([
             'data' => [
                 'restored_from' => $version->number,
-                'approvals_voided' => $voided,
             ],
         ]);
     }

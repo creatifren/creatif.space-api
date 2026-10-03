@@ -2,7 +2,6 @@
 
 use App\Http\Controllers\Api\V1\AffiliateController;
 use App\Http\Controllers\Api\V1\AnalyticsController;
-use App\Http\Controllers\Api\V1\ApprovalController;
 use App\Http\Controllers\Api\V1\DeliveryLogController;
 use App\Http\Controllers\Api\V1\DriveAccountController;
 use App\Http\Controllers\Api\V1\EarningController;
@@ -98,23 +97,10 @@ Route::post('/r/{slug}/submissions', [PublicFileRequestController::class, 'store
     ->name('api.v1.file-requests.submit');
 
 // The analytics beacon. Deliberately unguarded: it is called from the
-// visitor's browser, and most visitors are strangers. Adding auth:client
-// here would silence it for nearly everyone — the guard still resolves on
-// its own when the visitor happens to be signed in.
+// visitor's browser, and most visitors are strangers.
 Route::post('/spaces/{space}/events', SpaceEventController::class)
     ->middleware('throttle:60,1')
     ->name('api.v1.spaces.events');
-
-// The client approving in someone else's Space — the `client` guard, not
-// the creator's. Same gates as the viewer: 404 → 410 → 423.
-Route::middleware('auth:client')->group(function () {
-    Route::post('/profiles/{handle}/spaces/{slug}/approvals', [ApprovalController::class, 'store'])
-        ->middleware('throttle:60,1')
-        ->name('api.v1.approvals.store');
-    Route::post('/profiles/{handle}/spaces/{slug}/approvals/all', [ApprovalController::class, 'storeAll'])
-        ->middleware('throttle:20,1')
-        ->name('api.v1.approvals.store-all');
-});
 
 // Authenticated (Sanctum SPA cookie)
 Route::middleware('auth:sanctum')->group(function () {
@@ -239,11 +225,6 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::post('/spaces/{space}/reactivate', [SpaceController::class, 'reactivate'])->name('api.v1.spaces.reactivate');
     Route::post('/spaces/{space}/duplicate', [SpaceController::class, 'duplicate'])->name('api.v1.spaces.duplicate');
     Route::delete('/spaces/{space}', [SpaceController::class, 'destroy'])->name('api.v1.spaces.destroy');
-
-    // Approval — the owner's side
-    Route::get('/insights/approvals', [InsightsApprovalController::class, 'index'])->name('api.v1.insights.approvals');
-    Route::post('/approvals/{approval}/reply', [InsightsApprovalController::class, 'reply'])->name('api.v1.approvals.reply');
-    Route::post('/spaces/{space}/approvals/reset', [InsightsApprovalController::class, 'reset'])->name('api.v1.approvals.reset');
 
     // Analytics — Insights → Analytics
     Route::get('/me/storage', StorageController::class)->name('api.v1.me.storage');

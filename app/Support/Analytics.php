@@ -2,10 +2,7 @@
 
 namespace App\Support;
 
-use App\Enums\ApprovalStatus;
 use App\Enums\SpaceEventType;
-use App\Models\Approval;
-use App\Models\Client;
 use App\Models\Space;
 use App\Models\SpaceDailyStat;
 use App\Models\SpaceEvent;
@@ -244,55 +241,6 @@ final class Analytics
     }
 
     /**
-     * Who opened what — only the visitors who happened to be signed in as
-     * a client. Everyone else is a hash and stays one.
-     *
-     * @param  list<int>  $spaceIds
-     * @return list<array{who: string, space: string, last_at: string, visits: int}>
-     */
-    public static function viewers(array $spaceIds, CarbonInterface $from, CarbonInterface $to): array
-    {
-        $rows = self::events($spaceIds, $from, $to)
-            ->selectRaw('client_id, space_id, COUNT(*) AS visits, MAX(created_at) AS last_at')
-            ->whereNotNull('client_id')
-            ->where('type', SpaceEventType::View)
-            ->groupBy('client_id', 'space_id')
-            ->orderByDesc('last_at')
-            ->limit(10)
-            ->toBase()
-            ->get();
-
-        $clients = Client::query()
-            ->whereIn('id', $rows->pluck('client_id'))
-            ->get()
-            ->keyBy('id');
-
-        $spaces = Space::query()
-            ->whereIn('id', $rows->pluck('space_id'))
-            ->get()
-            ->keyBy('id');
-
-        return $rows
-            ->map(function ($row) use ($clients, $spaces): ?array {
-                $client = $clients[$row->client_id] ?? null;
-
-                if ($client === null) {
-                    return null;
-                }
-
-                return [
-                    'who' => $client->displayName(),
-                    'space' => (string) ($spaces[$row->space_id]->title ?? ''),
-                    'last_at' => (string) $row->last_at,
-                    'visits' => (int) $row->visits,
-                ];
-            })
-            ->filter()
-            ->values()
-            ->all();
-    }
-
-    /**
      * Bots that read the public pages, by name.
      *
      * @param  list<int>  $spaceIds
@@ -375,54 +323,6 @@ final class Analytics
         }
 
         return $hours;
-    }
-
-    /**
-     * How fast approval moves, and what is stuck. Read from approvals, not
-     * events — a decision is a fact, not traffic.
-     *
-     * @param  list<int>  $spaceIds
-     * @return array{median_hours: int|null, stuck: list<array{name: string, who: string, age_hours: int}>}
-     */
-    public static function approval(array $spaceIds): array
-    {
-        $decided = Approval::query()
-            ->whereIn(
-                'space_item_id',
-                SpaceItem::query()->whereIn('space_id', $spaceIds)->select('id'),
-            )
-            ->where('status', ApprovalStatus::Approved)
-            ->whereNotNull('approved_at')
-            ->get(['created_at', 'approved_at']);
-
-        $spans = $decided
-            ->map(fn (Approval $a): float => $a->created_at->diffInHours($a->approved_at))
-            ->sort()
-            ->values();
-
-        $median = $spans->isEmpty()
-            ? null
-            : (int) round($spans[(int) floor(($spans->count() - 1) / 2)]);
-
-        $stuck = Approval::query()
-            ->whereIn(
-                'space_item_id',
-                SpaceItem::query()->whereIn('space_id', $spaceIds)->select('id'),
-            )
-            ->where('status', ApprovalStatus::Pending)
-            ->where('created_at', '<=', now()->subDays(3))
-            ->with(['spaceItem.space', 'client'])
-            ->latest('id')
-            ->limit(5)
-            ->get()
-            ->map(fn (Approval $a): array => [
-                'name' => (string) $a->spaceItem->space->title,
-                'who' => $a->client->displayName(),
-                'age_hours' => (int) round($a->created_at->diffInHours(now())),
-            ])
-            ->all();
-
-        return ['median_hours' => $median, 'stuck' => $stuck];
     }
 
     /**

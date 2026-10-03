@@ -1,7 +1,6 @@
 <?php
 
 use App\Enums\SpaceEventType;
-use App\Models\Client;
 use App\Models\File;
 use App\Models\Plan;
 use App\Models\Space;
@@ -70,7 +69,7 @@ describe('the free headline', function () {
 
         // null means "not on your plan"; [] would mean "yours, and empty".
         // The blur-and-upgrade layout depends on telling those apart.
-        foreach (['unique', 'sources', 'files', 'viewers', 'crawlers', 'hours', 'aeo'] as $key) {
+        foreach (['unique', 'sources', 'files', 'crawlers', 'hours', 'aeo'] as $key) {
             expect($data)->toHaveKey($key)
                 ->and($data[$key])->toBeNull();
         }
@@ -148,10 +147,9 @@ describe('premium', function () {
     it('opens every block, from real events', function () {
         $user = premiumCreator();
         $space = Space::factory()->for($user)->published()->create();
-        $client = Client::factory()->create(['name' => 'Andi', 'email' => 'andi@winternoel.com']);
 
         SpaceEvent::factory()->count(2)->for($space)->from('instagram.com')->create();
-        SpaceEvent::factory()->for($space)->create(['client_id' => $client->id]);
+        SpaceEvent::factory()->for($space)->create();
         SpaceEvent::factory()->for($space)->crawler('GPTBot')->create();
         SpaceEvent::factory()->for($space)->from('chatgpt.com')->create();
         statsFor($space, 5, 4);
@@ -161,7 +159,6 @@ describe('premium', function () {
         expect($data['full'])->toBeTrue()
             ->and($data['unique'])->toBe(4)
             ->and($data['sources'])->toContain(['name' => 'instagram.com', 'views' => 2])
-            ->and($data['viewers'][0]['who'])->toBe('Andi')
             ->and($data['crawlers'])->toHaveCount(1)
             ->and($data['crawlers'][0]['name'])->toBe('GPTBot')
             ->and($data['ai_refs'][0]['name'])->toBe('ChatGPT')

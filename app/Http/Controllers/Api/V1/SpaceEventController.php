@@ -7,6 +7,7 @@ use App\Http\Controllers\Controller;
 use App\Models\Space;
 use App\Models\SpaceEvent;
 use App\Models\SpaceItem;
+use App\Models\User;
 use App\Notifications\SpaceOpened;
 use App\Support\CrawlerAgents;
 use App\Support\SpaceUnlockToken;
@@ -21,9 +22,8 @@ use Illuminate\Http\Request;
  * Recording inside PublicSpaceController::show would be wrong three ways:
  * that endpoint is fetched by the Next server (so every row would carry the
  * server's IP as the visitor), it is fetched twice per page load
- * (generateMetadata, then the page), and it is fetched a third time when a
- * Space has approval on. Traffic would be inflated by a factor that depends
- * on which features the creator turned on.
+ * (generateMetadata, then the page). Traffic would be inflated for every
+ * Space, twice over.
  *
  * Always answers 204. A beacon must never be the thing that makes a page
  * look broken.
@@ -53,11 +53,10 @@ class SpaceEventController extends Controller
         $hash = VisitorHash::for($request);
 
         // No middleware on this route on purpose: whoever opens a Space link
-        // is a stranger, and requiring auth:client would silence the beacon
-        // for almost everyone. The guard still resolves from the session
-        // cookie when the visitor happens to be a signed-in client — the
-        // same trick PublicSpaceResource::approvalBlock() already uses.
-        $client = $request->user('client');
+        // is a stranger. The web guard still resolves from the session
+        // cookie when the visitor is signed in — which is how the creator
+        // opening their own Space is told apart below.
+        $viewer = $request->user('web');
 
         $type = SpaceEventType::from($validated['type']);
 
@@ -69,7 +68,6 @@ class SpaceEventController extends Controller
             'space_id' => $space->id,
             'type' => $type,
             'visitor_hash' => $hash,
-            'client_id' => $client?->id,
             'space_item_id' => $this->itemId($space, $validated['item'] ?? null),
             'referrer_host' => $this->referrerHost($request),
             'is_ai_crawler' => $crawler['is_crawler'],
@@ -77,7 +75,7 @@ class SpaceEventController extends Controller
         ]);
 
         if ($isFirstView) {
-            $this->tellTheOwner($space, $client?->user_id);
+            $this->tellTheOwner($space, $viewer instanceof User ? $viewer->id : null);
         }
 
         $this->stampDelivery($space, $type, $crawler['is_crawler']);

@@ -26,7 +26,6 @@ use Illuminate\Support\Str;
  * @property SpaceViewMode $view_mode
  * @property string|null $password_hash
  * @property CarbonImmutable|null $expires_at
- * @property bool $approval_enabled
  * @property array<string, mixed> $design
  * @property array<string, mixed> $settings
  * @property array<string, mixed>|null $seo
@@ -50,7 +49,6 @@ class Space extends Model
         'visibility',
         'view_mode',
         'expires_at',
-        'approval_enabled',
         'design',
         'settings',
         'seo',
@@ -75,8 +73,7 @@ class Space extends Model
             'visibility' => SpaceVisibility::class,
             'view_mode' => SpaceViewMode::class,
             'expires_at' => 'datetime',
-            'approval_enabled' => 'boolean',
-            'design' => 'array',
+                'design' => 'array',
             'settings' => 'array',
             'seo' => 'array',
             'published_at' => 'datetime',
@@ -193,7 +190,6 @@ class Space extends Model
         return [
             'allow_download' => true,
             'discoverable' => false,
-            'approval_mode' => 'per_file',
         ];
     }
 }

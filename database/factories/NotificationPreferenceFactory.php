@@ -20,7 +20,7 @@ class NotificationPreferenceFactory extends Factory
     {
         return [
             'user_id' => User::factory(),
-            'type' => 'approval.decided',
+            'type' => 'space.opened',
             'email_enabled' => true,
             'bell_enabled' => true,
         ];

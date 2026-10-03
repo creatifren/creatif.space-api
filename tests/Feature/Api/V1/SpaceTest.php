@@ -11,7 +11,6 @@ describe('create', function () {
         $this->actingAs($user)
             ->postJson('/api/v1/spaces', [
                 'title' => 'Winter Noel — Product Shoot',
-                'purpose' => 'portfolio',
                 'view_mode' => 'editorial',
             ])
             ->assertCreated()
@@ -19,18 +18,18 @@ describe('create', function () {
             ->assertJsonPath('data.visibility', 'private')
             ->assertJsonPath('data.view_mode', 'editorial')
             ->assertJsonPath('data.slug', 'winter-noel-product-shoot')
-            ->assertJsonPath('data.approval_enabled', false);
+            ->assertJsonMissingPath('data.approval_enabled');
     });
 
-    it('sets the approval flag for approval purpose and dedups slugs', function () {
+    it('dedups slugs', function () {
         $user = User::factory()->create();
 
         $this->actingAs($user)->postJson('/api/v1/spaces', [
-            'title' => 'Wedding', 'purpose' => 'approval', 'view_mode' => 'grid',
-        ])->assertCreated()->assertJsonPath('data.approval_enabled', true);
+            'title' => 'Wedding', 'view_mode' => 'grid',
+        ])->assertCreated()->assertJsonPath('data.slug', 'wedding');
 
         $this->actingAs($user)->postJson('/api/v1/spaces', [
-            'title' => 'Wedding', 'purpose' => 'portfolio', 'view_mode' => 'grid',
+            'title' => 'Wedding', 'view_mode' => 'grid',
         ])->assertCreated()->assertJsonPath('data.slug', 'wedding-2');
     });
 
@@ -41,7 +40,7 @@ describe('create', function () {
 
     it('rejects an invalid view mode', function () {
         $this->actingAs(User::factory()->create())
-            ->postJson('/api/v1/spaces', ['title' => 'X', 'purpose' => 'portfolio', 'view_mode' => 'mosaic'])
+            ->postJson('/api/v1/spaces', ['title' => 'X', 'view_mode' => 'mosaic'])
             ->assertUnprocessable();
     });
 
@@ -50,13 +49,13 @@ describe('create', function () {
         Space::factory()->count(10)->for($user)->create();
 
         $this->actingAs($user)
-            ->postJson('/api/v1/spaces', ['title' => 'One more', 'purpose' => 'portfolio', 'view_mode' => 'grid'])
+            ->postJson('/api/v1/spaces', ['title' => 'One more', 'view_mode' => 'grid'])
             ->assertUnprocessable();
 
         $user->spaces()->first()->delete();
 
         $this->actingAs($user)
-            ->postJson('/api/v1/spaces', ['title' => 'One more', 'purpose' => 'portfolio', 'view_mode' => 'grid'])
+            ->postJson('/api/v1/spaces', ['title' => 'One more', 'view_mode' => 'grid'])
             ->assertCreated();
     });
 });
@@ -66,17 +65,16 @@ describe('list', function () {
         $user = User::factory()->create();
         Space::factory()->for($user)->create(['visibility' => 'private']);
         Space::factory()->for($user)->published()->create(['visibility' => 'public']);
-        Space::factory()->for($user)->create(['approval_enabled' => true]);
         Space::factory()->for($user)->archived()->create();
 
         $this->actingAs($user)->getJson('/api/v1/spaces')
-            ->assertOk()->assertJsonCount(3, 'data');
-        $this->actingAs($user)->getJson('/api/v1/spaces?tab=private')
             ->assertOk()->assertJsonCount(2, 'data');
+        $this->actingAs($user)->getJson('/api/v1/spaces?tab=private')
+            ->assertOk()->assertJsonCount(1, 'data');
         $this->actingAs($user)->getJson('/api/v1/spaces?tab=public')
             ->assertOk()->assertJsonCount(1, 'data');
         $this->actingAs($user)->getJson('/api/v1/spaces?tab=approval')
-            ->assertOk()->assertJsonCount(1, 'data');
+            ->assertUnprocessable();
         $this->actingAs($user)->getJson('/api/v1/spaces?tab=archived')
             ->assertOk()->assertJsonCount(1, 'data');
     });
@@ -263,7 +261,7 @@ describe('the default layout for a new Space', function () {
             ->assertJsonPath('data.default_view_mode', 'grid');
 
         $this->actingAs($user)
-            ->postJson('/api/v1/spaces', ['title' => 'Winter Noel', 'purpose' => 'portfolio'])
+            ->postJson('/api/v1/spaces', ['title' => 'Winter Noel'])
             ->assertCreated()
             ->assertJsonPath('data.view_mode', 'grid');
     });
@@ -277,7 +275,6 @@ describe('the default layout for a new Space', function () {
         $this->actingAs($user)
             ->postJson('/api/v1/spaces', [
                 'title' => 'Board one',
-                'purpose' => 'portfolio',
                 'view_mode' => 'board',
             ])
             ->assertCreated()
@@ -287,7 +284,7 @@ describe('the default layout for a new Space', function () {
     it('falls back to editorial for an account with no profile yet', function () {
         // A Space can be made before the profile screen is ever opened.
         $this->actingAs(User::factory()->create())
-            ->postJson('/api/v1/spaces', ['title' => 'First', 'purpose' => 'portfolio'])
+            ->postJson('/api/v1/spaces', ['title' => 'First'])
             ->assertCreated()
             ->assertJsonPath('data.view_mode', 'editorial');
     });

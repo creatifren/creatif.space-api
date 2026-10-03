@@ -3,7 +3,6 @@
 use App\Enums\SpaceEventType;
 use App\Jobs\AggregateSpaceStats;
 use App\Jobs\PruneSpaceEvents;
-use App\Models\Client;
 use App\Models\File;
 use App\Models\Space;
 use App\Models\SpaceDailyStat;
@@ -41,8 +40,7 @@ describe('beacon', function () {
             ->and($event->type)->toBe(SpaceEventType::View)
             // www. is stripped so instagram.com is one bucket, not two.
             ->and($event->referrer_host)->toBe('instagram.com')
-            ->and($event->is_ai_crawler)->toBeFalse()
-            ->and($event->client_id)->toBeNull();
+            ->and($event->is_ai_crawler)->toBeFalse();
     });
 
     it('leaves the referrer null when there is none — that is the Direct link bucket', function () {
@@ -70,17 +68,6 @@ describe('beacon', function () {
         $stat = SpaceDailyStat::query()->sole();
         expect($stat->views)->toBe(0)
             ->and($stat->ai_crawler_hits)->toBe(1);
-    });
-
-    it('attaches the client when the visitor happens to be signed in', function () {
-        Notification::fake();
-        $space = beaconSpace();
-        $client = Client::factory()->create();
-
-        $this->actingAs($client, 'client')
-            ->postJson("/api/v1/spaces/{$space->ulid}/events", ['type' => 'view']);
-
-        expect(SpaceEvent::query()->sole()->client_id)->toBe($client->id);
     });
 
     it('links a lightbox open to the item, and ignores an item from elsewhere', function () {
@@ -178,9 +165,8 @@ describe('space opened notification', function () {
         $this->withHeader('User-Agent', 'ClaudeBot/1.0')
             ->postJson("/api/v1/spaces/{$space->ulid}/events", ['type' => 'view']);
 
-        // A client identity that belongs to the creator themself.
-        $me = Client::factory()->create(['user_id' => $space->user_id]);
-        $this->actingAs($me, 'client')
+        // The creator themself, signed in.
+        $this->actingAs($space->user, 'web')
             ->postJson("/api/v1/spaces/{$space->ulid}/events", ['type' => 'view']);
 
         Notification::assertNothingSent();

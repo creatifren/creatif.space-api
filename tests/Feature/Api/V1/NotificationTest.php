@@ -1,9 +1,6 @@
 <?php
 
-use App\Enums\NoteAuthor;
 use App\Enums\NotificationType;
-use App\Models\Approval;
-use App\Models\Client;
 use App\Models\File;
 use App\Models\FileRequest;
 use App\Models\FileRequestSubmission;
@@ -12,7 +9,6 @@ use App\Models\Space;
 use App\Models\SpaceItem;
 use App\Models\Transfer;
 use App\Models\User;
-use App\Notifications\ApprovalDecided;
 use App\Notifications\SpaceOpened;
 
 describe('preferences', function () {
@@ -24,7 +20,7 @@ describe('preferences', function () {
             // money notifications stay deliberately absent.
             ->assertJsonCount(count(NotificationType::switchable()), 'data');
 
-        expect($response->json('data.0.type'))->toBe('approval.decided')
+        expect($response->json('data.0.type'))->toBe('space.opened')
             ->and($response->json('data.0.email_enabled'))->toBeTrue();
     });
 
@@ -32,20 +28,20 @@ describe('preferences', function () {
         $user = User::factory()->create();
 
         $this->actingAs($user)->patchJson('/api/v1/me/notification-preferences', [
-            'type' => 'approval.decided',
+            'type' => 'space.opened',
             'email_enabled' => false,
         ])->assertNoContent();
 
         expect($user->notificationPreferences()->count())->toBe(1)
-            ->and($user->fresh()->wants(NotificationType::ApprovalDecided, 'email'))->toBeFalse()
+            ->and($user->fresh()->wants(NotificationType::SpaceOpened, 'email'))->toBeFalse()
             // Only the channel that was named moved.
-            ->and($user->fresh()->wants(NotificationType::ApprovalDecided, 'bell'))->toBeTrue();
+            ->and($user->fresh()->wants(NotificationType::SpaceOpened, 'bell'))->toBeTrue();
     });
 
-    it('refuses a type that is not one of the five', function () {
+    it('refuses a type that is not one of the switches', function () {
         $this->actingAs(User::factory()->create())
             ->patchJson('/api/v1/me/notification-preferences', [
-                'type' => 'approval.invented',
+                'type' => 'space.invented',
                 'email_enabled' => false,
             ])->assertUnprocessable();
     });
@@ -55,11 +51,8 @@ describe('delivery', function () {
     it('sends on both channels by default', function () {
         $user = User::factory()->create();
         $space = Space::factory()->for($user)->create();
-        $approval = Approval::factory()->approved()->create();
 
         expect((new SpaceOpened($space))->via($user))
-            ->toBe(['mail', 'database'])
-            ->and((new ApprovalDecided($approval, $space))->via($user))
             ->toBe(['mail', 'database']);
     });
 
@@ -90,21 +83,15 @@ describe('the bell', function () {
     it('lists notifications with an unread count, then marks them read', function () {
         $user = User::factory()->create();
         $space = Space::factory()->for($user)->create(['title' => 'Winter Noel']);
-        $item = SpaceItem::factory()->for($space)->create([
-            'file_id' => File::factory()->for($user)->create(['name' => 'winter-noel-07.jpg'])->id,
-        ]);
-        $approval = Approval::factory()->for($item, 'spaceItem')->approved()->create();
-        $approval->load(['client', 'notes', 'spaceItem.file']);
 
-        $user->notify(new ApprovalDecided($approval, $space, 2));
+        $user->notify(new SpaceOpened($space));
 
         $response = $this->actingAs($user)->getJson('/api/v1/me/notifications')
             ->assertOk()
             ->assertJsonCount(1, 'data')
             ->assertJsonPath('meta.unread', 1);
 
-        expect($response->json('data.0.data.file_name'))->toBe('winter-noel-07.jpg')
-            ->and($response->json('data.0.data.count'))->toBe(2);
+        expect($response->json('data.0.data.space_title'))->toBe('Winter Noel');
 
         $this->actingAs($user)->postJson('/api/v1/me/notifications/read')->assertNoContent();
 
@@ -119,106 +106,11 @@ describe('the bell', function () {
     });
 });
 
-describe('insights', function () {
-    it('lists my Spaces out for review with their tally', function () {
-        $user = User::factory()->create();
-        $space = Space::factory()->for($user)->published()->create([
-            'title' => 'Winter Noel',
-            'approval_enabled' => true,
-        ]);
-        $item = SpaceItem::factory()->for($space)->create();
-        Approval::factory()->for($item, 'spaceItem')->approved()->create();
-
-        // A Space that never asked for an approval stays out of this list.
-        Space::factory()->for($user)->published()->create(['approval_enabled' => false]);
-
-        $this->actingAs($user)->getJson('/api/v1/insights/approvals?scope=sent')
-            ->assertOk()
-            ->assertJsonCount(1, 'data')
-            ->assertJsonPath('data.0.title', 'Winter Noel')
-            ->assertJsonPath('data.0.approved', 1);
-    });
-
-    it('lists what I decided in someone else’s Space', function () {
-        $me = User::factory()->create(['email' => 'rani@creatif.space']);
-        $client = Client::factory()->for($me)->create(['email' => 'rani@creatif.space']);
-
-        $theirSpace = Space::factory()->published()->create(['title' => 'Ramadan Catalogue']);
-        $item = SpaceItem::factory()->for($theirSpace)->create();
-        Approval::factory()->for($item, 'spaceItem')->for($client)->approved()->create();
-
-        $this->actingAs($me)->getJson('/api/v1/insights/approvals?scope=given')
-            ->assertOk()
-            ->assertJsonCount(1, 'data')
-            ->assertJsonPath('data.0.title', 'Ramadan Catalogue')
-            ->assertJsonPath('data.0.approved', 1);
-    });
-
-    it('lets the owner reply once, and refuses the second reply', function () {
-        $user = User::factory()->create();
-        $space = Space::factory()->for($user)->create();
-        $item = SpaceItem::factory()->for($space)->create();
-        $approval = Approval::factory()->for($item, 'spaceItem')->revision()->create();
-
-        $this->actingAs($user)
-            ->postJson("/api/v1/approvals/{$approval->ulid}/reply", ['body' => 'Re-cropped and back up.'])
-            ->assertNoContent();
-
-        $this->actingAs($user)
-            ->postJson("/api/v1/approvals/{$approval->ulid}/reply", ['body' => 'And again.'])
-            ->assertUnprocessable();
-    });
-
-    it('404s when replying on someone else’s approval', function () {
-        $approval = Approval::factory()->revision()->create();
-
-        $this->actingAs(User::factory()->create())
-            ->postJson("/api/v1/approvals/{$approval->ulid}/reply", ['body' => 'Hello?'])
-            ->assertNotFound();
-    });
-});
-
 describe('needs you', function () {
     it('is empty when nothing is waiting', function () {
         $this->actingAs(User::factory()->create())
             ->getJson('/api/v1/me/attention')
             ->assertOk()
-            ->assertJsonCount(0, 'data');
-    });
-
-    it('lists a client note nobody has answered, and drops it once replied to', function () {
-        $user = User::factory()->create();
-        $space = Space::factory()->for($user)->create(['title' => 'Winter Noel']);
-        $item = SpaceItem::factory()->for($space)->create();
-        $approval = Approval::factory()->for($item, 'spaceItem')->revision()->create();
-        $approval->notes()->create([
-            'author_type' => NoteAuthor::Client,
-            'body' => 'Could the third one be warmer?',
-        ]);
-
-        $this->actingAs($user)
-            ->getJson('/api/v1/me/attention')
-            ->assertOk()
-            ->assertJsonPath('data.0.kind', 'approval.unanswered')
-            ->assertJsonPath('data.0.detail', 'Winter Noel');
-
-        $this->actingAs($user)
-            ->postJson("/api/v1/approvals/{$approval->ulid}/reply", ['body' => 'Re-cropped.']);
-
-        // Answered is done — it must not keep asking.
-        $this->actingAs($user)
-            ->getJson('/api/v1/me/attention')
-            ->assertJsonCount(0, 'data');
-    });
-
-    it('ignores a revision with no note at all', function () {
-        $user = User::factory()->create();
-        $item = SpaceItem::factory()->for(Space::factory()->for($user))->create();
-        Approval::factory()->for($item, 'spaceItem')->revision()->create();
-
-        // Nobody said anything, so there is nothing to reply to.
-        $this->actingAs($user)
-            ->getJson('/api/v1/me/attention')
             ->assertJsonCount(0, 'data');
     });
 

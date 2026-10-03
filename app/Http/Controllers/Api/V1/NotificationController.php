@@ -2,13 +2,10 @@
 
 namespace App\Http\Controllers\Api\V1;
 
-use App\Enums\ApprovalStatus;
 use App\Enums\FileRequestStatus;
-use App\Enums\NoteAuthor;
 use App\Enums\NotificationType;
 use App\Http\Controllers\Controller;
 use App\Models\Activity;
-use App\Models\Approval;
 use App\Models\File;
 use App\Models\FileRequest;
 use App\Models\Transfer;
@@ -176,41 +173,14 @@ class NotificationController extends Controller
      * still take — nothing is listed once it is too late to act.
      *
      * The old alerts (version-voided approvals, lost Drive access) really
-     * did stop being possible when files moved to our storage. These four
-     * replace them, and all four come out of data that already exists.
+     * did stop being possible when files moved to our storage. What is
+     * below replaced them, and all of it comes out of data that already
+     * exists.
      */
     public function attention(Request $request): JsonResponse
     {
         $user = Workspace::owner($request->user());
         $rows = [];
-
-        /* A client asked for a revision and nobody has answered. The same
-           condition reply() guards on: a Revision approval whose notes
-           carry no Owner reply. This is the one row where somebody is
-           actually waiting on a person rather than a date. */
-        $unanswered = Approval::query()
-            ->where('status', ApprovalStatus::Revision)
-            ->whereHas('spaceItem.space', fn ($q) => $q->where('user_id', $user->id))
-            ->whereDoesntHave('notes', fn ($q) => $q->where('author_type', NoteAuthor::Owner))
-            ->whereHas('notes')
-            ->with(['spaceItem.space:id,ulid,title,slug', 'client:id,name'])
-            ->latest('updated_at')
-            ->limit(10)
-            ->get();
-
-        foreach ($unanswered as $approval) {
-            $space = $approval->spaceItem->space;
-            $rows[] = [
-                'id' => 'ap'.$approval->ulid,
-                'kind' => 'approval.unanswered',
-                'title' => $approval->client?->name === null
-                    ? 'A revision was asked for'
-                    : "{$approval->client->name} asked for a revision",
-                'detail' => $space->title,
-                'subject' => ['type' => 'space', 'id' => $space->ulid],
-                'when' => $approval->updated_at,
-            ];
-        }
 
         /* Links about to close with nothing collected yet. An empty request
            expiring is a thing somebody meant to chase; one that already

@@ -6,7 +6,6 @@ use Database\Factories\SpaceItemFactory;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
-use Illuminate\Database\Eloquent\Relations\HasMany;
 
 /**
  * @property int $id
@@ -58,13 +57,5 @@ class SpaceItem extends Model
     public function file(): BelongsTo
     {
         return $this->belongsTo(File::class);
-    }
-
-    /**
-     * @return HasMany<Approval, $this>
-     */
-    public function approvals(): HasMany
-    {
-        return $this->hasMany(Approval::class);
     }
 }

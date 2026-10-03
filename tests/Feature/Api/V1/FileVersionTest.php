@@ -1,13 +1,7 @@
 <?php
 
-use App\Enums\ApprovalCancelReason;
-use App\Enums\ApprovalStatus;
-use App\Models\Approval;
-use App\Models\Client;
 use App\Models\File;
 use App\Models\FileVersion;
-use App\Models\Space;
-use App\Models\SpaceItem;
 use App\Models\User;
 use Illuminate\Support\Facades\Storage;
 
@@ -130,36 +124,6 @@ describe('replacing the bytes', function () {
             ])
             ->assertStatus(422)
             ->assertJsonPath('errors.file.0', 'The upload never arrived — try again.');
-    });
-});
-
-describe('approvals', function () {
-    it('sends a client’s decision back to pending when the bytes change', function () {
-        Storage::fake('s3');
-        $user = User::factory()->create();
-        $file = storedFile($user);
-
-        $space = Space::factory()->for($user)->create();
-        $item = SpaceItem::factory()->for($space)->for($file)->create();
-        $approval = Approval::factory()
-            ->for($item, 'spaceItem')
-            ->for(Client::factory(), 'client')
-            ->create(['status' => ApprovalStatus::Approved, 'approved_at' => now()]);
-
-        $upload = $this->actingAs($user)
-            ->postJson("/api/v1/files/{$file->ulid}/versions/presign", ['size_bytes' => 8])
-            ->json('data.upload_id');
-        Storage::disk('s3')->put(FileVersion::keyFor($file, $upload, $file->name), 'v2-bytes');
-
-        $this->actingAs($user)
-            ->postJson("/api/v1/files/{$file->ulid}/versions/complete", ['upload_id' => $upload])
-            ->assertOk()
-            ->assertJsonPath('data.approvals_voided', 1);
-
-        $approval->refresh();
-        expect($approval->status)->toBe(ApprovalStatus::Pending)
-            ->and($approval->cancelled_reason)->toBe(ApprovalCancelReason::FileReplaced)
-            ->and($approval->approved_at)->toBeNull();
     });
 });
 

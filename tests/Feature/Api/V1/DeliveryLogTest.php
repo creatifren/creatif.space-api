@@ -1,9 +1,6 @@
 <?php
 
-use App\Enums\ApprovalStatus;
 use App\Enums\SpaceEventType;
-use App\Models\Approval;
-use App\Models\Client;
 use App\Models\File;
 use App\Models\Space;
 use App\Models\SpaceItem;
@@ -77,54 +74,6 @@ describe('delivery log', function () {
             ->getJson('/api/v1/me/deliveries')
             ->assertOk()
             ->assertJsonCount(0, 'data');
-    });
-
-    it('groups approvals into one verified mark per client', function () {
-        $user = User::factory()->create();
-        $space = Space::factory()->for($user)->published()->create();
-        $client = Client::factory()->create(['email' => 'andi@winternoel.com']);
-
-        // One client signing off three files is one verdict, not three rows.
-        foreach (range(1, 3) as $i) {
-            $file = File::factory()->for($user)->create();
-            $item = SpaceItem::factory()->for($space)->create(['file_id' => $file->id]);
-            Approval::factory()->for($item, 'spaceItem')->for($client)->create([
-                'status' => ApprovalStatus::Approved,
-                'approved_at' => now()->subDays(4 - $i),
-            ]);
-        }
-
-        $this->actingAs($user)
-            ->getJson('/api/v1/me/deliveries')
-            ->assertOk()
-            ->assertJsonCount(1, 'data.0.marks')
-            ->assertJsonPath('data.0.marks.0.email', 'andi@winternoel.com')
-            ->assertJsonPath('data.0.marks.0.files', 3)
-            ->assertJsonPath('data.0.marks.0.verified', true);
-    });
-
-    it('counts only files a client actually approved', function () {
-        $user = User::factory()->create();
-        $space = Space::factory()->for($user)->published()->create();
-        $client = Client::factory()->create();
-
-        $approvedFile = File::factory()->for($user)->create();
-        $approvedItem = SpaceItem::factory()->for($space)->create(['file_id' => $approvedFile->id]);
-        Approval::factory()->for($approvedItem, 'spaceItem')->for($client)->create([
-            'status' => ApprovalStatus::Approved,
-            'approved_at' => now(),
-        ]);
-
-        $pendingFile = File::factory()->for($user)->create();
-        $pendingItem = SpaceItem::factory()->for($space)->create(['file_id' => $pendingFile->id]);
-        Approval::factory()->for($pendingItem, 'spaceItem')->for($client)->create([
-            'status' => ApprovalStatus::Pending,
-        ]);
-
-        $this->actingAs($user)
-            ->getJson('/api/v1/me/deliveries')
-            ->assertOk()
-            ->assertJsonPath('data.0.marks.0.files', 1);
     });
 
     it('is available on Free — evidence is not an upsell', function () {

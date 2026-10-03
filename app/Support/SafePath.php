@@ -5,10 +5,10 @@ namespace App\Support;
 /**
  * Where an OAuth round trip is allowed to land.
  *
- * Both Google flows take a destination from the query string — the creator's
- * `?next=` and the approver's `?return=` — and both hand it back as a redirect
- * once Google answers. That makes the value attacker-supplied all the way
- * through, so it is checked on the way in and again on the way out: an open
+ * The Google sign-in takes a destination from the query string — the
+ * creator's `?next=` — and hands it back as a redirect once Google answers.
+ * That makes the value attacker-supplied all the way through, so it is
+ * checked on the way in and again on the way out: an open
  * redirect here would let a stranger's link bounce off our own domain and
  * arrive somewhere else wearing our name.
  *

@@ -17,7 +17,6 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
  * @property int $space_id
  * @property SpaceEventType $type
  * @property string $visitor_hash
- * @property int|null $client_id
  * @property int|null $space_item_id
  * @property string|null $referrer_host
  * @property bool $is_ai_crawler
@@ -25,7 +24,6 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
  * @property string|null $country
  * @property CarbonImmutable|null $created_at
  * @property-read Space $space
- * @property-read Client|null $client
  */
 class SpaceEvent extends Model
 {
@@ -41,7 +39,6 @@ class SpaceEvent extends Model
         'space_id',
         'type',
         'visitor_hash',
-        'client_id',
         'space_item_id',
         'referrer_host',
         'is_ai_crawler',
@@ -68,13 +65,5 @@ class SpaceEvent extends Model
     public function space(): BelongsTo
     {
         return $this->belongsTo(Space::class);
-    }
-
-    /**
-     * @return BelongsTo<Client, $this>
-     */
-    public function client(): BelongsTo
-    {
-        return $this->belongsTo(Client::class);
     }
 }

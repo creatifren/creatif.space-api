@@ -77,11 +77,9 @@ class AnalyticsController extends Controller
             'summary' => null,
             'sources' => null,
             'files' => null,
-            'viewers' => null,
             'crawlers' => null,
             'ai_refs' => null,
             'hours' => null,
-            'approval' => null,
             'aeo' => null,
         ];
 
@@ -95,11 +93,9 @@ class AnalyticsController extends Controller
                 'summary' => $this->summary($this->upper($rangeKey, $from), $totals),
                 'sources' => Analytics::sources($spaceIds, $from, $to),
                 'files' => $breakdown,
-                'viewers' => Analytics::viewers($spaceIds, $from, $to),
                 'crawlers' => Analytics::crawlers($spaceIds, $from, $to),
                 'ai_refs' => Analytics::assistantReferrers($spaceIds, $from, $to),
                 'hours' => Analytics::hours($spaceIds, $from, $to),
-                'approval' => Analytics::approval($spaceIds),
                 'aeo' => Analytics::answerReadiness($user),
             ]);
         }

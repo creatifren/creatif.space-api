@@ -32,7 +32,7 @@ class SpaceController extends Controller
     public function index(Request $request): JsonResponse
     {
         $validated = $request->validate([
-            'tab' => ['sometimes', 'string', 'in:all,private,public,approval,archived'],
+            'tab' => ['sometimes', 'string', 'in:all,private,public,archived'],
             'search' => ['sometimes', 'nullable', 'string', 'max:255'],
         ]);
 
@@ -45,7 +45,6 @@ class SpaceController extends Controller
             'archived' => $query->where('status', SpaceStatus::Archived),
             'private' => $query->where('status', '!=', SpaceStatus::Archived)->where('visibility', 'private'),
             'public' => $query->where('status', '!=', SpaceStatus::Archived)->where('visibility', 'public'),
-            'approval' => $query->where('status', '!=', SpaceStatus::Archived)->where('approval_enabled', true),
             default => $query->where('status', '!=', SpaceStatus::Archived),
         };
 
@@ -59,14 +58,13 @@ class SpaceController extends Controller
     }
 
     /**
-     * New Space modal: name + purpose + gallery view. Always Draft+Private.
+     * New Space modal: name (+ gallery view). Always Draft+Private.
      */
     public function store(Request $request): JsonResponse
     {
         abort_unless(Workspace::canWrite($request->user()), 403);
         $validated = $request->validate([
             'title' => ['required', 'string', 'max:255'],
-            'purpose' => ['required', 'string', 'in:portfolio,approval'],
             /* Optional now: without it the Space takes the account's
                default. Still accepted, because the new-Space modal asks —
                the setting is for people who answer the same way every
@@ -94,10 +92,6 @@ class SpaceController extends Controller
             'design' => Space::emptyDesign(),
             'settings' => Space::defaultSettings(),
         ]);
-
-        $space->forceFill([
-            'approval_enabled' => $validated['purpose'] === 'approval',
-        ])->save();
 
         // refresh(): status/visibility come from column defaults.
         return (new SpaceResource($space->refresh()->load('items.file')))
@@ -130,7 +124,6 @@ class SpaceController extends Controller
             'slug' => ['sometimes', 'string', 'min:1', 'max:80', 'regex:/^[a-z0-9-]+$/'],
             'visibility' => ['sometimes', 'string', 'in:private,public'],
             'view_mode' => ['sometimes', 'string', 'in:editorial,grid,board'],
-            'approval_enabled' => ['sometimes', 'boolean'],
             'expires_at' => ['sometimes', 'nullable', 'date'],
             'password' => ['sometimes', 'nullable', 'string', 'min:4', 'max:255'],
             'design' => ['sometimes', 'array'],
@@ -165,9 +158,6 @@ class SpaceController extends Controller
                 'expires_at', 'design', 'settings', 'seo',
             ])));
 
-            if (array_key_exists('approval_enabled', $validated)) {
-                $space->approval_enabled = $validated['approval_enabled'];
-            }
             if (array_key_exists('password', $validated)) {
                 $space->password_hash = $validated['password'] === null
                     ? null
@@ -298,9 +288,6 @@ class SpaceController extends Controller
                 'settings' => $space->settings,
                 'seo' => $space->seo,
             ]);
-            $copy->forceFill([
-                'approval_enabled' => $space->approval_enabled,
-            ])->save();
 
             // Copy items; remap old item ulid → new in design.items + blocks.
             $map = [];

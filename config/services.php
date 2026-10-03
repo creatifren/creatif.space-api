@@ -36,9 +36,6 @@ return [
         'redirect' => env('GOOGLE_REDIRECT_URI'),
         // Separate callback for the Drive connect flow (scope drive.file).
         'drive_redirect' => env('GOOGLE_DRIVE_REDIRECT_URI'),
-        // Third pass: the client signing in to approve. Identity only — no
-        // Drive scope ever travels on this one.
-        'approver_redirect' => env('GOOGLE_APPROVER_REDIRECT_URI'),
     ],
 
     // Payments — subscription checkout (Snap) and its webhook. The server

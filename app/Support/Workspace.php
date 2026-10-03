@@ -20,7 +20,7 @@ use App\Models\User;
  *                           revoking a Drive is an account action, and a
  *                           member revoking the owner's Drive is a
  *                           disaster with no upside
- *   Approval, Analytics     the owner's, read-only
+ *   Analytics               the owner's, read-only
  *   Earnings, withdrawals   owner only. Money is not a seat feature
  *   Subscription, handle,
  *   profile, referral       owner only — identity and billing belong to
