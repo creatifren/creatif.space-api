@@ -20,6 +20,7 @@ class SocialPostFactory extends Factory
     {
         return [
             'user_id' => User::factory(),
+            'provider_post_id' => 'post_'.fake()->unique()->lexify('????????????'),
             'caption' => fake()->sentence(),
             'media' => [['url' => 'https://example.com/photo.jpg']],
             'scheduled_at' => now()->addDay(),

@@ -46,16 +46,14 @@ return [
         'is_production' => (bool) env('MIDTRANS_IS_PRODUCTION', false),
     ],
 
-    // Social posting — Outstand relays posts to the platforms. One API key,
-    // one org shared by every user: Outstand has no per-user tenant, so which
-    // account belongs to whom is recorded and enforced on our side only. The
-    // webhook secret is whatever was typed into their dashboard.
-    'outstand' => [
-        'key' => env('OUTSTAND_API_KEY'),
-        'org_id' => env('OUTSTAND_ORG_ID'),
-        'base_url' => env('OUTSTAND_BASE_URL', 'https://api.outstand.so/v1'),
-        'connect_url' => 'https://www.outstand.so/app/api/socials',
-        'webhook_secret' => env('OUTSTAND_WEBHOOK_SECRET'),
+    // Social posting — Post for Me relays posts to the nine platforms. One
+    // API key, one shared workspace: tenancy lives in external_id (our user
+    // ulid), enforced on our side. The webhook secret is issued when the
+    // webhook is registered with them.
+    'postforme' => [
+        'key' => env('POSTFORME_API_KEY'),
+        'base_url' => env('POSTFORME_BASE_URL', 'https://api.postforme.dev/v1'),
+        'webhook_secret' => env('POSTFORME_WEBHOOK_SECRET'),
     ],
 
     'postmark' => [

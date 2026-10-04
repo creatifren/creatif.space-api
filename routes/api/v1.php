@@ -14,7 +14,7 @@ use App\Http\Controllers\Api\V1\MeController;
 use App\Http\Controllers\Api\V1\MidtransWebhookController;
 use App\Http\Controllers\Api\V1\MyProfileController;
 use App\Http\Controllers\Api\V1\NotificationController;
-use App\Http\Controllers\Api\V1\OutstandWebhookController;
+use App\Http\Controllers\Api\V1\PostForMeWebhookController;
 use App\Http\Controllers\Api\V1\PublicFileRequestController;
 use App\Http\Controllers\Api\V1\PublicProfileController;
 use App\Http\Controllers\Api\V1\PublicSpaceController;
@@ -37,16 +37,17 @@ Route::get('/plans', [SubscriptionController::class, 'plans'])->name('api.v1.pla
 Route::post('/webhooks/midtrans', MidtransWebhookController::class)
     ->name('api.v1.webhooks.midtrans');
 
-// Outstand calls this on post and account events: no auth, the HMAC
-// signature is the authentication.
-Route::post('/webhooks/outstand', OutstandWebhookController::class)
-    ->name('api.v1.webhooks.outstand');
+// Post for Me calls this on account and post events: no auth, the shared
+// secret header is the authentication.
+Route::post('/webhooks/postforme', PostForMeWebhookController::class)
+    ->name('api.v1.webhooks.postforme');
 
-// The browser comes back here from Outstand after granting an account. No
-// session to lean on — the single-use nonce in the path is the auth.
-Route::get('/social-accounts/callback/{nonce}', [SocialAccountController::class, 'callback'])
-    ->middleware('throttle:30,1')
-    ->name('api.v1.social-accounts.callback');
+// The same URL doubles as the project's OAuth return: the browser arrives
+// here with GET after granting an account (the dashboard's redirect URL is
+// this public tunnel), and is handed on to the connect page, which syncs.
+Route::get('/webhooks/postforme', function () {
+    return redirect(config('app.frontend_url').'/social/connect?social=connected');
+})->name('api.v1.webhooks.postforme.return');
 
 Route::get('/handles/availability', [HandleController::class, 'availability'])
     ->middleware('throttle:30,1')
@@ -121,7 +122,7 @@ Route::middleware('auth:sanctum')->group(function () {
         ->name('api.v1.drive-accounts.picker-token');
     Route::delete('/drive-accounts/{driveAccount}', [DriveAccountController::class, 'destroy'])->name('api.v1.drive-accounts.destroy');
 
-    // Social — accounts connected through Outstand
+    // Social — accounts connected through Post for Me
     Route::get('/social-accounts', [SocialAccountController::class, 'index'])->name('api.v1.social-accounts.index');
     Route::post('/social-accounts/auth-url', [SocialAccountController::class, 'authUrl'])
         ->middleware('throttle:30,1')
