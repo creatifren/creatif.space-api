@@ -153,6 +153,11 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::patch('/social-posts/{socialPost}', [SocialPostController::class, 'update'])
         ->middleware('throttle:30,1')
         ->name('api.v1.social-posts.update');
+    Route::post('/social-posts/{socialPost}/send', [SocialPostController::class, 'send'])
+        ->middleware('throttle:30,1')
+        ->name('api.v1.social-posts.send');
+    Route::delete('/social-posts/{socialPost}/draft', [SocialPostController::class, 'discard'])
+        ->name('api.v1.social-posts.discard');
     Route::post('/social-posts/{socialPost}/approve', [SocialApprovalController::class, 'approve'])
         ->middleware('throttle:30,1')
         ->name('api.v1.social-posts.approve');

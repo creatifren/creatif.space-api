@@ -73,14 +73,18 @@ class SocialPostController extends Controller
             // `client` for a client on an approval link; either holds the
             // post here — nothing reaches the provider until approved.
             'approval' => ['sometimes', 'nullable', Rule::in(['awaiting', 'client'])],
+            // A draft is only saved: no provider, no quota. Sending it later
+            // goes through the same gate as a new post.
+            'draft' => ['sometimes', 'boolean'],
         ]);
 
         $user = $request->user();
         $approval = isset($validated['approval']) ? SocialPostApproval::from($validated['approval']) : null;
+        $draft = (bool) ($validated['draft'] ?? false);
 
         // Quota gate before anything reaches the provider. Free's limit is
         // zero, so this is also the "social is a paid feature" wall.
-        if (! PlanQuota::canPostSocial($user)) {
+        if (! $draft && ! PlanQuota::canPostSocial($user)) {
             $limit = PlanQuota::socialPostsLimit($user);
 
             throw ValidationException::withMessages([
@@ -140,10 +144,11 @@ class SocialPostController extends Controller
             $payload['account_configurations'] = $configurations->all();
         }
 
-        // A held post is only recorded; approving it sends it.
-        $remote = $approval === null ? $postForMe->createPost($payload) : null;
+        // A held post or a draft is only recorded; approving or sending it
+        // is what reaches the provider.
+        $remote = $approval === null && ! $draft ? $postForMe->createPost($payload) : null;
 
-        $post = DB::transaction(function () use ($user, $ulid, $validated, $accounts, $captions, $scheduledAt, $remote, $approval) {
+        $post = DB::transaction(function () use ($user, $ulid, $validated, $accounts, $captions, $scheduledAt, $remote, $approval, $draft) {
             $post = $user->socialPosts()->create([
                 'ulid' => $ulid,
                 'provider_post_id' => $remote ? (string) $remote['id'] : null,
@@ -153,9 +158,11 @@ class SocialPostController extends Controller
                 'approval' => $approval,
                 // `processed` means it already went out — everything else is
                 // still on its way.
-                'status' => ($remote['status'] ?? null) === 'processed'
-                    ? SocialPostStatus::Published
-                    : SocialPostStatus::Scheduled,
+                'status' => $draft
+                    ? SocialPostStatus::Draft
+                    : (($remote['status'] ?? null) === 'processed'
+                        ? SocialPostStatus::Published
+                        : SocialPostStatus::Scheduled),
             ]);
 
             foreach ($accounts as $account) {
@@ -195,11 +202,12 @@ class SocialPostController extends Controller
             'scheduled_at' => ['sometimes', 'date', 'after:now'],
         ]);
 
-        // A held post is still ours, so it can change even with no slot.
-        $held = $socialPost->held();
+        // A held post or a draft is still ours, so it can change even with
+        // no slot; a sent one only while its slot is ahead.
+        $ours = $socialPost->held() || $socialPost->status === SocialPostStatus::Draft;
 
-        if ($socialPost->status !== SocialPostStatus::Scheduled
-            || (! $held && ($socialPost->scheduled_at === null || $socialPost->scheduled_at->isPast()))) {
+        if (! in_array($socialPost->status, [SocialPostStatus::Scheduled, SocialPostStatus::Draft], true)
+            || (! $ours && ($socialPost->scheduled_at === null || $socialPost->scheduled_at->isPast()))) {
             return response()->json([
                 'message' => 'Only posts still waiting for their slot can be changed.',
             ], 422);
@@ -235,6 +243,64 @@ class SocialPostController extends Controller
         }
 
         return new SocialPostResource($socialPost->load('targets.account'));
+    }
+
+    /**
+     * Send a draft: the quota gate runs now, then it goes to the provider —
+     * or is held, if it asks for approval.
+     */
+    public function send(Request $request, SocialPost $socialPost, SocialPostRelay $relay): SocialPostResource|JsonResponse
+    {
+        Gate::allowIf(fn ($user) => $socialPost->user_id === $user->id);
+
+        $validated = $request->validate([
+            'scheduled_at' => ['sometimes', 'nullable', 'date', 'after:now'],
+            'approval' => ['sometimes', 'nullable', Rule::in(['awaiting', 'client'])],
+        ]);
+
+        if ($socialPost->status !== SocialPostStatus::Draft) {
+            return response()->json(['message' => 'Only a draft can be sent from here.'], 422);
+        }
+
+        $user = $request->user();
+        if (! PlanQuota::canPostSocial($user)) {
+            $limit = PlanQuota::socialPostsLimit($user);
+
+            throw ValidationException::withMessages([
+                'caption' => $limit === 0
+                    ? 'Social posting is not included on the Free plan — upgrade to Premium to publish.'
+                    : "You've reached your {$limit} posts for this month.",
+            ]);
+        }
+
+        $socialPost->update([
+            'scheduled_at' => isset($validated['scheduled_at']) ? Carbon::parse($validated['scheduled_at']) : null,
+            'approval' => isset($validated['approval']) ? SocialPostApproval::from($validated['approval']) : null,
+        ]);
+
+        if ($socialPost->held()) {
+            $socialPost->update(['status' => SocialPostStatus::Scheduled]);
+        } else {
+            $relay->send($socialPost);
+        }
+
+        return new SocialPostResource($socialPost->fresh()->load('targets.account'));
+    }
+
+    /**
+     * Throw a draft away. It was never sent, so there is nothing to cancel.
+     */
+    public function discard(Request $request, SocialPost $socialPost): JsonResponse
+    {
+        Gate::allowIf(fn ($user) => $socialPost->user_id === $user->id);
+
+        if ($socialPost->status !== SocialPostStatus::Draft) {
+            return response()->json(['message' => 'Only a draft can be discarded.'], 422);
+        }
+
+        $socialPost->delete();
+
+        return response()->json(null, 204);
     }
 
     /**

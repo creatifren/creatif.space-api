@@ -296,3 +296,45 @@ describe('listing and cancelling', function () {
         $this->getJson('/api/v1/social-posts')->assertUnauthorized();
     });
 });
+
+describe('drafts', function () {
+    it('saves a draft without the provider or the quota, then sends it', function () {
+        Http::fake(['api.postforme.test/*' => Http::response(['id' => 'post_d', 'status' => 'scheduled'])]);
+        $user = premiumUser();
+        $account = SocialAccount::factory()->for($user)->create();
+        SocialPost::factory()->for($user)->count(60)->create(); // the month is full
+
+        $id = $this->actingAs($user)
+            ->postJson('/api/v1/social-posts', ['caption' => 'Later.', 'account_ids' => [$account->ulid], 'draft' => true])
+            ->assertCreated()
+            ->assertJsonPath('data.status', 'draft')
+            ->json('data.id');
+        Http::assertNothingSent();
+
+        // Sending runs the gate the draft skipped.
+        $this->actingAs($user)->postJson("/api/v1/social-posts/{$id}/send")->assertUnprocessable();
+
+        $user->socialPosts()->where('status', 'scheduled')->first()->update(['status' => 'cancelled']);
+
+        $this->actingAs($user)
+            ->postJson("/api/v1/social-posts/{$id}/send", ['scheduled_at' => now()->addDay()->toIso8601String()])
+            ->assertOk()
+            ->assertJsonPath('data.status', 'scheduled');
+        Http::assertSentCount(1);
+    });
+
+    it('edits and discards a draft, and only a draft', function () {
+        $user = User::factory()->create();
+        $draft = SocialPost::factory()->for($user)->create(['status' => 'draft', 'provider_post_id' => null, 'scheduled_at' => null]);
+        $sent = SocialPost::factory()->for($user)->create();
+
+        $this->actingAs($user)
+            ->patchJson("/api/v1/social-posts/{$draft->ulid}", ['caption' => 'Better.'])
+            ->assertOk()
+            ->assertJsonPath('data.caption', 'Better.');
+
+        $this->actingAs($user)->deleteJson("/api/v1/social-posts/{$sent->ulid}/draft")->assertUnprocessable();
+        $this->actingAs($user)->deleteJson("/api/v1/social-posts/{$draft->ulid}/draft")->assertNoContent();
+        expect(SocialPost::query()->find($draft->id))->toBeNull();
+    });
+});

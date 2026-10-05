@@ -2,7 +2,12 @@
 
 namespace App\Support;
 
+use App\Enums\SocialPostStatus;
 use App\Enums\SpaceStatus;
+use App\Enums\TeamMemberStatus;
+use App\Models\File;
+use App\Models\FileVersion;
+use App\Models\SocialPost;
 use App\Models\User;
 
 /**
@@ -78,10 +83,10 @@ class PlanQuota
            soft delete would have silently handed everyone free storage. */
         $current = (int) $user->files()
             ->withTrashed()
-            ->whereIn('status', [\App\Models\File::STATUS_PENDING, \App\Models\File::STATUS_READY])
+            ->whereIn('status', [File::STATUS_PENDING, File::STATUS_READY])
             ->sum('size_bytes');
 
-        $history = (int) \App\Models\FileVersion::query()
+        $history = (int) FileVersion::query()
             ->whereIn('file_id', $user->files()->withTrashed()->select('id'))
             ->sum('size_bytes');
 
@@ -123,13 +128,14 @@ class PlanQuota
         $owner = Workspace::owner($user);
 
         $userIds = $owner->teamMembers()
-            ->where('status', \App\Enums\TeamMemberStatus::Active)
+            ->where('status', TeamMemberStatus::Active)
             ->pluck('member_id')
             ->push($owner->id);
 
-        return \App\Models\SocialPost::query()
+        return SocialPost::query()
             ->whereIn('user_id', $userIds)
-            ->where('status', '!=', \App\Enums\SocialPostStatus::Cancelled)
+            // Drafts were never sent, cancelled ones never went out.
+            ->whereNotIn('status', [SocialPostStatus::Cancelled, SocialPostStatus::Draft])
             ->where('created_at', '>=', now()->startOfMonth())
             ->count();
     }
