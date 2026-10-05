@@ -30,6 +30,7 @@ enum ActivityAction: string
     case SpaceArchive = 'space.archive';
     case PostSchedule = 'post.schedule';
     case PostPublish = 'post.publish';
+    case PostReschedule = 'post.reschedule';
 
     /** Which pill on the Activity screen this belongs under. */
     public function tool(): string
@@ -39,7 +40,7 @@ enum ActivityAction: string
             self::Move, self::Trash, self::Restore, self::Purge, self::Transfer,
             self::Download, self::RequestCreate => 'Files',
             self::SpacePublish, self::SpaceArchive => 'Spaces',
-            self::PostSchedule, self::PostPublish => 'Posts',
+            self::PostSchedule, self::PostPublish, self::PostReschedule => 'Posts',
         };
     }
 }

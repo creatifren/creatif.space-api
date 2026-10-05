@@ -2,11 +2,13 @@
 
 namespace App\Http\Controllers\Api\V1;
 
+use App\Enums\ActivityAction;
 use App\Enums\SocialAccountStatus;
 use App\Enums\SocialPostStatus;
 use App\Enums\SocialPostTargetStatus;
 use App\Http\Controllers\Controller;
 use App\Http\Resources\SocialPostResource;
+use App\Models\Activity;
 use App\Models\SocialPost;
 use App\Services\PostForMeService;
 use App\Support\PlanQuota;
@@ -224,7 +226,21 @@ class SocialPostController extends Controller
             $postForMe->updatePost($socialPost->provider_post_id, $payload);
         }
 
+        $from = $socialPost->scheduled_at;
         $socialPost->update(['caption' => $caption, 'scheduled_at' => $scheduledAt]);
+
+        // The move's record: who moved which post, from when to when. A
+        // caption-only edit is not a move and leaves no line.
+        if (! $from->equalTo($scheduledAt)) {
+            Activity::log(
+                $request->user(),
+                ActivityAction::PostReschedule,
+                'Moved a post to '.$scheduledAt->format('D j M, H:i'),
+                'social_post',
+                $socialPost->ulid,
+                ['from' => $from->toIso8601String(), 'to' => $scheduledAt->toIso8601String()],
+            );
+        }
 
         return new SocialPostResource($socialPost->load('targets.account'));
     }

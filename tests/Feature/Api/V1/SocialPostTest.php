@@ -1,5 +1,6 @@
 <?php
 
+use App\Models\Activity;
 use App\Models\SocialAccount;
 use App\Models\SocialPost;
 use App\Models\Subscription;
@@ -258,7 +259,9 @@ describe('listing and cancelling', function () {
             ->assertOk()
             ->assertJsonPath('data.caption', $post->caption);
 
-        expect($post->fresh()->scheduled_at->equalTo($when))->toBeTrue();
+        expect($post->fresh()->scheduled_at->equalTo($when))->toBeTrue()
+            ->and(Activity::query()->where('action', 'post.reschedule')->where('subject_id', $post->ulid)->first()?->meta['to'])
+            ->toBe($when->toIso8601String());
         Http::assertSent(fn ($request) => $request->method() === 'PUT'
             && str_ends_with($request->url(), "/social-posts/{$post->provider_post_id}")
             && $request['social_accounts'] === [$account->provider_account_id]
