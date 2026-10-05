@@ -15,11 +15,13 @@ use App\Http\Controllers\Api\V1\MidtransWebhookController;
 use App\Http\Controllers\Api\V1\MyProfileController;
 use App\Http\Controllers\Api\V1\NotificationController;
 use App\Http\Controllers\Api\V1\PostForMeWebhookController;
+use App\Http\Controllers\Api\V1\PublicApprovalController;
 use App\Http\Controllers\Api\V1\PublicFileRequestController;
 use App\Http\Controllers\Api\V1\PublicProfileController;
 use App\Http\Controllers\Api\V1\PublicSpaceController;
 use App\Http\Controllers\Api\V1\PublicTransferController;
 use App\Http\Controllers\Api\V1\SocialAccountController;
+use App\Http\Controllers\Api\V1\SocialApprovalController;
 use App\Http\Controllers\Api\V1\SocialPostController;
 use App\Http\Controllers\Api\V1\SpaceController;
 use App\Http\Controllers\Api\V1\SpaceEventController;
@@ -65,6 +67,17 @@ Route::get('/profiles/{handle}/spaces/{slug}/archive', [PublicSpaceController::c
 Route::post('/profiles/{handle}/spaces/{slug}/unlock', [PublicSpaceController::class, 'unlock'])
     ->middleware('throttle:10,1')
     ->name('api.v1.profiles.spaces.unlock');
+
+// Approval link — a client with no account. The token is the credential.
+Route::get('/a/{token}', [PublicApprovalController::class, 'show'])
+    ->middleware('throttle:60,1')
+    ->name('api.v1.approval-links.show');
+Route::post('/a/{token}/posts/{post}/decision', [PublicApprovalController::class, 'decide'])
+    ->middleware('throttle:30,1')
+    ->name('api.v1.approval-links.decide');
+Route::post('/a/{token}/posts/{post}/comments', [PublicApprovalController::class, 'comment'])
+    ->middleware('throttle:30,1')
+    ->name('api.v1.approval-links.comment');
 
 // A referral link was opened. Answers 204 whatever the code was: an
 // unknown one must not tell a stranger which codes exist.
@@ -140,6 +153,25 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::patch('/social-posts/{socialPost}', [SocialPostController::class, 'update'])
         ->middleware('throttle:30,1')
         ->name('api.v1.social-posts.update');
+    Route::post('/social-posts/{socialPost}/approve', [SocialApprovalController::class, 'approve'])
+        ->middleware('throttle:30,1')
+        ->name('api.v1.social-posts.approve');
+    Route::get('/social-posts/{socialPost}/comments', [SocialApprovalController::class, 'comments'])
+        ->name('api.v1.social-posts.comments.index');
+    Route::post('/social-posts/{socialPost}/comments', [SocialApprovalController::class, 'comment'])
+        ->middleware('throttle:60,1')
+        ->name('api.v1.social-posts.comments.store');
+    Route::post('/social-comments/{socialPostComment}/resolve', [SocialApprovalController::class, 'resolve'])
+        ->name('api.v1.social-comments.resolve');
+    Route::post('/social-comments/{socialPostComment}/apply', [SocialApprovalController::class, 'applySuggestion'])
+        ->name('api.v1.social-comments.apply');
+    Route::get('/social-approval-links', [SocialApprovalController::class, 'links'])
+        ->name('api.v1.social-approval-links.index');
+    Route::post('/social-approval-links', [SocialApprovalController::class, 'link'])
+        ->middleware('throttle:30,1')
+        ->name('api.v1.social-approval-links.store');
+    Route::delete('/social-approval-links/{socialApprovalLink}', [SocialApprovalController::class, 'revoke'])
+        ->name('api.v1.social-approval-links.destroy');
     Route::delete('/social-posts/{socialPost}', [SocialPostController::class, 'destroy'])->name('api.v1.social-posts.destroy');
 
     // Crefile — the file library (R2-hosted)

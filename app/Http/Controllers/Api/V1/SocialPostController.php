@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Api\V1;
 
 use App\Enums\ActivityAction;
 use App\Enums\SocialAccountStatus;
+use App\Enums\SocialPostApproval;
 use App\Enums\SocialPostStatus;
 use App\Enums\SocialPostTargetStatus;
 use App\Http\Controllers\Controller;
@@ -12,6 +13,7 @@ use App\Models\Activity;
 use App\Models\SocialPost;
 use App\Services\PostForMeService;
 use App\Support\PlanQuota;
+use App\Support\SocialPostRelay;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
@@ -37,6 +39,7 @@ class SocialPostController extends Controller
             $request->user()->socialPosts()
                 ->when($validated['status'] ?? null, fn ($q, $status) => $q->where('status', $status))
                 ->with('targets.account')
+                ->withCount('comments')
                 ->latest()
                 ->get(),
         )->additional(['meta' => [
@@ -65,9 +68,14 @@ class SocialPostController extends Controller
             'media' => ['sometimes', 'array', 'max:10'],
             'media.*.url' => ['required', 'url:https'],
             'scheduled_at' => ['sometimes', 'nullable', 'date', 'after:now'],
+            // Off when absent. `awaiting` waits for the editor's own yes,
+            // `client` for a client on an approval link; either holds the
+            // post here — nothing reaches the provider until approved.
+            'approval' => ['sometimes', 'nullable', Rule::in(['awaiting', 'client'])],
         ]);
 
         $user = $request->user();
+        $approval = isset($validated['approval']) ? SocialPostApproval::from($validated['approval']) : null;
 
         // Quota gate before anything reaches the provider. Free's limit is
         // zero, so this is also the "social is a paid feature" wall.
@@ -131,15 +139,17 @@ class SocialPostController extends Controller
             $payload['account_configurations'] = $configurations->all();
         }
 
-        $remote = $postForMe->createPost($payload);
+        // A held post is only recorded; approving it sends it.
+        $remote = $approval === null ? $postForMe->createPost($payload) : null;
 
-        $post = DB::transaction(function () use ($user, $ulid, $validated, $accounts, $captions, $scheduledAt, $remote) {
+        $post = DB::transaction(function () use ($user, $ulid, $validated, $accounts, $captions, $scheduledAt, $remote, $approval) {
             $post = $user->socialPosts()->create([
                 'ulid' => $ulid,
-                'provider_post_id' => (string) $remote['id'],
+                'provider_post_id' => $remote ? (string) $remote['id'] : null,
                 'caption' => $validated['caption'],
                 'media' => $validated['media'] ?? null,
                 'scheduled_at' => $scheduledAt,
+                'approval' => $approval,
                 // `processed` means it already went out — everything else is
                 // still on its way.
                 'status' => ($remote['status'] ?? null) === 'processed'
@@ -175,6 +185,7 @@ class SocialPostController extends Controller
         Request $request,
         SocialPost $socialPost,
         PostForMeService $postForMe,
+        SocialPostRelay $relay,
     ): SocialPostResource|JsonResponse {
         Gate::allowIf(fn ($user) => $socialPost->user_id === $user->id);
 
@@ -183,9 +194,11 @@ class SocialPostController extends Controller
             'scheduled_at' => ['sometimes', 'date', 'after:now'],
         ]);
 
+        // A held post is still ours, so it can change even with no slot.
+        $held = $socialPost->held();
+
         if ($socialPost->status !== SocialPostStatus::Scheduled
-            || $socialPost->scheduled_at === null
-            || $socialPost->scheduled_at->isPast()) {
+            || (! $held && ($socialPost->scheduled_at === null || $socialPost->scheduled_at->isPast()))) {
             return response()->json([
                 'message' => 'Only posts still waiting for their slot can be changed.',
             ], 422);
@@ -196,34 +209,12 @@ class SocialPostController extends Controller
             ? Carbon::parse($validated['scheduled_at'])
             : $socialPost->scheduled_at;
 
-        $targets = $socialPost->targets()->with('account')->get();
-
-        $payload = [
-            'caption' => $caption,
-            'social_accounts' => $targets->pluck('account.provider_account_id')->all(),
-            'external_id' => $socialPost->ulid,
-            'scheduled_at' => $scheduledAt->toIso8601String(),
-        ];
-
-        if ($socialPost->media !== null) {
-            $payload['media'] = $socialPost->media;
-        }
-
-        $configurations = $targets
-            ->filter(fn ($t) => $t->configuration !== null)
-            ->map(fn ($t) => [
-                'social_account_id' => $t->account->provider_account_id,
-                'configuration' => $t->configuration,
-            ])
-            ->values();
-
-        if ($configurations->isNotEmpty()) {
-            $payload['account_configurations'] = $configurations->all();
-        }
-
         // Provider first: the row only changes once the plan really moved.
         if ($socialPost->provider_post_id !== null) {
-            $postForMe->updatePost($socialPost->provider_post_id, $payload);
+            $postForMe->updatePost(
+                $socialPost->provider_post_id,
+                $relay->payload($socialPost, $caption, $scheduledAt),
+            );
         }
 
         $from = $socialPost->scheduled_at;
@@ -231,14 +222,14 @@ class SocialPostController extends Controller
 
         // The move's record: who moved which post, from when to when. A
         // caption-only edit is not a move and leaves no line.
-        if (! $from->equalTo($scheduledAt)) {
+        if ($scheduledAt !== null && ($from === null || ! $from->equalTo($scheduledAt))) {
             Activity::log(
                 $request->user(),
                 ActivityAction::PostReschedule,
                 'Moved a post to '.$scheduledAt->format('D j M, H:i'),
                 'social_post',
                 $socialPost->ulid,
-                ['from' => $from->toIso8601String(), 'to' => $scheduledAt->toIso8601String()],
+                ['from' => $from?->toIso8601String(), 'to' => $scheduledAt->toIso8601String()],
             );
         }
 

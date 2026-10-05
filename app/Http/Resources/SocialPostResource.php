@@ -26,6 +26,10 @@ class SocialPostResource extends JsonResource
             'scheduled_at' => $this->scheduled_at,
             'status' => $this->status,
             'fail_reason' => $this->fail_reason,
+            'approval' => $this->approval,
+            'approval_by' => $this->approval_by,
+            // Open threads only — the Feed's count and its first glance.
+            'comments_count' => $this->whenCounted('comments'),
             'created_at' => $this->created_at,
             // Targets never appear outside their post, so they are mapped
             // inline rather than through a resource of their own.

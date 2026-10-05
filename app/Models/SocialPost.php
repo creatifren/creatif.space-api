@@ -2,8 +2,10 @@
 
 namespace App\Models;
 
+use App\Enums\SocialPostApproval;
 use App\Enums\SocialPostStatus;
 use App\Enums\SocialPostTargetStatus;
+use App\Notifications\SocialPostFailed;
 use Carbon\CarbonImmutable;
 use Database\Factories\SocialPostFactory;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
@@ -22,6 +24,9 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
  * @property SocialPostStatus $status
  * @property string|null $fail_reason
  * @property array<string, mixed>|null $raw_payload
+ * @property SocialPostApproval|null $approval
+ * @property string|null $approval_by
+ * @property CarbonImmutable|null $approval_at
  */
 class SocialPost extends Model
 {
@@ -40,6 +45,9 @@ class SocialPost extends Model
         'status',
         'fail_reason',
         'raw_payload',
+        'approval',
+        'approval_by',
+        'approval_at',
     ];
 
     /**
@@ -54,7 +62,23 @@ class SocialPost extends Model
             'scheduled_at' => 'datetime',
             'status' => SocialPostStatus::class,
             'raw_payload' => 'array',
+            'approval' => SocialPostApproval::class,
+            'approval_at' => 'datetime',
         ];
+    }
+
+    /** Waiting on a yes, so not yet at the provider. */
+    public function held(): bool
+    {
+        return $this->approval?->held() ?? false;
+    }
+
+    /**
+     * @return HasMany<SocialPostComment, $this>
+     */
+    public function comments(): HasMany
+    {
+        return $this->hasMany(SocialPostComment::class)->whereNull('parent_id')->oldest();
     }
 
     /**
@@ -118,7 +142,7 @@ class SocialPost extends Model
         // Only on the transition into Failed — webhook retries recompute
         // again and must not notify twice.
         if (! $anyPublished && ! $wasFailed) {
-            $this->user->notify(new \App\Notifications\SocialPostFailed($this));
+            $this->user->notify(new SocialPostFailed($this));
         }
     }
 }
