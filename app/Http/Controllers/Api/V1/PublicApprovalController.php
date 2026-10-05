@@ -35,7 +35,7 @@ class PublicApprovalController extends Controller
 
         return response()->json(['data' => [
             'editor' => $link->user->name,
-            'expires_at' => $link->expires_at->toIso8601String(),
+            'expires_at' => $link->expires_at?->toIso8601String(),
             'posts' => $posts->map(fn (SocialPost $p) => $this->postArray($p))->all(),
         ]]);
     }
@@ -133,7 +133,7 @@ class PublicApprovalController extends Controller
         if ($link->revoked_at !== null) {
             return response()->json(['message' => 'This link was taken back.'], 409);
         }
-        if ($link->expires_at->isPast()) {
+        if ($link->expired()) {
             return response()->json(['message' => 'This link has expired.', 'editor' => $link->user->name], 410);
         }
 

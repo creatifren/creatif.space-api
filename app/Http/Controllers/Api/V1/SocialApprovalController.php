@@ -13,6 +13,7 @@ use App\Support\SocialPostRelay;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Gate;
+use Illuminate\Validation\Rule;
 
 /**
  * The editor's side of approval and conversation: approve a held post
@@ -52,6 +53,8 @@ class SocialApprovalController extends Controller
         $validated = $request->validate([
             'post_ids' => ['required', 'array', 'min:1', 'max:50'],
             'post_ids.*' => ['string'],
+            // The share dialog's choices; absent = no expiry.
+            'expires_in_hours' => ['sometimes', 'nullable', 'integer', Rule::in([48, 168, 720])],
         ]);
 
         $posts = $request->user()->socialPosts()
@@ -64,7 +67,11 @@ class SocialApprovalController extends Controller
             return response()->json(['message' => 'None of these posts can still be approved.'], 422);
         }
 
-        $link = SocialApprovalLink::create(['user_id' => $request->user()->id]);
+        $hours = $validated['expires_in_hours'] ?? null;
+        $link = SocialApprovalLink::create([
+            'user_id' => $request->user()->id,
+            'expires_at' => $hours ? now()->addHours($hours) : null,
+        ]);
         $link->posts()->attach($posts->pluck('id'));
         SocialPost::query()->whereIn('id', $posts->pluck('id'))
             ->update(['approval' => SocialPostApproval::Client->value]);
@@ -80,7 +87,7 @@ class SocialApprovalController extends Controller
         $links = SocialApprovalLink::query()
             ->where('user_id', $request->user()->id)
             ->whereNull('revoked_at')
-            ->where('expires_at', '>', now())
+            ->where(fn ($q) => $q->whereNull('expires_at')->orWhere('expires_at', '>', now()))
             ->withCount('posts')
             ->latest()
             ->get();
@@ -174,7 +181,7 @@ class SocialApprovalController extends Controller
             'id' => $link->ulid,
             'url' => $link->url(),
             'posts' => $link->posts_count ?? 0,
-            'expires_at' => $link->expires_at->toIso8601String(),
+            'expires_at' => $link->expires_at?->toIso8601String(),
             'created_at' => $link->created_at?->toIso8601String(),
         ];
     }

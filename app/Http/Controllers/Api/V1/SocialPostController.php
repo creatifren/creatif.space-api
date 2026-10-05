@@ -38,8 +38,9 @@ class SocialPostController extends Controller
         return SocialPostResource::collection(
             $request->user()->socialPosts()
                 ->when($validated['status'] ?? null, fn ($q, $status) => $q->where('status', $status))
-                ->with('targets.account')
-                ->withCount('comments')
+                // Threads ride along: the Feed shows every post's conversation
+                // at once, so one request beats one per card.
+                ->with(['targets.account', 'comments.replies'])
                 ->latest()
                 ->get(),
         )->additional(['meta' => [

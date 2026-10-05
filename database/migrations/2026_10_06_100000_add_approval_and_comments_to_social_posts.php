@@ -27,7 +27,8 @@ return new class extends Migration
             $table->ulid('ulid')->unique();
             $table->foreignId('user_id')->constrained()->cascadeOnDelete();
             $table->string('token', 64)->unique();
-            $table->timestamp('expires_at');
+            // Null = no expiry, which the share dialog offers.
+            $table->timestamp('expires_at')->nullable();
             $table->timestamp('revoked_at')->nullable();
             $table->timestamps();
         });

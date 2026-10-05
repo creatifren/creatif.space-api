@@ -17,15 +17,18 @@ use Illuminate\Support\Str;
  * @property string $ulid
  * @property int $user_id
  * @property string $token
- * @property CarbonImmutable $expires_at
+ * @property CarbonImmutable|null $expires_at
  * @property CarbonImmutable|null $revoked_at
  * @property CarbonImmutable|null $created_at
  */
 class SocialApprovalLink extends Model
 {
-    public const DAYS = 14;
-
     protected $fillable = ['user_id', 'token', 'expires_at', 'revoked_at'];
+
+    public function expired(): bool
+    {
+        return $this->expires_at !== null && $this->expires_at->isPast();
+    }
 
     /**
      * @return array<string, string>
@@ -43,7 +46,6 @@ class SocialApprovalLink extends Model
         static::creating(function (self $link): void {
             $link->ulid ??= (string) Str::ulid();
             $link->token ??= Str::random(40);
-            $link->expires_at ??= now()->addDays(self::DAYS);
         });
     }
 
