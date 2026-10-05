@@ -20,6 +20,7 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
  * @property string|null $provider_post_id
  * @property string $caption
  * @property string $type
+ * @property list<string>|null $labels
  * @property array<int, array{url: string}>|null $media
  * @property CarbonImmutable|null $scheduled_at
  * @property SocialPostStatus $status
@@ -42,6 +43,7 @@ class SocialPost extends Model
         'provider_post_id',
         'caption',
         'type',
+        'labels',
         'media',
         'scheduled_at',
         'status',
@@ -65,6 +67,7 @@ class SocialPost extends Model
             'status' => SocialPostStatus::class,
             'raw_payload' => 'array',
             'approval' => SocialPostApproval::class,
+            'labels' => 'array',
             'approval_at' => 'datetime',
         ];
     }

@@ -25,6 +25,7 @@ use App\Http\Controllers\Api\V1\SocialAccountController;
 use App\Http\Controllers\Api\V1\SocialApprovalController;
 use App\Http\Controllers\Api\V1\SocialFeedController;
 use App\Http\Controllers\Api\V1\SocialPostController;
+use App\Http\Controllers\Api\V1\SocialSettingsController;
 use App\Http\Controllers\Api\V1\SpaceController;
 use App\Http\Controllers\Api\V1\SpaceEventController;
 use App\Http\Controllers\Api\V1\StorageController;
@@ -125,6 +126,8 @@ Route::middleware('auth:sanctum')->group(function () {
         ->middleware('throttle:10,1')
         ->name('api.v1.handles.claim');
     Route::get('/me/profile', [MyProfileController::class, 'show'])->name('api.v1.me.profile.show');
+    Route::get('/me/social-settings', [SocialSettingsController::class, 'show'])->name('api.v1.me.social-settings.show');
+    Route::patch('/me/social-settings', [SocialSettingsController::class, 'update'])->name('api.v1.me.social-settings.update');
     Route::patch('/me/profile', [MyProfileController::class, 'update'])->name('api.v1.me.profile.update');
 
     // Crefile — Drive import accounts (one-way copy into R2, no live sync)

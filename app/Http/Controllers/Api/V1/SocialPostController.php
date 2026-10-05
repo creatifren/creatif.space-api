@@ -83,6 +83,8 @@ class SocialPostController extends Controller
             // Reels and Story are placements on Facebook, Instagram and
             // Threads; other platforms post it as an ordinary post.
             'type' => ['sometimes', Rule::in(['post', 'reels', 'story'])],
+            'labels' => ['sometimes', 'nullable', 'array', 'max:10'],
+            'labels.*' => ['string', 'max:40'],
         ]);
 
         $user = $request->user();
@@ -164,6 +166,7 @@ class SocialPostController extends Controller
                 'provider_post_id' => $remote ? (string) $remote['id'] : null,
                 'caption' => $validated['caption'],
                 'type' => $type,
+                'labels' => $validated['labels'] ?? null,
                 'media' => $validated['media'] ?? null,
                 'scheduled_at' => $scheduledAt,
                 'approval' => $approval,
@@ -217,7 +220,17 @@ class SocialPostController extends Controller
         $validated = $request->validate([
             'caption' => ['sometimes', 'string', 'max:63206'],
             'scheduled_at' => ['sometimes', 'date', 'after:now'],
+            // Labels are ours alone — never sent to the provider.
+            'labels' => ['sometimes', 'nullable', 'array', 'max:10'],
+            'labels.*' => ['string', 'max:40'],
         ]);
+
+        // Labels alone are our own filing: any post, any status, no provider.
+        if (array_keys($validated) === ['labels']) {
+            $socialPost->update(['labels' => $validated['labels']]);
+
+            return new SocialPostResource($socialPost->load('targets.account'));
+        }
 
         // A held post or a draft is still ours, so it can change even with
         // no slot; a sent one only while its slot is ahead.
@@ -244,7 +257,8 @@ class SocialPostController extends Controller
         }
 
         $from = $socialPost->scheduled_at;
-        $socialPost->update(['caption' => $caption, 'scheduled_at' => $scheduledAt]);
+        $socialPost->update(['caption' => $caption, 'scheduled_at' => $scheduledAt]
+            + (array_key_exists('labels', $validated) ? ['labels' => $validated['labels']] : []));
 
         // The move's record: who moved which post, from when to when. A
         // caption-only edit is not a move and leaves no line.
