@@ -190,6 +190,8 @@ Route::middleware('auth:sanctum')->group(function () {
         ->name('api.v1.social-comments.resolve');
     Route::post('/social-comments/{socialPostComment}/apply', [SocialApprovalController::class, 'applySuggestion'])
         ->name('api.v1.social-comments.apply');
+    Route::get('/social-posts/{socialPost}/approval-link', [SocialApprovalController::class, 'linkFor'])
+        ->name('api.v1.social-posts.approval-link');
     Route::get('/social-approval-links', [SocialApprovalController::class, 'links'])
         ->name('api.v1.social-approval-links.index');
     Route::post('/social-approval-links', [SocialApprovalController::class, 'link'])

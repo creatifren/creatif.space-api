@@ -150,3 +150,20 @@ it('threads comments, resolves without deleting, and applies a suggestion', func
         ->assertJsonPath('data.0.resolved', true)
         ->assertJsonCount(1, 'data.0.replies');
 });
+
+it('hands back the live link a waiting post is on, for a reminder', function () {
+    $post = heldPost('client');
+    $link = SocialApprovalLink::create(['user_id' => $post->user_id]);
+    $link->posts()->attach($post->id);
+
+    $this->actingAs($post->user)
+        ->getJson("/api/v1/social-posts/{$post->ulid}/approval-link")
+        ->assertOk()
+        ->assertJsonPath('data.url', $link->url());
+
+    $link->update(['revoked_at' => now()]);
+
+    $this->actingAs($post->user)
+        ->getJson("/api/v1/social-posts/{$post->ulid}/approval-link")
+        ->assertNotFound();
+});

@@ -95,6 +95,28 @@ class SocialApprovalController extends Controller
         return response()->json(['data' => $links->map(fn ($l) => $this->linkArray($l))->all()]);
     }
 
+    /**
+     * The live link a waiting post is on — what Remind hands back to share
+     * again. A client has no address with us (a name is all the link asks
+     * for), so a reminder is the same link sent once more, by the editor.
+     */
+    public function linkFor(Request $request, SocialPost $socialPost): JsonResponse
+    {
+        Gate::allowIf(fn ($user) => $socialPost->user_id === $user->id);
+
+        $link = SocialApprovalLink::query()
+            ->whereHas('posts', fn ($q) => $q->whereKey($socialPost->id))
+            ->whereNull('revoked_at')
+            ->where(fn ($q) => $q->whereNull('expires_at')->orWhere('expires_at', '>', now()))
+            ->withCount('posts')
+            ->latest('id')
+            ->first();
+
+        return $link === null
+            ? response()->json(['message' => 'This post is not on a live approval link — share it from List.'], 404)
+            : response()->json(['data' => $this->linkArray($link)]);
+    }
+
     public function revoke(Request $request, SocialApprovalLink $socialApprovalLink): JsonResponse
     {
         Gate::allowIf(fn ($user) => $socialApprovalLink->user_id === $user->id);
