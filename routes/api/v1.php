@@ -22,6 +22,7 @@ use App\Http\Controllers\Api\V1\PublicSpaceController;
 use App\Http\Controllers\Api\V1\PublicTransferController;
 use App\Http\Controllers\Api\V1\SocialAccountController;
 use App\Http\Controllers\Api\V1\SocialApprovalController;
+use App\Http\Controllers\Api\V1\SocialFeedController;
 use App\Http\Controllers\Api\V1\SocialPostController;
 use App\Http\Controllers\Api\V1\SpaceController;
 use App\Http\Controllers\Api\V1\SpaceEventController;
@@ -143,6 +144,9 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::post('/social-accounts/sync', [SocialAccountController::class, 'sync'])
         ->middleware('throttle:30,1')
         ->name('api.v1.social-accounts.sync');
+    Route::get('/social-accounts/{socialAccount}/feed', [SocialFeedController::class, 'show'])
+        ->middleware('throttle:60,1')
+        ->name('api.v1.social-accounts.feed');
     Route::delete('/social-accounts/{socialAccount}', [SocialAccountController::class, 'destroy'])->name('api.v1.social-accounts.destroy');
 
     // Social — posts relayed to the platforms

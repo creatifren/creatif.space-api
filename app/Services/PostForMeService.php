@@ -147,6 +147,30 @@ class PostForMeService
     }
 
     /**
+     * Every post on the account — ours and ones made outside — with its
+     * metrics. Needs the account connected with the "feeds" permission.
+     *
+     * @return array{data: array<int, array<string, mixed>>, cursor: string|null}
+     *
+     * @throws ConnectionException
+     */
+    public function feed(string $accountId, ?string $cursor = null, int $limit = 25): array
+    {
+        $response = $this->client()->get("/social-account-feeds/{$accountId}", array_filter([
+            'expand' => 'metrics',
+            'limit' => $limit,
+            'cursor' => $cursor,
+        ]));
+
+        $response->throw();
+
+        return [
+            'data' => (array) $response->json('data', []),
+            'cursor' => $response->json('meta.next_cursor') ?? $response->json('meta.cursor'),
+        ];
+    }
+
+    /**
      * The webhook's only authentication: the shared secret issued when the
      * webhook was registered, echoed back in a header on every delivery.
      * An unconfigured secret rejects everything — never open by default.
