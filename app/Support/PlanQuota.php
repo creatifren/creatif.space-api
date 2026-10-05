@@ -100,9 +100,29 @@ class PlanQuota
      */
     public static function storageLimit(User $user): ?int
     {
+        $plan = static::planStorageLimit($user);
+
+        // The plan's storage plus whatever the account rents in Credits.
+        return $plan === null ? null : $plan + Credits::rentedBytes($user);
+    }
+
+    /** What the plan alone includes — the base the rented blocks sit on. */
+    public static function planStorageLimit(User $user): ?int
+    {
         $limit = $user->plan()->quota('storage_bytes');
 
         return $limit === null ? null : $limit * Workspace::seats($user);
+    }
+
+    /**
+     * Over the ceiling: a block lapsed, or the plan shrank. Uploads stop
+     * until it fits; nothing is deleted and every link keeps working.
+     */
+    public static function readOnly(User $user): bool
+    {
+        $limit = static::storageLimit($user);
+
+        return $limit !== null && static::storageUsed($user) > $limit;
     }
 
     /**
@@ -152,11 +172,14 @@ class PlanQuota
         return $limit === null ? null : $limit * Workspace::seats($owner);
     }
 
-    public static function canPostSocial(User $user): bool
+    /**
+     * Sending is paid in Credits now (3 a destination); the monthly count
+     * above is kept for the usage screen only. Free can send too — with the
+     * thirty it got at sign-up, or with a top-up.
+     */
+    public static function canPostSocial(User $user, int $destinations = 1): bool
     {
-        $limit = static::socialPostsLimit($user);
-
-        return $limit === null || static::socialPostsUsed($user) < $limit;
+        return Credits::balance($user) >= $destinations * Credits::PER_SEND;
     }
 
     /**

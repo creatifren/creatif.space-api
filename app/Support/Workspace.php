@@ -5,6 +5,7 @@ namespace App\Support;
 use App\Enums\TeamMemberStatus;
 use App\Models\TeamMember;
 use App\Models\User;
+use Illuminate\Support\Collection;
 
 /**
  * Whose data a request is acting on.
@@ -95,6 +96,20 @@ final class Workspace
      * How many seats this account has: what was bought, or what the plan
      * includes when nothing was.
      */
+    /**
+     * The owner and every active member — whose posts and files draw from
+     * the owner's pooled storage and Credits.
+     *
+     * @return Collection<int, int>
+     */
+    public static function memberIds(User $owner): Collection
+    {
+        return $owner->teamMembers()
+            ->where('status', TeamMemberStatus::Active)
+            ->pluck('member_id')
+            ->push($owner->id);
+    }
+
     public static function seats(User $owner): int
     {
         $subscription = $owner->activeSubscription();

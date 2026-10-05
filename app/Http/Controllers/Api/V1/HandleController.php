@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Api\V1;
 
 use App\Http\Controllers\Controller;
 use App\Models\Handle;
+use App\Support\Credits;
 use Illuminate\Database\UniqueConstraintViolationException;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -96,6 +97,8 @@ class HandleController extends Controller
         // public page exists the moment the address does. Claiming also
         // completes onboarding — the Drive step is skippable by design.
         $user->profile()->firstOrCreate([]);
+        // Thirty Credits — ten destinations — arrive with the username.
+        Credits::welcome($user);
         $user->forceFill(['onboarded_at' => $user->onboarded_at ?? now()])->save();
 
         return response()->json([

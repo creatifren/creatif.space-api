@@ -11,9 +11,11 @@ use App\Models\SocialAccount;
 use App\Models\SocialPost;
 use App\Models\User;
 use App\Services\PostForMeService;
+use App\Support\Credits;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Str;
 
 /**
  * Post for Me calls this on account and post events. Public route: the
@@ -133,6 +135,14 @@ class PostForMeWebhookController extends Controller
 
         DB::transaction(function () use ($post, $target, $data): void {
             $success = (bool) ($data['success'] ?? false);
+
+            // The vendor refused it: nothing left our hands, so its 3 Credits
+            // come back — once, on the first failed result for this target.
+            if (! $success && $target->status === SocialPostTargetStatus::Pending) {
+                Credits::returnSend($post, 1, 'Not charged · '.Str::limit(
+                    is_string($data['error'] ?? null) ? $data['error'] : 'the platform refused it', 120,
+                ));
+            }
 
             $target->update($success
                 ? [

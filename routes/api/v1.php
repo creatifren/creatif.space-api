@@ -2,6 +2,7 @@
 
 use App\Http\Controllers\Api\V1\AffiliateController;
 use App\Http\Controllers\Api\V1\AnalyticsController;
+use App\Http\Controllers\Api\V1\CreditsController;
 use App\Http\Controllers\Api\V1\DeliveryLogController;
 use App\Http\Controllers\Api\V1\DriveAccountController;
 use App\Http\Controllers\Api\V1\EarningController;
@@ -137,6 +138,18 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::delete('/drive-accounts/{driveAccount}', [DriveAccountController::class, 'destroy'])->name('api.v1.drive-accounts.destroy');
 
     // Social — accounts connected through Post for Me
+    // Credits — one balance for sends and storage
+    Route::get('/credits', [CreditsController::class, 'show'])->name('api.v1.credits.show');
+    Route::get('/credits/ledger', [CreditsController::class, 'ledger'])->name('api.v1.credits.ledger');
+    Route::post('/credits/top-up', [CreditsController::class, 'topUp'])
+        ->middleware('throttle:10,1')
+        ->name('api.v1.credits.top-up');
+    Route::post('/credits/storage-blocks', [CreditsController::class, 'addBlocks'])
+        ->middleware('throttle:10,1')
+        ->name('api.v1.credits.blocks.add');
+    Route::delete('/credits/storage-blocks', [CreditsController::class, 'releaseBlocks'])
+        ->name('api.v1.credits.blocks.release');
+
     Route::get('/social-accounts', [SocialAccountController::class, 'index'])->name('api.v1.social-accounts.index');
     Route::post('/social-accounts/auth-url', [SocialAccountController::class, 'authUrl'])
         ->middleware('throttle:30,1')

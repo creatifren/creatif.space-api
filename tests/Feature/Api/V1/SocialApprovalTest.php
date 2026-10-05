@@ -5,6 +5,7 @@ use App\Models\SocialApprovalLink;
 use App\Models\SocialPost;
 use App\Models\Subscription;
 use App\Models\User;
+use App\Support\Credits;
 use Illuminate\Support\Facades\Http;
 
 beforeEach(function () {
@@ -19,6 +20,7 @@ function heldPost(string $approval = 'awaiting'): SocialPost
 {
     $user = User::factory()->create();
     Subscription::factory()->for($user)->create();
+    Credits::grant($user, 300, 'Test');
     $post = SocialPost::factory()->for($user)->create([
         'provider_post_id' => null,
         'approval' => $approval,

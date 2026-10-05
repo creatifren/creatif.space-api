@@ -32,6 +32,7 @@ use Spatie\Permission\Traits\HasRoles;
  * @property CarbonImmutable|null $onboarded_at
  * @property CarbonImmutable|null $suspended_at
  * @property string|null $suspended_reason
+ * @property int $storage_blocks
  * @property CarbonImmutable|null $created_at
  * @property-read Handle|null $handle
  * @property-read Profile|null $profile
@@ -85,6 +86,7 @@ class User extends Authenticatable implements FilamentUser
             'onboarded_at' => 'datetime',
             'suspended_at' => 'datetime',
             'is_staff' => 'boolean',
+            'storage_blocks' => 'integer',
             'password' => 'hashed',
             'status' => UserStatus::class,
         ];

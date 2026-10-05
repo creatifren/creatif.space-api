@@ -14,4 +14,15 @@ enum WalletTransactionType: string
     case WithdrawalFailedCredit = 'withdrawal_failed_credit';
     case CommissionCredit = 'commission_credit';
     case Adjustment = 'adjustment';
+
+    /* ── Credits wallet ── */
+    case CreditsTopUp = 'credits_top_up';
+    /** The plan's monthly Credits, or Free's thirty at sign-up. */
+    case CreditsGrant = 'credits_grant';
+    /** Three per destination, taken when the post is handed to the provider. */
+    case CreditsSend = 'credits_send';
+    /** A destination that never went out — failed or cancelled — comes back. */
+    case CreditsSendReturn = 'credits_send_return';
+    /** Storage blocks, on the first of the month or when one is added. */
+    case CreditsRent = 'credits_rent';
 }

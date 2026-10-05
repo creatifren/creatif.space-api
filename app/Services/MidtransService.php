@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use App\Models\CreditPurchase;
 use App\Models\Invoice;
 use App\Models\User;
 use Illuminate\Http\Client\ConnectionException;
@@ -39,6 +40,24 @@ class MidtransService
             buyerName: $user->name,
             buyerEmail: $user->email,
             finishUrl: config('app.frontend_url').'/settings?section=subscription',
+        );
+    }
+
+    /**
+     * A Credits top-up. Finishes on the Credits page, not Settings.
+     *
+     * @throws ConnectionException
+     */
+    public function creditsToken(CreditPurchase $purchase, User $user): string
+    {
+        return $this->token(
+            orderId: $purchase->midtrans_order_id,
+            amount: $purchase->amount,
+            itemId: $purchase->midtrans_order_id,
+            itemName: number_format($purchase->credits, 0, ',', '.').' Credits',
+            buyerName: $user->name,
+            buyerEmail: $user->email,
+            finishUrl: config('app.frontend_url').'/dashboard/credits',
         );
     }
 

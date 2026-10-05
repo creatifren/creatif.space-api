@@ -5,6 +5,7 @@ use App\Models\SocialAccount;
 use App\Models\SocialPost;
 use App\Models\Subscription;
 use App\Models\User;
+use App\Support\Credits;
 use Illuminate\Support\Facades\Http;
 
 beforeEach(function () {
@@ -14,11 +15,12 @@ beforeEach(function () {
     ]);
 });
 
-/** Social posting is a paid feature — creators in these tests are Premium. */
+/** A Premium creator with Credits to spend — sending costs 3 a destination. */
 function premiumUser(): User
 {
     $user = User::factory()->create();
     Subscription::factory()->for($user)->create();
+    Credits::grant($user, 300, 'Test');
 
     return $user;
 }
@@ -130,63 +132,73 @@ describe('creating posts', function () {
     });
 });
 
-describe('plan quota', function () {
-    it('refuses a Free user with an upgrade message and sends nothing', function () {
+describe('credits', function () {
+    it('refuses a send the balance cannot pay for, and sends nothing', function () {
         Http::fake();
-        $user = User::factory()->create(); // no subscription = Free, 0 posts
+        $user = User::factory()->create(); // no Credits yet
         $account = SocialAccount::factory()->for($user)->create();
 
         $this->actingAs($user)
-            ->postJson('/api/v1/social-posts', [
-                'caption' => 'Free tier.',
-                'account_ids' => [$account->ulid],
-            ])
+            ->postJson('/api/v1/social-posts', ['caption' => 'Broke.', 'account_ids' => [$account->ulid]])
             ->assertUnprocessable()
             ->assertJsonValidationErrors('caption');
 
         Http::assertNothingSent();
     });
 
-    it('caps Premium at 60 posts a month, cancelled ones not counted', function () {
-        Http::fake([
-            'api.postforme.test/*' => Http::response(['id' => 'post_61', 'status' => 'scheduled']),
-        ]);
-        $user = premiumUser();
-        $account = SocialAccount::factory()->for($user)->create();
-
-        SocialPost::factory()->for($user)->count(60)->create();
-
-        $payload = ['caption' => 'One too many.', 'account_ids' => [$account->ulid]];
+    it('takes 3 a destination when sent, and gives a failed one back', function () {
+        Http::fake(['api.postforme.test/*' => Http::response(['id' => 'post_c', 'status' => 'scheduled'])]);
+        config(['services.postforme.webhook_secret' => 's']);
+        $user = User::factory()->create();
+        Credits::grant($user, 30, 'Welcome');
+        $a = SocialAccount::factory()->for($user)->create();
+        $b = SocialAccount::factory()->for($user)->create();
 
         $this->actingAs($user)
-            ->postJson('/api/v1/social-posts', $payload)
-            ->assertUnprocessable();
-
-        // Cancelling one frees the slot.
-        $user->socialPosts()->first()->update(['status' => 'cancelled']);
-
-        $this->actingAs($user)
-            ->postJson('/api/v1/social-posts', $payload)
+            ->postJson('/api/v1/social-posts', ['caption' => 'Two.', 'account_ids' => [$a->ulid, $b->ulid]])
             ->assertCreated();
+        expect(Credits::balance($user))->toBe(24);
+
+        $failure = [
+            'event_type' => 'social.post.result.created',
+            'data' => ['post_id' => 'post_c', 'social_account_id' => $b->provider_account_id, 'success' => false, 'error' => 'Video too long'],
+        ];
+        $this->postJson('/api/v1/webhooks/postforme', $failure, ['Post-For-Me-Webhook-Secret' => 's'])->assertOk();
+        // A redelivery gives nothing back twice.
+        $this->postJson('/api/v1/webhooks/postforme', $failure, ['Post-For-Me-Webhook-Secret' => 's'])->assertOk();
+
+        expect(Credits::balance($user))->toBe(27);
     });
 
-    it("ignores last month's posts", function () {
-        Http::fake([
-            'api.postforme.test/*' => Http::response(['id' => 'post_new', 'status' => 'scheduled']),
-        ]);
-        $user = premiumUser();
+    it('returns the price of every destination still pending on cancel', function () {
+        Http::fake(['api.postforme.test/*' => Http::response(['id' => 'post_x', 'status' => 'scheduled'])]);
+        $user = premiumUser(); // 300
         $account = SocialAccount::factory()->for($user)->create();
 
-        SocialPost::factory()->for($user)->count(60)->create([
-            'created_at' => now()->subMonth(),
-        ]);
-
-        $this->actingAs($user)
+        $id = $this->actingAs($user)
             ->postJson('/api/v1/social-posts', [
-                'caption' => 'Fresh month.',
-                'account_ids' => [$account->ulid],
-            ])
-            ->assertCreated();
+                'caption' => 'Later.', 'account_ids' => [$account->ulid],
+                'scheduled_at' => now()->addDay()->toIso8601String(),
+            ])->json('data.id');
+        expect(Credits::balance($user))->toBe(297);
+
+        $this->actingAs($user)->deleteJson("/api/v1/social-posts/{$id}")->assertNoContent();
+        expect(Credits::balance($user))->toBe(300);
+    });
+
+    it('charges nothing to hold a post for approval or save a draft', function () {
+        Http::fake();
+        $user = User::factory()->create();
+        $account = SocialAccount::factory()->for($user)->create();
+
+        foreach ([['approval' => 'awaiting'], ['draft' => true]] as $extra) {
+            $this->actingAs($user)
+                ->postJson('/api/v1/social-posts', ['caption' => 'Free to hold.', 'account_ids' => [$account->ulid]] + $extra)
+                ->assertCreated();
+        }
+
+        expect(Credits::balance($user))->toBe(0);
+        Http::assertNothingSent();
     });
 });
 
@@ -298,11 +310,10 @@ describe('listing and cancelling', function () {
 });
 
 describe('drafts', function () {
-    it('saves a draft without the provider or the quota, then sends it', function () {
+    it('saves a draft without the provider or Credits, then sends it', function () {
         Http::fake(['api.postforme.test/*' => Http::response(['id' => 'post_d', 'status' => 'scheduled'])]);
-        $user = premiumUser();
+        $user = User::factory()->create(); // no Credits
         $account = SocialAccount::factory()->for($user)->create();
-        SocialPost::factory()->for($user)->count(60)->create(); // the month is full
 
         $id = $this->actingAs($user)
             ->postJson('/api/v1/social-posts', ['caption' => 'Later.', 'account_ids' => [$account->ulid], 'draft' => true])
@@ -313,8 +324,9 @@ describe('drafts', function () {
 
         // Sending runs the gate the draft skipped.
         $this->actingAs($user)->postJson("/api/v1/social-posts/{$id}/send")->assertUnprocessable();
+        Http::assertNothingSent();
 
-        $user->socialPosts()->where('status', 'scheduled')->first()->update(['status' => 'cancelled']);
+        Credits::grant($user, 3, 'Test');
 
         $this->actingAs($user)
             ->postJson("/api/v1/social-posts/{$id}/send", ['scheduled_at' => now()->addDay()->toIso8601String()])

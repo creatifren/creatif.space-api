@@ -30,6 +30,9 @@ final class Wallet
 
     public const AFFILIATE = 'affiliate';
 
+    /** Prepaid Credits — spent on sends and storage rent, never withdrawn here. */
+    public const CREDITS = 'credits';
+
     /**
      * What this user can withdraw from one wallet right now.
      */

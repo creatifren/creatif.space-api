@@ -4,13 +4,16 @@ namespace App\Http\Controllers\Api\V1;
 
 use App\Enums\InvoiceStatus;
 use App\Enums\SubscriptionStatus;
+use App\Enums\WalletTransactionType;
 use App\Http\Controllers\Controller;
+use App\Models\CreditPurchase;
 use App\Models\Invoice;
 use App\Models\Subscription;
 use App\Notifications\InvoiceFailed;
 use App\Notifications\SubscriptionStarted;
 use App\Services\MidtransService;
 use App\Support\CommissionEngine;
+use App\Support\Wallet;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -34,6 +37,11 @@ class MidtransWebhookController extends Controller
 
         if (! $midtrans->verifySignature($payload)) {
             return response()->json(['message' => 'Invalid signature.'], 403);
+        }
+
+        // A Credits top-up, not a plan invoice.
+        if (str_starts_with((string) ($payload['order_id'] ?? ''), CreditPurchase::ORDER_PREFIX)) {
+            return $this->topUp($payload, $midtrans->outcome($payload));
         }
 
         $invoice = Invoice::query()
@@ -128,5 +136,54 @@ class MidtransWebhookController extends Controller
             'seats_pending' => null,
             'seats_at_renewal' => null,
         ])->save();
+    }
+
+    /**
+     * Credits land once, on the first paid notification; the purchase row
+     * is the idempotency handle. Anything else just records what arrived.
+     *
+     * @param  array<string, mixed>  $payload
+     */
+    private function topUp(array $payload, string $outcome): JsonResponse
+    {
+        $purchase = CreditPurchase::query()
+            ->where('midtrans_order_id', (string) $payload['order_id'])
+            ->first();
+
+        if ($purchase === null) {
+            return response()->json(['message' => 'Unknown order.'], 404);
+        }
+
+        if ($purchase->isSettled()) {
+            $purchase->forceFill(['raw_notification' => $payload])->save();
+
+            return response()->json(['message' => 'Already processed.']);
+        }
+
+        DB::transaction(function () use ($purchase, $payload, $outcome) {
+            $purchase->forceFill([
+                'status' => match ($outcome) {
+                    'paid', 'failed', 'expired' => $outcome,
+                    default => 'pending',
+                },
+                'payment_method' => $payload['payment_type'] ?? $purchase->payment_method,
+                'paid_at' => $outcome === 'paid' ? now() : null,
+                'raw_notification' => $payload,
+            ])->save();
+
+            if ($outcome === 'paid') {
+                Wallet::credit(
+                    $purchase->user,
+                    WalletTransactionType::CreditsTopUp,
+                    $purchase->credits,
+                    'credit_purchase',
+                    $purchase->id,
+                    'Rp'.number_format($purchase->amount, 0, ',', '.').' · Midtrans '.$purchase->midtrans_order_id,
+                    Wallet::CREDITS,
+                );
+            }
+        });
+
+        return response()->json(['message' => 'ok']);
     }
 }

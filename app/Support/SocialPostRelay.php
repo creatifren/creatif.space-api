@@ -7,6 +7,7 @@ use App\Models\SocialPost;
 use App\Services\PostForMeService;
 use Carbon\CarbonInterface;
 use Illuminate\Http\Client\ConnectionException;
+use Illuminate\Validation\ValidationException;
 
 /**
  * A stored post as the provider's create/replace body. Post for Me's PUT is
@@ -94,7 +95,20 @@ class SocialPostRelay
      */
     public function send(SocialPost $post): void
     {
+        $destinations = $post->targets()->count();
+
+        // Refuse before the provider, not after: a short balance must not
+        // leave a post live on the platform that was never paid for.
+        $need = $destinations * Credits::PER_SEND;
+        if (Credits::balance($post->user) < $need) {
+            throw ValidationException::withMessages([
+                'caption' => "This needs {$need} Credits and the balance has ".Credits::balance($post->user)
+                    .' — top up, then try again.',
+            ]);
+        }
+
         $remote = $this->postForMe->createPost($this->payload($post));
+        Credits::chargeSend($post, $destinations);
 
         $post->update([
             'provider_post_id' => (string) $remote['id'],

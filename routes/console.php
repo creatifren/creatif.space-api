@@ -1,14 +1,15 @@
 <?php
 
 use App\Jobs\AggregateSpaceStats;
+use App\Jobs\BackfillFileChecksums;
 use App\Jobs\ExpireSubscriptions;
 use App\Jobs\PruneActivityLog;
 use App\Jobs\PruneSpaceArchives;
 use App\Jobs\PruneSpaceEvents;
-use App\Jobs\BackfillFileChecksums;
 use App\Jobs\PruneStaleUploads;
 use App\Jobs\PurgeTrashedFiles;
 use App\Jobs\ReleaseCommissions;
+use App\Jobs\RenewCredits;
 use Illuminate\Foundation\Inspiring;
 use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\Schedule;
@@ -22,6 +23,12 @@ Artisan::command('inspire', function () {
  * already say so by the time its owner opens the dashboard.
  */
 Schedule::job(new ExpireSubscriptions)->dailyAt('03:00');
+
+/*
+ * Storage rent, then the plan's Credits — on the first, after billing has
+ * settled who is still on a plan, before anyone is sending.
+ */
+Schedule::job(new RenewCredits)->monthlyOn(1, '03:20');
 
 /*
  * Yesterday's traffic becomes today's chart. Runs before billing so a slow

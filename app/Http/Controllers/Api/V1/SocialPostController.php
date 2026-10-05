@@ -12,6 +12,7 @@ use App\Http\Resources\SocialPostResource;
 use App\Models\Activity;
 use App\Models\SocialPost;
 use App\Services\PostForMeService;
+use App\Support\Credits;
 use App\Support\PlanQuota;
 use App\Support\SocialPostRelay;
 use Illuminate\Http\JsonResponse;
@@ -44,9 +45,12 @@ class SocialPostController extends Controller
                 ->latest()
                 ->get(),
         )->additional(['meta' => [
-            // The composer's "x of y left this month" line. null limit = no cap.
+            // The composer's "uses N of your Credits" line.
+            'credits' => Credits::balance($request->user()),
+            'per_send' => Credits::PER_SEND,
+            // Kept for the usage screen's monthly count.
             'posts_used' => PlanQuota::socialPostsUsed($request->user()),
-            'posts_limit' => PlanQuota::socialPostsLimit($request->user()),
+            'posts_limit' => null,
         ]]);
     }
 
@@ -84,20 +88,20 @@ class SocialPostController extends Controller
         $user = $request->user();
         $approval = isset($validated['approval']) ? SocialPostApproval::from($validated['approval']) : null;
         $draft = (bool) ($validated['draft'] ?? false);
+        $ids = array_values(array_unique($validated['account_ids']));
+        $sendsNow = $approval === null && ! $draft;
 
-        // Quota gate before anything reaches the provider. Free's limit is
-        // zero, so this is also the "social is a paid feature" wall.
-        if (! $draft && ! PlanQuota::canPostSocial($user)) {
-            $limit = PlanQuota::socialPostsLimit($user);
+        // The price is 3 Credits a destination, checked before anything
+        // reaches the provider. Held posts and drafts are checked when they
+        // are approved or sent — holding one costs nothing.
+        if ($sendsNow && ! PlanQuota::canPostSocial($user, count($ids))) {
+            $need = count($ids) * Credits::PER_SEND;
 
             throw ValidationException::withMessages([
-                'caption' => $limit === 0
-                    ? 'Social posting is not included on the Free plan — upgrade to Premium to publish.'
-                    : "You've reached your {$limit} posts for this month.",
+                'caption' => "This needs {$need} Credits and the balance has ".Credits::balance($user)
+                    .' — top up, or send to fewer accounts.',
             ]);
         }
-
-        $ids = array_values(array_unique($validated['account_ids']));
 
         $accounts = $user->socialAccounts()
             ->whereIn('ulid', $ids)
@@ -152,7 +156,7 @@ class SocialPostController extends Controller
 
         // A held post or a draft is only recorded; approving or sending it
         // is what reaches the provider.
-        $remote = $approval === null && ! $draft ? $postForMe->createPost($payload) : null;
+        $remote = $sendsNow ? $postForMe->createPost($payload) : null;
 
         $post = DB::transaction(function () use ($user, $ulid, $validated, $accounts, $captions, $scheduledAt, $remote, $approval, $draft, $type) {
             $post = $user->socialPosts()->create([
@@ -180,6 +184,12 @@ class SocialPostController extends Controller
                         : null,
                     'status' => SocialPostTargetStatus::Pending,
                 ]);
+            }
+
+            // Charged with the row it pays for; a destination that fails
+            // or is cancelled hands its 3 back.
+            if ($remote !== null) {
+                Credits::chargeSend($post, $accounts->count());
             }
 
             return $post;
@@ -269,17 +279,8 @@ class SocialPostController extends Controller
             return response()->json(['message' => 'Only a draft can be sent from here.'], 422);
         }
 
-        $user = $request->user();
-        if (! PlanQuota::canPostSocial($user)) {
-            $limit = PlanQuota::socialPostsLimit($user);
-
-            throw ValidationException::withMessages([
-                'caption' => $limit === 0
-                    ? 'Social posting is not included on the Free plan — upgrade to Premium to publish.'
-                    : "You've reached your {$limit} posts for this month.",
-            ]);
-        }
-
+        // The relay charges as it sends, and refuses before the provider if
+        // the balance is short; a held draft costs nothing yet.
         $socialPost->update([
             'scheduled_at' => isset($validated['scheduled_at']) ? Carbon::parse($validated['scheduled_at']) : null,
             'approval' => isset($validated['approval']) ? SocialPostApproval::from($validated['approval']) : null,
@@ -311,9 +312,9 @@ class SocialPostController extends Controller
     }
 
     /**
-     * Cancel a scheduled post. Cancelling uses nothing — the quota moves
-     * when a post goes out. Anything past Scheduled is history, not a plan,
-     * and history cannot be cancelled.
+     * Cancel a scheduled post. The Credits taken for destinations that had
+     * not gone out come back. Anything past Scheduled is history, not a
+     * plan, and history cannot be cancelled.
      */
     public function destroy(
         Request $request,
@@ -328,11 +329,23 @@ class SocialPostController extends Controller
             ], 422);
         }
 
-        if ($socialPost->provider_post_id !== null) {
+        $sent = $socialPost->provider_post_id !== null;
+        if ($sent) {
             $postForMe->deletePost($socialPost->provider_post_id);
         }
 
-        $socialPost->update(['status' => SocialPostStatus::Cancelled]);
+        DB::transaction(function () use ($socialPost, $sent) {
+            $socialPost->update(['status' => SocialPostStatus::Cancelled]);
+
+            // Only a post that was handed over was charged.
+            if ($sent) {
+                Credits::returnSend(
+                    $socialPost,
+                    $socialPost->targets()->where('status', SocialPostTargetStatus::Pending)->count(),
+                    'Cancelled before it went out',
+                );
+            }
+        });
 
         return response()->json(null, 204);
     }
