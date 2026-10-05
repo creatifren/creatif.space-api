@@ -277,6 +277,57 @@ class SocialPostController extends Controller
     }
 
     /**
+     * Trade two posts' slots — Grid's drag. One request so it is one act:
+     * if the second provider replace fails, the first is put back before
+     * answering, and the rows only change once both landed.
+     */
+    public function swap(Request $request, PostForMeService $postForMe, SocialPostRelay $relay): JsonResponse
+    {
+        $validated = $request->validate([
+            'a' => ['required', 'string'],
+            'b' => ['required', 'string', 'different:a'],
+        ]);
+
+        $posts = $request->user()->socialPosts()
+            ->whereIn('ulid', [$validated['a'], $validated['b']])
+            ->where('status', SocialPostStatus::Scheduled)
+            ->whereNotNull('scheduled_at')
+            ->where('scheduled_at', '>', now())
+            ->get()
+            ->keyBy('ulid');
+
+        if ($posts->count() !== 2) {
+            return response()->json(['message' => 'Both posts must be yours and still waiting for a future slot.'], 422);
+        }
+
+        [$a, $b] = [$posts[$validated['a']], $posts[$validated['b']]];
+        [$atA, $atB] = [$a->scheduled_at, $b->scheduled_at];
+
+        $replace = fn (SocialPost $p, $at) => $p->provider_post_id === null ? null
+            : $postForMe->updatePost($p->provider_post_id, $relay->payload($p, null, $at));
+
+        $replace($a, $atB);
+        try {
+            $replace($b, $atA);
+        } catch (\Throwable $e) {
+            $replace($a, $atA); // put the first back; if this throws too, the error says so
+            throw $e;
+        }
+
+        DB::transaction(function () use ($a, $b, $atA, $atB) {
+            $a->update(['scheduled_at' => $atB]);
+            $b->update(['scheduled_at' => $atA]);
+        });
+
+        foreach ([[$a, $atA, $atB], [$b, $atB, $atA]] as [$p, $from, $to]) {
+            Activity::log($request->user(), ActivityAction::PostReschedule, 'Moved a post to '.$to->format('D j M, H:i'),
+                'social_post', $p->ulid, ['from' => $from->toIso8601String(), 'to' => $to->toIso8601String(), 'swap' => true]);
+        }
+
+        return response()->json(null, 204);
+    }
+
+    /**
      * Send a draft: the quota gate runs now, then it goes to the provider —
      * or is held, if it asks for approval.
      */

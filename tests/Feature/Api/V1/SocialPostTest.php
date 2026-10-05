@@ -371,3 +371,43 @@ it('sends Reels as a placement where the platform has one, and plainly elsewhere
         && $request['account_configurations'][0]['social_account_id'] === $ig->provider_account_id
         && $request['account_configurations'][0]['configuration'] === ['placement' => 'reels']);
 });
+
+describe('swap', function () {
+    it('trades two slots in one act', function () {
+        Http::fake(['api.postforme.test/*' => Http::response(['id' => 'x'])]);
+        $user = User::factory()->create();
+        $a = SocialPost::factory()->for($user)->create(['scheduled_at' => now()->addDay()->startOfMinute()]);
+        $b = SocialPost::factory()->for($user)->create(['scheduled_at' => now()->addDays(2)->startOfMinute()]);
+        [$atA, $atB] = [$a->scheduled_at, $b->scheduled_at];
+
+        $this->actingAs($user)->postJson('/api/v1/social-posts/swap', ['a' => $a->ulid, 'b' => $b->ulid])->assertNoContent();
+
+        expect($a->fresh()->scheduled_at->equalTo($atB))->toBeTrue()
+            ->and($b->fresh()->scheduled_at->equalTo($atA))->toBeTrue();
+        Http::assertSentCount(2);
+    });
+
+    it('puts the first back when the second replace fails, and changes no row', function () {
+        Http::fakeSequence('api.postforme.test/*')
+            ->push(['id' => 'x'])          // a → b's slot
+            ->push(['message' => 'no'], 500) // b fails
+            ->push(['id' => 'x']);         // a put back
+        $user = User::factory()->create();
+        $a = SocialPost::factory()->for($user)->create(['scheduled_at' => now()->addDay()->startOfMinute()]);
+        $b = SocialPost::factory()->for($user)->create(['scheduled_at' => now()->addDays(2)->startOfMinute()]);
+        $atA = $a->scheduled_at;
+
+        $this->actingAs($user)->postJson('/api/v1/social-posts/swap', ['a' => $a->ulid, 'b' => $b->ulid])->assertServerError();
+
+        expect($a->fresh()->scheduled_at->equalTo($atA))->toBeTrue();
+        Http::assertSentCount(3);
+    });
+
+    it("refuses someone else's post", function () {
+        $user = User::factory()->create();
+        $a = SocialPost::factory()->for($user)->create();
+        $b = SocialPost::factory()->create();
+
+        $this->actingAs($user)->postJson('/api/v1/social-posts/swap', ['a' => $a->ulid, 'b' => $b->ulid])->assertUnprocessable();
+    });
+});
