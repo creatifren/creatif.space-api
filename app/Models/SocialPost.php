@@ -19,6 +19,7 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
  * @property int $user_id
  * @property string|null $provider_post_id
  * @property string $caption
+ * @property string $type
  * @property array<int, array{url: string}>|null $media
  * @property CarbonImmutable|null $scheduled_at
  * @property SocialPostStatus $status
@@ -40,6 +41,7 @@ class SocialPost extends Model
         'user_id',
         'provider_post_id',
         'caption',
+        'type',
         'media',
         'scheduled_at',
         'status',

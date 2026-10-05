@@ -16,6 +16,12 @@ use Illuminate\Http\Client\ConnectionException;
  */
 class SocialPostRelay
 {
+    /** Our post type → Post for Me's placement value. */
+    private const PLACEMENT = ['reels' => 'reels', 'story' => 'stories'];
+
+    /** The platforms Post for Me takes a placement for. */
+    private const PLACED = ['facebook', 'instagram', 'threads'];
+
     public function __construct(private PostForMeService $postForMe) {}
 
     /**
@@ -45,11 +51,13 @@ class SocialPostRelay
         }
 
         $configurations = $targets
-            ->filter(fn ($t) => $t->configuration !== null)
-            ->map(fn ($t) => [
-                'social_account_id' => $t->account->provider_account_id,
-                'configuration' => $t->configuration,
-            ])
+            ->map(fn ($t) => self::configuration(
+                $t->account->provider_account_id,
+                $t->account->platform->value,
+                $t->configuration,
+                $post->type ?? 'post',
+            ))
+            ->filter()
             ->values();
 
         if ($configurations->isNotEmpty()) {
@@ -57,6 +65,26 @@ class SocialPostRelay
         }
 
         return $payload;
+    }
+
+    /**
+     * One account's configuration entry, or null when it needs none. Reels
+     * and Story are a placement on the platforms that have one; elsewhere
+     * the post goes out as an ordinary post.
+     *
+     * @param  array<string, mixed>|null  $own  the per-account caption override
+     * @return array{social_account_id: string, configuration: array<string, mixed>}|null
+     */
+    public static function configuration(string $providerId, string $platform, ?array $own, string $type): ?array
+    {
+        $config = $own ?? [];
+        $placement = self::PLACEMENT[$type] ?? null;
+
+        if ($placement !== null && in_array($platform, self::PLACED, true)) {
+            $config['placement'] = $placement;
+        }
+
+        return $config === [] ? null : ['social_account_id' => $providerId, 'configuration' => $config];
     }
 
     /**

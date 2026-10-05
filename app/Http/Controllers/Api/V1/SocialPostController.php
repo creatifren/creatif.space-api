@@ -76,6 +76,9 @@ class SocialPostController extends Controller
             // A draft is only saved: no provider, no quota. Sending it later
             // goes through the same gate as a new post.
             'draft' => ['sometimes', 'boolean'],
+            // Reels and Story are placements on Facebook, Instagram and
+            // Threads; other platforms post it as an ordinary post.
+            'type' => ['sometimes', Rule::in(['post', 'reels', 'story'])],
         ]);
 
         $user = $request->user();
@@ -116,12 +119,15 @@ class SocialPostController extends Controller
         // webhook can find the row even before provider_post_id lands.
         $ulid = (string) str()->ulid();
 
+        $type = $validated['type'] ?? 'post';
         $configurations = $accounts
-            ->filter(fn ($a) => isset($captions[$a->ulid]))
-            ->map(fn ($a) => [
-                'social_account_id' => $a->provider_account_id,
-                'configuration' => ['caption' => $captions[$a->ulid]],
-            ])
+            ->map(fn ($a) => SocialPostRelay::configuration(
+                $a->provider_account_id,
+                $a->platform->value,
+                isset($captions[$a->ulid]) ? ['caption' => $captions[$a->ulid]] : null,
+                $type,
+            ))
+            ->filter()
             ->values();
 
         // Provider first, DB second — never an HTTP call inside the
@@ -148,11 +154,12 @@ class SocialPostController extends Controller
         // is what reaches the provider.
         $remote = $approval === null && ! $draft ? $postForMe->createPost($payload) : null;
 
-        $post = DB::transaction(function () use ($user, $ulid, $validated, $accounts, $captions, $scheduledAt, $remote, $approval, $draft) {
+        $post = DB::transaction(function () use ($user, $ulid, $validated, $accounts, $captions, $scheduledAt, $remote, $approval, $draft, $type) {
             $post = $user->socialPosts()->create([
                 'ulid' => $ulid,
                 'provider_post_id' => $remote ? (string) $remote['id'] : null,
                 'caption' => $validated['caption'],
+                'type' => $type,
                 'media' => $validated['media'] ?? null,
                 'scheduled_at' => $scheduledAt,
                 'approval' => $approval,

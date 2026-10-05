@@ -338,3 +338,24 @@ describe('drafts', function () {
         expect(SocialPost::query()->find($draft->id))->toBeNull();
     });
 });
+
+it('sends Reels as a placement where the platform has one, and plainly elsewhere', function () {
+    Http::fake(['api.postforme.test/*' => Http::response(['id' => 'post_r', 'status' => 'scheduled'])]);
+    $user = premiumUser();
+    $ig = SocialAccount::factory()->for($user)->create(['platform' => 'instagram']);
+    $tt = SocialAccount::factory()->for($user)->create(['platform' => 'tiktok']);
+
+    $this->actingAs($user)
+        ->postJson('/api/v1/social-posts', [
+            'caption' => 'Reel.',
+            'account_ids' => [$ig->ulid, $tt->ulid],
+            'type' => 'reels',
+            'media' => [['url' => 'https://assets.creatif.space/r.mp4']],
+        ])
+        ->assertCreated()
+        ->assertJsonPath('data.type', 'reels');
+
+    Http::assertSent(fn ($request) => count($request['account_configurations']) === 1
+        && $request['account_configurations'][0]['social_account_id'] === $ig->provider_account_id
+        && $request['account_configurations'][0]['configuration'] === ['placement' => 'reels']);
+});

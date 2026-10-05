@@ -22,6 +22,7 @@ class SocialPostResource extends JsonResource
         return [
             'id' => $this->ulid,
             'caption' => $this->caption,
+            'type' => $this->type,
             'media' => $this->media,
             'scheduled_at' => $this->scheduled_at,
             'status' => $this->status,
