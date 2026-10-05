@@ -241,6 +241,54 @@ describe('listing and cancelling', function () {
             ->assertForbidden();
     });
 
+    it('reschedules via a full PUT that keeps destinations and overrides', function () {
+        Http::fake(['api.postforme.test/*' => Http::response(['id' => 'post_x'])]);
+        $user = User::factory()->create();
+        $post = SocialPost::factory()->for($user)->create();
+        $account = SocialAccount::factory()->for($user)->create();
+        $post->targets()->create([
+            'social_account_id' => $account->id,
+            'configuration' => ['caption' => 'Own line.'],
+            'status' => 'pending',
+        ]);
+        $when = now()->addDays(3)->startOfMinute();
+
+        $this->actingAs($user)
+            ->patchJson("/api/v1/social-posts/{$post->ulid}", ['scheduled_at' => $when->toIso8601String()])
+            ->assertOk()
+            ->assertJsonPath('data.caption', $post->caption);
+
+        expect($post->fresh()->scheduled_at->equalTo($when))->toBeTrue();
+        Http::assertSent(fn ($request) => $request->method() === 'PUT'
+            && str_ends_with($request->url(), "/social-posts/{$post->provider_post_id}")
+            && $request['social_accounts'] === [$account->provider_account_id]
+            && $request['caption'] === $post->caption
+            && $request['account_configurations'][0]['configuration'] === ['caption' => 'Own line.']);
+    });
+
+    it('refuses to change a post that already went or is going out', function () {
+        Http::fake();
+        $user = User::factory()->create();
+        $published = SocialPost::factory()->for($user)->published()->create();
+        $immediate = SocialPost::factory()->for($user)->create(['scheduled_at' => null]);
+
+        foreach ([$published, $immediate] as $post) {
+            $this->actingAs($user)
+                ->patchJson("/api/v1/social-posts/{$post->ulid}", ['caption' => 'Late edit.'])
+                ->assertUnprocessable();
+        }
+
+        Http::assertNothingSent();
+    });
+
+    it("forbids changing another user's post", function () {
+        $post = SocialPost::factory()->create();
+
+        $this->actingAs(User::factory()->create())
+            ->patchJson("/api/v1/social-posts/{$post->ulid}", ['caption' => 'Mine now.'])
+            ->assertForbidden();
+    });
+
     it('rejects guests', function () {
         $this->getJson('/api/v1/social-posts')->assertUnauthorized();
     });

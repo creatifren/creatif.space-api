@@ -137,6 +137,9 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::post('/social-posts', [SocialPostController::class, 'store'])
         ->middleware('throttle:30,1')
         ->name('api.v1.social-posts.store');
+    Route::patch('/social-posts/{socialPost}', [SocialPostController::class, 'update'])
+        ->middleware('throttle:30,1')
+        ->name('api.v1.social-posts.update');
     Route::delete('/social-posts/{socialPost}', [SocialPostController::class, 'destroy'])->name('api.v1.social-posts.destroy');
 
     // Crefile — the file library (R2-hosted)

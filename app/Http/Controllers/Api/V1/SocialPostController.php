@@ -164,6 +164,72 @@ class SocialPostController extends Controller
     }
 
     /**
+     * Reschedule or re-caption a post that has not gone out. Only a post
+     * with a future slot qualifies — an immediate one is already in flight.
+     * Destinations and media stay as sent; the provider's PUT is a full
+     * replace, so the body is rebuilt from the row.
+     */
+    public function update(
+        Request $request,
+        SocialPost $socialPost,
+        PostForMeService $postForMe,
+    ): SocialPostResource|JsonResponse {
+        Gate::allowIf(fn ($user) => $socialPost->user_id === $user->id);
+
+        $validated = $request->validate([
+            'caption' => ['sometimes', 'string', 'max:63206'],
+            'scheduled_at' => ['sometimes', 'date', 'after:now'],
+        ]);
+
+        if ($socialPost->status !== SocialPostStatus::Scheduled
+            || $socialPost->scheduled_at === null
+            || $socialPost->scheduled_at->isPast()) {
+            return response()->json([
+                'message' => 'Only posts still waiting for their slot can be changed.',
+            ], 422);
+        }
+
+        $caption = $validated['caption'] ?? $socialPost->caption;
+        $scheduledAt = isset($validated['scheduled_at'])
+            ? Carbon::parse($validated['scheduled_at'])
+            : $socialPost->scheduled_at;
+
+        $targets = $socialPost->targets()->with('account')->get();
+
+        $payload = [
+            'caption' => $caption,
+            'social_accounts' => $targets->pluck('account.provider_account_id')->all(),
+            'external_id' => $socialPost->ulid,
+            'scheduled_at' => $scheduledAt->toIso8601String(),
+        ];
+
+        if ($socialPost->media !== null) {
+            $payload['media'] = $socialPost->media;
+        }
+
+        $configurations = $targets
+            ->filter(fn ($t) => $t->configuration !== null)
+            ->map(fn ($t) => [
+                'social_account_id' => $t->account->provider_account_id,
+                'configuration' => $t->configuration,
+            ])
+            ->values();
+
+        if ($configurations->isNotEmpty()) {
+            $payload['account_configurations'] = $configurations->all();
+        }
+
+        // Provider first: the row only changes once the plan really moved.
+        if ($socialPost->provider_post_id !== null) {
+            $postForMe->updatePost($socialPost->provider_post_id, $payload);
+        }
+
+        $socialPost->update(['caption' => $caption, 'scheduled_at' => $scheduledAt]);
+
+        return new SocialPostResource($socialPost->load('targets.account'));
+    }
+
+    /**
      * Cancel a scheduled post. Cancelling uses nothing — the quota moves
      * when a post goes out. Anything past Scheduled is history, not a plan,
      * and history cannot be cancelled.

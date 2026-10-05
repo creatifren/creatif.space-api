@@ -124,6 +124,19 @@ class PostForMeService
     }
 
     /**
+     * Replace a post that has not gone out yet. The provider's PUT takes the
+     * full create body — anything left out is dropped, not kept.
+     *
+     * @param  array<string, mixed>  $payload
+     *
+     * @throws ConnectionException
+     */
+    public function updatePost(string $postId, array $payload): void
+    {
+        $this->client()->put("/social-posts/{$postId}", $payload)->throw();
+    }
+
+    /**
      * Cancel a post that has not gone out yet.
      *
      * @throws ConnectionException
