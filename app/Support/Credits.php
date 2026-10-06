@@ -157,6 +157,26 @@ final class Credits
     }
 
     /**
+     * Credits that can go back to a bank: only what was bought (a grant was
+     * never paid for), less what was already withdrawn, and never more than
+     * the balance holds.
+     */
+    public static function withdrawable(User $user): int
+    {
+        $owner = self::owner($user);
+        $sum = fn (array $types) => (int) WalletTransaction::query()
+            ->where('user_id', $owner->id)
+            ->where('wallet', Wallet::CREDITS)
+            ->whereIn('type', $types)
+            ->sum('amount');
+
+        $bought = $sum([WalletTransactionType::CreditsTopUp]);
+        $out = $sum([WalletTransactionType::WithdrawalDebit, WalletTransactionType::WithdrawalFailedCredit]);
+
+        return max(0, min(self::balance($owner), $bought + $out));
+    }
+
+    /**
      * Grant Credits (plan monthly, Free welcome, an admin gift).
      */
     public static function grant(User $user, int $credits, string $why): void

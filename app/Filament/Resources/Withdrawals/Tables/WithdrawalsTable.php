@@ -5,6 +5,7 @@ namespace App\Filament\Resources\Withdrawals\Tables;
 use App\Enums\WalletTransactionType;
 use App\Enums\WithdrawalStatus;
 use App\Models\Withdrawal;
+use App\Support\Credits;
 use App\Support\Wallet;
 use Filament\Actions\Action;
 use Filament\Forms\Components\TextInput;
@@ -111,7 +112,10 @@ class WithdrawalsTable
                         Wallet::credit(
                             $record->user,
                             WalletTransactionType::WithdrawalFailedCredit,
-                            $record->amount,
+                            // The Credits wallet counts Credits; the row is rupiah.
+                            $record->wallet === Wallet::CREDITS
+                                ? intdiv($record->amount, Credits::RUPIAH)
+                                : $record->amount,
                             'withdrawal',
                             $record->id,
                             $data['reason'],

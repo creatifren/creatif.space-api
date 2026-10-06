@@ -6,7 +6,9 @@ use App\Enums\WalletTransactionType;
 use App\Enums\WithdrawalStatus;
 use App\Http\Controllers\Controller;
 use App\Http\Resources\WithdrawalResource;
+use App\Models\User;
 use App\Models\Withdrawal;
+use App\Support\Credits;
 use App\Support\Wallet;
 use App\Support\Workspace;
 use Illuminate\Http\JsonResponse;
@@ -64,7 +66,7 @@ class EarningController extends Controller
      *
      * @return array{bank_code: string, account_masked: string, account_name: string}|null
      */
-    private static function payoutAccount(\App\Models\User $user): ?array
+    private static function payoutAccount(User $user): ?array
     {
         /* getAttributes(), not property access: a User instance that was
            never re-read since creation (actingAs in tests) has no key for
@@ -110,11 +112,20 @@ class EarningController extends Controller
             'account_name' => ['required_with:bank_code,account_number', 'string', 'max:255'],
             // Sales and affiliate commission are separate balances, so they
             // are separate payouts — one cannot be spent out of the other.
-            'wallet' => ['sometimes', 'string', 'in:main,affiliate'],
+            // Credits go back at what they cost: the amount is rupiah, a
+            // whole number of Credits, out of what was bought (not granted).
+            'wallet' => ['sometimes', 'string', 'in:main,affiliate,credits'],
         ]);
 
         $user = $request->user();
         $wallet = $validated['wallet'] ?? Wallet::MAIN;
+        $credits = $wallet === Wallet::CREDITS;
+
+        if ($credits && $validated['amount'] % Credits::RUPIAH !== 0) {
+            throw ValidationException::withMessages([
+                'amount' => 'Credits go back whole — use a multiple of '.Credits::RUPIAH.'.',
+            ]);
+        }
 
         if (! isset($validated['account_number'])) {
             $saved = $user->getAttributes();
@@ -130,7 +141,8 @@ class EarningController extends Controller
             $validated['account_name'] = $saved['payout_account_name'];
         }
 
-        if ($validated['amount'] > Wallet::balance($user, $wallet)) {
+        $available = $credits ? Credits::withdrawable($user) * Credits::RUPIAH : Wallet::balance($user, $wallet);
+        if ($validated['amount'] > $available) {
             throw ValidationException::withMessages([
                 'amount' => 'That’s more than your balance.',
             ]);
@@ -150,7 +162,7 @@ class EarningController extends Controller
             ]);
         }
 
-        $withdrawal = DB::transaction(function () use ($user, $validated, $wallet) {
+        $withdrawal = DB::transaction(function () use ($user, $validated, $wallet, $credits) {
             $withdrawal = $user->withdrawals()->create([
                 'wallet' => $wallet,
                 'amount' => $validated['amount'],
@@ -165,7 +177,7 @@ class EarningController extends Controller
             Wallet::debit(
                 $user,
                 WalletTransactionType::WithdrawalDebit,
-                $withdrawal->amount,
+                $credits ? intdiv($withdrawal->amount, Credits::RUPIAH) : $withdrawal->amount,
                 'withdrawal',
                 $withdrawal->id,
                 wallet: $wallet,

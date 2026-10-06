@@ -4,6 +4,7 @@ use App\Enums\WalletTransactionType;
 use App\Enums\WithdrawalStatus;
 use App\Models\User;
 use App\Models\Withdrawal;
+use App\Support\Credits;
 use App\Support\Wallet;
 
 /** A creator with money in the balance. */
@@ -145,5 +146,29 @@ describe('withdrawing', function () {
             ->assertJsonCount(1, 'data')
             ->assertJsonPath('data.0.amount', 640_000)
             ->assertJsonPath('data.0.status', 'completed');
+    });
+});
+
+describe('credits withdrawal', function () {
+    it('pays back only bought Credits, at Rp100 each, and records it in Credits', function () {
+        $user = User::factory()->create();
+        Wallet::credit($user, WalletTransactionType::CreditsTopUp, 1000, wallet: Wallet::CREDITS);
+        Credits::grant($user, 120, 'October Credits'); // never paid for — stays
+
+        $this->actingAs($user)
+            ->postJson('/api/v1/me/withdrawals', payoutDetails(100_001) + ['wallet' => 'credits'])
+            ->assertUnprocessable(); // not a whole Credit
+
+        $this->actingAs($user)
+            ->postJson('/api/v1/me/withdrawals', payoutDetails(100_100) + ['wallet' => 'credits'])
+            ->assertUnprocessable(); // 1001 Credits, but only 1000 were bought
+
+        $this->actingAs($user)
+            ->postJson('/api/v1/me/withdrawals', payoutDetails(100_000) + ['wallet' => 'credits'])
+            ->assertCreated();
+
+        expect(Credits::balance($user))->toBe(120)
+            ->and(Credits::withdrawable($user))->toBe(0)
+            ->and(Withdrawal::query()->first())->wallet->toBe('credits')->amount->toBe(100_000);
     });
 });
