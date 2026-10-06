@@ -2,6 +2,7 @@
 
 use App\Http\Controllers\Api\V1\AffiliateController;
 use App\Http\Controllers\Api\V1\AnalyticsController;
+use App\Http\Controllers\Api\V1\CaptionAssistController;
 use App\Http\Controllers\Api\V1\CreditsController;
 use App\Http\Controllers\Api\V1\DeliveryLogController;
 use App\Http\Controllers\Api\V1\DriveAccountController;
@@ -173,6 +174,9 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::patch('/social-posts/{socialPost}', [SocialPostController::class, 'update'])
         ->middleware('throttle:30,1')
         ->name('api.v1.social-posts.update');
+    Route::post('/social-captions/assist', CaptionAssistController::class)
+        ->middleware('throttle:20,1')
+        ->name('api.v1.social-captions.assist');
     Route::post('/social-posts/swap', [SocialPostController::class, 'swap'])
         ->middleware('throttle:30,1')
         ->name('api.v1.social-posts.swap');

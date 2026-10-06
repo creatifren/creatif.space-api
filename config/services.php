@@ -56,6 +56,13 @@ return [
         'webhook_secret' => env('POSTFORME_WEBHOOK_SECRET'),
     ],
 
+    // Any OpenAI-compatible chat endpoint, for the composer's caption help.
+    'ai' => [
+        'key' => env('AI_API_KEY'),
+        'base_url' => env('AI_BASE_URL'),
+        'model' => env('AI_MODEL'),
+    ],
+
     'postmark' => [
         'key' => env('POSTMARK_API_KEY'),
     ],
