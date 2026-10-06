@@ -37,11 +37,12 @@ class PostForMeService
             'external_id' => $externalId,
         ];
 
-        // Two platforms demand a connection_type, and on the provider's own
-        // system credentials only one value works: Instagram must go through
-        // Login with Facebook, LinkedIn through "organization".
+        // Two platforms take a connection_type. Instagram signs in on
+        // Instagram itself (Business Login for Instagram), not through a
+        // Facebook Page — the owner's call, 2026-10-06. LinkedIn must be
+        // "organization" on the provider's system credentials.
         if ($platform === 'instagram') {
-            $payload['platform_data'] = ['instagram' => ['connection_type' => 'facebook']];
+            $payload['platform_data'] = ['instagram' => ['connection_type' => 'instagram']];
         } elseif ($platform === 'linkedin') {
             $payload['platform_data'] = ['linkedin' => ['connection_type' => 'organization']];
         }

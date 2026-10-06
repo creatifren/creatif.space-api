@@ -42,7 +42,9 @@ describe('social accounts', function () {
             ->assertJsonPath('data.url', 'https://auth.postforme.test/connect?x=1');
 
         Http::assertSent(fn ($request) => $request['platform'] === 'instagram'
-            && $request['external_id'] === $user->ulid);
+            && $request['external_id'] === $user->ulid
+            // Login with Instagram, not via a Facebook Page.
+            && $request['platform_data']['instagram']['connection_type'] === 'instagram');
     });
 
     it('rejects an unknown platform', function () {
