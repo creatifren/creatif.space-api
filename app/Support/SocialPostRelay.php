@@ -3,6 +3,7 @@
 namespace App\Support;
 
 use App\Enums\SocialPostStatus;
+use App\Enums\SocialPostTargetStatus;
 use App\Models\SocialPost;
 use App\Services\PostForMeService;
 use Carbon\CarbonInterface;
@@ -121,15 +122,23 @@ class SocialPostRelay
 
     /**
      * Pull a sent-but-not-out post back so it is held again — approval
-     * taken back after it was given.
+     * taken back, or its only account disconnected. The destinations that
+     * had not gone out are paid back.
      *
      * @throws ConnectionException
      */
-    public function recall(SocialPost $post): void
+    public function recall(SocialPost $post, string $why): void
     {
-        if ($post->provider_post_id !== null) {
-            $this->postForMe->deletePost($post->provider_post_id);
-            $post->update(['provider_post_id' => null]);
+        if ($post->provider_post_id === null) {
+            return;
         }
+
+        $this->postForMe->deletePost($post->provider_post_id);
+        Credits::returnSend(
+            $post,
+            $post->targets()->where('status', SocialPostTargetStatus::Pending)->count(),
+            $why,
+        );
+        $post->update(['provider_post_id' => null]);
     }
 }

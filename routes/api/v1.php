@@ -79,6 +79,9 @@ Route::get('/a/{token}', [PublicApprovalController::class, 'show'])
 Route::post('/a/{token}/posts/{post}/decision', [PublicApprovalController::class, 'decide'])
     ->middleware('throttle:30,1')
     ->name('api.v1.approval-links.decide');
+Route::post('/a/{token}/posts/{post}/retract', [PublicApprovalController::class, 'retract'])
+    ->middleware('throttle:30,1')
+    ->name('api.v1.approval-links.retract');
 Route::post('/a/{token}/posts/{post}/comments', [PublicApprovalController::class, 'comment'])
     ->middleware('throttle:30,1')
     ->name('api.v1.approval-links.comment');

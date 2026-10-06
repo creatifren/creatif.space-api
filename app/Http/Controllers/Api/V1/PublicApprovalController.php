@@ -90,6 +90,44 @@ class PublicApprovalController extends Controller
     }
 
     /**
+     * Take a decision back — Undo while fresh, Take it back later; the
+     * server does not tell the two apart. An approved post is pulled from
+     * the provider (its Credits come back) and waits again. Only while it
+     * has not gone out: history cannot be undecided. The retraction is
+     * written as a comment, never by erasing the old line.
+     */
+    public function retract(Request $request, string $token, string $post, SocialPostRelay $relay): JsonResponse
+    {
+        $link = $this->resolve($token);
+        if ($link instanceof JsonResponse) {
+            return $link;
+        }
+
+        $validated = $request->validate(['name' => ['required', 'string', 'max:120']]);
+        $socialPost = $link->posts()->where('ulid', $post)->firstOrFail();
+        $was = $socialPost->approval;
+
+        if ($socialPost->status !== SocialPostStatus::Scheduled
+            || ! in_array($was, [SocialPostApproval::Approved, SocialPostApproval::Revision], true)) {
+            return response()->json(['message' => 'This post has already gone out — it cannot be taken back.'], 422);
+        }
+
+        if ($was === SocialPostApproval::Approved) {
+            $relay->recall($socialPost, 'Approval taken back');
+        }
+
+        $socialPost->update(['approval' => SocialPostApproval::Client, 'approval_by' => null, 'approval_at' => null]);
+        SocialPostComment::create([
+            'social_post_id' => $socialPost->id,
+            'author_name' => $validated['name'],
+            'role' => 'APPROVER',
+            'body' => $was === SocialPostApproval::Approved ? 'Approval taken back.' : 'Request for changes taken back.',
+        ]);
+
+        return response()->json(['data' => $this->postArray($socialPost->fresh(['targets.account', 'comments.replies']))]);
+    }
+
+    /**
      * A comment, a reply, or a caption suggestion from the client.
      */
     public function comment(Request $request, string $token, string $post): JsonResponse

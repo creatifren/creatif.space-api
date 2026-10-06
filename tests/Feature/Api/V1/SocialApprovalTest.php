@@ -116,6 +116,37 @@ it('needs a reason to ask for changes, and records it as a comment', function ()
     Http::assertNothingSent();
 });
 
+it('takes an approval back: pulled from the provider, Credits returned, waiting again', function () {
+    Http::fake(['api.postforme.test/*' => Http::response(['id' => 'post_r', 'status' => 'scheduled'])]);
+    $post = heldPost('client');
+    $link = SocialApprovalLink::create(['user_id' => $post->user_id]);
+    $link->posts()->attach($post->id);
+    $before = Credits::balance($post->user);
+
+    $this->postJson("/api/v1/a/{$link->token}/posts/{$post->ulid}/decision", ['name' => 'Andi', 'decision' => 'approve'])
+        ->assertOk();
+    expect(Credits::balance($post->user))->toBe($before - Credits::PER_SEND);
+
+    $this->postJson("/api/v1/a/{$link->token}/posts/{$post->ulid}/retract", ['name' => 'Andi'])
+        ->assertOk()
+        ->assertJsonPath('data.approval', 'client')
+        ->assertJsonPath('data.comments.0.body', 'Approval taken back.');
+
+    expect($post->fresh()->provider_post_id)->toBeNull()
+        ->and(Credits::balance($post->user))->toBe($before);
+    Http::assertSent(fn ($r) => $r->method() === 'DELETE' && str_ends_with($r->url(), '/social-posts/post_r'));
+});
+
+it('refuses to take back a post that has gone out', function () {
+    $post = heldPost('approved');
+    $post->update(['status' => 'published']);
+    $link = SocialApprovalLink::create(['user_id' => $post->user_id]);
+    $link->posts()->attach($post->id);
+
+    $this->postJson("/api/v1/a/{$link->token}/posts/{$post->ulid}/retract", ['name' => 'Andi'])
+        ->assertUnprocessable();
+});
+
 it('answers 409 for a revoked link and 410 for an expired one', function () {
     $post = heldPost('client');
     $revoked = SocialApprovalLink::create(['user_id' => $post->user_id, 'revoked_at' => now()]);
