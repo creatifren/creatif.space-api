@@ -4,13 +4,19 @@ namespace App\Http\Controllers\Api\V1;
 
 use App\Enums\SocialAccountStatus;
 use App\Enums\SocialPlatform;
+use App\Enums\SocialPostStatus;
+use App\Enums\SocialPostTargetStatus;
 use App\Http\Controllers\Controller;
 use App\Http\Resources\SocialAccountResource;
 use App\Models\SocialAccount;
+use App\Models\SocialPost;
 use App\Services\PostForMeService;
+use App\Support\Credits;
+use App\Support\SocialPostRelay;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Validation\Rule;
 
@@ -98,15 +104,51 @@ class SocialAccountController extends Controller
 
     /**
      * Disconnect an account. The row stays as Disconnected — published
-     * posts and their numbers reference it. Scheduled posts to it are left
-     * for the provider to fail at publish time; the webhook records why.
+     * posts and their numbers reference it. A post still to go loses this
+     * destination (its 3 Credits come back); one aimed only here goes back
+     * to being a draft, pulled from the provider and off any approval link.
      */
     public function destroy(
         Request $request,
         SocialAccount $socialAccount,
         PostForMeService $postForMe,
+        SocialPostRelay $relay,
     ): JsonResponse {
         Gate::allowIf(fn ($user) => $socialAccount->user_id === $user->id);
+
+        $why = 'Its account was disconnected';
+        $posts = SocialPost::query()
+            ->where('user_id', $socialAccount->user_id)
+            ->whereIn('status', [SocialPostStatus::Scheduled, SocialPostStatus::Draft])
+            ->whereHas('targets', fn ($q) => $q->where('social_account_id', $socialAccount->id))
+            ->withCount('targets')
+            ->with('user')
+            ->get();
+
+        foreach ($posts as $post) {
+            if ($post->targets_count === 1) {
+                $relay->recall($post, $why);
+                $post->targets()->delete();
+                DB::table('social_approval_link_post')->where('social_post_id', $post->id)->delete();
+                $post->update([
+                    'status' => SocialPostStatus::Draft,
+                    'approval' => null,
+                    'approval_by' => null,
+                    'approval_at' => null,
+                ]);
+
+                continue;
+            }
+
+            $target = $post->targets()->where('social_account_id', $socialAccount->id)->first();
+            $target->delete();
+            if ($post->provider_post_id !== null) {
+                $postForMe->updatePost($post->provider_post_id, $relay->payload($post));
+                if ($target->status === SocialPostTargetStatus::Pending) {
+                    Credits::returnSend($post, 1, $why);
+                }
+            }
+        }
 
         $postForMe->disconnect($socialAccount->provider_account_id);
         $postForMe->deleteAccount($socialAccount->provider_account_id);

@@ -1,7 +1,9 @@
 <?php
 
 use App\Models\SocialAccount;
+use App\Models\SocialPost;
 use App\Models\User;
+use App\Support\Credits;
 use Illuminate\Support\Facades\Http;
 
 beforeEach(function () {
@@ -102,6 +104,32 @@ describe('social accounts', function () {
             ->and(SocialAccount::query()->count())->toBe(1);
 
         Http::assertSentCount(2); // disconnect + delete
+    });
+
+    it('disconnects: a post aimed only there becomes a draft, a shared one loses the destination', function () {
+        Http::fake(['api.postforme.test/*' => Http::response(['message' => 'ok'])]);
+        $user = User::factory()->create();
+        Credits::grant($user, 100, 'Test');
+        $gone = SocialAccount::factory()->for($user)->create();
+        $kept = SocialAccount::factory()->for($user)->create();
+
+        $only = SocialPost::factory()->for($user)->create(['provider_post_id' => 'post_only']);
+        $only->targets()->create(['social_account_id' => $gone->id, 'status' => 'pending']);
+        $shared = SocialPost::factory()->for($user)->create(['provider_post_id' => 'post_shared']);
+        $shared->targets()->create(['social_account_id' => $gone->id, 'status' => 'pending']);
+        $shared->targets()->create(['social_account_id' => $kept->id, 'status' => 'pending']);
+        $before = Credits::balance($user);
+
+        $this->actingAs($user)->deleteJson("/api/v1/social-accounts/{$gone->ulid}")->assertNoContent();
+
+        expect($only->fresh())->status->value->toBe('draft')->provider_post_id->toBeNull()
+            ->and($only->targets()->count())->toBe(0)
+            ->and($shared->targets()->pluck('social_account_id')->all())->toBe([$kept->id])
+            ->and(Credits::balance($user))->toBe($before + 2 * Credits::PER_SEND);
+
+        Http::assertSent(fn ($r) => $r->method() === 'DELETE' && str_ends_with($r->url(), '/social-posts/post_only'));
+        Http::assertSent(fn ($r) => $r->method() === 'PUT' && str_ends_with($r->url(), '/social-posts/post_shared')
+            && $r['social_accounts'] === [$kept->provider_account_id]);
     });
 
     it("forbids touching another user's account", function () {
