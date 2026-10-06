@@ -17,13 +17,15 @@ use Illuminate\Support\Str;
  * @property string $ulid
  * @property int $user_id
  * @property string $token
+ * @property string|null $title
+ * @property string|null $client_name
  * @property CarbonImmutable|null $expires_at
  * @property CarbonImmutable|null $revoked_at
  * @property CarbonImmutable|null $created_at
  */
 class SocialApprovalLink extends Model
 {
-    protected $fillable = ['user_id', 'token', 'expires_at', 'revoked_at'];
+    protected $fillable = ['user_id', 'token', 'title', 'client_name', 'expires_at', 'revoked_at'];
 
     public function expired(): bool
     {

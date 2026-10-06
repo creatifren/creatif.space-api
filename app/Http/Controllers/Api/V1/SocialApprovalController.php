@@ -55,6 +55,10 @@ class SocialApprovalController extends Controller
             'post_ids.*' => ['string'],
             // The share dialog's choices; absent = no expiry.
             'expires_in_hours' => ['sometimes', 'nullable', 'integer', Rule::in([48, 168, 720])],
+            // Shown to the client above the posts.
+            'title' => ['sometimes', 'nullable', 'string', 'max:120'],
+            // The editor's own note on who it is for; the client never sees it.
+            'client_name' => ['sometimes', 'nullable', 'string', 'max:120'],
         ]);
 
         $posts = $request->user()->socialPosts()
@@ -70,6 +74,8 @@ class SocialApprovalController extends Controller
         $hours = $validated['expires_in_hours'] ?? null;
         $link = SocialApprovalLink::create([
             'user_id' => $request->user()->id,
+            'title' => $validated['title'] ?? null,
+            'client_name' => $validated['client_name'] ?? null,
             'expires_at' => $hours ? now()->addHours($hours) : null,
         ]);
         $link->posts()->attach($posts->pluck('id'));
@@ -202,6 +208,8 @@ class SocialApprovalController extends Controller
         return [
             'id' => $link->ulid,
             'url' => $link->url(),
+            'title' => $link->title,
+            'client_name' => $link->client_name,
             'posts' => $link->posts_count ?? 0,
             'expires_at' => $link->expires_at?->toIso8601String(),
             'created_at' => $link->created_at?->toIso8601String(),

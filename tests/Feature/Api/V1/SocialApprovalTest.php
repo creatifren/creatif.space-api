@@ -79,15 +79,20 @@ it('lets a client approve on the link, and only posts on that link', function ()
     $other = heldPost();
 
     $url = $this->actingAs($post->user)
-        ->postJson('/api/v1/social-approval-links', ['post_ids' => [$post->ulid, $other->ulid]])
+        ->postJson('/api/v1/social-approval-links', [
+            'post_ids' => [$post->ulid, $other->ulid], 'title' => 'Desember', 'client_name' => 'Andi',
+        ])
         ->assertCreated()
+        ->assertJsonPath('data.title', 'Desember')
+        ->assertJsonPath('data.client_name', 'Andi')
         ->assertJsonPath('data.posts', 1) // the other user's post is not theirs to share
         ->json('data.url');
     $token = basename($url);
 
     expect($post->fresh()->approval->value)->toBe('client');
 
-    $this->getJson("/api/v1/a/{$token}")->assertOk()->assertJsonCount(1, 'data.posts');
+    $this->getJson("/api/v1/a/{$token}")->assertOk()->assertJsonCount(1, 'data.posts')
+        ->assertJsonMissingPath('data.client_name');
 
     $this->postJson("/api/v1/a/{$token}/posts/{$other->ulid}/decision", ['name' => 'Andi', 'decision' => 'approve'])
         ->assertNotFound();

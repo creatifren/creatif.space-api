@@ -35,6 +35,7 @@ class PublicApprovalController extends Controller
 
         return response()->json(['data' => [
             'editor' => $link->user->name,
+            'title' => $link->title,
             'expires_at' => $link->expires_at?->toIso8601String(),
             'posts' => $posts->map(fn (SocialPost $p) => $this->postArray($p))->all(),
         ]]);
