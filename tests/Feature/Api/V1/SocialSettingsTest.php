@@ -29,6 +29,20 @@ it('refuses a time that is not HH:MM and a day outside the week', function () {
         ->assertJsonValidationErrors(['timetable.0.day', 'timetable.0.time']);
 });
 
+it('carries a renamed label onto the posts that wear it', function () {
+    $user = User::factory()->create();
+    $post = SocialPost::factory()->for($user)->create(['labels' => ['Promo', 'Launch']]);
+    $other = SocialPost::factory()->create(['labels' => ['Promo']]); // someone else's
+
+    $this->actingAs($user)->patchJson('/api/v1/me/social-settings', [
+        'labels' => [['name' => 'Sale', 'color' => 'clay'], ['name' => 'Launch', 'color' => 'sea']],
+        'renamed' => ['Promo' => 'Sale'],
+    ])->assertOk()->assertJsonMissingPath('data.renamed');
+
+    expect($post->fresh()->labels)->toBe(['Sale', 'Launch'])
+        ->and($other->fresh()->labels)->toBe(['Promo']);
+});
+
 it('labels any post, even a published one, without touching the provider', function () {
     $user = User::factory()->create();
     $post = SocialPost::factory()->for($user)->published()->create();

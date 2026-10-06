@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Api\V1;
 
 use App\Http\Controllers\Controller;
+use App\Models\SocialPost;
 use App\Support\Workspace;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -45,9 +46,25 @@ class SocialSettingsController extends Controller
             'views.*.name' => ['required', 'string', 'max:60'],
             'views.*.screen' => ['required', 'in:list,grid,feed,calendar'],
             'views.*.filter' => ['present', 'array'],
+            // { old name: new name } — the posts carrying a renamed label
+            // follow it. A post stores the name, so without this it would
+            // keep the old one, uncoloured.
+            'renamed' => ['sometimes', 'array', 'max:50'],
+            'renamed.*' => ['string', 'max:40'],
         ]);
 
         $owner = Workspace::owner($request->user());
+
+        $renamed = array_filter($validated['renamed'] ?? [], fn ($to, $from) => $to !== $from, ARRAY_FILTER_USE_BOTH);
+        unset($validated['renamed']);
+        if ($renamed !== []) {
+            SocialPost::query()->where('user_id', $owner->id)->whereNotNull('labels')->each(function (SocialPost $post) use ($renamed) {
+                $labels = array_values(array_unique(array_map(fn ($l) => $renamed[$l] ?? $l, $post->labels)));
+                if ($labels !== $post->labels) {
+                    $post->update(['labels' => $labels]);
+                }
+            });
+        }
         $settings = $validated + ($owner->social_settings ?? []) + self::EMPTY;
         $owner->forceFill(['social_settings' => $settings])->save();
 
