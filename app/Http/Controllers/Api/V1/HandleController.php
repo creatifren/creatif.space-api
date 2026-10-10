@@ -40,9 +40,9 @@ class HandleController extends Controller
     }
 
     /**
-     * Claim a handle for the authenticated user. One handle per user, set
-     * once — changing it later is deliberately unsupported (sent links must
-     * keep working).
+     * Claim a handle for the authenticated user. One handle per user; this
+     * is the first one, set during onboarding. Later moves go through
+     * change().
      */
     public function claim(Request $request): JsonResponse
     {
@@ -104,6 +104,93 @@ class HandleController extends Controller
         return response()->json([
             'data' => ['name' => $handle->name],
         ], 201);
+    }
+
+    /**
+     * Move the user to a new handle, at most once per cooldown window.
+     *
+     * The old name is released into the usual 30-day grace, not freed: links
+     * already sent stop resolving, but nobody can step into the address and
+     * receive them. Its previous owner may take it back inside that window.
+     */
+    public function change(Request $request): JsonResponse
+    {
+        $validated = $request->validate([
+            'name' => ['required', 'string', 'min:3', 'max:30', 'regex:/^[a-z0-9-]+$/'],
+        ]);
+
+        $user = $request->user();
+        $old = $user->handle;
+
+        if ($old === null) {
+            throw ValidationException::withMessages([
+                'name' => 'Claim an address first.',
+            ]);
+        }
+
+        $name = Handle::normalize($validated['name']);
+
+        if ($name === $old->name) {
+            throw ValidationException::withMessages([
+                'name' => 'That is already your address.',
+            ]);
+        }
+
+        if ($old->changeableAt()->isFuture()) {
+            throw ValidationException::withMessages([
+                'name' => 'You can change your username again on '.$old->changeableAt()->format('j F Y').'.',
+            ]);
+        }
+
+        try {
+            $handle = DB::transaction(function () use ($name, $user, $old) {
+                $existing = Handle::query()->where('name', $name)->lockForUpdate()->first();
+
+                $ownGrace = $existing !== null
+                    && ! $existing->is_reserved
+                    && $existing->user_id === null
+                    && $existing->previous_user_id === $user->id;
+
+                if (! $ownGrace && ! Handle::isAvailable($name)) {
+                    throw ValidationException::withMessages([
+                        'name' => "creatif.space/{$name} is already taken.",
+                    ]);
+                }
+
+                // Released first: user_id is unique, so the new row cannot
+                // take it while the old one still holds it.
+                $old->forceFill([
+                    'user_id' => null,
+                    'previous_user_id' => $user->id,
+                    'released_at' => now(),
+                ])->save();
+
+                if ($existing !== null) {
+                    $existing->forceFill([
+                        'user_id' => $user->id,
+                        'released_at' => null,
+                    ])->save();
+
+                    return $existing;
+                }
+
+                return Handle::query()->create([
+                    'name' => $name,
+                    'user_id' => $user->id,
+                ]);
+            });
+        } catch (UniqueConstraintViolationException) {
+            throw ValidationException::withMessages([
+                'name' => "creatif.space/{$name} is already taken.",
+            ]);
+        }
+
+        return response()->json([
+            'data' => [
+                'name' => $handle->name,
+                'changeable_at' => $handle->changeableAt(),
+            ],
+        ]);
     }
 
     /**

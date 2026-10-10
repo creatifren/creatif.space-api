@@ -45,18 +45,4 @@ class FileFactory extends Factory
             'height' => null,
         ]);
     }
-
-    /**
-     * A file copied in from Google Drive.
-     */
-    public function driveImport(): static
-    {
-        return $this->state(fn (array $attributes) => [
-            'source' => 'drive_import',
-            'source_meta' => [
-                'provider_file_id' => fake()->regexify('[A-Za-z0-9_-]{28}'),
-                'drive_email' => fake()->safeEmail(),
-            ],
-        ]);
-    }
 }

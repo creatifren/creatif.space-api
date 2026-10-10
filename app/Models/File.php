@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use Carbon\CarbonImmutable;
 use Database\Factories\FileFactory;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
@@ -33,11 +34,9 @@ use Illuminate\Support\Facades\Storage;
  * @property int|null $height
  * @property array<string, mixed>|null $exif
  * @property string $source
- * @property int|null $source_account_id
  * @property array<string, mixed>|null $source_meta
- * @property-read DriveAccount|null $sourceAccount
- * @property \Carbon\CarbonImmutable|null $deleted_at
- * @property \Carbon\CarbonImmutable|null $purge_at
+ * @property CarbonImmutable|null $deleted_at
+ * @property CarbonImmutable|null $purge_at
  */
 class File extends Model
 {
@@ -100,7 +99,6 @@ class File extends Model
         'height',
         'exif',
         'source',
-        'source_account_id',
         'source_meta',
     ];
 
@@ -208,18 +206,6 @@ class File extends Model
     public function folder(): BelongsTo
     {
         return $this->belongsTo(Folder::class);
-    }
-
-    /**
-     * The Drive account that brought it, for an import. Null for an upload,
-     * a request drop, and for an import whose account has since been
-     * revoked — the file stays, the account does not.
-     *
-     * @return BelongsTo<DriveAccount, $this>
-     */
-    public function sourceAccount(): BelongsTo
-    {
-        return $this->belongsTo(DriveAccount::class, 'source_account_id');
     }
 
     public function versions(): HasMany

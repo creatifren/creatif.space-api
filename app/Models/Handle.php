@@ -15,6 +15,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
  * @property bool $is_reserved
  * @property int|null $previous_user_id
  * @property CarbonImmutable|null $released_at
+ * @property CarbonImmutable|null $updated_at
  * @property-read User|null $user
  */
 class Handle extends Model
@@ -51,6 +52,21 @@ class Handle extends Model
     public function user(): BelongsTo
     {
         return $this->belongsTo(User::class);
+    }
+
+    /**
+     * Days a username must be held before it can be changed again. Counted
+     * from `updated_at`, which both a fresh claim and an in-place reassign
+     * set; nothing else writes a user's handle row.
+     */
+    public const CHANGE_COOLDOWN_DAYS = 7;
+
+    /**
+     * When the owner may next change away from this handle.
+     */
+    public function changeableAt(): CarbonImmutable
+    {
+        return CarbonImmutable::instance($this->updated_at)->addDays(self::CHANGE_COOLDOWN_DAYS);
     }
 
     /**

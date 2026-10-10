@@ -1,5 +1,7 @@
 <?php
 
+use App\Http\Middleware\OptionalAuth;
+use App\Http\Middleware\ThrottlePerRoute;
 use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
 use Illuminate\Foundation\Configuration\Middleware;
@@ -16,7 +18,8 @@ return Application::configure(basePath: dirname(__DIR__))
         $middleware->statefulApi();
 
         $middleware->alias([
-            'auth.optional' => \App\Http\Middleware\OptionalAuth::class,
+            'auth.optional' => OptionalAuth::class,
+            'throttle' => ThrottlePerRoute::class,
         ]);
 
         // No Blade login page here — guests belong on the Next.js frontend.

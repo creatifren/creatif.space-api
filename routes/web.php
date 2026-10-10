@@ -1,7 +1,6 @@
 <?php
 
 use App\Http\Controllers\Auth\GoogleAuthController;
-use App\Http\Controllers\Auth\GoogleDriveConnectController;
 use App\Http\Controllers\Auth\PasswordAuthController;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Route;
@@ -23,12 +22,6 @@ Route::middleware('throttle:5,1')->group(function () {
 Route::get('/auth/email/verify/{id}/{hash}', [PasswordAuthController::class, 'verify'])
     ->middleware('throttle:10,1')
     ->name('verification.verify');
-
-// Drive connect (second OAuth pass, scope drive.file) — signed-in users only
-Route::middleware('auth')->group(function () {
-    Route::get('/auth/google/drive/redirect', [GoogleDriveConnectController::class, 'redirect'])->name('auth.google.drive.redirect');
-    Route::get('/auth/google/drive/callback', [GoogleDriveConnectController::class, 'callback'])->name('auth.google.drive.callback');
-});
 
 Route::post('/auth/logout', function () {
     Auth::guard('web')->logout();

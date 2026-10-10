@@ -38,19 +38,6 @@ class FileResource extends JsonResource
                 fn () => 1 + $this->versions_count,
             ),
             'source' => $this->source,
-            /* Which Drive brought it, when one did. whenLoaded: the list
-               eager-loads the relation, a single-file read does not need
-               it, and neither should invent an email. */
-            'source_account' => $this->whenLoaded(
-                'sourceAccount',
-                /* $this->resource, not $this: the resource proxies property
-                   reads through __get, which erases the model type, and the
-                   relation is typed on File itself. */
-                fn () => $this->resource->sourceAccount === null ? null : [
-                    'id' => $this->resource->sourceAccount->ulid,
-                    'email' => $this->resource->sourceAccount->email,
-                ],
-            ),
             'exif' => $this->exif,
             'created_at' => $this->created_at,
 

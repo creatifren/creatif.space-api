@@ -111,14 +111,6 @@ class User extends Authenticatable implements FilamentUser
     }
 
     /**
-     * @return HasMany<DriveAccount, $this>
-     */
-    public function driveAccounts(): HasMany
-    {
-        return $this->hasMany(DriveAccount::class);
-    }
-
-    /**
      * @return HasMany<SocialAccount, $this>
      */
     public function socialAccounts(): HasMany

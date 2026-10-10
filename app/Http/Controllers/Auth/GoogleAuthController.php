@@ -20,9 +20,7 @@ class GoogleAuthController extends Controller
     /**
      * Redirect the user to Google's OAuth consent screen.
      *
-     * Login-only for now: the drive.file scope is requested separately when
-     * the user connects a Drive account (Fase 2), per the onboarding design
-     * ("Later" escape hatch on the Drive step).
+     * Login-only: no Drive scope. Files are uploaded straight to R2.
      */
     public function redirect(Request $request): SymfonyRedirectResponse
     {

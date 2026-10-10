@@ -13,6 +13,7 @@ use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Password;
 use Illuminate\Support\Str;
@@ -33,28 +34,43 @@ class PasswordAuthController extends Controller
     /**
      * Create the account and send the verification link. No session: the
      * link is what signs them in.
+     *
+     * An address that already has an account gets a reset link instead, and
+     * the answer is the same either way — which accounts exist is not this
+     * form's to say. The reset link also gets everyone unstuck: whoever lost
+     * the verify email, a Google-only account, or the real owner of an
+     * address a stranger signed up with all end up holding the password.
      */
     public function register(Request $request): JsonResponse
     {
         $data = $request->validate([
-            'email' => ['required', 'string', 'email', 'max:255', 'unique:users,email'],
-            'password' => ['required', 'string', PasswordRule::min(8)],
+            'email' => ['required', 'string', 'email', 'max:255'],
+            'password' => ['required', 'string', PasswordRule::min(8)->max(72)],
             'ref' => ['nullable', 'string', 'max:30'],
         ]);
+        $email = Str::lower($data['email']);
 
-        $user = User::query()->create([
-            // ponytail: the part before the @ until they rename themselves in
-            // Settings — Google hands us a real name, a form does not.
-            'name' => Str::before($data['email'], '@'),
-            'email' => $data['email'],
-            'password' => $data['password'],
-        ]);
+        if (User::withTrashed()->where('email', $email)->exists()) {
+            Password::sendResetLink(['email' => $email]);
+        } else {
+            // A mail that fails to send takes the account with it, so a
+            // retry starts clean instead of hitting "already registered".
+            DB::transaction(function () use ($data, $email): void {
+                $user = User::query()->create([
+                    // ponytail: the part before the @ until they rename themselves in
+                    // Settings — Google hands us a real name, a form does not.
+                    'name' => Str::before($email, '@'),
+                    'email' => $email,
+                    'password' => $data['password'],
+                ]);
 
-        if (isset($data['ref'])) {
-            ReferralAttribution::attach($user, $data['ref']);
+                if (isset($data['ref'])) {
+                    ReferralAttribution::attach($user, $data['ref']);
+                }
+
+                $user->sendEmailVerificationNotification();
+            });
         }
-
-        $user->sendEmailVerificationNotification();
 
         return response()->json(['message' => 'Check your email to finish signing up.'], 202);
     }
@@ -66,7 +82,7 @@ class PasswordAuthController extends Controller
             'password' => ['required', 'string'],
         ]);
 
-        $user = User::query()->where('email', $data['email'])->first();
+        $user = User::query()->where('email', Str::lower($data['email']))->first();
 
         // A Google-only account has no password and fails here like a typo
         // would — which accounts exist is not this form's to say.
@@ -116,6 +132,12 @@ class PasswordAuthController extends Controller
             return redirect($frontend.'/login?error=suspended');
         }
 
+        // One use only: otherwise the link is a 60-minute login for whoever
+        // the email gets forwarded to.
+        if ($user->hasVerifiedEmail()) {
+            return redirect($frontend.'/login?error=link');
+        }
+
         $user->markEmailAsVerified();
         $this->signIn($request, $user);
 
@@ -141,7 +163,7 @@ class PasswordAuthController extends Controller
         $request->validate([
             'token' => ['required', 'string'],
             'email' => ['required', 'string', 'email'],
-            'password' => ['required', 'string', PasswordRule::min(8)],
+            'password' => ['required', 'string', PasswordRule::min(8)->max(72)],
         ]);
 
         $status = Password::reset(

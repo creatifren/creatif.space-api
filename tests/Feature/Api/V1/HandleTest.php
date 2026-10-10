@@ -115,3 +115,62 @@ describe('claim', function () {
             ->toBe($user->id);
     });
 });
+
+describe('change', function () {
+    it('moves the user to a new name and holds the old one in grace', function () {
+        $user = User::factory()->create();
+        Handle::factory()->for($user)->create(['name' => 'first', 'updated_at' => now()->subDays(8)]);
+
+        $this->actingAs($user)
+            ->patchJson('/api/v1/me/handle', ['name' => 'second'])
+            ->assertOk()
+            ->assertJsonPath('data.name', 'second');
+
+        $old = Handle::query()->where('name', 'first')->first();
+        expect($user->fresh()->handle->name)->toBe('second')
+            ->and($old->user_id)->toBeNull()
+            ->and($old->previous_user_id)->toBe($user->id)
+            ->and(Handle::isAvailable('first'))->toBeFalse();
+    });
+
+    it('refuses a second change inside seven days', function () {
+        $user = User::factory()->create();
+        Handle::factory()->for($user)->create(['name' => 'first', 'updated_at' => now()->subDays(6)]);
+
+        $this->actingAs($user)
+            ->patchJson('/api/v1/me/handle', ['name' => 'second'])
+            ->assertUnprocessable();
+
+        expect($user->fresh()->handle->name)->toBe('first');
+    });
+
+    it('lets the previous owner take back a name still in grace, but nobody else', function () {
+        $user = User::factory()->create();
+        $other = User::factory()->create();
+        Handle::factory()->for($user)->create(['name' => 'second', 'updated_at' => now()->subDays(8)]);
+        Handle::factory()->released(now()->subDays(8))->create(['name' => 'first', 'previous_user_id' => $user->id]);
+        Handle::factory()->for($other)->create(['name' => 'third', 'updated_at' => now()->subDays(8)]);
+
+        $this->actingAs($other)
+            ->patchJson('/api/v1/me/handle', ['name' => 'first'])
+            ->assertUnprocessable();
+
+        $this->actingAs($user)
+            ->patchJson('/api/v1/me/handle', ['name' => 'first'])
+            ->assertOk();
+
+        expect($user->fresh()->handle->name)->toBe('first');
+    });
+
+    it('rejects taken names, the same name, and users without a handle', function () {
+        $user = User::factory()->create();
+        Handle::factory()->for($user)->create(['name' => 'first', 'updated_at' => now()->subDays(8)]);
+        Handle::factory()->create(['name' => 'taken']);
+
+        $this->actingAs($user)->patchJson('/api/v1/me/handle', ['name' => 'taken'])->assertUnprocessable();
+        $this->actingAs($user)->patchJson('/api/v1/me/handle', ['name' => 'first'])->assertUnprocessable();
+        $this->actingAs(User::factory()->create())
+            ->patchJson('/api/v1/me/handle', ['name' => 'fresh'])
+            ->assertUnprocessable();
+    });
+});

@@ -21,6 +21,8 @@ class UserResource extends JsonResource
         return [
             'id' => $this->ulid,
             'handle' => $this->handle?->name,
+            // When Settings may offer a username change again.
+            'handle_changeable_at' => $this->handle?->changeableAt(),
             'name' => $this->name,
             'email' => $this->email,
             'avatar_url' => $this->avatar_url,

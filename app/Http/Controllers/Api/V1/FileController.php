@@ -2,19 +2,20 @@
 
 namespace App\Http\Controllers\Api\V1;
 
-use App\Models\Activity;
 use App\Enums\ActivityAction;
 use App\Http\Controllers\Controller;
 use App\Http\Resources\FileResource;
 use App\Http\Resources\FolderResource;
+use App\Models\Activity;
 use App\Models\File;
 use App\Models\Folder;
+use App\Notifications\StorageAlmostFull;
 use App\Support\AcceptedUploads;
 use App\Support\PlanQuota;
 use App\Support\Workspace;
 use Illuminate\Http\JsonResponse;
-use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
 use Illuminate\Http\Request;
+use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Validation\ValidationException;
 
@@ -37,10 +38,9 @@ class FileController extends Controller
         $validated = $request->validate([
             'search' => ['sometimes', 'nullable', 'string', 'max:255'],
             'type' => ['sometimes', 'nullable', 'string', 'in:image,video,pdf'],
-            // Where a file came from, and — for a Drive import — which
-            // account brought it.
+            // Where a file came from. drive_import stays valid: files copied
+            // in before Drive import was removed still carry it.
             'source' => ['sometimes', 'nullable', 'string', 'in:upload,drive_import,request'],
-            'source_account_id' => ['sometimes', 'nullable', 'string', 'max:26'],
             // "Show me only the files I have more than one copy of."
             'duplicates' => ['sometimes', 'boolean'],
             'sort' => ['sometimes', 'nullable', 'string', 'in:recent,name,size'],
@@ -64,7 +64,7 @@ class FileController extends Controller
             // spaceItems.space feeds the "in a Space" chip and the filter that
             // asks about it. Eager-loaded, so it is two extra queries for the
             // whole page rather than two per row.
-            ->with(['spaceItems.space', 'sourceAccount:id,ulid,email'])
+            ->with('spaceItems.space')
             // Counted, not loaded: the row only needs the number.
             ->withCount('versions');
 
@@ -93,17 +93,6 @@ class FileController extends Controller
 
         if (($validated['source'] ?? null) !== null) {
             $query->where('source', $validated['source']);
-        }
-
-        if (($validated['source_account_id'] ?? null) !== null) {
-            /* Resolved against this user, so an id belonging to somebody
-               else is a 404 rather than an empty list that looks like an
-               account with no files. */
-            $account = $user->driveAccounts()
-                ->where('ulid', $validated['source_account_id'])
-                ->firstOrFail();
-
-            $query->where('source_account_id', $account->id);
         }
 
         if ($validated['duplicates'] ?? false) {
@@ -297,7 +286,7 @@ class FileController extends Controller
             $file->ulid,
         );
 
-        \App\Notifications\StorageAlmostFull::checkAndSend($user);
+        StorageAlmostFull::checkAndSend($user);
 
         return new FileResource($file->refresh());
     }

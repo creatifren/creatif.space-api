@@ -45,11 +45,42 @@ it('registers without signing in and sends the verification link', function () {
     $this->assertGuest();
 });
 
-it('refuses an address that already has an account', function () {
-    passwordUser(['email' => 'taken@example.test']);
+it('answers a taken address the same, and mails its owner a reset link instead', function () {
+    $user = passwordUser(['email' => 'taken@example.test']);
 
-    $this->postJson('/auth/register', ['email' => 'taken@example.test', 'password' => 'correct-horse'])
-        ->assertStatus(422)->assertJsonValidationErrors('email');
+    $fresh = $this->postJson('/auth/register', ['email' => 'new@example.test', 'password' => 'correct-horse'])
+        ->assertStatus(202)->json();
+    $taken = $this->postJson('/auth/register', ['email' => 'Taken@example.test', 'password' => 'other-horse'])
+        ->assertStatus(202)->json();
+
+    expect($taken)->toBe($fresh)
+        ->and(Hash::check('correct-horse', $user->fresh()->password))->toBeTrue()
+        ->and(User::query()->where('email', 'taken@example.test')->count())->toBe(1);
+    Notification::assertSentTo($user, ResetPassword::class);
+    Notification::assertNotSentTo($user, VerifyEmail::class);
+    $this->assertGuest();
+});
+
+it('stores the address lowercased and signs in whatever the case', function () {
+    $this->postJson('/auth/register', ['email' => 'Rani@Example.test', 'password' => 'correct-horse'])
+        ->assertStatus(202);
+
+    $user = User::query()->firstWhere('email', 'rani@example.test');
+    expect($user)->not->toBeNull();
+
+    $user->markEmailAsVerified();
+    $this->postJson('/auth/login', ['email' => 'RANI@example.test', 'password' => 'correct-horse'])
+        ->assertNoContent();
+    $this->assertAuthenticatedAs($user);
+});
+
+it('does not let the handle check use up the signup throttle', function () {
+    foreach (range(1, 6) as $i) {
+        $this->getJson('/api/v1/handles/availability?name=rani'.$i)->assertOk();
+    }
+
+    $this->postJson('/auth/register', ['email' => 'rani@example.test', 'password' => 'correct-horse'])
+        ->assertStatus(202);
 });
 
 it('signs in a verified account', function () {
@@ -102,6 +133,17 @@ it('verifies and signs in from the email link', function () {
 
     expect($user->fresh()->email_verified_at)->not->toBeNull();
     $this->assertAuthenticatedAs($user);
+});
+
+it('signs in from the link only once', function () {
+    $user = passwordUser(['email_verified_at' => null]);
+    $url = verifyUrl($user);
+
+    $this->get($url)->assertRedirect(config('app.frontend_url').'/onboarding');
+    auth()->guard('web')->logout();
+
+    $this->get($url)->assertRedirect(config('app.frontend_url').'/login?error=link');
+    $this->assertGuest();
 });
 
 it('rejects a link for a different address or without a signature', function () {

@@ -5,7 +5,6 @@ use App\Http\Controllers\Api\V1\AnalyticsController;
 use App\Http\Controllers\Api\V1\CaptionAssistController;
 use App\Http\Controllers\Api\V1\CreditsController;
 use App\Http\Controllers\Api\V1\DeliveryLogController;
-use App\Http\Controllers\Api\V1\DriveAccountController;
 use App\Http\Controllers\Api\V1\EarningController;
 use App\Http\Controllers\Api\V1\FileController;
 use App\Http\Controllers\Api\V1\FileRequestController;
@@ -129,20 +128,13 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::post('/handles', [HandleController::class, 'claim'])
         ->middleware('throttle:10,1')
         ->name('api.v1.handles.claim');
+    Route::patch('/me/handle', [HandleController::class, 'change'])
+        ->middleware('throttle:10,1')
+        ->name('api.v1.me.handle.change');
     Route::get('/me/profile', [MyProfileController::class, 'show'])->name('api.v1.me.profile.show');
     Route::get('/me/social-settings', [SocialSettingsController::class, 'show'])->name('api.v1.me.social-settings.show');
     Route::patch('/me/social-settings', [SocialSettingsController::class, 'update'])->name('api.v1.me.social-settings.update');
     Route::patch('/me/profile', [MyProfileController::class, 'update'])->name('api.v1.me.profile.update');
-
-    // Crefile — Drive import accounts (one-way copy into R2, no live sync)
-    Route::get('/drive-accounts', [DriveAccountController::class, 'index'])->name('api.v1.drive-accounts.index');
-    Route::post('/drive-accounts/{driveAccount}/pick', [DriveAccountController::class, 'pick'])
-        ->middleware('throttle:30,1')
-        ->name('api.v1.drive-accounts.pick');
-    Route::get('/drive-accounts/{driveAccount}/picker-token', [DriveAccountController::class, 'pickerToken'])
-        ->middleware('throttle:20,1')
-        ->name('api.v1.drive-accounts.picker-token');
-    Route::delete('/drive-accounts/{driveAccount}', [DriveAccountController::class, 'destroy'])->name('api.v1.drive-accounts.destroy');
 
     // Social — accounts connected through Post for Me
     // Credits — one balance for sends and storage
