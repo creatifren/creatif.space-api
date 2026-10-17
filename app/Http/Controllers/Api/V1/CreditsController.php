@@ -15,7 +15,7 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
 /**
- * /dashboard/credits — the balance, what is already committed, storage
+ * /credits — the balance, what is already committed, storage
  * with its rented blocks, and every movement. Owner-only for anything that
  * spends; members can read.
  */

@@ -47,6 +47,31 @@ describe('social accounts', function () {
             && $request['platform_data']['instagram']['connection_type'] === 'instagram');
     });
 
+    it('sends bluesky its handle and app password, and requires both', function () {
+        Http::fake([
+            'api.postforme.test/*' => Http::response(['url' => 'https://auth.postforme.test/done']),
+        ]);
+        $user = User::factory()->create();
+
+        $this->actingAs($user)
+            ->postJson('/api/v1/social-accounts/auth-url', ['platform' => 'bluesky'])
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors(['handle', 'app_password']);
+
+        $this->actingAs($user)
+            ->postJson('/api/v1/social-accounts/auth-url', [
+                'platform' => 'bluesky',
+                'handle' => '@rani.bsky.social',
+                'app_password' => 'abcd-efgh-ijkl-mnop',
+            ])
+            ->assertOk();
+
+        Http::assertSent(fn ($request) => $request['platform_data']['bluesky'] === [
+            'handle' => 'rani.bsky.social',
+            'app_password' => 'abcd-efgh-ijkl-mnop',
+        ]);
+    });
+
     it('rejects an unknown platform', function () {
         $this->actingAs(User::factory()->create())
             ->postJson('/api/v1/social-accounts/auth-url', ['platform' => 'myspace'])

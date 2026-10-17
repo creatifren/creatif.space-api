@@ -361,7 +361,7 @@ final class Analytics
                 'ok' => $handle !== null,
                 'detail' => $handle === null
                     ? 'No handle claimed yet'
-                    : config('app.frontend_url').'/'.$handle->name,
+                    : config('app.public_url').'/'.$handle->name,
             ],
             [
                 'label' => 'Your profile says what you do',

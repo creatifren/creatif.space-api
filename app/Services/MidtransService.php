@@ -57,7 +57,7 @@ class MidtransService
             itemName: number_format($purchase->credits, 0, ',', '.').' Credits',
             buyerName: $user->name,
             buyerEmail: $user->email,
-            finishUrl: config('app.frontend_url').'/dashboard/credits',
+            finishUrl: config('app.frontend_url').'/credits',
         );
     }
 

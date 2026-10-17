@@ -56,7 +56,9 @@ describe('public space', function () {
             ->and($blocks[1]['photo']['src'])->toBeString()->toContain($shown->path);
 
         expect($response->json('data.owner.handle'))->toBe('rani')
-            ->and($response->json('data.layout'))->toBe('grid');
+            ->and($response->json('data.layout'))->toBe('grid')
+            ->and($response->json('data.corners'))->toBe('rounded')
+            ->and($blocks[1]['photo'])->toHaveKeys(['width', 'height']);
     });
 
     it('carries the owner’s city and when the Space last changed', function () {

@@ -45,9 +45,18 @@ class SocialAccountController extends Controller
     {
         $validated = $request->validate([
             'platform' => ['required', Rule::enum(SocialPlatform::class)],
+            // Bluesky has no OAuth page: it signs in with a handle and an app password.
+            'handle' => ['required_if:platform,bluesky', 'nullable', 'string', 'max:253'],
+            'app_password' => ['required_if:platform,bluesky', 'nullable', 'string', 'max:64'],
         ]);
 
-        $url = $postForMe->authUrl($validated['platform'], $request->user()->ulid);
+        $url = $postForMe->authUrl(
+            $validated['platform'],
+            $request->user()->ulid,
+            $validated['platform'] === 'bluesky'
+                ? ['handle' => ltrim($validated['handle'], '@'), 'app_password' => $validated['app_password']]
+                : [],
+        );
 
         return response()->json(['data' => ['url' => $url]]);
     }

@@ -23,9 +23,11 @@ class PostForMeService
      * platform and grant the account. `external_id` tags the resulting
      * account with our user, which is what sync and webhooks key on.
      *
+     * @param  array{handle?: string, app_password?: string}  $bluesky
+     *
      * @throws ConnectionException
      */
-    public function authUrl(string $platform, string $externalId): string
+    public function authUrl(string $platform, string $externalId, array $bluesky = []): string
     {
         // Where the browser lands after granting is the PROJECT's redirect
         // URL, set once in the Post for Me dashboard — point it at
@@ -45,6 +47,9 @@ class PostForMeService
             $payload['platform_data'] = ['instagram' => ['connection_type' => 'instagram']];
         } elseif ($platform === 'linkedin') {
             $payload['platform_data'] = ['linkedin' => ['connection_type' => 'organization']];
+        } elseif ($platform === 'bluesky') {
+            // Required by the provider: without them the request is rejected.
+            $payload['platform_data'] = ['bluesky' => $bluesky];
         }
 
         $response = $this->client()->post('/social-accounts/auth-url', $payload);
@@ -135,6 +140,26 @@ class PostForMeService
     public function updatePost(string $postId, array $payload): void
     {
         $this->client()->put("/social-posts/{$postId}", $payload)->throw();
+    }
+
+    /**
+     * Per-destination results for these posts — what the result webhook
+     * would have said, asked for when it did not arrive.
+     *
+     * @param  list<string>  $postIds
+     * @return array<int, array<string, mixed>>
+     *
+     * @throws ConnectionException
+     */
+    public function resultsFor(array $postIds): array
+    {
+        // Repeated `post_id=` params, the way the provider reads an OR list.
+        $query = implode('&', array_map(fn ($id) => 'post_id='.urlencode($id), $postIds));
+        $response = $this->client()->get('/social-post-results?limit=100&'.$query);
+
+        $response->throw();
+
+        return (array) $response->json('data', []);
     }
 
     /**

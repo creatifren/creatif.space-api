@@ -24,7 +24,7 @@ return new class extends Migration
             $table->ulid('ulid')->unique();
             $table->foreignId('user_id')->constrained()->cascadeOnDelete();
             $table->unsignedInteger('credits');
-            // Rupiah, tax included — Rp100 a Credit is what the user pays.
+            // Rupiah, tax included — Rp1 a Credit (Credits::RUPIAH) is what the user pays.
             $table->unsignedBigInteger('amount');
             $table->string('status', 20)->default('pending');
             // unique: the idempotency handle, same as invoices.

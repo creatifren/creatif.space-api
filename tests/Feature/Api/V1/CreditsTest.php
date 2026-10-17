@@ -56,7 +56,7 @@ it('starts a top-up only for an offered pack', function () {
         ->assertCreated()
         ->assertJsonPath('data.snap_token', 'snap-tok');
 
-    expect(CreditPurchase::query()->first()->amount)->toBe(50_000);
+    expect(CreditPurchase::query()->first()->amount)->toBe(500);
 });
 
 it('rents a block from Credits and raises the storage ceiling', function () {

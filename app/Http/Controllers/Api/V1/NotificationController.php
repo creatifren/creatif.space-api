@@ -2,12 +2,10 @@
 
 namespace App\Http\Controllers\Api\V1;
 
-use App\Enums\FileRequestStatus;
 use App\Enums\NotificationType;
 use App\Http\Controllers\Controller;
 use App\Models\Activity;
 use App\Models\File;
-use App\Models\FileRequest;
 use App\Models\Transfer;
 use App\Models\User;
 use App\Support\Workspace;
@@ -15,7 +13,7 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
 /**
- * The bell, the Needs Attention strip, and the five switches behind them.
+ * The bell, the Needs Attention strip, and the switches behind them.
  */
 class NotificationController extends Controller
 {
@@ -182,29 +180,6 @@ class NotificationController extends Controller
         $user = Workspace::owner($request->user());
         $rows = [];
 
-        /* Links about to close with nothing collected yet. An empty request
-           expiring is a thing somebody meant to chase; one that already
-           has files is finished, whatever the date says. */
-        $expiring = FileRequest::query()
-            ->where('user_id', $user->id)
-            ->where('status', FileRequestStatus::Open)
-            ->whereBetween('expires_at', [now(), now()->addDays(self::SOON_DAYS)])
-            ->whereDoesntHave('submissions')
-            ->orderBy('expires_at')
-            ->limit(10)
-            ->get();
-
-        foreach ($expiring as $fileRequest) {
-            $rows[] = [
-                'id' => 'fr'.$fileRequest->ulid,
-                'kind' => 'request.expiring',
-                'title' => "Nothing has arrived for “{$fileRequest->title}”",
-                'detail' => 'The link closes '.$fileRequest->expires_at->diffForHumans(),
-                'subject' => ['type' => 'file_request', 'id' => $fileRequest->ulid],
-                'when' => $fileRequest->expires_at,
-            ];
-        }
-
         /* A transfer expiring that nobody ever opened. `opens` is counted on
            the page itself, so this needs no aggregation job to be true. */
         $unopened = Transfer::query()
@@ -228,7 +203,7 @@ class NotificationController extends Controller
 
         /* The Trash empties itself. One row for the lot rather than one per
            file: the action is the same for all of them, and thirty rows
-           saying "restore me" would bury the other three kinds. */
+           saying "restore me" would bury the other kinds. */
         $purging = File::onlyTrashed()
             ->where('user_id', $user->id)
             ->whereBetween('purge_at', [now(), now()->addDays(self::SOON_DAYS)])
@@ -257,7 +232,7 @@ class NotificationController extends Controller
     }
 
     /**
-     * The five switches. Types with no stored row report as on, which is
+     * The switches. Types with no stored row report as on, which is
      * what the absence of a row means.
      */
     public function preferences(Request $request): JsonResponse
@@ -283,7 +258,7 @@ class NotificationController extends Controller
      */
     public function updatePreferences(Request $request): JsonResponse
     {
-        // Only the switchable five: a billing reminder is not opt-out.
+        // Only the switchable types: a billing reminder is not opt-out.
         $types = array_column(NotificationType::switchable(), 'value');
 
         $validated = $request->validate([

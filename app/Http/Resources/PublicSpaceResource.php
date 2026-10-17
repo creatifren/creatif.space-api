@@ -70,6 +70,8 @@ class PublicSpaceResource extends JsonResource
             'appearance' => $this->user->profile?->appearance ?? (object) [],
             'layout' => $this->view_mode,
             'fit' => $design['fit'] ?? 'cover',
+            // The owner's one corner choice for every frame on the page.
+            'corners' => ($design['corners'] ?? 'rounded') === 'square' ? 'square' : 'rounded',
             'labels' => $design['labels'] ?? ['name' => true, 'tags' => true],
             'allow_download' => (bool) ($this->settings['allow_download'] ?? true),
             // Same rule as the profile: paid plans drop the "Made with" line.
@@ -125,6 +127,9 @@ class PublicSpaceResource extends JsonResource
             'size' => $meta['size'] ?? 'Medium',
             'size_bytes' => $file->size_bytes,
             'mime_type' => $file->mime_type,
+            // The frame follows the photo's own ratio, so the page needs it.
+            'width' => $file->width,
+            'height' => $file->height,
             'is_video' => str_starts_with($file->mime_type, 'video/'),
             'plan_type' => $meta['plan_type'] ?? 'Feed',
             'caption' => $item->caption,

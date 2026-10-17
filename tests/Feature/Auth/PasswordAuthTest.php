@@ -1,6 +1,7 @@
 <?php
 
 use App\Enums\UserStatus;
+use App\Models\Handle;
 use App\Models\User;
 use Illuminate\Auth\Notifications\ResetPassword;
 use Illuminate\Auth\Notifications\VerifyEmail;
@@ -129,17 +130,30 @@ it('verifies and signs in from the email link', function () {
     $user = passwordUser(['email_verified_at' => null]);
 
     $this->get(verifyUrl($user))
-        ->assertRedirect(config('app.frontend_url').'/onboarding');
+        ->assertRedirect(config('app.frontend_url').'/home');
 
     expect($user->fresh()->email_verified_at)->not->toBeNull();
     $this->assertAuthenticatedAs($user);
+});
+
+it('gives the account an address from its email, skipping taken and reserved ones', function () {
+    Handle::factory()->reserved()->create(['name' => 'admin']);
+    Handle::factory()->create(['name' => 'admin2']);
+    $user = passwordUser(['email' => 'Ad.min@example.test', 'email_verified_at' => null]);
+
+    $this->get(verifyUrl($user));
+
+    $user->refresh();
+    expect($user->handle->name)->toBe('admin3')
+        ->and($user->onboarded_at)->not->toBeNull()
+        ->and($user->profile)->not->toBeNull();
 });
 
 it('signs in from the link only once', function () {
     $user = passwordUser(['email_verified_at' => null]);
     $url = verifyUrl($user);
 
-    $this->get($url)->assertRedirect(config('app.frontend_url').'/onboarding');
+    $this->get($url)->assertRedirect(config('app.frontend_url').'/home');
     auth()->guard('web')->logout();
 
     $this->get($url)->assertRedirect(config('app.frontend_url').'/login?error=link');

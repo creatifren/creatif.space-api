@@ -74,6 +74,6 @@ class SocialApprovalLink extends Model
 
     public function url(): string
     {
-        return config('app.frontend_url').'/a/'.$this->token;
+        return config('app.public_url').'/a/'.$this->token;
     }
 }

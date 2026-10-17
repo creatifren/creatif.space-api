@@ -7,7 +7,6 @@ use App\Http\Controllers\Api\V1\CreditsController;
 use App\Http\Controllers\Api\V1\DeliveryLogController;
 use App\Http\Controllers\Api\V1\EarningController;
 use App\Http\Controllers\Api\V1\FileController;
-use App\Http\Controllers\Api\V1\FileRequestController;
 use App\Http\Controllers\Api\V1\FileVersionController;
 use App\Http\Controllers\Api\V1\FolderController;
 use App\Http\Controllers\Api\V1\HandleController;
@@ -16,8 +15,8 @@ use App\Http\Controllers\Api\V1\MidtransWebhookController;
 use App\Http\Controllers\Api\V1\MyProfileController;
 use App\Http\Controllers\Api\V1\NotificationController;
 use App\Http\Controllers\Api\V1\PostForMeWebhookController;
+use App\Http\Controllers\Api\V1\ProfileFontController;
 use App\Http\Controllers\Api\V1\PublicApprovalController;
-use App\Http\Controllers\Api\V1\PublicFileRequestController;
 use App\Http\Controllers\Api\V1\PublicProfileController;
 use App\Http\Controllers\Api\V1\PublicSpaceController;
 use App\Http\Controllers\Api\V1\PublicTransferController;
@@ -91,10 +90,8 @@ Route::post('/referrals/{code}/click', [AffiliateController::class, 'click'])
     ->middleware('throttle:30,1')
     ->name('api.v1.referrals.click');
 
-// File Request — the link a stranger opens. No account by design, so the
-// throttle and the size caps are the whole defence.
-/* The transfer page. No account by design, same as /r — a link is the
-   whole product. */
+/* The transfer page. No account by design — a link is the whole product,
+   so the throttle and the size caps are the whole defence. */
 Route::get('/t/{slug}', [PublicTransferController::class, 'show'])
     ->name('api.v1.public.transfers.show');
 Route::post('/t/{slug}/unlock', [PublicTransferController::class, 'unlock'])
@@ -103,18 +100,6 @@ Route::post('/t/{slug}/unlock', [PublicTransferController::class, 'unlock'])
 Route::get('/t/{slug}/files/{file}/download', [PublicTransferController::class, 'download'])
     ->middleware('throttle:60,1')
     ->name('api.v1.public.transfers.download');
-Route::get('/r/{slug}', [PublicFileRequestController::class, 'show'])
-    ->name('api.v1.file-requests.public');
-Route::post('/r/{slug}/unlock', [PublicFileRequestController::class, 'unlock'])
-    ->middleware('throttle:10,1')
-    ->name('api.v1.file-requests.unlock');
-/* Optional auth: anyone may submit, and whoever is signed in gets the
-   submission recorded against their account so it shows up under "Asked of
-   you". The guard authenticates when a session is present and shrugs when
-   it is not — it never gates. */
-Route::post('/r/{slug}/submissions', [PublicFileRequestController::class, 'store'])
-    ->middleware(['throttle:5,1', 'auth.optional'])
-    ->name('api.v1.file-requests.submit');
 
 // The analytics beacon. Deliberately unguarded: it is called from the
 // visitor's browser, and most visitors are strangers.
@@ -135,6 +120,9 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('/me/social-settings', [SocialSettingsController::class, 'show'])->name('api.v1.me.social-settings.show');
     Route::patch('/me/social-settings', [SocialSettingsController::class, 'update'])->name('api.v1.me.social-settings.update');
     Route::patch('/me/profile', [MyProfileController::class, 'update'])->name('api.v1.me.profile.update');
+    Route::post('/me/profile/font', [ProfileFontController::class, 'store'])
+        ->middleware('throttle:10,1')
+        ->name('api.v1.me.profile.font');
 
     // Social — accounts connected through Post for Me
     // Credits — one balance for sends and storage
@@ -255,7 +243,6 @@ Route::middleware('auth:sanctum')->group(function () {
 
     Route::delete('/files/{file}', [FileController::class, 'destroy'])->name('api.v1.files.destroy');
 
-    // File Request — the owner's side
     // Transfers — files going out, as a link.
     Route::get('/transfers', [TransferController::class, 'index'])->name('api.v1.transfers.index');
     Route::get('/transfers/received', [TransferController::class, 'received'])->name('api.v1.transfers.received');
@@ -264,14 +251,6 @@ Route::middleware('auth:sanctum')->group(function () {
         ->name('api.v1.transfers.store');
     Route::patch('/transfers/{transfer}', [TransferController::class, 'update'])->name('api.v1.transfers.update');
     Route::delete('/transfers/{transfer}', [TransferController::class, 'destroy'])->name('api.v1.transfers.destroy');
-
-    Route::get('/file-requests/asked', [FileRequestController::class, 'asked'])->name('api.v1.file-requests.asked');
-    Route::get('/file-requests', [FileRequestController::class, 'index'])->name('api.v1.file-requests.index');
-    Route::post('/file-requests', [FileRequestController::class, 'store'])
-        ->middleware('throttle:20,1')
-        ->name('api.v1.file-requests.store');
-    Route::patch('/file-requests/{fileRequest}', [FileRequestController::class, 'update'])->name('api.v1.file-requests.update');
-    Route::delete('/file-requests/{fileRequest}', [FileRequestController::class, 'destroy'])->name('api.v1.file-requests.destroy');
 
     // Spaces
     Route::get('/spaces', [SpaceController::class, 'index'])->name('api.v1.spaces.index');

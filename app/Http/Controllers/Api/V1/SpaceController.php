@@ -124,7 +124,6 @@ class SpaceController extends Controller
             'slug' => ['sometimes', 'string', 'min:1', 'max:80', 'regex:/^[a-z0-9-]+$/'],
             'visibility' => ['sometimes', 'string', 'in:private,public'],
             'view_mode' => ['sometimes', 'string', 'in:editorial,grid,board'],
-            'expires_at' => ['sometimes', 'nullable', 'date'],
             'password' => ['sometimes', 'nullable', 'string', 'min:4', 'max:255'],
             'design' => ['sometimes', 'array'],
             'settings' => ['sometimes', 'array'],
@@ -155,7 +154,7 @@ class SpaceController extends Controller
         DB::transaction(function () use ($space, $validated, $request) {
             $space->fill(array_intersect_key($validated, array_flip([
                 'title', 'description', 'slug', 'visibility', 'view_mode',
-                'expires_at', 'design', 'settings', 'seo',
+                'design', 'settings', 'seo',
             ])));
 
             if (array_key_exists('password', $validated)) {

@@ -3,13 +3,12 @@
 namespace App\Enums;
 
 /**
- * The four switches on Settings → Notifications, plus the always-on set.
+ * The three switches on Settings → Notifications, plus the always-on set.
  * Every switchable type has a notification that actually raises it.
  */
 enum NotificationType: string
 {
     case SpaceOpened = 'space.opened';
-    case FilesReceived = 'files.received';
     case SocialPostFailed = 'social.post.failed';
     case ProductNews = 'product.news';
 
@@ -33,7 +32,6 @@ enum NotificationType: string
     {
         return [
             self::SpaceOpened,
-            self::FilesReceived,
             self::SocialPostFailed,
             self::ProductNews,
         ];

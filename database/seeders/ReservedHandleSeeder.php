@@ -24,6 +24,14 @@ class ReservedHandleSeeder extends Seeder
             'settings', 'referral', 'foundations', 'components', 'public-profile',
             'space-viewer', 'studio', 'features', 'solutions', 'changelog',
             'community', 'guides', 'topik',
+            // Dashboard at the app root since Oct 2026 (/post, /credits…), and
+            // the marketing site's routes: creatif.space proxies every path it
+            // does not own to the app, so a handle here would be shadowed.
+            'post', 'activity', 'affiliates', 'credits', 'usage', 'signup',
+            'forgot-password', 'reset-password', 'product', 'approval',
+            'socials', 'compare', 'tools', 'acceptable-use', 'for-agencies',
+            'for-brands', 'for-content-creators', 'for-freelancers',
+            'for-in-house-marketers', 'for-social-media-managers', 'fonts',
             // Single-letter and short prefixes that carry public links. A
             // creator holding one of these handles would collide with every
             // link under it, and the collision is silent: the link resolves,

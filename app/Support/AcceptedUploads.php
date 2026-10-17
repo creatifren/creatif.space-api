@@ -3,8 +3,10 @@
 namespace App\Support;
 
 /**
- * What a file may be — the one allowlist shared by direct upload, Drive
- * import, and File Request submissions.
+ * What a file may be — the one allowlist shared by direct upload and
+ * replacing a file's version. Only what can end up in a post or a Space:
+ * JPG, PNG, GIF, SVG, PDF, MP4, MOV. Mirrored by ACCEPTED_UPLOADS in the
+ * frontend's api.ts.
  */
 class AcceptedUploads
 {
@@ -12,16 +14,9 @@ class AcceptedUploads
      * @var list<string>
      */
     public const MIMES = [
-        'image/jpeg', 'image/png', 'image/gif', 'image/webp', 'image/heic', 'image/heif',
-        'image/tiff', 'image/avif',
+        'image/jpeg', 'image/png', 'image/gif', 'image/svg+xml',
         'video/mp4', 'video/quicktime',
-        'audio/mpeg', 'audio/wav',
-        'application/pdf', 'application/zip', 'application/x-zip-compressed',
-        'application/msword', 'application/vnd.ms-excel',
-        'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-        'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-        'application/vnd.openxmlformats-officedocument.presentationml.presentation',
-        'text/plain', 'text/csv',
+        'application/pdf',
     ];
 
     /**

@@ -1,6 +1,5 @@
 <?php
 
-use App\Http\Middleware\OptionalAuth;
 use App\Http\Middleware\ThrottlePerRoute;
 use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
@@ -18,7 +17,6 @@ return Application::configure(basePath: dirname(__DIR__))
         $middleware->statefulApi();
 
         $middleware->alias([
-            'auth.optional' => OptionalAuth::class,
             'throttle' => ThrottlePerRoute::class,
         ]);
 

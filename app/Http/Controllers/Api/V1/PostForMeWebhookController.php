@@ -5,17 +5,15 @@ namespace App\Http\Controllers\Api\V1;
 use App\Enums\SocialAccountStatus;
 use App\Enums\SocialPlatform;
 use App\Enums\SocialPostStatus;
-use App\Enums\SocialPostTargetStatus;
 use App\Http\Controllers\Controller;
 use App\Models\SocialAccount;
 use App\Models\SocialPost;
 use App\Models\User;
 use App\Services\PostForMeService;
-use App\Support\Credits;
+use App\Support\SocialPostRelay;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Str;
 
 /**
  * Post for Me calls this on account and post events. Public route: the
@@ -127,42 +125,7 @@ class PostForMeWebhookController extends Controller
             return;
         }
 
-        $target = $post->targets()->where('social_account_id', $account->id)->first();
-
-        if ($target === null) {
-            return;
-        }
-
-        DB::transaction(function () use ($post, $target, $data): void {
-            $success = (bool) ($data['success'] ?? false);
-
-            // The vendor refused it: nothing left our hands, so its 3 Credits
-            // come back — once, on the first failed result for this target.
-            if (! $success && $target->status === SocialPostTargetStatus::Pending) {
-                Credits::returnSend($post, 1, 'Not charged · '.Str::limit(
-                    is_string($data['error'] ?? null) ? $data['error'] : 'the platform refused it', 120,
-                ));
-            }
-
-            $target->update($success
-                ? [
-                    'status' => SocialPostTargetStatus::Published,
-                    'fail_reason' => null,
-                    'platform_url' => $data['platform_data']['url']
-                        ?? $data['details']['url']
-                        ?? null,
-                    'provider_result_id' => $data['id'] ?? null,
-                ]
-                : [
-                    'status' => SocialPostTargetStatus::Failed,
-                    'fail_reason' => is_string($data['error'] ?? null)
-                        ? $data['error']
-                        : json_encode($data['error'] ?? 'Unknown error'),
-                    'provider_result_id' => $data['id'] ?? null,
-                ]);
-
-            $post->recomputeFromTargets();
-        });
+        SocialPostRelay::applyResult($post, $account, $data);
     }
 
     /**

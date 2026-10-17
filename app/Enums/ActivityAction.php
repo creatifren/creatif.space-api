@@ -25,7 +25,6 @@ enum ActivityAction: string
     case Purge = 'purge';
     case Transfer = 'transfer';
     case Download = 'download';
-    case RequestCreate = 'request.create';
     case SpacePublish = 'space.publish';
     case SpaceArchive = 'space.archive';
     case PostSchedule = 'post.schedule';
@@ -38,7 +37,7 @@ enum ActivityAction: string
         return match ($this) {
             self::Upload, self::Version, self::FolderCreate, self::FolderDelete,
             self::Move, self::Trash, self::Restore, self::Purge, self::Transfer,
-            self::Download, self::RequestCreate => 'Files',
+            self::Download => 'Files',
             self::SpacePublish, self::SpaceArchive => 'Spaces',
             self::PostSchedule, self::PostPublish, self::PostReschedule => 'Posts',
         };

@@ -143,14 +143,6 @@ class User extends Authenticatable implements FilamentUser
     }
 
     /**
-     * @return HasMany<FileRequest, $this>
-     */
-    public function fileRequests(): HasMany
-    {
-        return $this->hasMany(FileRequest::class);
-    }
-
-    /**
      * @return HasMany<Transfer, $this>
      */
     public function transfers(): HasMany

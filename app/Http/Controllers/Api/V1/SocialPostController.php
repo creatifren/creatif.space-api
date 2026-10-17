@@ -30,11 +30,15 @@ class SocialPostController extends Controller
      * The user's posts — Scheduled and Published tabs are one endpoint with
      * a status filter.
      */
-    public function index(Request $request): AnonymousResourceCollection
+    public function index(Request $request, SocialPostRelay $relay): AnonymousResourceCollection
     {
         $validated = $request->validate([
             'status' => ['sometimes', Rule::enum(SocialPostStatus::class)],
         ]);
+
+        // A post whose slot passed still reading Scheduled means a result
+        // webhook went missing; ask before answering.
+        $relay->reconcile($request->user());
 
         return SocialPostResource::collection(
             $request->user()->socialPosts()
@@ -72,6 +76,8 @@ class SocialPostController extends Controller
             'captions.*' => ['string', 'max:63206'],
             'media' => ['sometimes', 'array', 'max:10'],
             'media.*.url' => ['required', 'url:https'],
+            // A video's cover. Post for Me hands it to the platforms that take one.
+            'media.*.thumbnail_url' => ['sometimes', 'nullable', 'url:https'],
             'scheduled_at' => ['sometimes', 'nullable', 'date', 'after:now'],
             // Off when absent. `awaiting` waits for the editor's own yes,
             // `client` for a client on an approval link; either holds the

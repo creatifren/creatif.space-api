@@ -1,11 +1,16 @@
 <?php
 
+use App\Http\Controllers\Api\V1\ProfileFontController;
 use App\Http\Controllers\Auth\GoogleAuthController;
 use App\Http\Controllers\Auth\PasswordAuthController;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Route;
 
 Route::get('/', fn () => redirect(config('app.frontend_url')));
+
+// A profile's uploaded display font. Here, not under /api, so it can carry
+// its own open CORS header — see ProfileFontController::show.
+Route::get('/fonts/{handle}', [ProfileFontController::class, 'show'])->name('profiles.font');
 
 // Google OAuth (session-based, consumed by the Next.js SPA via Sanctum cookies)
 Route::get('/auth/google/redirect', [GoogleAuthController::class, 'redirect'])->name('auth.google.redirect');

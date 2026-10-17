@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Auth;
 use App\Enums\UserStatus;
 use App\Http\Controllers\Controller;
 use App\Models\User;
+use App\Support\AutoHandle;
 use App\Support\ReferralAttribution;
 use App\Support\SafePath;
 use App\Support\TeamInvite;
@@ -95,24 +96,17 @@ class GoogleAuthController extends Controller
         // Somebody may have invited this address to their team, whether the
         // account is new or a year old — this login is when it takes.
         TeamInvite::claim($user);
+        // No onboarding screen: the address comes from the email.
+        AutoHandle::give($user);
 
         Auth::login($user, remember: true);
         request()->session()->regenerate();
 
-        /* Where to land. An account that has not been through onboarding goes
-           there whatever it asked for — `next` is a convenience, never a way
-           to skip picking an address. Otherwise honour the page the guard
-           interrupted, checked a second time because a session value is only
-           as trustworthy as what was put in it. */
-        $next = request()->session()->pull('next_path');
-        $wanted = SafePath::of($next);
+        /* Where to land: the page the guard interrupted, checked a second
+           time because a session value is only as trustworthy as what was
+           put in it — otherwise Home. */
+        $wanted = SafePath::of(request()->session()->pull('next_path'));
 
-        $destination = match (true) {
-            $user->onboarded_at === null => '/onboarding',
-            $wanted !== '/' => $wanted,
-            default => '/home',
-        };
-
-        return redirect(config('app.frontend_url').$destination);
+        return redirect(config('app.frontend_url').($wanted !== '/' ? $wanted : '/home'));
     }
 }

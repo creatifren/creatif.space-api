@@ -2,11 +2,8 @@
 
 use App\Enums\NotificationType;
 use App\Models\File;
-use App\Models\FileRequest;
-use App\Models\FileRequestSubmission;
 use App\Models\NotificationPreference;
 use App\Models\Space;
-use App\Models\SpaceItem;
 use App\Models\Transfer;
 use App\Models\User;
 use App\Notifications\SpaceOpened;
@@ -16,8 +13,8 @@ describe('preferences', function () {
         $response = $this->actingAs(User::factory()->create())
             ->getJson('/api/v1/me/notification-preferences')
             ->assertOk()
-            // Every switchable type. Fase 6 added "files received" —
-            // money notifications stay deliberately absent.
+            // Every switchable type — money notifications stay
+            // deliberately absent.
             ->assertJsonCount(count(NotificationType::switchable()), 'data');
 
         expect($response->json('data.0.type'))->toBe('space.opened')
@@ -114,28 +111,9 @@ describe('needs you', function () {
             ->assertJsonCount(0, 'data');
     });
 
-    it('names an empty request about to close, but not one that got files', function () {
-        $user = User::factory()->create();
-        FileRequest::factory()->for($user)->create([
-            'title' => 'Model releases',
-            'expires_at' => now()->addDays(2),
-        ]);
-        $answered = FileRequest::factory()->for($user)->create([
-            'expires_at' => now()->addDays(2),
-        ]);
-        FileRequestSubmission::factory()->for($answered)->create();
-
-        $response = $this->actingAs($user)->getJson('/api/v1/me/attention')->assertOk();
-
-        // A link that collected something is finished, whatever the date says.
-        expect($response->json('data'))->toHaveCount(1)
-            ->and($response->json('data.0.kind'))->toBe('request.expiring')
-            ->and($response->json('data.0.title'))->toContain('Model releases');
-    });
-
     it('leaves alone what is not close enough to act on', function () {
         $user = User::factory()->create();
-        FileRequest::factory()->for($user)->create(['expires_at' => now()->addDays(29)]);
+        Transfer::factory()->for($user)->create(['expires_at' => now()->addDays(29)]);
 
         // A month of warning is wallpaper, not attention.
         $this->actingAs($user)
@@ -178,18 +156,19 @@ describe('needs you', function () {
 
     it('puts the nearest deadline first', function () {
         $user = User::factory()->create();
-        Transfer::factory()->for($user)->create(['expires_at' => now()->addDays(5)]);
-        FileRequest::factory()->for($user)->create(['expires_at' => now()->addDay()]);
+        $file = File::factory()->for($user)->create();
+        $file->forceFill(['purge_at' => now()->addDays(5)])->save();
+        $file->delete();
+        Transfer::factory()->for($user)->create(['expires_at' => now()->addDay()]);
 
         $this->actingAs($user)
             ->getJson('/api/v1/me/attention')
-            ->assertJsonPath('data.0.kind', 'request.expiring')
-            ->assertJsonPath('data.1.kind', 'transfer.unopened');
+            ->assertJsonPath('data.0.kind', 'transfer.unopened')
+            ->assertJsonPath('data.1.kind', 'trash.purging');
     });
 
     it('never shows another account’s work', function () {
         $user = User::factory()->create();
-        FileRequest::factory()->create(['expires_at' => now()->addDay()]);
         Transfer::factory()->create(['expires_at' => now()->addDay()]);
 
         $this->actingAs($user)

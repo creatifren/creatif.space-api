@@ -61,6 +61,29 @@ describe('creating posts', function () {
         });
     });
 
+    it('sends a video cover as the media thumbnail', function () {
+        Http::fake([
+            'api.postforme.test/*' => Http::response(['id' => 'post_cov', 'status' => 'scheduled']),
+        ]);
+        $user = premiumUser();
+        $ig = SocialAccount::factory()->for($user)->create(['platform' => 'instagram']);
+        $media = [[
+            'url' => 'https://assets.creatif.space/reel.mp4',
+            'thumbnail_url' => 'https://assets.creatif.space/cover.jpg',
+        ]];
+
+        $this->actingAs($user)
+            ->postJson('/api/v1/social-posts', [
+                'caption' => 'Reel with a cover.',
+                'account_ids' => [$ig->ulid],
+                'media' => $media,
+                'scheduled_at' => now()->addDay()->toIso8601String(),
+            ])
+            ->assertCreated();
+
+        Http::assertSent(fn ($request) => ($request->data()['media'] ?? null) === $media);
+    });
+
     it('marks an immediate post published when the provider says processed', function () {
         Http::fake([
             'api.postforme.test/*' => Http::response(['id' => 'post_now', 'status' => 'processed']),
@@ -219,6 +242,30 @@ describe('listing and cancelling', function () {
             ->getJson('/api/v1/social-posts')
             ->assertOk()
             ->assertJsonCount(2, 'data');
+    });
+
+    it('settles an overdue Scheduled post from the provider results when the webhook never came', function () {
+        $user = User::factory()->create();
+        $account = SocialAccount::factory()->for($user)->create();
+        $post = SocialPost::factory()->for($user)->create([
+            'provider_post_id' => 'post_late',
+            'scheduled_at' => now()->subHour(),
+        ]);
+        $post->targets()->create(['social_account_id' => $account->id]);
+
+        Http::fake(['api.postforme.test/*' => Http::response(['data' => [[
+            'id' => 'res_9',
+            'post_id' => 'post_late',
+            'social_account_id' => $account->provider_account_id,
+            'success' => true,
+            'platform_data' => ['url' => 'https://instagram.com/p/9'],
+        ]]])]);
+
+        $this->actingAs($user)
+            ->getJson('/api/v1/social-posts')
+            ->assertOk()
+            ->assertJsonPath('data.0.status', 'published')
+            ->assertJsonPath('data.0.targets.0.platform_url', 'https://instagram.com/p/9');
     });
 
     it('cancels a scheduled post via the provider', function () {

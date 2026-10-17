@@ -106,32 +106,26 @@ it('sets, keeps and clears the password', function () {
     expect($space->fresh()->password_hash)->toBeNull();
 });
 
-it('sets and clears the link expiry', function () {
+it('ignores an expiry date — Space links never expire', function () {
     $user = User::factory()->create();
     $space = editorSpace($user);
 
-    // The shape the date input produces: end of the chosen day.
-    $this->actingAs($user)
-        ->patchJson("/api/v1/spaces/{$space->ulid}", ['expires_at' => '2030-12-31T23:59:59'])
-        ->assertOk();
-
-    expect($space->fresh()->expires_at->toDateString())->toBe('2030-12-31')
-        ->and($space->fresh()->isExpired())->toBeFalse();
-
-    // A past date really does expire it — this is the gate the public page reads.
     $this->actingAs($user)
         ->patchJson("/api/v1/spaces/{$space->ulid}", ['expires_at' => '2020-01-01T23:59:59'])
         ->assertOk();
 
-    expect($space->fresh()->isExpired())->toBeTrue();
-
-    // Empty means never.
-    $this->actingAs($user)
-        ->patchJson("/api/v1/spaces/{$space->ulid}", ['expires_at' => null])
-        ->assertOk();
-
     expect($space->fresh()->expires_at)->toBeNull()
         ->and($space->fresh()->isExpired())->toBeFalse();
+});
+
+it('stores the corner choice in the design document', function () {
+    $user = User::factory()->create();
+    $space = editorSpace($user);
+
+    $this->actingAs($user)
+        ->patchJson("/api/v1/spaces/{$space->ulid}", ['design' => ['corners' => 'square']])
+        ->assertOk()
+        ->assertJsonPath('data.design.corners', 'square');
 });
 
 it('refuses an address another space already holds', function () {

@@ -18,7 +18,7 @@ class TransferResource extends JsonResource
             'id' => $this->ulid,
             'title' => $this->title,
             'note' => $this->note,
-            'url' => config('app.frontend_url').'/t/'.$this->slug,
+            'url' => config('app.public_url').'/t/'.$this->slug,
             'files_count' => $this->whenCounted('files'),
             'size_bytes' => $this->whenLoaded('files', fn () => (int) $this->files->sum('size_bytes')),
             // Whether it is locked, never the hash — see the model's $hidden.

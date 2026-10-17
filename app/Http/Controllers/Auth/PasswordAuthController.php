@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Auth;
 use App\Enums\UserStatus;
 use App\Http\Controllers\Controller;
 use App\Models\User;
+use App\Support\AutoHandle;
 use App\Support\ReferralAttribution;
 use App\Support\TeamInvite;
 use Illuminate\Auth\Events\PasswordReset;
@@ -141,8 +142,8 @@ class PasswordAuthController extends Controller
         $user->markEmailAsVerified();
         $this->signIn($request, $user);
 
-        // Same landing as the Google callback: no address yet, pick one.
-        return redirect($frontend.($user->onboarded_at === null ? '/onboarding' : '/home'));
+        // Same landing as the Google callback.
+        return redirect($frontend.'/home');
     }
 
     /**
@@ -193,6 +194,7 @@ class PasswordAuthController extends Controller
     private function signIn(Request $request, User $user): void
     {
         TeamInvite::claim($user);
+        AutoHandle::give($user);
 
         Auth::login($user, remember: true);
         $request->session()->regenerate();

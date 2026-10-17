@@ -17,7 +17,9 @@ return [
 
     'allowed_methods' => ['*'],
 
-    'allowed_origins' => [env('FRONTEND_URL', 'http://localhost:3000')], // env() is fine here: config files are the one place it is allowed
+    // PUBLIC_URL: client pages (Space password gate, downloads, view events)
+    // are served from creatif.space via the marketing proxy and call the API from there.
+    'allowed_origins' => array_values(array_unique(array_filter([env('FRONTEND_URL', 'http://localhost:3000'), env('PUBLIC_URL')]))), // env() is fine here: config files are the one place it is allowed
 
     'allowed_origins_patterns' => [],
 

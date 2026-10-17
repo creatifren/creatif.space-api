@@ -65,6 +65,11 @@ return [
 
     'frontend_url' => env('FRONTEND_URL', 'http://localhost:3000'),
 
+    // Where client-facing links live (creatif.space/{handle}, /t, /a). The
+    // marketing site proxies these paths to the app, so in prod this differs
+    // from frontend_url; in dev both are the app.
+    'public_url' => env('PUBLIC_URL', env('FRONTEND_URL', 'http://localhost:3000')),
+
     /*
     |--------------------------------------------------------------------------
     | Application Timezone

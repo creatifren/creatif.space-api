@@ -15,7 +15,7 @@ use RuntimeException;
 /**
  * One balance for sends and storage (the Credits comp, 2026-10).
  *
- * The whole price list: a Credit is Rp100 (tax included), a destination
+ * The whole price list: a Credit is Rp1 (tax included), a destination
  * that goes out costs 3, a 5 GB block of storage costs 50 a month — 45
  * once the account passes 100 GB, on every block, not only the ones above
  * the line. Credits never expire.
@@ -30,7 +30,7 @@ use RuntimeException;
  */
 final class Credits
 {
-    public const RUPIAH = 100;
+    public const RUPIAH = 1;
 
     public const PER_SEND = 3;
 

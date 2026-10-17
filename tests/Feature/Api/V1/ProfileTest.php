@@ -5,6 +5,8 @@ use App\Models\Handle;
 use App\Models\Profile;
 use App\Models\Subscription;
 use App\Models\User;
+use Illuminate\Http\UploadedFile;
+use Illuminate\Support\Facades\Storage;
 
 describe('public profile', function () {
     it('shows the public page for a claimed handle', function () {
@@ -246,5 +248,50 @@ describe('my profile', function () {
     it('rejects guests', function () {
         $this->getJson('/api/v1/me/profile')->assertUnauthorized();
         $this->patchJson('/api/v1/me/profile', [])->assertUnauthorized();
+    });
+});
+
+describe('profile font', function () {
+    it('uploads a Premium font and serves it on the public handle once chosen', function () {
+        Storage::fake('s3');
+        $user = User::factory()->create();
+        Handle::factory()->for($user)->create(['name' => 'rani']);
+        Subscription::factory()->for($user)->create();
+        $font = UploadedFile::fake()->createWithContent('brand.woff2', 'wOF2'.str_repeat("\0", 60));
+
+        $this->actingAs($user)
+            ->post('/api/v1/me/profile/font', ['font' => $font], ['Accept' => 'application/json'])
+            ->assertCreated()
+            ->assertJsonStructure(['data' => ['version']]);
+
+        // Uploaded but not chosen: nothing public yet.
+        $this->get('/fonts/rani')->assertNotFound();
+
+        Profile::factory()->for($user)->create(['appearance' => ['font' => 'Upload your own']]);
+        $this->get('/fonts/rani')
+            ->assertOk()
+            ->assertHeader('Access-Control-Allow-Origin', '*')
+            ->assertHeader('Content-Type', 'font/woff2');
+    });
+
+    it('refuses Free accounts and files that are not fonts', function () {
+        Storage::fake('s3');
+        $free = User::factory()->create();
+
+        $this->actingAs($free)
+            ->post('/api/v1/me/profile/font', [
+                'font' => UploadedFile::fake()->createWithContent('a.woff2', 'wOF2xxxx'),
+            ], ['Accept' => 'application/json'])
+            ->assertForbidden();
+
+        $paid = User::factory()->create();
+        Subscription::factory()->for($paid)->create();
+
+        $this->actingAs($paid)
+            ->post('/api/v1/me/profile/font', [
+                'font' => UploadedFile::fake()->createWithContent('a.woff2', '<svg onload=x>'),
+            ], ['Accept' => 'application/json'])
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors('font');
     });
 });
