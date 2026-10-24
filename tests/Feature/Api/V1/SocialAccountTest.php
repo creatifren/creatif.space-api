@@ -136,7 +136,7 @@ describe('social accounts', function () {
     it('disconnects: a post aimed only there becomes a draft, a shared one loses the destination', function () {
         Http::fake(['api.postforme.test/*' => Http::response(['message' => 'ok'])]);
         $user = User::factory()->create();
-        Credits::grant($user, 100, 'Test');
+        Credits::grant($user, 10_000, 'Test');
         $gone = SocialAccount::factory()->for($user)->create();
         $kept = SocialAccount::factory()->for($user)->create();
 

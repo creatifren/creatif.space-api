@@ -21,8 +21,9 @@ use Illuminate\Http\Request;
  */
 class CreditsController extends Controller
 {
-    /** Top-up sizes the page offers; the server refuses any other. */
-    private const PACKS = [50, 100, 300, 500, 1000, 3000];
+    /** Top-up sizes the page offers as shortcuts; any whole amount between
+        Credits::TOP_UP_MIN and TOP_UP_MAX is accepted too (custom). */
+    private const PACKS = [25_000, 50_000, 100_000, 250_000, 500_000, 1_000_000];
 
     public function show(Request $request): JsonResponse
     {
@@ -53,6 +54,7 @@ class CreditsController extends Controller
                 'read_only' => PlanQuota::readOnly($user),
             ],
             'packs' => self::PACKS,
+            'top_up' => ['min' => Credits::TOP_UP_MIN, 'max' => Credits::TOP_UP_MAX],
         ]]);
     }
 
@@ -100,7 +102,7 @@ class CreditsController extends Controller
         Workspace::ownerOnly($request->user());
 
         $validated = $request->validate([
-            'credits' => ['required', 'integer', 'in:'.implode(',', self::PACKS)],
+            'credits' => ['required', 'integer', 'min:'.Credits::TOP_UP_MIN, 'max:'.Credits::TOP_UP_MAX],
         ]);
 
         $purchase = CreditPurchase::create([

@@ -99,7 +99,7 @@ class SocialPostController extends Controller
         $ids = array_values(array_unique($validated['account_ids']));
         $sendsNow = $approval === null && ! $draft;
 
-        // The price is 3 Credits a destination, checked before anything
+        // The price is Credits::PER_SEND a destination, checked before anything
         // reaches the provider. Held posts and drafts are checked when they
         // are approved or sent — holding one costs nothing.
         if ($sendsNow && ! PlanQuota::canPostSocial($user, count($ids))) {

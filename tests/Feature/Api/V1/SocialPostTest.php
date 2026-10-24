@@ -15,12 +15,12 @@ beforeEach(function () {
     ]);
 });
 
-/** A Premium creator with Credits to spend — sending costs 3 a destination. */
+/** A Premium creator with Credits to spend — sending costs Credits::PER_SEND a destination. */
 function premiumUser(): User
 {
     $user = User::factory()->create();
     Subscription::factory()->for($user)->create();
-    Credits::grant($user, 300, 'Test');
+    Credits::grant($user, 30_000, 'Test');
 
     return $user;
 }
@@ -169,18 +169,18 @@ describe('credits', function () {
         Http::assertNothingSent();
     });
 
-    it('takes 3 a destination when sent, and gives a failed one back', function () {
+    it('takes PER_SEND a destination when sent, and gives a failed one back', function () {
         Http::fake(['api.postforme.test/*' => Http::response(['id' => 'post_c', 'status' => 'scheduled'])]);
         config(['services.postforme.webhook_secret' => 's']);
         $user = User::factory()->create();
-        Credits::grant($user, 30, 'Welcome');
+        Credits::grant($user, 3000, 'Welcome');
         $a = SocialAccount::factory()->for($user)->create();
         $b = SocialAccount::factory()->for($user)->create();
 
         $this->actingAs($user)
             ->postJson('/api/v1/social-posts', ['caption' => 'Two.', 'account_ids' => [$a->ulid, $b->ulid]])
             ->assertCreated();
-        expect(Credits::balance($user))->toBe(24);
+        expect(Credits::balance($user))->toBe(2400);
 
         $failure = [
             'event_type' => 'social.post.result.created',
@@ -190,12 +190,12 @@ describe('credits', function () {
         // A redelivery gives nothing back twice.
         $this->postJson('/api/v1/webhooks/postforme', $failure, ['Post-For-Me-Webhook-Secret' => 's'])->assertOk();
 
-        expect(Credits::balance($user))->toBe(27);
+        expect(Credits::balance($user))->toBe(2700);
     });
 
     it('returns the price of every destination still pending on cancel', function () {
         Http::fake(['api.postforme.test/*' => Http::response(['id' => 'post_x', 'status' => 'scheduled'])]);
-        $user = premiumUser(); // 300
+        $user = premiumUser(); // 30000
         $account = SocialAccount::factory()->for($user)->create();
 
         $id = $this->actingAs($user)
@@ -203,10 +203,10 @@ describe('credits', function () {
                 'caption' => 'Later.', 'account_ids' => [$account->ulid],
                 'scheduled_at' => now()->addDay()->toIso8601String(),
             ])->json('data.id');
-        expect(Credits::balance($user))->toBe(297);
+        expect(Credits::balance($user))->toBe(29_700);
 
         $this->actingAs($user)->deleteJson("/api/v1/social-posts/{$id}")->assertNoContent();
-        expect(Credits::balance($user))->toBe(300);
+        expect(Credits::balance($user))->toBe(30_000);
     });
 
     it('charges nothing to hold a post for approval or save a draft', function () {
@@ -373,7 +373,7 @@ describe('drafts', function () {
         $this->actingAs($user)->postJson("/api/v1/social-posts/{$id}/send")->assertUnprocessable();
         Http::assertNothingSent();
 
-        Credits::grant($user, 3, 'Test');
+        Credits::grant($user, Credits::PER_SEND, 'Test');
 
         $this->actingAs($user)
             ->postJson("/api/v1/social-posts/{$id}/send", ['scheduled_at' => now()->addDay()->toIso8601String()])

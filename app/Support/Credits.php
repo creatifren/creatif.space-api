@@ -16,13 +16,13 @@ use RuntimeException;
  * One balance for sends and storage (the Credits comp, 2026-10).
  *
  * The whole price list: a Credit is Rp1 (tax included), a destination
- * that goes out costs 3, a 5 GB block of storage costs 50 a month — 45
- * once the account passes 100 GB, on every block, not only the ones above
- * the line. Credits never expire.
+ * that goes out costs 300, a 5 GB block of storage costs 5.000 a month —
+ * 4.500 once the account passes 100 GB, on every block, not only the ones
+ * above the line. Credits never expire.
  *
  * Order matters: rent is taken on the first, before anything is sent, so
  * a send never spends money the rent was going to need. A send is taken
- * up front when the post is handed to the provider — 3 a destination —
+ * up front when the post is handed to the provider — 300 a destination —
  * and a destination that never goes out (failed, cancelled) comes back,
  * so the user is only ever out of pocket for what was delivered.
  * Approval, drafts, scheduling and uploads inside rented storage move
@@ -32,21 +32,26 @@ final class Credits
 {
     public const RUPIAH = 1;
 
-    public const PER_SEND = 3;
+    public const PER_SEND = 300;
 
     public const BLOCK_GB = 5;
 
-    public const PER_BLOCK = 50;
+    public const PER_BLOCK = 5000;
 
-    public const PER_BLOCK_BULK = 45;
+    public const PER_BLOCK_BULK = 4500;
 
     /** Past this many plan-plus-rented GB, every block is at the bulk rate. */
     public const BULK_FROM_GB = 100;
 
     /** Monthly for paid plans (per seat), once at sign-up for Free. */
-    public const PREMIUM_MONTHLY = 120;
+    public const PREMIUM_MONTHLY = 12000;
 
-    public const FREE_WELCOME = 30;
+    public const FREE_WELCOME = 3000;
+
+    /** Top-up bounds, in Credits — a custom amount must sit inside them. */
+    public const TOP_UP_MIN = 10_000;
+
+    public const TOP_UP_MAX = 10_000_000;
 
     public static function balance(User $user): int
     {
@@ -104,7 +109,7 @@ final class Credits
     }
 
     /**
-     * Take the send price for a post about to reach the provider: 3 per
+     * Take the send price for a post about to reach the provider: 300 per
      * destination. Refuses with a validation error the composer can show.
      *
      * @throws ValidationException
@@ -185,7 +190,7 @@ final class Credits
     }
 
     /**
-     * Free's thirty, once — at the moment the username is claimed.
+     * Free's welcome Credits, once — at the moment the username is claimed.
      */
     public static function welcome(User $user): void
     {

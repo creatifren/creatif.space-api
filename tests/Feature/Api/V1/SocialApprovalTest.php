@@ -20,7 +20,7 @@ function heldPost(string $approval = 'awaiting'): SocialPost
 {
     $user = User::factory()->create();
     Subscription::factory()->for($user)->create();
-    Credits::grant($user, 300, 'Test');
+    Credits::grant($user, 30_000, 'Test');
     $post = SocialPost::factory()->for($user)->create([
         'provider_post_id' => null,
         'approval' => $approval,
