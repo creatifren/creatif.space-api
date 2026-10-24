@@ -2,6 +2,7 @@
 
 namespace App\Support;
 
+use App\Enums\SocialPostApproval;
 use App\Enums\SocialPostStatus;
 use App\Enums\SocialPostTargetStatus;
 use App\Models\SocialAccount;
@@ -10,6 +11,7 @@ use App\Models\User;
 use App\Services\PostForMeService;
 use Carbon\CarbonInterface;
 use Illuminate\Http\Client\ConnectionException;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
@@ -123,6 +125,60 @@ class SocialPostRelay
                 ? SocialPostStatus::Published
                 : SocialPostStatus::Scheduled,
         ]);
+    }
+
+    /**
+     * Send a held post and record who said yes — the one path for the
+     * owner's approve, a client's decision, and both Approve-alls.
+     *
+     * Locked per post and re-checked inside the lock: two yeses arriving
+     * together (a double tap, the client and the owner at once, a batch
+     * overlapping a single decision) must not send — and charge — twice.
+     * False means someone else decided first; that is not an error.
+     *
+     * @param  list<SocialPostApproval>  $from  the states this caller may approve out of
+     *
+     * @throws ConnectionException
+     * @throws ValidationException when the Credits do not cover it
+     */
+    public function approve(SocialPost $post, string $by, array $from): bool
+    {
+        return Cache::lock("social-post:{$post->id}:approve", 60)->block(10, function () use ($post, $by, $from): bool {
+            // Fresh state, not whatever this caller loaded earlier; `send`
+            // reads the owner for the Credits check.
+            $post->refresh()->loadMissing('user');
+
+            if ($post->status !== SocialPostStatus::Scheduled || ! in_array($post->approval, $from, true)) {
+                return false;
+            }
+
+            // Provider first: a failed send leaves the post held, not half-approved.
+            $this->send($post);
+            $post->update([
+                'approval' => SocialPostApproval::Approved,
+                'approval_by' => $by,
+                'approval_at' => now(),
+            ]);
+
+            return true;
+        });
+    }
+
+    /**
+     * Credits a set of posts needs to go out — checked once, up front, by
+     * an Approve-all, so a short balance refuses the batch before a single
+     * post reaches the provider.
+     *
+     * @param  iterable<SocialPost>  $posts
+     */
+    public static function need(iterable $posts): int
+    {
+        $destinations = 0;
+        foreach ($posts as $post) {
+            $destinations += $post->targets()->count();
+        }
+
+        return $destinations * Credits::PER_SEND;
     }
 
     /**

@@ -8,9 +8,13 @@ use App\Http\Controllers\Controller;
 use App\Models\SocialApprovalLink;
 use App\Models\SocialPost;
 use App\Models\SocialPostComment;
+use App\Notifications\SocialPostDecided;
+use App\Support\Credits;
 use App\Support\SocialPostRelay;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Validation\ValidationException;
+use Throwable;
 
 /**
  * creatif.space/a/{token} — the client's side. No account, by design: the
@@ -67,12 +71,14 @@ class PublicApprovalController extends Controller
         }
 
         if ($validated['decision'] === 'approve') {
-            $relay->send($socialPost);
-            $socialPost->update([
-                'approval' => SocialPostApproval::Approved,
-                'approval_by' => $validated['name'],
-                'approval_at' => now(),
-            ]);
+            $outcome = $this->approveFor($link, $socialPost, $validated['name'], $relay);
+            if ($outcome === false) {
+                return response()->json(['message' => 'This post has already been decided.'], 422);
+            }
+            if (is_string($outcome)) {
+                return response()->json(['message' => $outcome], 422);
+            }
+            $link->user->notify(new SocialPostDecided($link, SocialPostDecided::APPROVED, $validated['name'], 1, $socialPost));
         } else {
             $socialPost->update([
                 'approval' => SocialPostApproval::Revision,
@@ -85,9 +91,118 @@ class PublicApprovalController extends Controller
                 'role' => 'APPROVER',
                 'body' => $validated['reason'],
             ]);
+            $link->user->notify(new SocialPostDecided(
+                $link, SocialPostDecided::REVISE, $validated['name'], 1, $socialPost,
+                str($validated['reason'])->limit(200)->toString(),
+            ));
         }
 
         return response()->json(['data' => $this->postArray($socialPost->fresh(['targets.account', 'comments.replies']))]);
+    }
+
+    /**
+     * Approve all — the client's group approval (RF-043). One request for
+     * the posts the client was looking at: `post_ids` is what their page
+     * showed, so a post the editor added a minute ago is not approved
+     * unseen.
+     *
+     * Not all-or-nothing, and it cannot be: each approval hands a post to
+     * the provider, which no transaction can take back. What can be decided
+     * up front is: the Credits for the whole batch are checked before any
+     * post leaves, and a provider failure on one post is reported on that
+     * post while the rest go through.
+     *
+     * ponytail: synchronous — a 50-post batch waits on 50 provider calls.
+     * Queue it when links routinely carry more than ~20 posts.
+     */
+    public function approveAll(Request $request, string $token, SocialPostRelay $relay): JsonResponse
+    {
+        $link = $this->resolve($token);
+        if ($link instanceof JsonResponse) {
+            return $link;
+        }
+
+        $validated = $request->validate([
+            'name' => ['required', 'string', 'max:120'],
+            'post_ids' => ['required', 'array', 'min:1', 'max:50'],
+            'post_ids.*' => ['string'],
+        ]);
+
+        $eligible = $link->posts()
+            ->whereIn('ulid', array_unique($validated['post_ids']))
+            ->where('status', SocialPostStatus::Scheduled)
+            ->whereIn('approval', [SocialPostApproval::Client->value, SocialPostApproval::Revision->value])
+            ->orderBy('scheduled_at')
+            ->get();
+
+        if ($eligible->isEmpty()) {
+            return response()->json(['message' => 'These posts have already been decided.'], 422);
+        }
+
+        $need = SocialPostRelay::need($eligible);
+        $balance = Credits::balance($link->user);
+        if ($balance < $need) {
+            $link->user->notify(new SocialPostDecided(
+                $link, SocialPostDecided::BLOCKED, $validated['name'], $eligible->count(), null,
+                "Approving these needs {$need} Credits and the balance has {$balance} — top up, then send them from Approval links.",
+            ));
+
+            return response()->json(['message' => $this->blockedMessage($link)], 422);
+        }
+
+        $results = [];
+        $approved = 0;
+        foreach ($eligible as $post) {
+            $outcome = $this->approveFor($link, $post, $validated['name'], $relay);
+            $results[] = [
+                'id' => $post->ulid,
+                'approved' => $outcome === true,
+                'message' => is_string($outcome) ? $outcome : null,
+            ];
+            $approved += $outcome === true ? 1 : 0;
+        }
+
+        if ($approved > 0) {
+            $link->user->notify(new SocialPostDecided(
+                $link, SocialPostDecided::APPROVED, $validated['name'], $approved,
+                $approved === 1 ? $eligible->first(fn ($p) => $p->approval === SocialPostApproval::Approved) : null,
+            ));
+        }
+
+        $posts = $link->posts()->with(['targets.account', 'comments.replies'])->orderBy('scheduled_at')->get();
+
+        return response()->json(['data' => [
+            'posts' => $posts->map(fn (SocialPost $p) => $this->postArray($p))->all(),
+            'results' => $results,
+        ]]);
+    }
+
+    /**
+     * A client's yes, through the one approve path. True when it went,
+     * false when someone decided first, or the sentence the client may
+     * read when it could not go — the real reason (a short balance, a
+     * provider refusal) goes to the owner, never to the client: their page
+     * is not where the editor's Credits are discussed.
+     */
+    private function approveFor(SocialApprovalLink $link, SocialPost $post, string $name, SocialPostRelay $relay): bool|string
+    {
+        try {
+            return $relay->approve($post, $name, [SocialPostApproval::Client, SocialPostApproval::Revision]);
+        } catch (ValidationException $e) {
+            $why = $e->getMessage();
+        } catch (Throwable $e) {
+            report($e);
+            $why = 'Post for Me did not accept it — try sending it again from Approval links.';
+        }
+
+        $link->user->notify(new SocialPostDecided($link, SocialPostDecided::BLOCKED, $name, 1, $post, $why));
+
+        return $this->blockedMessage($link);
+    }
+
+    private function blockedMessage(SocialApprovalLink $link): string
+    {
+        return "This can’t go out right now — {$link->user->name} has been told.";
     }
 
     /**

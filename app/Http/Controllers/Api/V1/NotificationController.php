@@ -3,9 +3,12 @@
 namespace App\Http\Controllers\Api\V1;
 
 use App\Enums\NotificationType;
+use App\Enums\SocialPostApproval;
+use App\Enums\SocialPostStatus;
 use App\Http\Controllers\Controller;
 use App\Models\Activity;
 use App\Models\File;
+use App\Models\SocialPost;
 use App\Models\Transfer;
 use App\Models\User;
 use App\Support\Workspace;
@@ -221,6 +224,30 @@ class NotificationController extends Controller
                 'detail' => 'Restore them before '.$soonest->purge_at->isoFormat('D MMMM'),
                 'subject' => null,
                 'when' => $soonest->purge_at,
+            ];
+        }
+
+        /* A client asked for changes on a post that is still due to go out
+           (RF-043). One row for the lot, like the Trash: the answer is the
+           same for each — fix it, or approve it yourself. */
+        $changes = SocialPost::query()
+            ->where('user_id', $user->id)
+            ->where('status', SocialPostStatus::Scheduled)
+            ->where('approval', SocialPostApproval::Revision->value)
+            ->orderBy('scheduled_at')
+            ->get(['ulid', 'caption', 'scheduled_at', 'approval_by']);
+
+        if ($changes->isNotEmpty()) {
+            $first = $changes->first();
+            $rows[] = [
+                'id' => 'ac'.$first->ulid,
+                'kind' => 'approval.changes',
+                'title' => $changes->count() === 1
+                    ? ($first->approval_by ?? 'Your client').' asked for changes on “'.str($first->caption)->limit(40).'”'
+                    : $changes->count().' posts have changes requested',
+                'detail' => 'Fix or approve them before they are due',
+                'subject' => ['type' => 'social_post', 'id' => $first->ulid],
+                'when' => $first->scheduled_at ?? now(),
             ];
         }
 

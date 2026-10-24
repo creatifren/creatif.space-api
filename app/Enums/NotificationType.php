@@ -10,6 +10,8 @@ enum NotificationType: string
 {
     case SpaceOpened = 'space.opened';
     case SocialPostFailed = 'social.post.failed';
+    // A client approved or asked for changes on an approval link (RF-043).
+    case SocialPostDecision = 'social.post.decision';
     case ProductNews = 'product.news';
 
     // Money. Deliberately absent from the Settings screen: "your
@@ -33,6 +35,7 @@ enum NotificationType: string
         return [
             self::SpaceOpened,
             self::SocialPostFailed,
+            self::SocialPostDecision,
             self::ProductNews,
         ];
     }

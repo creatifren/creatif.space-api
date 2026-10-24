@@ -30,6 +30,7 @@ class SocialPostResource extends JsonResource
             'fail_reason' => $this->fail_reason,
             'approval' => $this->approval,
             'approval_by' => $this->approval_by,
+            'approval_at' => $this->approval_at,
             // "Created by" in the post's history (RF-040): the account that
             // made it, not whoever is reading.
             'author' => $this->whenLoaded('user', fn () => $this->user->name),

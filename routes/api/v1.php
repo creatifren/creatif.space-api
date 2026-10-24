@@ -84,6 +84,10 @@ Route::post('/a/{token}/posts/{post}/retract', [PublicApprovalController::class,
 Route::post('/a/{token}/posts/{post}/comments', [PublicApprovalController::class, 'comment'])
     ->middleware('throttle:30,1')
     ->name('api.v1.approval-links.comment');
+// Group approval (RF-043): every post the client was shown, in one request.
+Route::post('/a/{token}/approve-all', [PublicApprovalController::class, 'approveAll'])
+    ->middleware('throttle:10,1')
+    ->name('api.v1.approval-links.approve-all');
 
 // A referral link was opened. Answers 204 whatever the code was: an
 // unknown one must not tell a stranger which codes exist.
@@ -189,6 +193,14 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::post('/social-approval-links', [SocialApprovalController::class, 'link'])
         ->middleware('throttle:30,1')
         ->name('api.v1.social-approval-links.store');
+    Route::get('/social-approval-links/{socialApprovalLink}', [SocialApprovalController::class, 'show'])
+        ->name('api.v1.social-approval-links.show');
+    Route::patch('/social-approval-links/{socialApprovalLink}', [SocialApprovalController::class, 'update'])
+        ->middleware('throttle:30,1')
+        ->name('api.v1.social-approval-links.update');
+    Route::post('/social-approval-links/{socialApprovalLink}/approve', [SocialApprovalController::class, 'approveAll'])
+        ->middleware('throttle:10,1')
+        ->name('api.v1.social-approval-links.approve');
     Route::delete('/social-approval-links/{socialApprovalLink}', [SocialApprovalController::class, 'revoke'])
         ->name('api.v1.social-approval-links.destroy');
     Route::delete('/social-posts/{socialPost}', [SocialPostController::class, 'destroy'])->name('api.v1.social-posts.destroy');

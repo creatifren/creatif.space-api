@@ -11,6 +11,7 @@ use Database\Factories\SocialPostFactory;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 
 /**
@@ -84,6 +85,16 @@ class SocialPost extends Model
     public function comments(): HasMany
     {
         return $this->hasMany(SocialPostComment::class)->whereNull('parent_id')->oldest();
+    }
+
+    /**
+     * The approval links this post is on — usually one, sometimes several.
+     *
+     * @return BelongsToMany<SocialApprovalLink, $this>
+     */
+    public function approvalLinks(): BelongsToMany
+    {
+        return $this->belongsToMany(SocialApprovalLink::class, 'social_approval_link_post');
     }
 
     /**

@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use Carbon\CarbonImmutable;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
@@ -20,16 +21,37 @@ use Illuminate\Support\Str;
  * @property string|null $title
  * @property string|null $client_name
  * @property CarbonImmutable|null $expires_at
+ * @property CarbonImmutable|null $extended_at
  * @property CarbonImmutable|null $revoked_at
  * @property CarbonImmutable|null $created_at
  */
 class SocialApprovalLink extends Model
 {
-    protected $fillable = ['user_id', 'token', 'title', 'client_name', 'expires_at', 'revoked_at'];
+    protected $fillable = ['user_id', 'token', 'title', 'client_name', 'expires_at', 'extended_at', 'revoked_at'];
 
     public function expired(): bool
     {
         return $this->expires_at !== null && $this->expires_at->isPast();
+    }
+
+    /**
+     * Open to the client: not revoked, not past its expiry.
+     *
+     * @param  Builder<self>  $query
+     */
+    public function scopeLive(Builder $query): void
+    {
+        $query->whereNull('revoked_at')
+            ->where(fn ($q) => $q->whereNull('expires_at')->orWhere('expires_at', '>', now()));
+    }
+
+    /**
+     * Revoked beats expired: a revoked link never comes back, an expired
+     * one can be extended.
+     */
+    public function status(): string
+    {
+        return $this->revoked_at !== null ? 'revoked' : ($this->expired() ? 'expired' : 'active');
     }
 
     /**
@@ -39,6 +61,7 @@ class SocialApprovalLink extends Model
     {
         return [
             'expires_at' => 'datetime',
+            'extended_at' => 'datetime',
             'revoked_at' => 'datetime',
         ];
     }
