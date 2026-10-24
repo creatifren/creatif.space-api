@@ -30,6 +30,7 @@ use Spatie\Permission\Traits\HasRoles;
  * @property bool $is_staff
  * @property CarbonImmutable|null $email_verified_at
  * @property CarbonImmutable|null $onboarded_at
+ * @property CarbonImmutable|null $tour_seen_at
  * @property CarbonImmutable|null $suspended_at
  * @property string|null $suspended_reason
  * @property int $storage_blocks
@@ -85,6 +86,7 @@ class User extends Authenticatable implements FilamentUser
         return [
             'email_verified_at' => 'datetime',
             'onboarded_at' => 'datetime',
+            'tour_seen_at' => 'datetime',
             'suspended_at' => 'datetime',
             'is_staff' => 'boolean',
             'storage_blocks' => 'integer',

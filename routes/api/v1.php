@@ -30,6 +30,7 @@ use App\Http\Controllers\Api\V1\SpaceEventController;
 use App\Http\Controllers\Api\V1\StorageController;
 use App\Http\Controllers\Api\V1\SubscriptionController;
 use App\Http\Controllers\Api\V1\TeamController;
+use App\Http\Controllers\Api\V1\TourController;
 use App\Http\Controllers\Api\V1\TransferController;
 use Illuminate\Support\Facades\Route;
 
@@ -110,6 +111,7 @@ Route::post('/spaces/{space}/events', SpaceEventController::class)
 // Authenticated (Sanctum SPA cookie)
 Route::middleware('auth:sanctum')->group(function () {
     Route::get('/me', MeController::class)->name('api.v1.me');
+    Route::post('/me/tour', TourController::class)->name('api.v1.me.tour');
     Route::post('/handles', [HandleController::class, 'claim'])
         ->middleware('throttle:10,1')
         ->name('api.v1.handles.claim');

@@ -38,6 +38,8 @@ class UserResource extends JsonResource
             'has_google' => $this->google_id !== null,
             'has_password' => $this->password !== null,
             'onboarded_at' => $this->onboarded_at,
+            // Null until the dashboard tour is finished or skipped (RF-004).
+            'tour_seen_at' => $this->tour_seen_at,
             'created_at' => $this->created_at,
         ];
     }
