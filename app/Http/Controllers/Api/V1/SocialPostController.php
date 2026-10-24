@@ -45,7 +45,7 @@ class SocialPostController extends Controller
                 ->when($validated['status'] ?? null, fn ($q, $status) => $q->where('status', $status))
                 // Threads ride along: the Feed shows every post's conversation
                 // at once, so one request beats one per card.
-                ->with(['targets.account', 'comments.replies'])
+                ->with(['targets.account', 'comments.replies', 'user:id,name'])
                 ->latest()
                 ->get(),
         )->additional(['meta' => [

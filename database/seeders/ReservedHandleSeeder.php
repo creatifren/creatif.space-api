@@ -32,6 +32,9 @@ class ReservedHandleSeeder extends Seeder
             'socials', 'compare', 'tools', 'acceptable-use', 'for-agencies',
             'for-brands', 'for-content-creators', 'for-freelancers',
             'for-in-house-marketers', 'for-social-media-managers', 'fonts',
+            // Marketing static folders and pages proxied ahead of handles.
+            // (`demo` and `blog` are held further down.)
+            'platform', 'opengraph-image', 'robots', 'sitemap',
             // Single-letter and short prefixes that carry public links. A
             // creator holding one of these handles would collide with every
             // link under it, and the collision is silent: the link resolves,

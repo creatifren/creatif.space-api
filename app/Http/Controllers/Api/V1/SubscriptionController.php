@@ -41,6 +41,9 @@ class SubscriptionController extends Controller
                 'plan' => [
                     'key' => $user->plan()->key,
                     'name' => $user->plan()->name,
+                    // The flags the server gates on, so a screen locks the
+                    // same features the API refuses (RF-049: custom_fonts).
+                    'features' => (object) ($user->plan()->features ?? []),
                 ],
                 'subscription' => $subscription === null
                     ? null

@@ -157,8 +157,9 @@ it('answers 409 for a revoked link and 410 for an expired one', function () {
     $revoked = SocialApprovalLink::create(['user_id' => $post->user_id, 'revoked_at' => now()]);
     $expired = SocialApprovalLink::create(['user_id' => $post->user_id, 'expires_at' => now()->subDay()]);
 
-    $this->getJson("/api/v1/a/{$revoked->token}")->assertStatus(409);
-    $this->getJson("/api/v1/a/{$expired->token}")->assertStatus(410);
+    $editor = $post->user->name;
+    $this->getJson("/api/v1/a/{$revoked->token}")->assertStatus(409)->assertJsonPath('editor', $editor);
+    $this->getJson("/api/v1/a/{$expired->token}")->assertStatus(410)->assertJsonPath('editor', $editor);
     $this->getJson('/api/v1/a/nope')->assertNotFound();
 });
 

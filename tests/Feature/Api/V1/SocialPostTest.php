@@ -241,7 +241,9 @@ describe('listing and cancelling', function () {
         $this->actingAs($user)
             ->getJson('/api/v1/social-posts')
             ->assertOk()
-            ->assertJsonCount(2, 'data');
+            ->assertJsonCount(2, 'data')
+            // "Created by" names the post's maker (RF-040).
+            ->assertJsonPath('data.0.author', $user->name);
     });
 
     it('settles an overdue Scheduled post from the provider results when the webhook never came', function () {

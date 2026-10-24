@@ -170,7 +170,8 @@ class PublicApprovalController extends Controller
             abort(404);
         }
         if ($link->revoked_at !== null) {
-            return response()->json(['message' => 'This link was taken back.'], 409);
+            // The name, as on 410: the dead page tells the client whom to ask.
+            return response()->json(['message' => 'This link was taken back.', 'editor' => $link->user->name], 409);
         }
         if ($link->expired()) {
             return response()->json(['message' => 'This link has expired.', 'editor' => $link->user->name], 410);

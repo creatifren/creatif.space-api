@@ -30,6 +30,9 @@ class SocialPostResource extends JsonResource
             'fail_reason' => $this->fail_reason,
             'approval' => $this->approval,
             'approval_by' => $this->approval_by,
+            // "Created by" in the post's history (RF-040): the account that
+            // made it, not whoever is reading.
+            'author' => $this->whenLoaded('user', fn () => $this->user->name),
             'comments' => $this->whenLoaded('comments', fn () => $this->comments
                 ->map(fn ($c) => $c->toPublicArray())->all()),
             'created_at' => $this->created_at,
