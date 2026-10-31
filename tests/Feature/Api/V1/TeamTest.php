@@ -96,7 +96,7 @@ describe('inviting', function () {
 
         $premium = User::factory()->create();
         $premium->subscriptions()->create([
-            'plan_id' => Plan::query()->where('key', 'premium')->value('id'),
+            'plan_id' => Plan::query()->where('key', 'pro')->value('id'),
             'billing_period' => 'monthly',
             'status' => 'active',
         ]);
@@ -245,70 +245,10 @@ describe('what a seat buys', function () {
     });
 });
 
-describe('seats', function () {
-    it('bills the days left when seats are added, and waits for the money', function () {
-        Http::fake([
-            'https://app.sandbox.midtrans.com/snap/v1/transactions' => Http::response([
-                'token' => 'snap-seats-1',
-            ]),
-        ]);
-        $owner = teamOwner(seats: 3);
-
-        $response = $this->actingAs($owner)
-            ->postJson('/api/v1/me/subscription/seats', ['seats' => 4])
-            ->assertCreated();
-
-        // 20 of 30 days left on one extra seat at Rp44.000.
-        expect($response->json('data.amount'))->toBe(29_334)
-            ->and($response->json('data.seats'))->toBe(3)
-            ->and($response->json('data.seats_pending'))->toBe(4);
-
-        // Not yet: a seat nobody has paid for cannot be filled.
-        expect(Workspace::seats($owner->fresh()))->toBe(3);
-    });
-
-    it('defers a reduction to the renewal rather than refunding', function () {
-        $owner = teamOwner(seats: 3);
-
-        $this->actingAs($owner)
-            ->postJson('/api/v1/me/subscription/seats', ['seats' => 2])
-            ->assertOk()
-            ->assertJsonPath('data.seats', 3)
-            ->assertJsonPath('data.seats_at_renewal', 2)
-            ->assertJsonPath('data.invoice', null);
-
-        // The seats are paid for until the period ends, so they still work.
-        expect(Workspace::seats($owner->fresh()))->toBe(3);
-    });
-
-    it('will not sell fewer seats than there are people', function () {
-        Notification::fake();
-        $owner = teamOwner(seats: 3);
-        seatedMember($owner);
-        seatedMember($owner);
-
-        // Three people on those three seats: the owner plus two.
-        $this->actingAs($owner)
-            ->postJson('/api/v1/me/subscription/seats', ['seats' => 2])
-            ->assertUnprocessable()
-            ->assertJsonPath('errors.seats.0', 'Remove somebody first — you have 3 people on your team.');
-    });
-
-    it('refuses extra seats on a plan that has no seats', function () {
-        $user = User::factory()->create();
-
-        $this->actingAs($user)
-            ->postJson('/api/v1/me/subscription/checkout', [
-                'plan' => 'premium',
-                'period' => 'monthly',
-                'seats' => 3,
-            ])
-            ->assertUnprocessable()
-            ->assertJsonPath('errors.seats.0', 'Extra people are part of Team / Agency.');
-
-        $this->actingAs($user)
-            ->postJson('/api/v1/me/subscription/seats', ['seats' => 3])
-            ->assertUnprocessable()
-            ->assertJsonPath('errors.seats.0', 'Seats are part of the Team plan.');
-    });
+it('does not sell seats while Team is planned', function () {
+    Http::preventStrayRequests();
+    $owner = teamOwner();
+    $this->actingAs($owner)->postJson('/api/v1/me/subscription/seats', ['seats' => 4])
+        ->assertUnprocessable()->assertJsonValidationErrors('seats');
+    expect(Workspace::seats($owner->fresh()))->toBe(3);
 });

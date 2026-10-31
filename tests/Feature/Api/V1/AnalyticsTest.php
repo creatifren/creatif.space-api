@@ -21,7 +21,7 @@ function premiumCreator(): User
     $user = User::factory()->create();
 
     Subscription::factory()->for($user)->create([
-        'plan_id' => Plan::query()->where('key', 'premium')->value('id'),
+        'plan_id' => Plan::query()->where('key', 'pro')->value('id'),
         'status' => 'active',
         'current_period_end' => now()->addMonth(),
     ]);
@@ -143,7 +143,7 @@ describe('the delta sentence', function () {
     });
 });
 
-describe('premium', function () {
+describe('pro', function () {
     it('opens every block, from real events', function () {
         $user = premiumCreator();
         $space = Space::factory()->for($user)->published()->create();

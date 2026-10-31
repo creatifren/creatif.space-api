@@ -44,9 +44,9 @@ describe('create', function () {
             ->assertUnprocessable();
     });
 
-    it('enforces the 10-space total quota, freed by delete', function () {
+    it('enforces the 15-space total quota, freed by delete', function () {
         $user = User::factory()->create();
-        Space::factory()->count(10)->for($user)->create();
+        Space::factory()->count(15)->for($user)->create();
 
         $this->actingAs($user)
             ->postJson('/api/v1/spaces', ['title' => 'One more', 'view_mode' => 'grid'])
@@ -89,9 +89,9 @@ describe('list', function () {
             ->assertOk()
             ->assertJsonCount(2, 'data')
             ->assertJsonPath('meta.quota.active_used', 1)
-            ->assertJsonPath('meta.quota.active_limit', 3)
+            ->assertJsonPath('meta.quota.active_limit', null)
             ->assertJsonPath('meta.quota.total_used', 2)
-            ->assertJsonPath('meta.quota.total_limit', 10);
+            ->assertJsonPath('meta.quota.total_limit', 15);
     });
 });
 

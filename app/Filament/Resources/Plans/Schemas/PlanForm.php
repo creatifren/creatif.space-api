@@ -21,17 +21,12 @@ class PlanForm
                 TextInput::make('name')
                     ->required(),
                 TextInput::make('price_monthly')
-                    ->label('Price / month (Rp)')
+                    ->label('Price / month (USD cents)')
                     ->numeric()
                     ->minValue(0)
                     ->required(),
                 TextInput::make('price_yearly')
-                    ->label('Price / year (Rp)')
-                    ->numeric()
-                    ->minValue(0)
-                    ->required(),
-                TextInput::make('seat_price_monthly')
-                    ->label('Extra seat / month (Rp)')
+                    ->label('Price / year (USD cents)')
                     ->numeric()
                     ->minValue(0)
                     ->required(),

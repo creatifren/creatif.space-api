@@ -16,17 +16,9 @@ use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 
-/**
- * Payouts: the destination account, the withdrawal history, and the
- * request that moves money out of a wallet.
- */
+/** USD payouts, sent manually by staff through PayPal. Credits never pay out. */
 class EarningController extends Controller
 {
-    /**
-     * The saved destination, for the withdraw form to start from. Masked —
-     * see payoutAccount(). Null when nothing has been saved yet, which the
-     * form reads as "ask for the details".
-     */
     public function showPayoutAccount(Request $request): JsonResponse
     {
         Workspace::ownerOnly($request->user());
@@ -34,145 +26,62 @@ class EarningController extends Controller
         return response()->json(['data' => self::payoutAccount($request->user())]);
     }
 
-    /**
-     * Save the default payout destination without withdrawing anything.
-     * The withdraw form starts from this; each payout still copies the
-     * details onto its own row.
-     */
     public function savePayoutAccount(Request $request): JsonResponse
     {
         Workspace::ownerOnly($request->user());
-        $validated = $request->validate([
-            'bank_code' => ['required', 'string', 'max:20'],
-            'account_number' => ['required', 'string', 'max:40'],
-            'account_name' => ['required', 'string', 'max:255'],
-        ]);
-
+        $validated = $request->validate(['paypal_email' => ['required', 'email:rfc', 'max:255']]);
         $user = $request->user();
-        $user->forceFill([
-            'payout_bank_code' => $validated['bank_code'],
-            'payout_account_number' => $validated['account_number'],
-            'payout_account_name' => $validated['account_name'],
-        ])->save();
+        $user->forceFill(['payout_paypal_email' => $validated['paypal_email']])->save();
 
         return response()->json(['data' => self::payoutAccount($user)]);
     }
 
-    /**
-     * The saved destination, account number masked like withdrawal history —
-     * only the withdraw form ever needs the full number, and the owner types
-     * it there.
-     *
-     * @return array{bank_code: string, account_masked: string, account_name: string}|null
-     */
     private static function payoutAccount(User $user): ?array
     {
-        /* getAttributes(), not property access: a User instance that was
-           never re-read since creation (actingAs in tests) has no key for
-           these columns, and strict mode turns that into a 500. Missing and
-           null both mean "nothing saved". */
-        $attrs = $user->getAttributes();
+        $email = $user->getAttributes()['payout_paypal_email'] ?? null;
 
-        if (empty($attrs['payout_bank_code'])) {
-            return null;
-        }
-
-        return [
-            'bank_code' => (string) $attrs['payout_bank_code'],
-            'account_masked' => '••••'.substr((string) ($attrs['payout_account_number'] ?? ''), -4),
-            'account_name' => (string) ($attrs['payout_account_name'] ?? ''),
-        ];
+        return $email === null ? null : ['paypal_email' => $email];
     }
 
     public function withdrawals(Request $request): AnonymousResourceCollection
     {
         Workspace::ownerOnly($request->user());
 
-        return WithdrawalResource::collection(
-            $request->user()->withdrawals()->latest('id')->limit(50)->get(),
-        );
+        return WithdrawalResource::collection($request->user()->withdrawals()->latest('id')->limit(50)->get());
     }
 
-    /**
-     * Ask for a payout. The money leaves the balance now; a failed transfer
-     * puts it back with its own ledger line rather than deleting this one.
-     */
     public function withdraw(Request $request): JsonResponse
     {
         Workspace::ownerOnly($request->user());
         $validated = $request->validate([
             'amount' => ['required', 'integer', 'min:'.Withdrawal::MINIMUM],
-            /* Optional as a trio: omitted means "the saved destination".
-               The full number never leaves the server (the client only ever
-               sees it masked), so paying out to the saved account has to be
-               resolved here, not typed back in the browser. */
-            'bank_code' => ['required_with:account_number,account_name', 'string', 'max:20'],
-            'account_number' => ['required_with:bank_code,account_name', 'string', 'max:40'],
-            'account_name' => ['required_with:bank_code,account_number', 'string', 'max:255'],
-            // Sales and affiliate commission are separate balances, so they
-            // are separate payouts — one cannot be spent out of the other.
-            // Credits are not here: bought Credits are spent, never paid
-            // back to a bank (the gateway that took the money owns refunds).
+            'paypal_email' => ['sometimes', 'email:rfc', 'max:255'],
             'wallet' => ['sometimes', 'string', 'in:main,affiliate'],
         ]);
-
         $user = $request->user();
         $wallet = $validated['wallet'] ?? Wallet::MAIN;
+        $email = $validated['paypal_email'] ?? $user->getAttributes()['payout_paypal_email'] ?? null;
+        if ($email === null) {
+            throw ValidationException::withMessages(['paypal_email' => 'No PayPal email saved — add one first.']);
+        }
 
-        if (! isset($validated['account_number'])) {
-            $saved = $user->getAttributes();
-
-            if (empty($saved['payout_bank_code'])) {
-                throw ValidationException::withMessages([
-                    'account_number' => 'No destination account saved — add one first.',
-                ]);
+        $withdrawal = DB::transaction(function () use ($user, $validated, $wallet, $email) {
+            // Serialize requests, including the open-request check. Checking
+            // outside this lock would let two concurrent requests both pass.
+            User::query()->whereKey($user->id)->lockForUpdate()->firstOrFail();
+            if ($user->withdrawals()->where('wallet', $wallet)
+                ->whereIn('status', [WithdrawalStatus::Pending, WithdrawalStatus::Processing])->exists()) {
+                throw ValidationException::withMessages(['amount' => 'A withdrawal is already on its way — wait for it to land.']);
             }
-
-            $validated['bank_code'] = $saved['payout_bank_code'];
-            $validated['account_number'] = $saved['payout_account_number'];
-            $validated['account_name'] = $saved['payout_account_name'];
-        }
-
-        if ($validated['amount'] > Wallet::balance($user, $wallet)) {
-            throw ValidationException::withMessages([
-                'amount' => 'That’s more than your balance.',
-            ]);
-        }
-
-        // One at a time per wallet: a second request while the first is in
-        // flight would be paid out of a balance the first already spent.
-        // Scoped, or an affiliate payout would block a sales payout.
-        $inFlight = $user->withdrawals()
-            ->where('wallet', $wallet)
-            ->whereIn('status', [WithdrawalStatus::Pending, WithdrawalStatus::Processing])
-            ->exists();
-
-        if ($inFlight) {
-            throw ValidationException::withMessages([
-                'amount' => 'A withdrawal is already on its way — wait for it to land.',
-            ]);
-        }
-
-        $withdrawal = DB::transaction(function () use ($user, $validated, $wallet) {
+            if ($validated['amount'] > Wallet::balance($user, $wallet)) {
+                throw ValidationException::withMessages(['amount' => 'That’s more than your balance.']);
+            }
             $withdrawal = $user->withdrawals()->create([
-                'wallet' => $wallet,
-                'amount' => $validated['amount'],
-                'bank_code' => $validated['bank_code'],
-                'account_number' => $validated['account_number'],
-                'account_name' => $validated['account_name'],
-                'status' => WithdrawalStatus::Pending,
+                'wallet' => $wallet, 'amount' => $validated['amount'], 'currency' => 'USD',
+                'paypal_email' => $email, 'status' => WithdrawalStatus::Pending,
             ]);
-
-            // Debit inside the same transaction: the ledger check and the
-            // row that spends it must not be able to disagree.
-            Wallet::debit(
-                $user,
-                WalletTransactionType::WithdrawalDebit,
-                $withdrawal->amount,
-                'withdrawal',
-                $withdrawal->id,
-                wallet: $wallet,
-            );
+            Wallet::debit($user, WalletTransactionType::WithdrawalDebit, $withdrawal->amount,
+                'withdrawal', $withdrawal->id, wallet: $wallet);
 
             return $withdrawal;
         });

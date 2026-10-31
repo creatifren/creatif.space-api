@@ -19,11 +19,11 @@ class PlansTable
                     ->badge(),
                 TextColumn::make('price_monthly')
                     ->label('Monthly')
-                    ->money('IDR', 1)
+                    ->money('USD', 100)
                     ->sortable(),
                 TextColumn::make('price_yearly')
                     ->label('Yearly')
-                    ->money('IDR', 1)
+                    ->money('USD', 100)
                     ->sortable(),
                 TextColumn::make('subscriptions_count')
                     ->label('Subscribers')

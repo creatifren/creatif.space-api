@@ -1,5 +1,7 @@
 <?php
 
+use App\Enums\WalletTransactionType;
+use App\Models\Plan;
 use App\Models\SocialAccount;
 use App\Models\SocialApprovalLink;
 use App\Models\SocialPost;
@@ -7,11 +9,16 @@ use App\Models\Subscription;
 use App\Models\User;
 use App\Notifications\SocialPostDecided;
 use App\Support\Credits;
+use App\Support\Wallet;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Notification;
 
 beforeEach(function () {
+    // Keep these approval/retry cases on the Credits path.
+    foreach (Plan::all() as $plan) {
+        $plan->update(['quotas' => [...$plan->quotas, 'social_posts_monthly' => 0]]);
+    }
     config([
         'services.postforme.key' => 'test-key',
         'services.postforme.base_url' => 'https://api.postforme.test/v1',
@@ -438,7 +445,8 @@ it("never shows a client the editor's balance, and sends nothing it cannot pay f
     $user = $a->user;
     $b = heldPost('client', $user);
     $link = linkFor($a, $b);
-    Credits::chargeSend($a, intdiv(Credits::balance($user), Credits::PER_SEND)); // drain below one send
+    Wallet::debit($user, WalletTransactionType::CreditsSend,
+        Credits::balance($user), wallet: Wallet::CREDITS);
 
     $message = $this->postJson("/api/v1/a/{$link->token}/approve-all", ['name' => 'Andi', 'post_ids' => [$a->ulid, $b->ulid]])
         ->assertUnprocessable()

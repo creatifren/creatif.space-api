@@ -24,7 +24,7 @@ class PlanResource extends JsonResource
             'name' => $this->name,
             'price_monthly' => $this->price_monthly,
             'price_yearly' => $this->price_yearly,
-            'seat_price_monthly' => $this->seat_price_monthly,
+            'currency' => 'USD',
             // null inside quotas means unlimited, and travels as null.
             'quotas' => $this->quotas,
             'features' => $this->features,

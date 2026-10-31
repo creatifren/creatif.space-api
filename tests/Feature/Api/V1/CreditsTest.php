@@ -27,38 +27,20 @@ it('gives Free its welcome Credits once, when the username is claimed', function
     expect(Credits::balance($user))->toBe(Credits::FREE_WELCOME);
 });
 
-it('lands a paid top-up once, however often Midtrans retries', function () {
-    config(['services.midtrans.server_key' => 'sk']);
-    $user = User::factory()->create();
-    $purchase = CreditPurchase::create(['user_id' => $user->id, 'credits' => 50_000, 'amount' => 50_000, 'status' => 'pending']);
-
-    $payload = [
-        'order_id' => $purchase->midtrans_order_id,
-        'status_code' => '200',
-        'gross_amount' => '50000.00',
-        'transaction_status' => 'settlement',
-        'payment_type' => 'qris',
-    ];
-    $payload['signature_key'] = hash('sha512', $payload['order_id'].'200'.'50000.00'.'sk');
-
-    $this->postJson('/api/v1/webhooks/midtrans', $payload)->assertOk();
-    $this->postJson('/api/v1/webhooks/midtrans', $payload)->assertOk();
-
-    expect(Credits::balance($user))->toBe(50_000)
-        ->and($purchase->fresh()->status)->toBe('paid');
-});
-
-it('starts a top-up for any whole amount inside the bounds', function () {
-    Http::fake(['*' => Http::response(['token' => 'snap-tok'])]);
-    config(['services.midtrans.server_key' => 'sk']);
+it('starts a custom whole-dollar top-up at the fixed USD rate', function () {
+    Http::preventStrayRequests();
+    Http::fake(['test-api.creem.io/*' => Http::response(['id' => 'ch_topup', 'checkout_url' => 'https://checkout.creem.io/test'])]);
     $user = User::factory()->create();
 
-    $this->actingAs($user)->postJson('/api/v1/credits/top-up', ['credits' => 77])->assertUnprocessable();
-    $this->actingAs($user)->postJson('/api/v1/credits/top-up', ['credits' => 12_345])
-        ->assertCreated()
-        ->assertJsonPath('data.snap_token', 'snap-tok');
+    foreach ([9, 1001, 10.50] as $dollars) {
+        $this->actingAs($user)->postJson('/api/v1/credits/top-up', ['dollars' => $dollars])->assertUnprocessable();
+    }
+    $this->actingAs($user)->postJson('/api/v1/credits/top-up', ['dollars' => 37])
+        ->assertCreated()->assertJsonPath('data.checkout_url', 'https://checkout.creem.io/test');
 
-    expect(CreditPurchase::query()->first()->amount)->toBe(12_345);
+    $purchase = CreditPurchase::query()->sole();
+    expect($purchase->amount)->toBe(3700)->and($purchase->credits)->toBe(370000);
+    Http::assertSent(fn ($r) => $r['units'] === 37 && $r['product_id'] === 'prod_credits');
 });
 
 it('rents a block from Credits and raises the storage ceiling', function () {
@@ -74,7 +56,7 @@ it('rents a block from Credits and raises the storage ceiling', function () {
     expect(PlanQuota::storageLimit($user->fresh()))->toBe(7 * 1024 ** 3);
 });
 
-it('takes rent before the plan Credits on the first, and lapses what it cannot pay', function () {
+it('takes storage rent without granting expiring allowance as permanent Credits', function () {
     $paid = User::factory()->create(['storage_blocks' => 1]);
     Subscription::factory()->for($paid)->create();
     Credits::grant($paid, 6000, 'Test');
@@ -87,10 +69,9 @@ it('takes rent before the plan Credits on the first, and lapses what it cannot p
     (new RenewCredits)->handle();
     (new RenewCredits)->handle(); // a retry charges nothing twice
 
-    expect(Credits::balance($paid))->toBe(6000 - 5000 + 12_000)
+    expect(Credits::balance($paid))->toBe(1000)
         ->and($paid->fresh()->storage_blocks)->toBe(1)
-        // Rent first: 3100 could not pay 5000, so the block lapsed — then 12000 landed.
-        ->and(Credits::balance($short))->toBe(3100 + 12_000)
+        ->and(Credits::balance($short))->toBe(3100)
         ->and($short->fresh()->storage_blocks)->toBe(0)
         ->and(PlanQuota::readOnly($short->fresh()))->toBeTrue();
 });

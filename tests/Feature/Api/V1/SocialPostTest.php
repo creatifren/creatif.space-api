@@ -1,6 +1,7 @@
 <?php
 
 use App\Models\Activity;
+use App\Models\Plan;
 use App\Models\SocialAccount;
 use App\Models\SocialPost;
 use App\Models\Subscription;
@@ -9,6 +10,10 @@ use App\Support\Credits;
 use Illuminate\Support\Facades\Http;
 
 beforeEach(function () {
+    // This suite covers paid sends; allowance-first behavior has its own tests.
+    foreach (Plan::all() as $plan) {
+        $plan->update(['quotas' => [...$plan->quotas, 'social_posts_monthly' => 0]]);
+    }
     config([
         'services.postforme.key' => 'test-key',
         'services.postforme.base_url' => 'https://api.postforme.test/v1',
@@ -26,6 +31,32 @@ function premiumUser(): User
 }
 
 describe('creating posts', function () {
+    it('charges before the provider and gives it back when the provider refuses', function () {
+        Http::fake(['api.postforme.test/*' => Http::response(['error' => 'down'], 500)]);
+        $user = premiumUser();
+        $ig = SocialAccount::factory()->for($user)->create(['platform' => 'instagram']);
+
+        $this->actingAs($user)
+            ->postJson('/api/v1/social-posts', ['caption' => 'Hi', 'account_ids' => [$ig->ulid]])
+            ->assertServerError();
+
+        expect(SocialPost::query()->count())->toBe(0)
+            ->and(Credits::balance($user))->toBe(30_000);
+    });
+
+    it('refuses before the provider when the shared wallet is already spent', function () {
+        Http::fake();
+        $user = User::factory()->create();
+        $ig = SocialAccount::factory()->for($user)->create(['platform' => 'instagram']);
+
+        $this->actingAs($user)
+            ->postJson('/api/v1/social-posts', ['caption' => 'Hi', 'account_ids' => [$ig->ulid]])
+            ->assertUnprocessable();
+
+        Http::assertNothingSent();
+        expect(SocialPost::query()->count())->toBe(0);
+    });
+
     it('creates a scheduled post with pending targets and per-account captions', function () {
         Http::fake([
             'api.postforme.test/*' => Http::response(['id' => 'post_abc', 'status' => 'scheduled']),

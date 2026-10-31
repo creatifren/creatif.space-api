@@ -5,7 +5,6 @@ namespace App\Filament\Resources\Withdrawals\Tables;
 use App\Enums\WalletTransactionType;
 use App\Enums\WithdrawalStatus;
 use App\Models\Withdrawal;
-use App\Support\Credits;
 use App\Support\Wallet;
 use Filament\Actions\Action;
 use Filament\Forms\Components\TextInput;
@@ -13,6 +12,7 @@ use Filament\Notifications\Notification;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Filters\SelectFilter;
 use Filament\Tables\Table;
+use Illuminate\Support\Facades\DB;
 
 class WithdrawalsTable
 {
@@ -31,16 +31,15 @@ class WithdrawalsTable
                     ->badge()
                     ->color(fn (string $state): string => $state === 'affiliate' ? 'warning' : 'gray'),
                 TextColumn::make('amount')
-                    ->money('IDR', 1)
+                    ->money(fn (Withdrawal $record) => $record->currency, 100)
                     ->sortable(),
-                TextColumn::make('bank_code')
-                    ->label('Bank')
-                    ->badge(),
-                TextColumn::make('account_number')
-                    ->label('Account')
+                TextColumn::make('paypal_email')
+                    ->label('PayPal')
                     ->copyable(),
-                TextColumn::make('account_name')
-                    ->label('Name on account'),
+                TextColumn::make('payout_reference')
+                    ->label('PayPal reference')
+                    ->placeholder('—')
+                    ->copyable(),
                 TextColumn::make('status')
                     ->badge(),
                 TextColumn::make('processed_at')
@@ -69,13 +68,26 @@ class WithdrawalsTable
                     ->label('Mark paid')
                     ->color('success')
                     ->visible(fn (Withdrawal $record) => $record->isOpen())
+                    ->schema([
+                        TextInput::make('payout_reference')
+                            ->label('PayPal transaction ID')
+                            ->required()
+                            ->maxLength(255),
+                    ])
                     ->requiresConfirmation()
-                    ->modalDescription('Only do this once the transfer has actually left the bank. The money is already out of the creator’s balance.')
-                    ->action(function (Withdrawal $record) {
-                        $record->forceFill([
-                            'status' => WithdrawalStatus::Completed,
-                            'processed_at' => now(),
-                        ])->save();
+                    ->modalDescription('Only do this after PayPal shows the payout as sent. The money is already out of the creator’s balance.')
+                    ->action(function (Withdrawal $record, array $data) {
+                        DB::transaction(function () use ($record, $data): void {
+                            $locked = Withdrawal::query()->whereKey($record->id)->lockForUpdate()->firstOrFail();
+                            if (! $locked->isOpen()) {
+                                return;
+                            }
+                            $locked->forceFill([
+                                'status' => WithdrawalStatus::Completed,
+                                'processed_at' => now(),
+                                'payout_reference' => $data['payout_reference'],
+                            ])->save();
+                        });
 
                         Notification::make()
                             ->title('Marked as paid')
@@ -96,31 +108,29 @@ class WithdrawalsTable
                     ->requiresConfirmation()
                     ->modalDescription('The amount goes back into the creator’s balance as a new ledger line.')
                     ->action(function (Withdrawal $record, array $data) {
-                        $record->forceFill([
-                            'status' => WithdrawalStatus::Failed,
-                            'processed_at' => now(),
-                            'failure_reason' => $data['reason'],
-                        ])->save();
+                        DB::transaction(function () use ($record, $data): void {
+                            // A double click must not return the money twice.
+                            $locked = Withdrawal::query()->whereKey($record->id)->lockForUpdate()->firstOrFail();
+                            if (! $locked->isOpen()) {
+                                return;
+                            }
+                            $locked->forceFill([
+                                'status' => WithdrawalStatus::Failed,
+                                'processed_at' => now(),
+                                'failure_reason' => $data['reason'],
+                            ])->save();
 
-                        // A new credit, not an undo: the debit stays on the
-                        // record so the history says what happened.
-                        //
-                        // The wallet comes from the row, never a default —
-                        // returning an affiliate payout into the sales
-                        // balance would be money in the wrong place, and
-                        // nothing downstream would notice.
-                        Wallet::credit(
-                            $record->user,
-                            WalletTransactionType::WithdrawalFailedCredit,
-                            // The Credits wallet counts Credits; the row is rupiah.
-                            $record->wallet === Wallet::CREDITS
-                                ? intdiv($record->amount, Credits::RUPIAH)
-                                : $record->amount,
-                            'withdrawal',
-                            $record->id,
-                            $data['reason'],
-                            wallet: $record->wallet,
-                        );
+                            // The wallet comes from the row, never a default.
+                            Wallet::credit(
+                                $locked->user,
+                                WalletTransactionType::WithdrawalFailedCredit,
+                                $locked->amount,
+                                'withdrawal',
+                                $locked->id,
+                                $data['reason'],
+                                wallet: $locked->wallet,
+                            );
+                        });
 
                         Notification::make()
                             ->title('Money returned to the balance')

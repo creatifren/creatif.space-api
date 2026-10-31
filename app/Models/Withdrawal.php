@@ -21,7 +21,6 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
  * @property string $account_number
  * @property string $account_name
  * @property WithdrawalStatus $status
- * @property string|null $midtrans_payout_id
  * @property CarbonImmutable|null $processed_at
  * @property string|null $failure_reason
  * @property CarbonImmutable|null $created_at
@@ -33,16 +32,18 @@ class Withdrawal extends Model
     use HasFactory;
 
     /** The product's promise on the pricing page. */
-    public const MINIMUM = 50_000;
+    public const MINIMUM = 1000; // $10, in USD cents
 
     protected $fillable = [
         'wallet',
         'amount',
+        'currency',
         'bank_code',
         'account_number',
         'account_name',
+        'paypal_email',
+        'payout_reference',
         'status',
-        'midtrans_payout_id',
         'processed_at',
         'failure_reason',
     ];
@@ -100,6 +101,6 @@ class Withdrawal extends Model
     /** The last four digits, which is all a confirmation screen should show. */
     public function maskedAccount(): string
     {
-        return '••••'.substr($this->account_number, -4);
+        return $this->account_number === null ? '' : '••••'.substr($this->account_number, -4);
     }
 }

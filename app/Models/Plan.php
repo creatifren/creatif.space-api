@@ -16,9 +16,8 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
  * @property int $id
  * @property PlanKey $key
  * @property string $name
- * @property int $price_monthly
- * @property int $price_yearly
- * @property int $seat_price_monthly
+ * @property int $price_monthly US cents
+ * @property int $price_yearly US cents
  * @property array<string, mixed> $quotas
  * @property array<string, mixed> $features
  * @property bool $is_active
@@ -36,7 +35,6 @@ class Plan extends Model
         'name',
         'price_monthly',
         'price_yearly',
-        'seat_price_monthly',
         'quotas',
         'features',
         'is_active',
@@ -54,7 +52,6 @@ class Plan extends Model
             'key' => PlanKey::class,
             'price_monthly' => 'integer',
             'price_yearly' => 'integer',
-            'seat_price_monthly' => 'integer',
             'quotas' => 'array',
             'features' => 'array',
             'is_active' => 'boolean',
@@ -63,8 +60,8 @@ class Plan extends Model
     }
 
     /**
-     * `key` is the public identity — "premium" is what the checkout call
-     * sends, and it never changes.
+     * `key` is the public identity — "pro" is what the checkout call sends,
+     * and it never changes.
      */
     public function getRouteKeyName(): string
     {
@@ -109,19 +106,21 @@ class Plan extends Model
     }
 
     /**
-     * The price actually charged for a period, seats included. Team bills
-     * per person beyond the seats the plan already covers.
+     * What one billing period costs, in US cents. Pro and Max are one unit;
+     * Team, when it ships, multiplies this by the seats.
      */
-    public function priceFor(string $period, int $seats = 1): int
+    public function priceFor(string $period): int
     {
-        $included = $this->quota('seats') ?? $seats;
-        $extra = max(0, $seats - $included);
+        return $period === 'yearly' ? $this->price_yearly : $this->price_monthly;
+    }
 
-        return $period === 'yearly'
-            // A yearly seat costs ten months, the same three-months-free
-            // arithmetic the plan price itself uses.
-            ? $this->price_yearly + $extra * $this->seat_price_monthly * 10
-            : $this->price_monthly + $extra * $this->seat_price_monthly;
+    /**
+     * The Creem product that sells this plan for the period. Products differ
+     * between test and live mode, so they come from config, not this row.
+     */
+    public function creemProduct(string $period): ?string
+    {
+        return config("services.creem.products.{$this->key->value}_{$period}");
     }
 
     /**

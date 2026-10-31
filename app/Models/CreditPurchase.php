@@ -8,17 +8,18 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Support\Str;
 
 /**
- * A top-up waiting on, or settled by, Midtrans. The Credits land in the
+ * A top-up waiting on, or settled by, Creem. The Credits land in the
  * ledger once, when the webhook says paid — this row is the receipt.
  *
  * @property int $id
  * @property string $ulid
  * @property int $user_id
  * @property int $credits
- * @property int $amount
+ * @property int $units Dollars bought — Creem's $1 Credits product, this many times
+ * @property int $amount US cents
+ * @property string $currency
  * @property string $status
- * @property string $midtrans_order_id
- * @property string|null $midtrans_snap_token
+ * @property string|null $creem_checkout_id
  * @property string|null $payment_method
  * @property CarbonImmutable|null $paid_at
  * @property array<string, mixed>|null $raw_notification
@@ -26,11 +27,9 @@ use Illuminate\Support\Str;
  */
 class CreditPurchase extends Model
 {
-    public const ORDER_PREFIX = 'CR-';
-
     protected $fillable = [
-        'user_id', 'credits', 'amount', 'status', 'midtrans_order_id',
-        'midtrans_snap_token', 'payment_method', 'paid_at', 'raw_notification',
+        'user_id', 'credits', 'units', 'amount', 'currency', 'status',
+        'creem_checkout_id', 'payment_method', 'paid_at', 'raw_notification',
     ];
 
     /**
@@ -48,7 +47,6 @@ class CreditPurchase extends Model
     {
         static::creating(function (self $purchase): void {
             $purchase->ulid ??= (string) Str::ulid();
-            $purchase->midtrans_order_id ??= self::ORDER_PREFIX.$purchase->ulid;
         });
     }
 

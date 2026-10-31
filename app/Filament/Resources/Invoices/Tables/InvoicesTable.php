@@ -22,7 +22,7 @@ class InvoicesTable
                     ->label('Plan')
                     ->badge(),
                 TextColumn::make('amount')
-                    ->money('IDR', 1)
+                    ->money(fn ($record) => $record->currency, 100)
                     ->sortable(),
                 TextColumn::make('status')
                     ->badge(),
@@ -32,8 +32,8 @@ class InvoicesTable
                     ->dateTime()
                     ->placeholder('—')
                     ->sortable(),
-                TextColumn::make('midtrans_order_id')
-                    ->label('Midtrans order')
+                TextColumn::make('creem_transaction_id')
+                    ->label('Creem transaction')
                     ->copyable()
                     ->toggleable(isToggledHiddenByDefault: true),
                 TextColumn::make('created_at')

@@ -1,0 +1,258 @@
+<?php
+
+namespace App\Http\Controllers\Api\V1;
+
+use App\Enums\InvoiceStatus;
+use App\Enums\SubscriptionStatus;
+use App\Enums\WalletTransactionType;
+use App\Http\Controllers\Controller;
+use App\Models\CreditPurchase;
+use App\Models\Invoice;
+use App\Models\Plan;
+use App\Models\Subscription;
+use App\Models\User;
+use App\Notifications\SubscriptionPastDue;
+use App\Notifications\SubscriptionStarted;
+use App\Services\CreemService;
+use App\Support\CommissionEngine;
+use App\Support\Wallet;
+use Carbon\CarbonImmutable;
+use Illuminate\Http\JsonResponse;
+use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
+use Illuminate\Validation\ValidationException;
+
+/** Only verified provider evidence settles money; redirects never do. */
+class CreemWebhookController extends Controller
+{
+    public function __invoke(Request $request, CreemService $creem): JsonResponse
+    {
+        if (! $creem->verifySignature($request->getContent(), (string) $request->header('creem-signature'))) {
+            return response()->json(['message' => 'Invalid signature.'], 403);
+        }
+
+        $event = $request->validate([
+            'id' => ['required', 'string', 'max:64'],
+            'eventType' => ['required', 'string', 'max:64'],
+            'object' => ['required', 'array'],
+        ]);
+
+        // The receipt and every business write commit together. A failed
+        // handler must not poison the event id and make its retry a no-op.
+        DB::transaction(function () use ($event, $creem): void {
+            if (! DB::table('webhook_events')->insertOrIgnore([
+                'source' => 'creem', 'event_id' => $event['id'], 'type' => $event['eventType'],
+                'payload' => json_encode($event, JSON_THROW_ON_ERROR),
+                'created_at' => now(), 'updated_at' => now(),
+            ])) {
+                return;
+            }
+
+            $object = $event['object'];
+            match ($event['eventType']) {
+                'checkout.completed' => $this->checkout($object),
+                'subscription.paid' => $this->paid($object, $creem),
+                'subscription.past_due', 'subscription.unpaid', 'subscription.expired',
+                'subscription.canceled', 'subscription.scheduled_cancel' => $this->lifecycle($event['eventType'], $object),
+                // A product update is not proof a proration charge succeeded.
+                // Paid events alone grant upgraded features.
+                'subscription.update', 'subscription.active' => null,
+                'refund.created', 'dispute.created' => $this->review($event),
+                default => null,
+            };
+        });
+
+        return response()->json(['message' => 'ok']);
+    }
+
+    private function checkout(array $object): void
+    {
+        $requestId = $object['request_id'] ?? '';
+        $purchase = CreditPurchase::query()->where('ulid', $requestId)->lockForUpdate()->first();
+
+        if ($purchase !== null) {
+            $order = $object['order'] ?? [];
+            // What was actually paid, not the list price: a coupon on the
+            // Credits product must not buy full Credits for less. Tax sits on
+            // top under inclusive pricing, so paid may meet but not undercut.
+            $paid = $order['amount_paid'] ?? $order['amount'] ?? null;
+            $this->require(
+                ($order['status'] ?? '') === 'paid'
+                && ($order['currency'] ?? '') === 'USD'
+                && ($order['amount'] ?? null) === $purchase->amount
+                && is_int($paid) && $paid >= $purchase->amount
+                && (int) ($order['discount_amount'] ?? 0) === 0
+                && $this->id($object['product'] ?? null) === config('services.creem.products.credits')
+                && ($purchase->creem_checkout_id === null || $purchase->creem_checkout_id === ($object['id'] ?? null)),
+            );
+
+            if ($purchase->status === 'paid') {
+                return;
+            }
+            $this->require($purchase->status === 'pending');
+            User::query()->whereKey($purchase->user_id)->lockForUpdate()->firstOrFail();
+            $purchase->update([
+                'status' => 'paid', 'paid_at' => now(), 'creem_checkout_id' => $object['id'],
+                'raw_notification' => $object,
+            ]);
+            Wallet::credit($purchase->user, WalletTransactionType::CreditsTopUp, $purchase->credits,
+                'credit_purchase', $purchase->id, 'Creem checkout '.$object['id'], Wallet::CREDITS);
+
+            return;
+        }
+
+        $invoice = Invoice::query()->where('number', $requestId)->lockForUpdate()->firstOrFail();
+        $subscription = $invoice->subscription()->lockForUpdate()->firstOrFail();
+        $remoteId = $this->id($object['subscription'] ?? null);
+        $this->require($remoteId !== null
+            && ($subscription->creem_subscription_id === null || $subscription->creem_subscription_id === $remoteId)
+            && $this->id($object['product'] ?? null) === $subscription->plan->creemProduct($subscription->billing_period->value));
+        $subscription->update([
+            'creem_subscription_id' => $remoteId,
+            'creem_customer_id' => $this->id($object['customer'] ?? null),
+        ]);
+        $invoice->update(['creem_checkout_id' => $object['id']]);
+    }
+
+    private function paid(array $object, CreemService $creem): void
+    {
+        $subscription = $this->localSubscription($object);
+        User::query()->whereKey($subscription->user_id)->lockForUpdate()->firstOrFail();
+        $transactionId = $object['last_transaction_id'] ?? null;
+        $this->require(is_string($transactionId) && $transactionId !== '');
+        if (Invoice::query()->where('creem_transaction_id', $transactionId)->exists()) {
+            return;
+        }
+
+        $transaction = $object['last_transaction'] ?? $creem->transaction($transactionId);
+        $this->require(($transaction['id'] ?? '') === $transactionId
+            && ($transaction['currency'] ?? '') === 'USD'
+            && in_array($transaction['status'] ?? '', ['paid', 'completed'], true)
+            && is_int($transaction['amount'] ?? null) && $transaction['amount'] > 0);
+
+        [$plan, $period] = $this->plan($this->id($object['product'] ?? null));
+        $start = CarbonImmutable::parse($object['current_period_start_date'] ?? throw ValidationException::withMessages(['object' => 'Missing billing period.']));
+        $end = CarbonImmutable::parse($object['current_period_end_date'] ?? throw ValidationException::withMessages(['object' => 'Missing billing period.']));
+        $this->require($end->gt($start));
+        // Two checkouts both paid: record the money, but never run two plans.
+        // The second is left for an operator to refund in Creem.
+        $other = Subscription::query()->where('user_id', $subscription->user_id)
+            ->whereKeyNot($subscription->id)
+            ->whereIn('status', [SubscriptionStatus::Active, SubscriptionStatus::PastDue])
+            ->exists();
+        if ($other) {
+            Log::warning('billing.duplicate_subscription_paid', [
+                'subscription' => $subscription->ulid, 'creem_subscription' => $object['id'],
+            ]);
+        }
+
+        $first = ! $subscription->invoices()->where('status', InvoiceStatus::Paid)->exists();
+        $invoice = $subscription->invoices()->where('status', InvoiceStatus::Pending)->oldest('id')->lockForUpdate()->first();
+        if ($invoice === null) {
+            $invoice = $subscription->invoices()->create(['number' => Invoice::nextNumber(), 'amount' => $transaction['amount'], 'currency' => 'USD']);
+        }
+        $invoice->update([
+            'status' => InvoiceStatus::Paid, 'amount' => $transaction['amount'], 'currency' => 'USD',
+            'creem_transaction_id' => $transactionId, 'paid_at' => now(), 'raw_notification' => $object,
+        ]);
+
+        // Record a late, older payment, but do not roll a newer period back.
+        // Ordered by period start, not end: switching yearly → monthly makes
+        // the new period end earlier while still being the newer one.
+        if (! $other && ($subscription->current_period_start === null || $start->gte($subscription->current_period_start))) {
+            $subscription->update([
+                'plan_id' => $plan->id, 'billing_period' => $period,
+                'status' => SubscriptionStatus::Active,
+                'creem_subscription_id' => $object['id'],
+                'creem_customer_id' => $this->id($object['customer'] ?? null),
+                'current_period_start' => $start, 'current_period_end' => $end,
+                'grace_ends_at' => null,
+            ]);
+        }
+        if ($other) {
+            return;
+        }
+        CommissionEngine::forInvoice($invoice);
+        if ($first) {
+            DB::afterCommit(fn () => $subscription->user->notify(new SubscriptionStarted($subscription->fresh()->load('plan'), $invoice)));
+        }
+    }
+
+    private function lifecycle(string $type, array $object): void
+    {
+        $subscription = $this->localSubscription($object);
+        // A delayed event about an older period must not undo a newer payment.
+        if (isset($object['current_period_start_date']) && $subscription->current_period_start !== null
+            && CarbonImmutable::parse($object['current_period_start_date'])->lt($subscription->current_period_start)) {
+            return;
+        }
+        if (in_array($type, ['subscription.scheduled_cancel', 'subscription.canceled'], true)) {
+            $subscription->update(['cancelled_at' => $subscription->cancelled_at ?? now()]);
+            if ($type === 'subscription.canceled' && $subscription->current_period_end?->isPast()) {
+                $subscription->update(['status' => SubscriptionStatus::Expired]);
+            }
+        } elseif ($type === 'subscription.past_due') {
+            if ($subscription->status !== SubscriptionStatus::PastDue) {
+                // A fixed window: Creem retries the card meanwhile, and the
+                // expiry job ends access once it closes, whatever Creem says.
+                $subscription->update([
+                    'status' => SubscriptionStatus::PastDue,
+                    'grace_ends_at' => now()->addDays(Subscription::GRACE_DAYS),
+                ]);
+                DB::afterCommit(fn () => $subscription->user->notify(new SubscriptionPastDue($subscription)));
+            }
+        } else {
+            $subscription->update(['status' => SubscriptionStatus::Expired]);
+        }
+    }
+
+    private function localSubscription(array $object): Subscription
+    {
+        $remoteId = $object['id'] ?? null;
+        $this->require(is_string($remoteId) && $remoteId !== '');
+        $subscription = Subscription::query()->where('creem_subscription_id', $remoteId)->lockForUpdate()->first();
+        // subscription.paid can arrive before checkout.completed. Creem
+        // carries checkout metadata onto the subscription for this case.
+        if ($subscription === null && is_string($object['metadata']['subscription'] ?? null)) {
+            $subscription = Subscription::query()->where('ulid', $object['metadata']['subscription'])->lockForUpdate()->first();
+        }
+        abort_if($subscription === null, 404, 'Unknown subscription.');
+        $this->require($subscription->creem_subscription_id === null || $subscription->creem_subscription_id === $remoteId);
+
+        return $subscription;
+    }
+
+    private function plan(?string $product): array
+    {
+        foreach (['pro', 'max'] as $key) {
+            foreach (['monthly', 'yearly'] as $period) {
+                $expected = config("services.creem.products.{$key}_{$period}");
+                if ($product !== null && is_string($expected) && $expected !== '' && $product === $expected) {
+                    return [Plan::query()->where('key', $key)->where('is_active', true)->firstOrFail(), $period];
+                }
+            }
+        }
+        throw ValidationException::withMessages(['object' => 'Unknown product.']);
+    }
+
+    /** Refunds/disputes need an explicit operator decision; never hide one. */
+    private function review(array $event): void
+    {
+        Log::warning('billing.review_required', ['event_id' => $event['id'], 'type' => $event['eventType']]);
+        // ponytail: refund clawback is manual until partial refunds and spent
+        // Credits have a debt policy. The durable event is the review queue.
+    }
+
+    private function id(mixed $value): ?string
+    {
+        return is_string($value) ? $value : (is_array($value) && is_string($value['id'] ?? null) ? $value['id'] : null);
+    }
+
+    private function require(bool $condition): void
+    {
+        if (! $condition) {
+            throw ValidationException::withMessages(['object' => 'Payment evidence does not match the purchase.']);
+        }
+    }
+}

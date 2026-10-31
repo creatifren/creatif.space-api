@@ -23,7 +23,7 @@ class SubscriptionFactory extends Factory
             'user_id' => User::factory(),
             // The seeded rows are the plans — `key` is unique, so making a
             // fresh one would collide. Tests name the plan they want.
-            'plan_id' => fn () => Plan::query()->where('key', 'premium')->value('id')
+            'plan_id' => fn () => Plan::query()->where('key', 'pro')->value('id')
                 ?? Plan::factory(),
             'billing_period' => 'monthly',
             'status' => 'active',

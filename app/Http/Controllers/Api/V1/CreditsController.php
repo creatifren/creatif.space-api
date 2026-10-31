@@ -6,7 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\CreditPurchase;
 use App\Models\SocialPost;
 use App\Models\WalletTransaction;
-use App\Services\MidtransService;
+use App\Services\CreemService;
 use App\Support\Credits;
 use App\Support\PlanQuota;
 use App\Support\Wallet;
@@ -21,9 +21,9 @@ use Illuminate\Http\Request;
  */
 class CreditsController extends Controller
 {
-    /** Top-up sizes the page offers as shortcuts; any whole amount between
+    /** Top-up shortcuts, in whole dollars; any whole amount between
         Credits::TOP_UP_MIN and TOP_UP_MAX is accepted too (custom). */
-    private const PACKS = [25_000, 50_000, 100_000, 250_000, 500_000, 1_000_000];
+    private const PACKS = [10, 20, 50, 100];
 
     public function show(Request $request): JsonResponse
     {
@@ -33,16 +33,20 @@ class CreditsController extends Controller
             'balance' => Credits::balance($user),
             'committed' => Credits::committed($user),
             'rate' => [
-                'rupiah' => Credits::RUPIAH,
+                'per_dollar' => Credits::PER_DOLLAR,
                 'per_send' => Credits::PER_SEND,
                 'block_gb' => Credits::BLOCK_GB,
                 'per_block' => Credits::PER_BLOCK,
                 'per_block_bulk' => Credits::PER_BLOCK_BULK,
                 'bulk_from_gb' => Credits::BULK_FROM_GB,
             ],
-            'monthly' => $user->activeSubscription() !== null
-                ? Credits::PREMIUM_MONTHLY * Workspace::seats(Workspace::owner($user))
-                : 0,
+            // Publishes the plan includes this period — used before Credits.
+            'allowance' => [
+                'limit' => PlanQuota::socialPostsLimit($user),
+                'used' => Credits::allowanceUsed($user),
+                'resets_at' => Credits::allowanceSince(Workspace::owner($user))
+                    ->addMonthNoOverflow()->toIso8601String(),
+            ],
             'storage' => [
                 'used' => PlanQuota::storageUsed($user),
                 'plan' => PlanQuota::planStorageLimit($user),
@@ -92,30 +96,33 @@ class CreditsController extends Controller
     }
 
     /**
-     * Start a top-up: a pending purchase and a Snap token. The Credits land
-     * when Midtrans says paid.
+     * Start a top-up: a pending purchase and a hosted Creem checkout. The
+     * Credits land when the webhook says paid, never on the redirect back.
      */
-    public function topUp(Request $request, MidtransService $midtrans): JsonResponse
+    public function topUp(Request $request, CreemService $creem): JsonResponse
     {
         Workspace::ownerOnly($request->user());
 
         $validated = $request->validate([
-            'credits' => ['required', 'integer', 'min:'.Credits::TOP_UP_MIN, 'max:'.Credits::TOP_UP_MAX],
+            // Whole dollars: Creem sells the $1 Credits product this many times.
+            'dollars' => ['required', 'integer', 'min:'.Credits::TOP_UP_MIN, 'max:'.Credits::TOP_UP_MAX],
         ]);
 
         $purchase = CreditPurchase::create([
             'user_id' => $request->user()->id,
-            'credits' => $validated['credits'],
-            'amount' => $validated['credits'] * Credits::RUPIAH,
+            'units' => $validated['dollars'],
+            'credits' => $validated['dollars'] * Credits::PER_DOLLAR,
+            'amount' => $validated['dollars'] * 100,
+            'currency' => 'USD',
             'status' => 'pending',
         ]);
 
-        $token = $midtrans->creditsToken($purchase, $request->user());
-        $purchase->forceFill(['midtrans_snap_token' => $token])->save();
+        $checkout = $creem->creditsCheckout($purchase, $request->user());
+        $purchase->forceFill(['creem_checkout_id' => $checkout['id']])->save();
 
         return response()->json(['data' => [
-            'snap_token' => $token,
-            'order_id' => $purchase->midtrans_order_id,
+            'checkout_url' => $checkout['checkout_url'],
+            'purchase_id' => $purchase->ulid,
         ]], 201);
     }
 

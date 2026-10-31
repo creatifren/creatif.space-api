@@ -141,9 +141,9 @@ describe('social accounts', function () {
         $kept = SocialAccount::factory()->for($user)->create();
 
         $only = SocialPost::factory()->for($user)->create(['provider_post_id' => 'post_only']);
-        $only->targets()->create(['social_account_id' => $gone->id, 'status' => 'pending']);
+        $only->targets()->create(['social_account_id' => $gone->id, 'status' => 'pending', 'paid_with' => 'credits', 'charged_at' => now()]);
         $shared = SocialPost::factory()->for($user)->create(['provider_post_id' => 'post_shared']);
-        $shared->targets()->create(['social_account_id' => $gone->id, 'status' => 'pending']);
+        $shared->targets()->create(['social_account_id' => $gone->id, 'status' => 'pending', 'paid_with' => 'credits', 'charged_at' => now()]);
         $shared->targets()->create(['social_account_id' => $kept->id, 'status' => 'pending']);
         $before = Credits::balance($user);
 

@@ -15,6 +15,7 @@ use App\Services\PostForMeService;
 use App\Support\Credits;
 use App\Support\PlanQuota;
 use App\Support\SocialPostRelay;
+use App\Support\Workspace;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
@@ -23,6 +24,7 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
+use Throwable;
 
 class SocialPostController extends Controller
 {
@@ -49,12 +51,14 @@ class SocialPostController extends Controller
                 ->latest()
                 ->get(),
         )->additional(['meta' => [
-            // The composer's "uses N of your Credits" line.
+            // The composer's "uses N of your Credits" line: the allowance
+            // goes first, so it needs both.
             'credits' => Credits::balance($request->user()),
             'per_send' => Credits::PER_SEND,
-            // Kept for the usage screen's monthly count.
-            'posts_used' => PlanQuota::socialPostsUsed($request->user()),
-            'posts_limit' => null,
+            'posts_used' => Credits::allowanceUsed($request->user()),
+            'posts_limit' => PlanQuota::socialPostsLimit($request->user()),
+            'posts_reset_at' => Credits::allowanceSince(Workspace::owner($request->user()))
+                ->addMonthNoOverflow()->toIso8601String(),
         ]]);
     }
 
@@ -95,15 +99,18 @@ class SocialPostController extends Controller
 
         $user = $request->user();
         $approval = isset($validated['approval']) ? SocialPostApproval::from($validated['approval']) : null;
+        if ($approval === SocialPostApproval::Client) {
+            PlanQuota::requireClientApprovals($user);
+        }
         $draft = (bool) ($validated['draft'] ?? false);
         $ids = array_values(array_unique($validated['account_ids']));
         $sendsNow = $approval === null && ! $draft;
 
-        // The price is Credits::PER_SEND a destination, checked before anything
-        // reaches the provider. Held posts and drafts are checked when they
-        // are approved or sent — holding one costs nothing.
+        // The allowance first, then Credits::PER_SEND a destination past it,
+        // checked before anything reaches the provider. Held posts and drafts
+        // are checked when they are approved or sent — holding one costs nothing.
         if ($sendsNow && ! PlanQuota::canPostSocial($user, count($ids))) {
-            $need = count($ids) * Credits::PER_SEND;
+            $need = Credits::sendPrice($user, count($ids));
 
             throw ValidationException::withMessages([
                 'caption' => "This needs {$need} Credits and the balance has ".Credits::balance($user)
@@ -142,8 +149,7 @@ class SocialPostController extends Controller
             ->filter()
             ->values();
 
-        // Provider first, DB second — never an HTTP call inside the
-        // transaction, and nothing is recorded that was never sent.
+        // Never an HTTP call inside a transaction.
         $payload = [
             'caption' => $validated['caption'],
             'social_accounts' => $accounts->pluck('provider_account_id')->all(),
@@ -162,27 +168,20 @@ class SocialPostController extends Controller
             $payload['account_configurations'] = $configurations->all();
         }
 
-        // A held post or a draft is only recorded; approving or sending it
-        // is what reaches the provider.
-        $remote = $sendsNow ? $postForMe->createPost($payload) : null;
-
-        $post = DB::transaction(function () use ($user, $ulid, $validated, $accounts, $captions, $scheduledAt, $remote, $approval, $draft, $type) {
+        // Recorded and paid for first, then handed to the provider: a short
+        // balance — or a teammate spending the same wallet a moment earlier —
+        // refuses here, before anything can go live unpaid. A held post or a
+        // draft is only recorded; approving or sending it reaches the provider.
+        $post = DB::transaction(function () use ($user, $ulid, $validated, $accounts, $captions, $scheduledAt, $approval, $draft, $type, $sendsNow) {
             $post = $user->socialPosts()->create([
                 'ulid' => $ulid,
-                'provider_post_id' => $remote ? (string) $remote['id'] : null,
                 'caption' => $validated['caption'],
                 'type' => $type,
                 'labels' => $validated['labels'] ?? null,
                 'media' => $validated['media'] ?? null,
                 'scheduled_at' => $scheduledAt,
                 'approval' => $approval,
-                // `processed` means it already went out — everything else is
-                // still on its way.
-                'status' => $draft
-                    ? SocialPostStatus::Draft
-                    : (($remote['status'] ?? null) === 'processed'
-                        ? SocialPostStatus::Published
-                        : SocialPostStatus::Scheduled),
+                'status' => $draft ? SocialPostStatus::Draft : SocialPostStatus::Scheduled,
             ]);
 
             foreach ($accounts as $account) {
@@ -195,14 +194,35 @@ class SocialPostController extends Controller
                 ]);
             }
 
-            // Charged with the row it pays for; a destination that fails
-            // or is cancelled hands its 3 back.
-            if ($remote !== null) {
-                Credits::chargeSend($post, $accounts->count());
+            // A destination that fails or is cancelled hands its publish back.
+            if ($sendsNow) {
+                Credits::chargeSend($post);
             }
 
             return $post;
         });
+
+        if ($sendsNow) {
+            try {
+                $remote = $postForMe->createPost($payload);
+            } catch (Throwable $e) {
+                // Nothing went out: give the publishes back and forget the row.
+                DB::transaction(function () use ($post) {
+                    Credits::returnSend($post, $post->targets()->get(), 'Not sent · the provider refused it');
+                    $post->delete();
+                });
+
+                throw $e;
+            }
+
+            // `processed` means it already went out — anything else is on its way.
+            $post->update([
+                'provider_post_id' => (string) $remote['id'],
+                'status' => ($remote['status'] ?? null) === 'processed'
+                    ? SocialPostStatus::Published
+                    : SocialPostStatus::Scheduled,
+            ]);
+        }
 
         return (new SocialPostResource($post->load('targets.account')))
             ->response()
@@ -315,7 +335,7 @@ class SocialPostController extends Controller
         $replace($a, $atB);
         try {
             $replace($b, $atA);
-        } catch (\Throwable $e) {
+        } catch (Throwable $e) {
             $replace($a, $atA); // put the first back; if this throws too, the error says so
             throw $e;
         }
@@ -348,6 +368,10 @@ class SocialPostController extends Controller
 
         if ($socialPost->status !== SocialPostStatus::Draft) {
             return response()->json(['message' => 'Only a draft can be sent from here.'], 422);
+        }
+
+        if (($validated['approval'] ?? null) === SocialPostApproval::Client->value) {
+            PlanQuota::requireClientApprovals($request->user());
         }
 
         // The relay charges as it sends, and refuses before the provider if
@@ -412,7 +436,7 @@ class SocialPostController extends Controller
             if ($sent) {
                 Credits::returnSend(
                     $socialPost,
-                    $socialPost->targets()->where('status', SocialPostTargetStatus::Pending)->count(),
+                    $socialPost->targets()->where('status', SocialPostTargetStatus::Pending)->get(),
                     'Cancelled before it went out',
                 );
             }

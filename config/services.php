@@ -31,17 +31,27 @@ return [
          * Unset now yields null, Google rejects it immediately, and the
          * missing variable is named in .env.example. Same reasoning as
          * client_id/client_secret above, which never had fallbacks, and as
-         * MidtransService throwing when its key is absent.
+         * CreemService throwing when its key is absent.
          */
         'redirect' => env('GOOGLE_REDIRECT_URI'),
     ],
 
-    // Payments — subscription checkout (Snap) and its webhook. The server
-    // key is also the webhook signing secret, so it never leaves the server.
-    'midtrans' => [
-        'server_key' => env('MIDTRANS_SERVER_KEY'),
-        'client_key' => env('MIDTRANS_CLIENT_KEY'),
-        'is_production' => (bool) env('MIDTRANS_IS_PRODUCTION', false),
+    // Payments — Creem is the merchant of record: hosted checkout for plans
+    // and Credits, and a signed webhook. Test-mode keys only work against
+    // the test host, so test_mode and the key must agree. Product ids differ
+    // between test and live too, hence env rather than the plans table.
+    'creem' => [
+        'api_key' => env('CREEM_API_KEY'),
+        'webhook_secret' => env('CREEM_WEBHOOK_SECRET'),
+        'test_mode' => (bool) env('CREEM_TEST_MODE', true),
+        'products' => [
+            'pro_monthly' => env('CREEM_PRODUCT_PRO_MONTHLY'),
+            'pro_yearly' => env('CREEM_PRODUCT_PRO_YEARLY'),
+            'max_monthly' => env('CREEM_PRODUCT_MAX_MONTHLY'),
+            'max_yearly' => env('CREEM_PRODUCT_MAX_YEARLY'),
+            // One-time, $1 a unit = 10,000 Credits; checkout sends the units.
+            'credits' => env('CREEM_PRODUCT_CREDITS'),
+        ],
     ],
 
     // Social posting — Post for Me relays posts to the nine platforms. One

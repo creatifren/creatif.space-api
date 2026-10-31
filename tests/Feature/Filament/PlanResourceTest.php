@@ -37,26 +37,26 @@ it('renders the plans list without stringifying the enum route key', function ()
     $this->actingAs(admin())
         ->get('/admin/plans')
         ->assertOk()
-        ->assertSee('Premium');
+        ->assertSee('Pro');
 });
 
 it('links each row to an edit page keyed by the enum value', function () {
     $this->actingAs(admin())
         ->get('/admin/plans')
         ->assertOk()
-        ->assertSee('/admin/plans/premium/edit');
+        ->assertSee('/admin/plans/pro/edit');
 });
 
 it('opens a plan edit page by its string key', function () {
     $this->actingAs(admin())
-        ->get('/admin/plans/premium/edit')
+        ->get('/admin/plans/pro/edit')
         ->assertOk();
 });
 
 it('returns the backing string from getRouteKey, not the enum case', function () {
-    $plan = Plan::where('key', 'premium')->firstOrFail();
+    $plan = Plan::where('key', 'pro')->firstOrFail();
 
-    expect($plan->getRouteKey())->toBe('premium')->toBeString()
+    expect($plan->getRouteKey())->toBe('pro')->toBeString()
         // The attribute itself must stay an enum — the fix is at the route
         // boundary, not a walk-back of the cast.
         ->and($plan->key)->toBeInstanceOf(PlanKey::class);

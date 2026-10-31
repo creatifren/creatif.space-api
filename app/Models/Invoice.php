@@ -16,10 +16,12 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
  * @property string $ulid
  * @property int $subscription_id
  * @property string $number
- * @property int $amount
+ * @property int $amount US cents (IDR for rows from before Creem)
+ * @property string $currency
  * @property InvoiceStatus $status
- * @property string|null $midtrans_order_id
- * @property string|null $midtrans_snap_token
+ * @property string|null $creem_checkout_id
+ * @property string|null $creem_checkout_url
+ * @property string|null $creem_transaction_id
  * @property string|null $payment_method
  * @property CarbonImmutable|null $due_at
  * @property CarbonImmutable|null $paid_at
@@ -32,16 +34,18 @@ class Invoice extends Model
     /** @use HasFactory<InvoiceFactory> */
     use HasFactory;
 
-    /** How long a Snap checkout stays payable. */
+    /** How long a hosted checkout is waited on before the bill is stale. */
     public const DUE_HOURS = 24;
 
     protected $fillable = [
         'subscription_id',
         'number',
         'amount',
+        'currency',
         'status',
-        'midtrans_order_id',
-        'midtrans_snap_token',
+        'creem_checkout_id',
+        'creem_checkout_url',
+        'creem_transaction_id',
         'payment_method',
         'due_at',
         'paid_at',

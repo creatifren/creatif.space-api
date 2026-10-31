@@ -14,8 +14,10 @@ it('publishes a draft and sets published_at', function () {
     expect($space->refresh()->published_at)->not->toBeNull();
 });
 
-it('enforces the 3-active quota on publish, freed by archive', function () {
+it('enforces a configured active quota on publish, freed by archive', function () {
     $user = User::factory()->create();
+    $plan = $user->plan();
+    $plan->update(['quotas' => [...$plan->quotas, 'spaces_active' => 3]]);
     Space::factory()->for($user)->published()->count(3)->create();
     $draft = Space::factory()->for($user)->create();
 
@@ -50,6 +52,8 @@ it('unpublishes back to draft', function () {
 
 it('reactivates a previously published space to published with the quota gate', function () {
     $user = User::factory()->create();
+    $plan = $user->plan();
+    $plan->update(['quotas' => [...$plan->quotas, 'spaces_active' => 3]]);
     $archived = Space::factory()->for($user)->archived()->create(['published_at' => now()->subWeek()]);
     Space::factory()->for($user)->published()->count(3)->create();
 

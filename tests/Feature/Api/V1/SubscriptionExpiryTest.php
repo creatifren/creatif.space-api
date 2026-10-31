@@ -1,112 +1,38 @@
 <?php
 
-use App\Enums\SubscriptionStatus;
 use App\Jobs\ExpireSubscriptions;
-use App\Models\Plan;
-use App\Models\Space;
 use App\Models\Subscription;
-use App\Models\User;
-use App\Notifications\SubscriptionPastDue;
-use Illuminate\Support\Facades\Notification;
+use App\Services\CreemService;
+use Illuminate\Support\Facades\Http;
 
-function premiumId(): int
-{
-    return (int) Plan::query()->where('key', 'premium')->value('id');
-}
-
-it('puts a lapsed plan into grace and says so', function () {
-    Notification::fake();
-    $user = User::factory()->create();
-    $subscription = Subscription::factory()->for($user)->create([
-        'plan_id' => premiumId(),
-        'current_period_end' => now()->subHour(),
-    ]);
-
-    (new ExpireSubscriptions)->handle();
-
-    $subscription->refresh();
-
-    expect($subscription->status)->toBe(SubscriptionStatus::PastDue)
-        ->and($subscription->grace_ends_at)->not->toBeNull()
-        // Still Premium during grace — that is what grace is for.
-        ->and($user->fresh()->plan()->key->value)->toBe('premium');
-
-    Notification::assertSentTo($user, SubscriptionPastDue::class);
+it('does not invent a grace period from the local clock', function () {
+    Http::preventStrayRequests();
+    $sub = Subscription::factory()->create(['current_period_end' => now()->subHour()]);
+    (new ExpireSubscriptions)->handle(app(CreemService::class));
+    expect($sub->fresh()->status->value)->toBe('active');
+    Http::assertNothingSent();
 });
 
-it('leaves a plan that is still paid for alone', function () {
-    Notification::fake();
-    $subscription = Subscription::factory()->create([
-        'plan_id' => premiumId(),
-        'current_period_end' => now()->addWeek(),
-    ]);
-
-    (new ExpireSubscriptions)->handle();
-
-    expect($subscription->refresh()->status)->toBe(SubscriptionStatus::Active);
-    Notification::assertNothingSent();
+it('ends access when the past_due grace closes, whatever Creem says', function () {
+    Http::preventStrayRequests();
+    $sub = Subscription::factory()->create(['status' => 'past_due', 'grace_ends_at' => now()->subMinute()]);
+    (new ExpireSubscriptions)->handle(app(CreemService::class));
+    expect($sub->fresh()->status->value)->toBe('expired');
 });
 
-it('drops to Free when grace runs out', function () {
-    Notification::fake();
-    $user = User::factory()->create();
-    $subscription = Subscription::factory()->for($user)->pastDue()->create([
-        'plan_id' => premiumId(),
-        'grace_ends_at' => now()->subHour(),
-    ]);
-
-    (new ExpireSubscriptions)->handle();
-
-    expect($subscription->refresh()->status)->toBe(SubscriptionStatus::Expired)
-        ->and($user->fresh()->plan()->key->value)->toBe('free');
+it('reconciles an overdue remote subscription before expiring it', function () {
+    Http::preventStrayRequests();
+    Http::fake(['test-api.creem.io/v1/subscriptions*' => Http::response(['id' => 'sub_test', 'status' => 'expired'])]);
+    $sub = Subscription::factory()->create(['creem_subscription_id' => 'sub_test', 'current_period_end' => now()->subDays(5)]);
+    (new ExpireSubscriptions)->handle(app(CreemService::class));
+    expect($sub->fresh()->status->value)->toBe('expired');
 });
 
-it('expires a cancelled plan quietly — they asked for this', function () {
-    Notification::fake();
-    $user = User::factory()->create();
-    $subscription = Subscription::factory()->for($user)->cancelled()->create([
-        'plan_id' => premiumId(),
-        'current_period_end' => now()->subHour(),
-    ]);
-
-    (new ExpireSubscriptions)->handle();
-
-    expect($subscription->refresh()->status)->toBe(SubscriptionStatus::Expired);
-    Notification::assertNothingSent();
-});
-
-it('never deletes a Space on the way down', function () {
-    Notification::fake();
-    $user = User::factory()->create();
-    Subscription::factory()->for($user)->pastDue()->create([
-        'plan_id' => premiumId(),
-        'grace_ends_at' => now()->subHour(),
-    ]);
-    // Far past what Free allows.
-    Space::factory()->count(14)->for($user)->published()->create();
-
-    (new ExpireSubscriptions)->handle();
-
-    expect($user->fresh()->plan()->key->value)->toBe('free')
-        ->and($user->spaces()->count())->toBe(14)
-        // Published ones stay published: the promise is "readable archives",
-        // not "unpublished behind your back".
-        ->and($user->spaces()->where('status', 'published')->count())->toBe(14);
-});
-
-it('is safe to run twice in a row', function () {
-    Notification::fake();
-    $user = User::factory()->create();
-    $subscription = Subscription::factory()->for($user)->create([
-        'plan_id' => premiumId(),
-        'current_period_end' => now()->subHour(),
-    ]);
-
-    (new ExpireSubscriptions)->handle();
-    $graceEnd = $subscription->refresh()->grace_ends_at;
-
-    (new ExpireSubscriptions)->handle();
-
-    expect($subscription->refresh()->grace_ends_at->eq($graceEnd))->toBeTrue();
-    Notification::assertSentToTimes($user, SubscriptionPastDue::class, 1);
+it('does not grant a new paid period from a status read', function () {
+    Http::preventStrayRequests();
+    Http::fake(['test-api.creem.io/*' => Http::response(['id' => 'sub_test', 'status' => 'active'])]);
+    $sub = Subscription::factory()->create(['creem_subscription_id' => 'sub_test', 'current_period_end' => now()->subDays(5)]);
+    $end = $sub->current_period_end;
+    (new ExpireSubscriptions)->handle(app(CreemService::class));
+    expect($sub->fresh()->current_period_end->eq($end))->toBeTrue();
 });

@@ -4,76 +4,49 @@ namespace App\Jobs;
 
 use App\Enums\SubscriptionStatus;
 use App\Models\Subscription;
-use App\Notifications\SubscriptionPastDue;
+use App\Services\CreemService;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Queue\Queueable;
+use Illuminate\Support\Facades\Log;
 
-/**
- * The daily sweep that moves lapsed subscriptions along.
- *
- *   active, period over        → past_due, 7 days of grace, tell them
- *   past_due, grace over       → expired (back to Free)
- *   cancelled, period over     → expired, quietly: they asked for this
- *
- * Downgrade never deletes anything. Spaces above the Free ceiling stay and
- * stay readable — only making or publishing new ones stops, which is what
- * PlanQuota already enforces at the create and publish gates.
- */
+/** A missed-webhook safety net; Creem, not our clock, owns billing state. */
 class ExpireSubscriptions implements ShouldQueue
 {
     use Queueable;
 
     public int $tries = 3;
 
-    /** @var list<int> */
     public array $backoff = [60, 300];
 
-    public function handle(): void
+    public function handle(CreemService $creem): void
     {
-        $this->startGrace();
-        $this->endGrace();
-    }
-
-    /**
-     * A period that ran out. Cancelled ones go straight to expired — there
-     * is nothing to chase, they told us to stop.
-     */
-    private function startGrace(): void
-    {
-        $lapsed = Subscription::query()
-            ->where('status', SubscriptionStatus::Active)
-            ->whereNotNull('current_period_end')
-            ->where('current_period_end', '<=', now())
-            ->with(['plan', 'user'])
-            ->get();
-
-        foreach ($lapsed as $subscription) {
-            if ($subscription->cancelled_at !== null) {
-                $subscription->forceFill([
-                    'status' => SubscriptionStatus::Expired,
-                ])->save();
-
-                continue;
-            }
-
-            $subscription->forceFill([
-                'status' => SubscriptionStatus::PastDue,
-                'grace_ends_at' => now()->addDays(Subscription::GRACE_DAYS),
-            ])->save();
-
-            $subscription->user->notify(new SubscriptionPastDue($subscription));
-        }
-    }
-
-    /**
-     * Grace is over: back to Free.
-     */
-    private function endGrace(): void
-    {
+        // Grace is ours to close: a card Creem keeps retrying must not keep
+        // the plan forever.
         Subscription::query()
             ->where('status', SubscriptionStatus::PastDue)
             ->whereNotNull('grace_ends_at')
             ->where('grace_ends_at', '<=', now())
             ->update(['status' => SubscriptionStatus::Expired]);
+
+        Subscription::query()
+            ->whereIn('status', [SubscriptionStatus::Active, SubscriptionStatus::PastDue])
+            ->whereNotNull('creem_subscription_id')
+            ->where('current_period_end', '<', now()->subDays(3))
+            ->lazyById()
+            ->each(function (Subscription $subscription) use ($creem): void {
+                $remote = $creem->subscription($subscription->creem_subscription_id);
+                if (($remote['id'] ?? null) !== $subscription->creem_subscription_id) {
+                    throw new \RuntimeException('Creem returned a different subscription.');
+                }
+                // Do not silently mint a paid period from a status read.
+                // Operators can replay the missing paid event from Creem.
+                Log::warning('billing.subscription_needs_reconciliation', [
+                    'subscription' => $subscription->ulid,
+                    'creem_status' => $remote['status'] ?? null,
+                ]);
+                if (in_array($remote['status'] ?? null, ['expired', 'unpaid', 'canceled'], true)) {
+                    $subscription->update(['status' => SubscriptionStatus::Expired]);
+                }
+            });
     }
 }

@@ -20,12 +20,10 @@ class WithdrawalFactory extends Factory
     {
         return [
             'user_id' => User::factory(),
-            'amount' => 100_000,
-            'bank_code' => 'bca',
-            'account_number' => '1234564471',
-            'account_name' => fake()->name(),
+            'amount' => 2500,
+            'currency' => 'USD',
+            'paypal_email' => fake()->safeEmail(),
             'status' => 'pending',
-            'midtrans_payout_id' => null,
             'processed_at' => null,
             'failure_reason' => null,
         ];

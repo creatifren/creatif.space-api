@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use App\Enums\SocialPostTargetStatus;
+use Carbon\CarbonImmutable;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
@@ -19,9 +20,15 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
  * @property string|null $fail_reason
  * @property string|null $platform_url
  * @property string|null $provider_result_id
+ * @property string|null $paid_with self::ALLOWANCE or self::CREDITS; null = not charged
+ * @property CarbonImmutable|null $charged_at
  */
 class SocialPostTarget extends Model
 {
+    public const ALLOWANCE = 'allowance';
+
+    public const CREDITS = 'credits';
+
     protected $fillable = [
         'social_post_id',
         'social_account_id',
@@ -30,6 +37,8 @@ class SocialPostTarget extends Model
         'fail_reason',
         'platform_url',
         'provider_result_id',
+        'paid_with',
+        'charged_at',
     ];
 
     /**
@@ -42,6 +51,7 @@ class SocialPostTarget extends Model
         return [
             'configuration' => 'array',
             'status' => SocialPostTargetStatus::class,
+            'charged_at' => 'datetime',
         ];
     }
 

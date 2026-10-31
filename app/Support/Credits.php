@@ -6,8 +6,10 @@ use App\Enums\SocialPostStatus;
 use App\Enums\SocialPostTargetStatus;
 use App\Enums\WalletTransactionType;
 use App\Models\SocialPost;
+use App\Models\SocialPostTarget;
 use App\Models\User;
 use App\Models\WalletTransaction;
+use Carbon\CarbonImmutable;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 use RuntimeException;
@@ -15,23 +17,31 @@ use RuntimeException;
 /**
  * One balance for sends and storage (the Credits comp, 2026-10).
  *
- * The whole price list: a Credit is Rp1 (tax included), a destination
- * that goes out costs 300, a 5 GB block of storage costs 5.000 a month —
- * 4.500 once the account passes 100 GB, on every block, not only the ones
- * above the line. Credits never expire.
+ * The whole price list: $1 buys 10.000 Credits ($10 = 100.000, the smallest
+ * top-up), a publish past the plan's monthly allowance costs 300 ($0.03),
+ * a 5 GB block of storage costs 5.000 a month — 4.500 once the account
+ * passes 100 GB, on every block, not only the ones above the line.
+ * Purchased Credits never expire.
+ *
+ * A publish is one post to one destination account. The plan's monthly
+ * allowance is used first; only publishes past it cost Credits. The
+ * allowance resets each period and never rolls over, and never turns into
+ * Credits.
  *
  * Order matters: rent is taken on the first, before anything is sent, so
  * a send never spends money the rent was going to need. A send is taken
- * up front when the post is handed to the provider — 300 a destination —
- * and a destination that never goes out (failed, cancelled) comes back,
- * so the user is only ever out of pocket for what was delivered.
- * Approval, drafts, scheduling and uploads inside rented storage move
- * nothing.
+ * up front when the post is handed to the provider, and a destination that
+ * never goes out (failed, cancelled) gives its publish back to where it
+ * came from — the allowance or the Credits — so the user is only ever out
+ * of pocket for what was delivered. Approval, drafts, scheduling and
+ * uploads inside rented storage move nothing.
  */
 final class Credits
 {
-    public const RUPIAH = 1;
+    /** Credits one US dollar buys. */
+    public const PER_DOLLAR = 10_000;
 
+    /** One publish past the monthly allowance. */
     public const PER_SEND = 300;
 
     public const BLOCK_GB = 5;
@@ -43,15 +53,13 @@ final class Credits
     /** Past this many plan-plus-rented GB, every block is at the bulk rate. */
     public const BULK_FROM_GB = 100;
 
-    /** Monthly for paid plans (per seat), once at sign-up for Free. */
-    public const PREMIUM_MONTHLY = 12000;
-
+    /** Once, at sign-up — Free and paid alike. */
     public const FREE_WELCOME = 3000;
 
-    /** Top-up bounds, in Credits — a custom amount must sit inside them. */
-    public const TOP_UP_MIN = 10_000;
+    /** Top-up bounds, in whole US dollars — a custom amount must sit inside them. */
+    public const TOP_UP_MIN = 10;
 
-    public const TOP_UP_MAX = 10_000_000;
+    public const TOP_UP_MAX = 1000;
 
     public static function balance(User $user): int
     {
@@ -109,56 +117,144 @@ final class Credits
     }
 
     /**
-     * Take the send price for a post about to reach the provider: 300 per
-     * destination. Refuses with a validation error the composer can show.
+     * Pay for a post about to reach the provider: each destination not yet
+     * paid for takes one publish from the monthly allowance while it lasts,
+     * then 300 Credits. Each target remembers which, so a return goes back
+     * to the right place. Refuses with a validation error the composer can
+     * show, and then nothing is marked.
+     *
+     * The owner's row is locked for the count: two sends at once must not
+     * both spend the last publish in the allowance.
      *
      * @throws ValidationException
      */
-    public static function chargeSend(SocialPost $post, int $destinations): void
+    public static function chargeSend(SocialPost $post): void
     {
         $owner = self::owner($post->user);
-        $price = $destinations * self::PER_SEND;
 
-        if ($price === 0) {
-            return;
-        }
+        DB::transaction(function () use ($post, $owner) {
+            User::query()->whereKey($owner->id)->lockForUpdate()->first();
 
-        try {
-            Wallet::debit(
-                $owner,
-                WalletTransactionType::CreditsSend,
-                $price,
-                'social_post',
-                $post->id,
-                $destinations.' destination'.($destinations === 1 ? '' : 's'),
-                Wallet::CREDITS,
-            );
-        } catch (RuntimeException) {
-            throw ValidationException::withMessages([
-                'caption' => "This needs {$price} Credits and the balance has ".self::balance($owner)
-                    .' — top up, or send to fewer accounts.',
-            ]);
-        }
+            $targets = $post->targets()
+                ->where('status', SocialPostTargetStatus::Pending)
+                ->whereNull('paid_with')
+                ->orderBy('id')
+                ->get();
+
+            if ($targets->isEmpty()) {
+                return;
+            }
+
+            $free = min($targets->count(), self::allowanceLeft($owner));
+            $paid = $targets->count() - $free;
+            $now = now();
+
+            if ($paid > 0) {
+                $price = $paid * self::PER_SEND;
+
+                try {
+                    Wallet::debit(
+                        $owner,
+                        WalletTransactionType::CreditsSend,
+                        $price,
+                        'social_post',
+                        $post->id,
+                        $paid.' publish'.($paid === 1 ? '' : 'es').' past the allowance',
+                        Wallet::CREDITS,
+                    );
+                } catch (RuntimeException) {
+                    throw ValidationException::withMessages([
+                        'caption' => "This needs {$price} Credits and the balance has ".self::balance($owner)
+                            .' — top up, or send to fewer accounts.',
+                    ]);
+                }
+            }
+
+            $targets->each(fn (SocialPostTarget $target, int $i) => $target->update([
+                'paid_with' => $i < $free ? SocialPostTarget::ALLOWANCE : SocialPostTarget::CREDITS,
+                'charged_at' => $now,
+            ]));
+        });
     }
 
     /**
-     * Give back the price of destinations that never went out.
+     * Give back the publishes of destinations that never went out: Credits
+     * to the balance, allowance to this period's count (by forgetting it was
+     * used). A target already given back, or never charged, gives nothing.
+     *
+     * @param  iterable<SocialPostTarget>  $targets
      */
-    public static function returnSend(SocialPost $post, int $destinations, string $why): void
+    public static function returnSend(SocialPost $post, iterable $targets, string $why): void
     {
-        if ($destinations <= 0) {
-            return;
-        }
+        $ids = collect($targets)->pluck('id');
+        $owner = self::owner($post->user);
 
-        Wallet::credit(
-            self::owner($post->user),
-            WalletTransactionType::CreditsSendReturn,
-            $destinations * self::PER_SEND,
-            'social_post',
-            $post->id,
-            $why,
-            Wallet::CREDITS,
-        );
+        DB::transaction(function () use ($post, $ids, $owner, $why) {
+            User::query()->whereKey($owner->id)->lockForUpdate()->firstOrFail();
+            // Fresh state under the same lock as charging. Two failures or a
+            // cancel racing a failure must not return a target twice.
+            $charged = $post->targets()->whereKey($ids)->whereNotNull('paid_with')->lockForUpdate()->get();
+            $credits = $charged->where('paid_with', SocialPostTarget::CREDITS)->count();
+            SocialPostTarget::query()->whereKey($charged->pluck('id'))->update(['paid_with' => null, 'charged_at' => null]);
+
+            if ($credits > 0) {
+                Wallet::credit(
+                    self::owner($post->user),
+                    WalletTransactionType::CreditsSendReturn,
+                    $credits * self::PER_SEND,
+                    'social_post',
+                    $post->id,
+                    $why,
+                    Wallet::CREDITS,
+                );
+            }
+        });
+    }
+
+    /**
+     * Credits a send of $destinations would take right now: only what the
+     * remaining allowance does not cover.
+     */
+    public static function sendPrice(User $user, int $destinations): int
+    {
+        return max(0, $destinations - self::allowanceLeft(self::owner($user))) * self::PER_SEND;
+    }
+
+    /** Publishes taken from the allowance in the current period. */
+    public static function allowanceUsed(User $user): int
+    {
+        $owner = self::owner($user);
+
+        return SocialPostTarget::query()
+            ->where('paid_with', SocialPostTarget::ALLOWANCE)
+            ->where('charged_at', '>=', self::allowanceSince($owner))
+            ->whereHas('post', fn ($q) => $q->whereIn('user_id', Workspace::memberIds($owner)))
+            ->count();
+    }
+
+    /** What is left of this period's allowance; a plan without a ceiling never runs out. */
+    public static function allowanceLeft(User $user): int
+    {
+        $limit = PlanQuota::socialPostsLimit($user);
+
+        return $limit === null ? PHP_INT_MAX : max(0, $limit - self::allowanceUsed($user));
+    }
+
+    /**
+     * When the current allowance period began. It resets monthly on the day
+     * of the sign-up (Free) or of the subscription's start (Pro, Max, yearly
+     * plans too); a month without that day resets on its last day.
+     */
+    public static function allowanceSince(User $owner): CarbonImmutable
+    {
+        $anchor = $owner->activeSubscription()?->current_period_start ?? $owner->created_at;
+        $day = $anchor === null ? 1 : $anchor->day;
+        $on = fn (CarbonImmutable $month) => $month->setDay(min($day, $month->daysInMonth))->startOfDay();
+
+        $month = CarbonImmutable::now()->startOfMonth();
+        $start = $on($month);
+
+        return $start->isFuture() ? $on($month->subMonthNoOverflow()) : $start;
     }
 
     /**
@@ -225,10 +321,9 @@ final class Credits
     }
 
     /**
-     * The first of the month, in this order: rent, then the plan's Credits.
-     * Rent that cannot be paid lapses the blocks (storage read-only until it
-     * fits; nothing is deleted) — the plan's Credits land afterwards and go
-     * to the sends already scheduled.
+     * The first of the month: rent. Rent that cannot be paid lapses the
+     * blocks (storage read-only until it fits; nothing is deleted). Plans
+     * add no Credits — they bring a publishing allowance instead.
      *
      * @return 'renewed'|'lapsed'|'none'
      */
@@ -248,10 +343,6 @@ final class Credits
             }
         }
 
-        if ($owner->activeSubscription() !== null) {
-            self::grant($owner, self::PREMIUM_MONTHLY * Workspace::seats($owner), now()->format('F').' Credits');
-        }
-
         return $outcome;
     }
 
@@ -263,7 +354,9 @@ final class Credits
             ->whereIn('user_id', Workspace::memberIds($owner))
             ->where('status', SocialPostStatus::Scheduled)
             ->whereNotNull('provider_post_id')
-            ->withCount(['targets' => fn ($q) => $q->where('status', SocialPostTargetStatus::Pending)])
+            // Only what Credits paid for: an allowance publish costs nothing back.
+            ->withCount(['targets' => fn ($q) => $q->where('status', SocialPostTargetStatus::Pending)
+                ->where('paid_with', SocialPostTarget::CREDITS)])
             ->get()
             ->sum('targets_count');
     }

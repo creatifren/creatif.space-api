@@ -107,7 +107,7 @@ class SocialPostRelay
 
         // Refuse before the provider, not after: a short balance must not
         // leave a post live on the platform that was never paid for.
-        $need = $destinations * Credits::PER_SEND;
+        $need = Credits::sendPrice($post->user, $destinations);
         if (Credits::balance($post->user) < $need) {
             throw ValidationException::withMessages([
                 'caption' => "This needs {$need} Credits and the balance has ".Credits::balance($post->user)
@@ -115,8 +115,17 @@ class SocialPostRelay
             ]);
         }
 
-        $remote = $this->postForMe->createPost($this->payload($post));
-        Credits::chargeSend($post, $destinations);
+        // Paid before it reaches the provider, under the owner's lock, so a
+        // teammate spending the same wallet cannot let it go out unpaid.
+        Credits::chargeSend($post);
+
+        try {
+            $remote = $this->postForMe->createPost($this->payload($post));
+        } catch (Throwable $e) {
+            Credits::returnSend($post, $post->targets()->get(), 'Not sent · the provider refused it');
+
+            throw $e;
+        }
 
         $post->update([
             'provider_post_id' => (string) $remote['id'],
@@ -167,18 +176,18 @@ class SocialPostRelay
     /**
      * Credits a set of posts needs to go out — checked once, up front, by
      * an Approve-all, so a short balance refuses the batch before a single
-     * post reaches the provider.
+     * post reaches the provider. What the allowance still covers is free.
      *
      * @param  iterable<SocialPost>  $posts
      */
-    public static function need(iterable $posts): int
+    public static function need(User $owner, iterable $posts): int
     {
         $destinations = 0;
         foreach ($posts as $post) {
             $destinations += $post->targets()->count();
         }
 
-        return $destinations * Credits::PER_SEND;
+        return Credits::sendPrice($owner, $destinations);
     }
 
     /**
@@ -197,7 +206,7 @@ class SocialPostRelay
         $this->postForMe->deletePost($post->provider_post_id);
         Credits::returnSend(
             $post,
-            $post->targets()->where('status', SocialPostTargetStatus::Pending)->count(),
+            $post->targets()->where('status', SocialPostTargetStatus::Pending)->get(),
             $why,
         );
         $post->update(['provider_post_id' => null]);
@@ -220,10 +229,10 @@ class SocialPostRelay
         DB::transaction(function () use ($post, $target, $data): void {
             $success = (bool) ($data['success'] ?? false);
 
-            // The vendor refused it: nothing left our hands, so its 3 Credits
-            // come back — once, on the first failed result for this target.
+            // The vendor refused it: nothing left our hands, so its publish
+            // comes back — once, on the first failed result for this target.
             if (! $success && $target->status === SocialPostTargetStatus::Pending) {
-                Credits::returnSend($post, 1, 'Not charged · '.Str::limit(
+                Credits::returnSend($post, [$target], 'Not charged · '.Str::limit(
                     is_string($data['error'] ?? null) ? $data['error'] : 'the platform refused it', 120,
                 ));
             }

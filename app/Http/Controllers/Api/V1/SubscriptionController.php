@@ -11,19 +11,22 @@ use App\Http\Resources\PlanResource;
 use App\Http\Resources\SubscriptionResource;
 use App\Models\Invoice;
 use App\Models\Plan;
-use App\Models\Subscription;
-use App\Services\MidtransService;
+use App\Models\User;
+use App\Services\CreemService;
+use App\Support\Credits;
 use App\Support\PlanQuota;
 use App\Support\Workspace;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
 
 /**
- * Settings → Subscription. Checkout opens a Midtrans Snap popup; nothing
- * here ever marks an invoice paid — only the webhook does that.
+ * Settings → Subscription. Checkout is Creem's hosted page; nothing here
+ * ever marks an invoice paid or a plan active — only the webhook does that.
+ * Creem renews by itself, so there is no "pay the next bill" path either.
  */
 class SubscriptionController extends Controller
 {
@@ -49,24 +52,30 @@ class SubscriptionController extends Controller
                     ? null
                     : (new SubscriptionResource($subscription->load(['plan', 'invoices'])))->toArray($request),
                 'quota' => PlanQuota::meta($user),
+                'allowance' => [
+                    'limit' => PlanQuota::socialPostsLimit($user),
+                    'used' => Credits::allowanceUsed($user),
+                ],
                 'seats' => Workspace::seats($user),
                 'seats_used' => Workspace::seatsUsed($user),
-                'seat_price_monthly' => $user->plan()->seat_price_monthly,
             ],
         ]);
     }
 
     /**
-     * Start a paid plan. Creates the subscription (not yet entitled), its
-     * first invoice, and the Snap token the browser opens.
+     * Start Pro or Max. Creates the subscription (not yet entitled), its
+     * first invoice, and the Creem checkout the browser is sent to.
+     *
+     * Already paying? Then this is a change of plan or period: Creem
+     * prorates and charges the difference now, and the plan on our side
+     * moves when its webhook arrives.
      */
-    public function checkout(Request $request, MidtransService $midtrans): JsonResponse
+    public function checkout(Request $request, CreemService $creem): JsonResponse
     {
         Workspace::ownerOnly($request->user());
         $validated = $request->validate([
-            'plan' => ['required', 'string', 'in:premium,team'],
+            'plan' => ['required', 'string', Rule::in(PlanKey::sold())],
             'period' => ['required', 'string', 'in:monthly,yearly'],
-            'seats' => ['sometimes', 'integer', 'min:1', 'max:100'],
         ]);
 
         $user = $request->user();
@@ -75,59 +84,84 @@ class SubscriptionController extends Controller
             ->where('is_active', true)
             ->firstOrFail();
 
-        // Already on this exact plan and still entitled? Nothing to buy —
-        // changing seats or period is a Fase 5b concern, not a second sale.
         $current = $user->activeSubscription();
-        if ($current !== null && $current->plan->key === $plan->key) {
-            throw ValidationException::withMessages([
-                'plan' => 'You’re already on '.$plan->name.'.',
-            ]);
+
+        if ($current !== null) {
+            if ($current->plan->key === $plan->key && $current->billing_period->value === $validated['period']) {
+                throw ValidationException::withMessages([
+                    'plan' => 'You’re already on '.$plan->name.'.',
+                ]);
+            }
+
+            if ($current->creem_subscription_id === null) {
+                throw ValidationException::withMessages([
+                    'plan' => 'This plan can’t be changed online yet — it ends on its own; choose again after.',
+                ]);
+            }
+
+            $creem->upgrade($current, (string) $plan->creemProduct($validated['period']));
+
+            return response()->json(['data' => [
+                'checkout_url' => null,
+                'changing_to' => ['plan' => $plan->key, 'period' => $validated['period']],
+            ]], 202);
         }
 
-        $seats = (int) ($validated['seats'] ?? 1);
+        $invoice = DB::transaction(function () use ($user, $plan, $validated) {
+            // A double click or a second tab must not open a second paid
+            // subscription: the same unpaid choice reuses its checkout.
+            User::query()->whereKey($user->id)->lockForUpdate()->firstOrFail();
 
-        // Seats only mean anything on Team, and you cannot buy fewer than
-        // the people you already have.
-        if ($seats > 1 && $plan->key !== PlanKey::Team) {
-            throw ValidationException::withMessages([
-                'seats' => 'Extra people are part of '.Plan::query()->where('key', 'team')->value('name').'.',
-            ]);
-        }
+            $open = Invoice::query()
+                ->whereIn('subscription_id', $user->subscriptions()->where('status', SubscriptionStatus::Expired)->select('id'))
+                ->where('status', InvoiceStatus::Pending)
+                ->where('due_at', '>', now())
+                ->whereNotNull('creem_checkout_url')
+                ->latest('id')
+                ->with('subscription.plan')
+                ->first();
 
-        $inUse = Workspace::seatsUsed($user);
-        if ($seats < $inUse) {
-            throw ValidationException::withMessages([
-                'seats' => 'You already have '.$inUse.' people on your team.',
-            ]);
-        }
+            if ($open !== null
+                && $open->subscription->plan_id === $plan->id
+                && $open->subscription->billing_period->value === $validated['period']) {
+                return $open;
+            }
 
-        $amount = $plan->priceFor($validated['period'], $seats);
+            // Another choice replaces the earlier unpaid one rather than
+            // standing beside it, so only one checkout can ever activate.
+            if ($open !== null) {
+                $open->forceFill(['status' => InvoiceStatus::Expired])->save();
+            }
 
-        $invoice = DB::transaction(function () use ($user, $plan, $validated, $seats, $amount) {
             $subscription = $user->subscriptions()->create([
                 'plan_id' => $plan->id,
                 'billing_period' => $validated['period'],
-                'seats' => $seats,
+                'seats' => 1,
                 // Not entitled until the webhook says the money arrived.
                 'status' => SubscriptionStatus::Expired,
             ]);
 
             return $subscription->invoices()->create([
                 'number' => Invoice::nextNumber(),
-                'amount' => $amount,
+                'amount' => $plan->priceFor($validated['period']),
+                'currency' => 'USD',
                 'status' => InvoiceStatus::Pending,
-                'midtrans_order_id' => 'CS-'.$subscription->ulid,
                 'due_at' => now()->addHours(Invoice::DUE_HOURS),
             ]);
         });
 
-        $token = $midtrans->snapToken($invoice->load('subscription.plan'), $user);
-        $invoice->forceFill(['midtrans_snap_token' => $token])->save();
+        // Reused bill: the same hosted page, never a second checkout for it.
+        if ($invoice->creem_checkout_url === null) {
+            $checkout = $creem->subscriptionCheckout($invoice->load('subscription.plan'), $user);
+            $invoice->forceFill([
+                'creem_checkout_id' => $checkout['id'],
+                'creem_checkout_url' => $checkout['checkout_url'],
+            ])->save();
+        }
 
         return response()->json([
             'data' => [
-                'snap_token' => $token,
-                'order_id' => $invoice->midtrans_order_id,
+                'checkout_url' => $invoice->creem_checkout_url,
                 'amount' => $invoice->amount,
                 'invoice' => (new InvoiceResource($invoice))->toArray($request),
             ],
@@ -135,115 +169,23 @@ class SubscriptionController extends Controller
     }
 
     /**
-     * Buy or release seats mid-plan.
-     *
-     * Going up is billed prorated for the days left and takes effect only
-     * when the webhook says it was paid — the seat is sold, not lent.
-     * Going down waits for the renewal: no refunds, because refunding a
-     * part-month is a refund engine, and that is not what a seat toggle
-     * should quietly become.
-     *
-     * ponytail: proration is linear on days and ignores the yearly-versus-
-     * monthly nuance. Revisit when the first Team customer disagrees.
+     * Seats belong to Team, which is not sold yet.
      */
-    public function seats(Request $request, MidtransService $midtrans): JsonResponse
+    public function seats(Request $request): JsonResponse
     {
         Workspace::ownerOnly($request->user());
 
-        $validated = $request->validate([
-            'seats' => ['required', 'integer', 'min:1', 'max:100'],
+        throw ValidationException::withMessages([
+            'seats' => 'Seats are part of the Team plan.',
         ]);
-
-        $user = $request->user();
-        $subscription = $user->activeSubscription();
-
-        if ($subscription === null || $subscription->plan->key !== PlanKey::Team) {
-            throw ValidationException::withMessages([
-                'seats' => 'Seats are part of the Team plan.',
-            ]);
-        }
-
-        $wanted = (int) $validated['seats'];
-        $inUse = Workspace::seatsUsed($user);
-
-        if ($wanted < $inUse) {
-            throw ValidationException::withMessages([
-                'seats' => 'Remove somebody first — you have '.$inUse.' people on your team.',
-            ]);
-        }
-
-        if ($wanted === $subscription->seats) {
-            throw ValidationException::withMessages([
-                'seats' => 'That’s how many you already have.',
-            ]);
-        }
-
-        if ($wanted < $subscription->seats) {
-            // Down is free and takes effect at renewal; the seats stay
-            // usable until then because they are already paid for.
-            $subscription->forceFill(['seats_at_renewal' => $wanted])->save();
-
-            return response()->json([
-                'data' => [
-                    'seats' => $subscription->seats,
-                    'seats_at_renewal' => $wanted,
-                    'invoice' => null,
-                ],
-            ]);
-        }
-
-        $amount = $this->prorated($subscription, $wanted - $subscription->seats, $user->plan()->seat_price_monthly);
-
-        $invoice = $subscription->invoices()->create([
-            'number' => Invoice::nextNumber(),
-            'amount' => $amount,
-            'status' => InvoiceStatus::Pending,
-            'midtrans_order_id' => 'CS-'.$subscription->ulid.'-S'.$wanted,
-            'due_at' => now()->addHours(Invoice::DUE_HOURS),
-        ]);
-
-        // Recorded now, applied by the webhook: seats a person has not paid
-        // for yet must not let them invite anybody.
-        $subscription->forceFill(['seats_pending' => $wanted])->save();
-
-        $token = $midtrans->snapToken($invoice->load('subscription.plan'), $user);
-        $invoice->forceFill(['midtrans_snap_token' => $token])->save();
-
-        return response()->json([
-            'data' => [
-                'snap_token' => $token,
-                'seats' => $subscription->seats,
-                'seats_pending' => $wanted,
-                'amount' => $amount,
-                'invoice' => (new InvoiceResource($invoice))->toArray($request),
-            ],
-        ], 201);
-    }
-
-    /**
-     * What the extra seats cost for the days left in the period, rounded
-     * up — a part-day is charged as a day rather than given away.
-     */
-    private function prorated(Subscription $subscription, int $extraSeats, int $seatPrice): int
-    {
-        $end = $subscription->current_period_end;
-        $start = $subscription->current_period_start;
-
-        if ($end === null || $start === null || $end->isPast()) {
-            return $extraSeats * $seatPrice;
-        }
-
-        $total = max(1, (int) round($start->diffInDays($end)));
-        $left = max(0, (int) ceil($end->diffInDays(now(), absolute: true)));
-
-        return (int) ceil($extraSeats * $seatPrice * min($left, $total) / $total);
     }
 
     /**
      * Cancel — but the plan runs to the end of the period already paid for.
      * "Cancel any time" is a promise about the next bill, not this one.
+     * Creem stops the renewal; its webhook records the cancellation.
      */
-    public function cancel(Request $request): JsonResponse
+    public function cancel(Request $request, CreemService $creem): JsonResponse
     {
         Workspace::ownerOnly($request->user());
         $subscription = $request->user()->activeSubscription();
@@ -254,11 +196,34 @@ class SubscriptionController extends Controller
             ]);
         }
 
-        $subscription->forceFill(['cancelled_at' => now()])->save();
+        if ($subscription->creem_subscription_id !== null) {
+            $creem->cancel($subscription);
+        }
+
+        // Recorded now as well, so the screen says so before the webhook
+        // lands; the webhook writing the same thing again changes nothing.
+        $subscription->forceFill(['cancelled_at' => $subscription->cancelled_at ?? now()])->save();
 
         return response()->json([
             'data' => (new SubscriptionResource($subscription->load('plan')))->toArray($request),
         ]);
+    }
+
+    /**
+     * Creem's customer portal: card, receipts, cancelling.
+     */
+    public function portal(Request $request, CreemService $creem): JsonResponse
+    {
+        Workspace::ownerOnly($request->user());
+        $subscription = $request->user()->activeSubscription();
+
+        if ($subscription === null || $subscription->creem_customer_id === null) {
+            throw ValidationException::withMessages([
+                'plan' => 'There’s no paid plan to manage.',
+            ]);
+        }
+
+        return response()->json(['data' => ['url' => $creem->portalLink($subscription)]]);
     }
 
     /**

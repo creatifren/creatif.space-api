@@ -33,7 +33,7 @@ class CommissionsTable
                     ->label('Rate')
                     ->suffix('%'),
                 TextColumn::make('amount')
-                    ->money('IDR', 1)
+                    ->money('USD', 100)
                     ->sortable(),
                 TextColumn::make('status')
                     ->badge(),

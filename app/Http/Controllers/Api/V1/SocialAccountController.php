@@ -12,7 +12,9 @@ use App\Models\SocialAccount;
 use App\Models\SocialPost;
 use App\Services\PostForMeService;
 use App\Support\Credits;
+use App\Support\PlanQuota;
 use App\Support\SocialPostRelay;
+use App\Support\Workspace;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
@@ -49,6 +51,16 @@ class SocialAccountController extends Controller
             'handle' => ['required_if:platform,bluesky', 'nullable', 'string', 'max:253'],
             'app_password' => ['required_if:platform,bluesky', 'nullable', 'string', 'max:64'],
         ]);
+
+        // Refused before the provider's consent page, where a refusal would
+        // otherwise surface as an account that connected and then vanished.
+        if (! PlanQuota::canConnectSocialAccount($request->user())) {
+            $limit = Workspace::owner($request->user())->plan()->quota('social_accounts');
+
+            throw ValidationException::withMessages([
+                'platform' => "Free connects up to {$limit} social accounts. Upgrade to Pro or Max to add more.",
+            ]);
+        }
 
         $url = $postForMe->authUrl(
             $validated['platform'],
@@ -150,13 +162,29 @@ class SocialAccountController extends Controller
             }
 
             $target = $post->targets()->where('social_account_id', $socialAccount->id)->first();
-            $target->delete();
+
+            // The provider stops the destination first; only then is it
+            // refunded and forgotten. A failed update keeps it charged and
+            // matchable by its result webhook.
             if ($post->provider_post_id !== null) {
-                $postForMe->updatePost($post->provider_post_id, $relay->payload($post));
-                if ($target->status === SocialPostTargetStatus::Pending) {
-                    Credits::returnSend($post, 1, $why);
+                $payload = $relay->payload($post);
+                $leaving = $socialAccount->provider_account_id;
+                $payload['social_accounts'] = array_values(array_diff($payload['social_accounts'], [$leaving]));
+                if (isset($payload['account_configurations'])) {
+                    $payload['account_configurations'] = array_values(array_filter(
+                        $payload['account_configurations'],
+                        fn (array $c) => $c['social_account_id'] !== $leaving,
+                    ));
                 }
+                $postForMe->updatePost($post->provider_post_id, $payload);
             }
+
+            DB::transaction(function () use ($post, $target, $why) {
+                if ($post->provider_post_id !== null && $target->status === SocialPostTargetStatus::Pending) {
+                    Credits::returnSend($post, [$target], $why);
+                }
+                $target->delete();
+            });
         }
 
         $postForMe->disconnect($socialAccount->provider_account_id);

@@ -4,6 +4,7 @@ use App\Http\Controllers\Api\V1\AffiliateController;
 use App\Http\Controllers\Api\V1\AnalyticsController;
 use App\Http\Controllers\Api\V1\CaptionAssistController;
 use App\Http\Controllers\Api\V1\CreditsController;
+use App\Http\Controllers\Api\V1\CreemWebhookController;
 use App\Http\Controllers\Api\V1\DeliveryLogController;
 use App\Http\Controllers\Api\V1\EarningController;
 use App\Http\Controllers\Api\V1\FileController;
@@ -11,7 +12,6 @@ use App\Http\Controllers\Api\V1\FileVersionController;
 use App\Http\Controllers\Api\V1\FolderController;
 use App\Http\Controllers\Api\V1\HandleController;
 use App\Http\Controllers\Api\V1\MeController;
-use App\Http\Controllers\Api\V1\MidtransWebhookController;
 use App\Http\Controllers\Api\V1\MyProfileController;
 use App\Http\Controllers\Api\V1\NotificationController;
 use App\Http\Controllers\Api\V1\PostForMeWebhookController;
@@ -37,10 +37,10 @@ use Illuminate\Support\Facades\Route;
 // Public
 Route::get('/plans', [SubscriptionController::class, 'plans'])->name('api.v1.plans');
 
-// Midtrans calls this, not a browser: no auth, no CSRF (api routes have
-// none), and the sha512 signature is the authentication.
-Route::post('/webhooks/midtrans', MidtransWebhookController::class)
-    ->name('api.v1.webhooks.midtrans');
+// Creem calls this, not a browser: no auth, no CSRF (api routes have
+// none), and the HMAC-SHA256 raw-body signature is the authentication.
+Route::post('/webhooks/creem', CreemWebhookController::class)
+    ->name('api.v1.webhooks.creem');
 
 // Post for Me calls this on account and post events: no auth, the shared
 // secret header is the authentication.
@@ -326,6 +326,9 @@ Route::middleware('auth:sanctum')->group(function () {
         ->middleware('throttle:10,1')
         ->name('api.v1.me.subscription.seats');
     Route::post('/me/subscription/cancel', [SubscriptionController::class, 'cancel'])->name('api.v1.me.subscription.cancel');
+    Route::post('/me/subscription/portal', [SubscriptionController::class, 'portal'])
+        ->middleware('throttle:10,1')
+        ->name('api.v1.me.subscription.portal');
     Route::get('/me/invoices', [SubscriptionController::class, 'invoices'])->name('api.v1.me.invoices');
 
     // Bell, Needs Attention, and the five switches

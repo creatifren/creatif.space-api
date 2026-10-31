@@ -30,7 +30,7 @@ function approvedAffiliate(array $attributes = []): Affiliate
 function paidInvoiceFor(User $customer, int $amount = 94_000): Invoice
 {
     $subscription = Subscription::factory()->for($customer)->create([
-        'plan_id' => Plan::query()->where('key', 'premium')->value('id'),
+        'plan_id' => Plan::query()->where('key', 'pro')->value('id'),
         'status' => 'active',
         'current_period_end' => now()->addMonth(),
     ]);
@@ -68,7 +68,7 @@ describe('the wallet split', function () {
         Wallet::credit($user, WalletTransactionType::SaleCredit, 200_000);
         Wallet::credit($user, WalletTransactionType::CommissionCredit, 200_000, wallet: Wallet::AFFILIATE);
 
-        $bank = ['bank_code' => 'BCA', 'account_number' => '4471', 'account_name' => 'Rani'];
+        $bank = ['paypal_email' => 'rani@example.com'];
 
         $this->actingAs($user)
             ->postJson('/api/v1/me/withdrawals', $bank + ['amount' => 50_000])

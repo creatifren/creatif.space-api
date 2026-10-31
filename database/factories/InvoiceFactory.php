@@ -21,10 +21,11 @@ class InvoiceFactory extends Factory
         return [
             'subscription_id' => Subscription::factory(),
             'number' => 'INV-'.now()->year.'-'.fake()->unique()->numerify('######'),
-            'amount' => 94_000,
+            'amount' => 999,
+            'currency' => 'USD',
             'status' => 'pending',
-            'midtrans_order_id' => 'CS-'.fake()->unique()->numerify('##########'),
-            'midtrans_snap_token' => null,
+            'creem_checkout_id' => null,
+            'creem_transaction_id' => null,
             'payment_method' => null,
             'due_at' => now()->addDay(),
             'paid_at' => null,
@@ -36,7 +37,7 @@ class InvoiceFactory extends Factory
     {
         return $this->state(fn (array $attributes) => [
             'status' => 'paid',
-            'payment_method' => 'qris',
+            'payment_method' => 'card',
             'paid_at' => now()->subHour(),
         ]);
     }

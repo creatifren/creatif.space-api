@@ -40,7 +40,6 @@ class TeamController extends Controller
             'meta' => [
                 'seats' => Workspace::seats($user),
                 'seats_used' => Workspace::seatsUsed($user),
-                'seat_price_monthly' => $user->plan()->seat_price_monthly,
             ],
         ]);
     }

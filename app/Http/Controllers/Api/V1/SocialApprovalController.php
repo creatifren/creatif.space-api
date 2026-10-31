@@ -10,6 +10,7 @@ use App\Models\SocialApprovalLink;
 use App\Models\SocialPost;
 use App\Models\SocialPostComment;
 use App\Support\Credits;
+use App\Support\PlanQuota;
 use App\Support\SocialPostRelay;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\JsonResponse;
@@ -68,6 +69,8 @@ class SocialApprovalController extends Controller
             // The editor's own note on who it is for; the client never sees it.
             'client_name' => ['sometimes', 'nullable', 'string', 'max:120'],
         ]);
+
+        PlanQuota::requireClientApprovals($request->user(), 'post_ids');
 
         $posts = $request->user()->socialPosts()
             ->whereIn('ulid', array_unique($validated['post_ids']))
@@ -144,6 +147,12 @@ class SocialApprovalController extends Controller
         $link = $socialApprovalLink;
         if ($link->revoked_at !== null) {
             return response()->json(['message' => 'This link was revoked for good — make a new one from List.'], 422);
+        }
+
+        // Asking the client about more posts is a new request; renaming,
+        // extending or taking posts off a link already sent is not.
+        if (! empty($validated['add_post_ids'])) {
+            PlanQuota::requireClientApprovals($request->user(), 'add_post_ids');
         }
 
         $add = isset($validated['add_post_ids'])
@@ -224,7 +233,7 @@ class SocialApprovalController extends Controller
             return response()->json(['message' => 'Nothing on this link is waiting.'], 422);
         }
 
-        $need = SocialPostRelay::need($waiting);
+        $need = SocialPostRelay::need($request->user(), $waiting);
         $balance = Credits::balance($request->user());
         if ($balance < $need) {
             return response()->json([

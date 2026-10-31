@@ -3,245 +3,118 @@
 use App\Enums\InvoiceStatus;
 use App\Enums\SubscriptionStatus;
 use App\Models\Invoice;
-use App\Models\Plan;
-use App\Models\Space;
 use App\Models\Subscription;
 use App\Models\User;
 use Illuminate\Support\Facades\Http;
 
-function fakeSnap(string $token = 'snap-token-1'): void
-{
-    Http::fake([
-        'https://app.sandbox.midtrans.com/snap/v1/transactions' => Http::response([
-            'token' => $token,
-            'redirect_url' => 'https://app.sandbox.midtrans.com/snap/v2/vtweb/'.$token,
-        ]),
-    ]);
-}
-
-describe('plans', function () {
-    it('serves the pricing table with unlimited as null', function () {
-        $response = $this->getJson('/api/v1/plans')
-            ->assertOk()
-            ->assertJsonCount(3, 'data');
-
-        $free = collect($response->json('data'))->firstWhere('key', 'free');
-        $premium = collect($response->json('data'))->firstWhere('key', 'premium');
-
-        expect($free['price_monthly'])->toBe(0)
-            ->and($free['quotas']['spaces_total'])->toBe(10)
-            ->and($premium['price_monthly'])->toBe(94_000)
-            ->and($premium['price_yearly'])->toBe(840_000)
-            // No limit is null, never zero — zero would read as "none".
-            ->and($premium['quotas']['spaces_total'])->toBeNull();
-    });
-
-    it('is open to anyone — pricing is a public page', function () {
-        $this->getJson('/api/v1/plans')->assertOk();
-    });
-
-    it('hides a retired plan', function () {
-        Plan::query()->where('key', 'team')->update(['is_active' => false]);
-
-        $this->getJson('/api/v1/plans')->assertOk()->assertJsonCount(2, 'data');
-    });
+beforeEach(function () {
+    Http::preventStrayRequests();
+    // The first checkout is ch_test; any later one gets its own id, as Creem does.
+    $calls = 0;
+    Http::fake(['test-api.creem.io/*' => function () use (&$calls) {
+        return Http::response([
+            'id' => $calls++ === 0 ? 'ch_test' : 'ch_'.$calls, 'checkout_url' => 'https://checkout.creem.io/test',
+            'customer_portal_link' => 'https://creem.io/my-orders/test',
+        ]);
+    }]);
 });
 
-describe('the current plan', function () {
-    it('reports Free when nothing has been bought', function () {
-        $this->actingAs(User::factory()->create())
-            ->getJson('/api/v1/me/subscription')
-            ->assertOk()
-            ->assertJsonPath('data.plan.key', 'free')
-            ->assertJsonPath('data.subscription', null)
-            ->assertJsonPath('data.quota.total_limit', 10);
-    });
-
-    it('reports the paid plan, with no ceilings', function () {
-        $user = User::factory()->create();
-        Subscription::factory()->for($user)->create([
-            'plan_id' => Plan::query()->where('key', 'premium')->value('id'),
-        ]);
-
-        $this->actingAs($user)->getJson('/api/v1/me/subscription')
-            ->assertOk()
-            ->assertJsonPath('data.plan.key', 'premium')
-            ->assertJsonPath('data.quota.total_limit', null);
-    });
-
-    it('rejects guests', function () {
-        $this->getJson('/api/v1/me/subscription')->assertUnauthorized();
-        $this->postJson('/api/v1/me/subscription/checkout')->assertUnauthorized();
-    });
+it('sells only Free Pro and Max at the approved USD prices', function () {
+    $rows = collect($this->getJson('/api/v1/plans')->assertOk()->assertJsonCount(3, 'data')->json('data'))->keyBy('key');
+    expect($rows->keys()->all())->toBe(['free', 'pro', 'max'])
+        ->and($rows['pro']['price_monthly'])->toBe(999)
+        ->and($rows['pro']['price_yearly'])->toBe(9990)
+        ->and($rows['max']['price_monthly'])->toBe(1499)
+        ->and($rows['max']['price_yearly'])->toBe(14990)
+        ->and($rows['free']['quotas']['spaces_total'])->toBe(15)
+        ->and($rows['free']['quotas']['social_posts_monthly'])->toBe(10)
+        ->and($rows['pro']['quotas']['social_posts_monthly'])->toBe(150)
+        ->and($rows['max']['quotas']['social_posts_monthly'])->toBe(500);
 });
 
-describe('checkout', function () {
-    it('creates an unpaid subscription, an invoice and a Snap token', function () {
-        fakeSnap();
-        $user = User::factory()->create();
-
-        $response = $this->actingAs($user)
-            ->postJson('/api/v1/me/subscription/checkout', [
-                'plan' => 'premium',
-                'period' => 'monthly',
-            ])
-            ->assertCreated()
-            ->assertJsonPath('data.snap_token', 'snap-token-1')
-            ->assertJsonPath('data.amount', 94_000);
-
-        $subscription = $user->subscriptions()->firstOrFail();
-        $invoice = Invoice::query()->firstOrFail();
-
-        expect($invoice->status)->toBe(InvoiceStatus::Pending)
-            ->and($invoice->number)->toStartWith('INV-'.now()->year.'-')
-            ->and($invoice->midtrans_snap_token)->toBe('snap-token-1')
-            ->and($response->json('data.order_id'))->toBe('CS-'.$subscription->ulid)
-            // Not entitled until the money lands — the webhook does that.
-            ->and($subscription->status)->toBe(SubscriptionStatus::Expired)
-            ->and($user->fresh()->plan()->key->value)->toBe('free');
-    });
-
-    it('charges the yearly price for a yearly period', function () {
-        fakeSnap();
-
-        $this->actingAs(User::factory()->create())
-            ->postJson('/api/v1/me/subscription/checkout', [
-                'plan' => 'premium',
-                'period' => 'yearly',
-            ])
-            ->assertCreated()
-            ->assertJsonPath('data.amount', 840_000);
-    });
-
-    it('bills Team for the seats beyond the three it includes', function () {
-        fakeSnap();
-
-        // 270.000 + 2 × 44.000
-        $this->actingAs(User::factory()->create())
-            ->postJson('/api/v1/me/subscription/checkout', [
-                'plan' => 'team',
-                'period' => 'monthly',
-                'seats' => 5,
-            ])
-            ->assertCreated()
-            ->assertJsonPath('data.amount', 358_000);
-    });
-
-    it('refuses to sell the plan you are already on', function () {
-        $user = User::factory()->create();
-        Subscription::factory()->for($user)->create([
-            'plan_id' => Plan::query()->where('key', 'premium')->value('id'),
-        ]);
-
-        $this->actingAs($user)
-            ->postJson('/api/v1/me/subscription/checkout', [
-                'plan' => 'premium',
-                'period' => 'monthly',
-            ])
-            ->assertUnprocessable();
-    });
-
-    it('refuses a plan that is not for sale', function () {
-        $this->actingAs(User::factory()->create())
-            ->postJson('/api/v1/me/subscription/checkout', [
-                'plan' => 'free',
-                'period' => 'monthly',
-            ])
-            ->assertUnprocessable();
-    });
-
-    it('numbers invoices in sequence', function () {
-        fakeSnap();
-
-        foreach (['premium', 'team'] as $plan) {
-            $this->actingAs(User::factory()->create())
-                ->postJson('/api/v1/me/subscription/checkout', [
-                    'plan' => $plan,
-                    'period' => 'monthly',
-                ])->assertCreated();
-        }
-
-        expect(Invoice::query()->orderBy('id')->pluck('number')->all())
-            ->toBe(['INV-'.now()->year.'-000001', 'INV-'.now()->year.'-000002']);
-    });
+it('reports Free without a subscription', function () {
+    $this->actingAs(User::factory()->create())->getJson('/api/v1/me/subscription')
+        ->assertOk()->assertJsonPath('data.plan.key', 'free')->assertJsonPath('data.subscription', null);
 });
 
-describe('cancelling', function () {
-    it('keeps the plan running until the period already paid for ends', function () {
-        $user = User::factory()->create();
-        $subscription = Subscription::factory()->for($user)->create([
-            'plan_id' => Plan::query()->where('key', 'premium')->value('id'),
-            'current_period_end' => now()->addWeeks(2),
-        ]);
-
-        $this->actingAs($user)->postJson('/api/v1/me/subscription/cancel')
-            ->assertOk()
-            ->assertJsonPath('data.ends_at_period_end', true);
-
-        expect($subscription->refresh()->status)->toBe(SubscriptionStatus::Active)
-            ->and($subscription->cancelled_at)->not->toBeNull()
-            // Still Premium today — that is what "cancel any time" means.
-            ->and($user->fresh()->plan()->key->value)->toBe('premium');
-    });
-
-    it('refuses when there is nothing to cancel', function () {
-        $this->actingAs(User::factory()->create())
-            ->postJson('/api/v1/me/subscription/cancel')
-            ->assertUnprocessable();
-    });
+it('creates pending billing state and returns a hosted checkout, never entitlement', function () {
+    $user = User::factory()->create();
+    $this->actingAs($user)->postJson('/api/v1/me/subscription/checkout', ['plan' => 'pro', 'period' => 'monthly'])
+        ->assertCreated()->assertJsonPath('data.checkout_url', 'https://checkout.creem.io/test')
+        ->assertJsonPath('data.amount', 999);
+    $invoice = Invoice::query()->sole();
+    expect($invoice->status)->toBe(InvoiceStatus::Pending)
+        ->and($invoice->creem_checkout_id)->toBe('ch_test')
+        ->and($user->fresh()->plan()->key->value)->toBe('free');
+    Http::assertSent(fn ($r) => $r->url() === 'https://test-api.creem.io/v1/checkouts'
+        && $r['product_id'] === 'prod_pro_monthly' && $r['request_id'] === $invoice->number
+        && $r->hasHeader('x-api-key', 'creem_test_fixture'));
 });
 
-describe('billing history', function () {
-    it('lists my invoices and nobody else’s', function () {
-        $user = User::factory()->create();
-        $mine = Subscription::factory()->for($user)->create();
-        Invoice::factory()->for($mine)->paid()->create(['number' => 'INV-2026-000001']);
-        Invoice::factory()->create(['number' => 'INV-2026-000002']); // someone else's
-
-        $this->actingAs($user)->getJson('/api/v1/me/invoices')
-            ->assertOk()
-            ->assertJsonCount(1, 'data')
-            ->assertJsonPath('data.0.number', 'INV-2026-000001')
-            ->assertJsonPath('data.0.status', 'paid');
-    });
+it('reuses one checkout for a repeated click and replaces it for another choice', function () {
+    $user = User::factory()->create();
+    $go = fn (string $plan) => $this->actingAs($user)
+        ->postJson('/api/v1/me/subscription/checkout', ['plan' => $plan, 'period' => 'monthly'])->assertCreated();
+    $go('pro');
+    $go('pro');
+    expect(Invoice::query()->where('status', InvoiceStatus::Pending)->count())->toBe(1);
+    Http::assertSentCount(1);
+    $go('max');
+    expect(Invoice::query()->where('status', InvoiceStatus::Pending)->count())->toBe(1)
+        ->and(Invoice::query()->where('status', InvoiceStatus::Expired)->count())->toBe(1);
 });
 
-describe('quota follows the plan', function () {
-    it('stops a Free user at ten Spaces and lets Premium past it', function () {
-        $user = User::factory()->create();
-        Space::factory()->count(10)->for($user)->create();
+it('charges the selected plan and period', function (string $plan, string $period, int $amount) {
+    $this->actingAs(User::factory()->create())->postJson('/api/v1/me/subscription/checkout', compact('plan', 'period'))
+        ->assertCreated()->assertJsonPath('data.amount', $amount);
+})->with([['pro', 'yearly', 9990], ['max', 'monthly', 1499], ['max', 'yearly', 14990]]);
 
-        $this->actingAs($user)->postJson('/api/v1/spaces', [
-            'title' => 'One too many',
-            'view_mode' => 'grid',
-        ])->assertUnprocessable();
+it('refuses Team, Premium and Free checkout', function (string $plan) {
+    $this->actingAs(User::factory()->create())->postJson('/api/v1/me/subscription/checkout', ['plan' => $plan, 'period' => 'monthly'])
+        ->assertUnprocessable()->assertJsonValidationErrors('plan');
+    Http::assertNothingSent();
+})->with(['free', 'premium', 'team']);
 
-        Subscription::factory()->for($user)->create([
-            'plan_id' => Plan::query()->where('key', 'premium')->value('id'),
-        ]);
+it('upgrades the existing subscription instead of creating another checkout', function () {
+    $sub = Subscription::factory()->create(['creem_subscription_id' => 'sub_test']);
+    $this->actingAs($sub->user)->postJson('/api/v1/me/subscription/checkout', ['plan' => 'max', 'period' => 'yearly'])
+        ->assertStatus(202)->assertJsonPath('data.checkout_url', null);
+    Http::assertSent(fn ($r) => str_ends_with($r->url(), '/subscriptions/sub_test/upgrade')
+        && $r['product_id'] === 'prod_max_yearly');
+    expect($sub->fresh()->plan->key->value)->toBe('pro');
+});
 
-        $this->actingAs($user)->postJson('/api/v1/spaces', [
-            'title' => 'Room at last',
-            'view_mode' => 'grid',
-        ])->assertCreated();
-    });
+it('refuses an identical plan and period', function () {
+    $sub = Subscription::factory()->create();
+    $this->actingAs($sub->user)->postJson('/api/v1/me/subscription/checkout', ['plan' => 'pro', 'period' => 'monthly'])
+        ->assertUnprocessable();
+});
 
-    it('keeps every Space when a plan lapses — nothing is deleted', function () {
-        $user = User::factory()->create();
-        $subscription = Subscription::factory()->for($user)->create([
-            'plan_id' => Plan::query()->where('key', 'premium')->value('id'),
-        ]);
-        Space::factory()->count(14)->for($user)->create();
+it('schedules cancellation through Creem and keeps the paid period', function () {
+    $sub = Subscription::factory()->create(['creem_subscription_id' => 'sub_test']);
+    $this->actingAs($sub->user)->postJson('/api/v1/me/subscription/cancel')
+        ->assertOk()->assertJsonPath('data.ends_at_period_end', true);
+    Http::assertSent(fn ($r) => str_ends_with($r->url(), '/subscriptions/sub_test/cancel')
+        && $r['mode'] === 'scheduled' && $r['onExecute'] === 'cancel');
+    expect($sub->fresh()->status)->toBe(SubscriptionStatus::Active);
+});
 
-        $subscription->forceFill(['status' => SubscriptionStatus::Expired])->save();
+it('returns the owning customer portal only', function () {
+    $sub = Subscription::factory()->create(['creem_customer_id' => 'cust_test']);
+    $this->actingAs($sub->user)->postJson('/api/v1/me/subscription/portal')
+        ->assertOk()->assertJsonPath('data.url', 'https://creem.io/my-orders/test');
+    Http::assertSent(fn ($r) => $r['customer_id'] === 'cust_test');
+});
 
-        expect($user->fresh()->plan()->key->value)->toBe('free')
-            ->and($user->spaces()->count())->toBe(14);
+it('keeps invoices private', function () {
+    $mine = Subscription::factory()->create();
+    Invoice::factory()->for($mine)->paid()->create();
+    Invoice::factory()->paid()->create();
+    $this->actingAs($mine->user)->getJson('/api/v1/me/invoices')->assertOk()->assertJsonCount(1, 'data')
+        ->assertJsonPath('data.0.currency', 'USD');
+});
 
-        // Only making a new one stops.
-        $this->actingAs($user)->postJson('/api/v1/spaces', [
-            'title' => 'Not now',
-            'view_mode' => 'grid',
-        ])->assertUnprocessable();
-    });
+it('requires authentication for billing', function () {
+    $this->getJson('/api/v1/me/subscription')->assertUnauthorized();
+    $this->postJson('/api/v1/me/subscription/checkout')->assertUnauthorized();
 });

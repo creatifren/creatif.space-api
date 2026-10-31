@@ -18,6 +18,8 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
  * @property string $ulid
  * @property int $user_id
  * @property int $plan_id
+ * @property string|null $creem_subscription_id
+ * @property string|null $creem_customer_id
  * @property BillingPeriod $billing_period
  * @property SubscriptionStatus $status
  * @property int $seats
@@ -40,6 +42,8 @@ class Subscription extends Model
 
     protected $fillable = [
         'plan_id',
+        'creem_subscription_id',
+        'creem_customer_id',
         'billing_period',
         'status',
         'seats',

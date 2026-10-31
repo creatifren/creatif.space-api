@@ -2,13 +2,12 @@
 
 namespace App\Support;
 
-use App\Enums\SocialPostStatus;
+use App\Enums\SocialAccountStatus;
 use App\Enums\SpaceStatus;
-use App\Enums\TeamMemberStatus;
 use App\Models\File;
 use App\Models\FileVersion;
-use App\Models\SocialPost;
 use App\Models\User;
+use Illuminate\Validation\ValidationException;
 
 /**
  * Plan limits, read from the plans table. No number lives here: a user's
@@ -136,33 +135,9 @@ class PlanQuota
     }
 
     /**
-     * Social posts created this calendar month, cancelled ones excluded —
-     * cancelling gives the slot back. Counted at creation (scheduled or
-     * immediate), so scheduling ahead spends quota up front.
-     *
-     * Pooled across the workspace: the owner's and every active member's
-     * posts draw from the same monthly pot, mirroring storage.
-     */
-    public static function socialPostsUsed(User $user): int
-    {
-        $owner = Workspace::owner($user);
-
-        $userIds = $owner->teamMembers()
-            ->where('status', TeamMemberStatus::Active)
-            ->pluck('member_id')
-            ->push($owner->id);
-
-        return SocialPost::query()
-            ->whereIn('user_id', $userIds)
-            // Drafts were never sent, cancelled ones never went out.
-            ->whereNotIn('status', [SocialPostStatus::Cancelled, SocialPostStatus::Draft])
-            ->where('created_at', '>=', now()->startOfMonth())
-            ->count();
-    }
-
-    /**
-     * Per-seat and pooled, like storage. Zero is a real ceiling (Free),
-     * null means no limit.
+     * The publishing allowance: publishes a period, per seat and pooled like
+     * storage. Null means no limit. What has been used is
+     * Credits::allowanceUsed.
      */
     public static function socialPostsLimit(User $user): ?int
     {
@@ -173,13 +148,42 @@ class PlanQuota
     }
 
     /**
-     * Sending is paid in Credits now (3 a destination); the monthly count
-     * above is kept for the usage screen only. Free can send too — with the
-     * thirty it got at sign-up, or with a top-up.
+     * Room to send to $destinations accounts: whatever the allowance does
+     * not cover must be in Credits.
      */
     public static function canPostSocial(User $user, int $destinations = 1): bool
     {
-        return Credits::balance($user) >= $destinations * Credits::PER_SEND;
+        return Credits::balance($user) >= Credits::sendPrice($user, $destinations);
+    }
+
+    /**
+     * Asking a client to approve is a paid feature. Refused only when a new
+     * request starts — links already sent keep working through a downgrade,
+     * and approving your own post is open to every plan.
+     *
+     * @throws ValidationException
+     */
+    public static function requireClientApprovals(User $user, string $field = 'approval'): void
+    {
+        if (! Workspace::owner($user)->plan()->feature('client_approvals')) {
+            throw ValidationException::withMessages([
+                $field => 'Client approvals are part of Pro and Max.',
+            ]);
+        }
+    }
+
+    /**
+     * Room to connect one more social account? Free stops at three. An
+     * account already connected is never cut off by a downgrade — only
+     * adding one is refused.
+     */
+    public static function canConnectSocialAccount(User $user): bool
+    {
+        $owner = Workspace::owner($user);
+        $limit = $owner->plan()->quota('social_accounts');
+
+        return $limit === null
+            || $owner->socialAccounts()->where('status', SocialAccountStatus::Connected)->count() < $limit;
     }
 
     /**

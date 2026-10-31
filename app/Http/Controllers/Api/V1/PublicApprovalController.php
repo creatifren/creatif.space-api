@@ -139,7 +139,7 @@ class PublicApprovalController extends Controller
             return response()->json(['message' => 'These posts have already been decided.'], 422);
         }
 
-        $need = SocialPostRelay::need($eligible);
+        $need = SocialPostRelay::need($link->user, $eligible);
         $balance = Credits::balance($link->user);
         if ($balance < $need) {
             $link->user->notify(new SocialPostDecided(
