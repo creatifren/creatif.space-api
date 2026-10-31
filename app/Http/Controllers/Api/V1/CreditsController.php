@@ -30,6 +30,8 @@ class CreditsController extends Controller
         $user = $request->user();
 
         return response()->json(['data' => [
+            // Whose plan the wallet hangs off — a teammate sees the owner's.
+            'plan' => Workspace::owner($user)->plan()->key,
             'balance' => Credits::balance($user),
             'committed' => Credits::committed($user),
             'rate' => [
