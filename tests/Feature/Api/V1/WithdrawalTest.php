@@ -149,22 +149,15 @@ describe('withdrawing', function () {
     });
 });
 
-describe('credits withdrawal', function () {
-    it('pays back only bought Credits, at Rp1 each, and records it in Credits', function () {
-        $user = User::factory()->create();
-        Wallet::credit($user, WalletTransactionType::CreditsTopUp, 60_000, wallet: Wallet::CREDITS);
-        Credits::grant($user, 120, 'October Credits'); // never paid for — stays
+it('refuses to pay Credits back to a bank, even bought ones', function () {
+    $user = User::factory()->create();
+    Wallet::credit($user, WalletTransactionType::CreditsTopUp, 60_000, wallet: Wallet::CREDITS);
 
-        $this->actingAs($user)
-            ->postJson('/api/v1/me/withdrawals', payoutDetails(60_001) + ['wallet' => 'credits'])
-            ->assertUnprocessable(); // 60.001 Credits, but only 60.000 were bought
+    $this->actingAs($user)
+        ->postJson('/api/v1/me/withdrawals', payoutDetails(60_000) + ['wallet' => 'credits'])
+        ->assertUnprocessable()
+        ->assertJsonValidationErrors('wallet');
 
-        $this->actingAs($user)
-            ->postJson('/api/v1/me/withdrawals', payoutDetails(60_000) + ['wallet' => 'credits'])
-            ->assertCreated();
-
-        expect(Credits::balance($user))->toBe(120)
-            ->and(Credits::withdrawable($user))->toBe(0)
-            ->and(Withdrawal::query()->first())->wallet->toBe('credits')->amount->toBe(60_000);
-    });
+    expect(Credits::balance($user))->toBe(60_000)
+        ->and(Withdrawal::query()->count())->toBe(0);
 });

@@ -31,8 +31,6 @@ class CreditsController extends Controller
 
         return response()->json(['data' => [
             'balance' => Credits::balance($user),
-            // Bought, not granted — what Withdraw can pay back.
-            'withdrawable' => Credits::withdrawable($user),
             'committed' => Credits::committed($user),
             'rate' => [
                 'rupiah' => Credits::RUPIAH,

@@ -8,7 +8,6 @@ use App\Http\Controllers\Controller;
 use App\Http\Resources\WithdrawalResource;
 use App\Models\User;
 use App\Models\Withdrawal;
-use App\Support\Credits;
 use App\Support\Wallet;
 use App\Support\Workspace;
 use Illuminate\Http\JsonResponse;
@@ -112,20 +111,13 @@ class EarningController extends Controller
             'account_name' => ['required_with:bank_code,account_number', 'string', 'max:255'],
             // Sales and affiliate commission are separate balances, so they
             // are separate payouts — one cannot be spent out of the other.
-            // Credits go back at what they cost: the amount is rupiah, a
-            // whole number of Credits, out of what was bought (not granted).
-            'wallet' => ['sometimes', 'string', 'in:main,affiliate,credits'],
+            // Credits are not here: bought Credits are spent, never paid
+            // back to a bank (the gateway that took the money owns refunds).
+            'wallet' => ['sometimes', 'string', 'in:main,affiliate'],
         ]);
 
         $user = $request->user();
         $wallet = $validated['wallet'] ?? Wallet::MAIN;
-        $credits = $wallet === Wallet::CREDITS;
-
-        if ($credits && $validated['amount'] % Credits::RUPIAH !== 0) {
-            throw ValidationException::withMessages([
-                'amount' => 'Credits go back whole — use a multiple of '.Credits::RUPIAH.'.',
-            ]);
-        }
 
         if (! isset($validated['account_number'])) {
             $saved = $user->getAttributes();
@@ -141,8 +133,7 @@ class EarningController extends Controller
             $validated['account_name'] = $saved['payout_account_name'];
         }
 
-        $available = $credits ? Credits::withdrawable($user) * Credits::RUPIAH : Wallet::balance($user, $wallet);
-        if ($validated['amount'] > $available) {
+        if ($validated['amount'] > Wallet::balance($user, $wallet)) {
             throw ValidationException::withMessages([
                 'amount' => 'That’s more than your balance.',
             ]);
@@ -162,7 +153,7 @@ class EarningController extends Controller
             ]);
         }
 
-        $withdrawal = DB::transaction(function () use ($user, $validated, $wallet, $credits) {
+        $withdrawal = DB::transaction(function () use ($user, $validated, $wallet) {
             $withdrawal = $user->withdrawals()->create([
                 'wallet' => $wallet,
                 'amount' => $validated['amount'],
@@ -177,7 +168,7 @@ class EarningController extends Controller
             Wallet::debit(
                 $user,
                 WalletTransactionType::WithdrawalDebit,
-                $credits ? intdiv($withdrawal->amount, Credits::RUPIAH) : $withdrawal->amount,
+                $withdrawal->amount,
                 'withdrawal',
                 $withdrawal->id,
                 wallet: $wallet,

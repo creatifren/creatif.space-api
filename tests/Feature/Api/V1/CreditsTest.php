@@ -95,7 +95,7 @@ it('takes rent before the plan Credits on the first, and lapses what it cannot p
         ->and(PlanQuota::readOnly($short->fresh()))->toBeTrue();
 });
 
-it('converts old balances ×100 once, and keeps withdrawable at what was paid', function () {
+it('converts old balances ×100 once', function () {
     $user = User::factory()->create();
     Wallet::credit($user, WalletTransactionType::CreditsTopUp, 500, wallet: Wallet::CREDITS);
     Credits::grant($user, 30, 'Welcome');
@@ -106,7 +106,6 @@ it('converts old balances ×100 once, and keeps withdrawable at what was paid', 
     $migration->up(); // a re-run changes nothing
 
     expect(Credits::balance($user))->toBe(53_000)
-        ->and(Credits::withdrawable($user))->toBe(500)
         ->and(Credits::balance($empty))->toBe(0);
 });
 
