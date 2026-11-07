@@ -1,12 +1,17 @@
 <?php
 
+use App\Enums\CommissionStatus;
 use App\Enums\InvoiceStatus;
 use App\Enums\SubscriptionStatus;
+use App\Enums\WalletTransactionType;
+use App\Models\Commission;
 use App\Models\CreditPurchase;
 use App\Models\Invoice;
 use App\Models\Plan;
+use App\Models\Referral;
 use App\Models\Subscription;
 use App\Models\User;
+use App\Notifications\BillingNeedsReview;
 use App\Support\Wallet;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Http;
@@ -150,4 +155,78 @@ it('does not activate on an unpaid product update', function () {
     $event = ['id' => 'evt_update', 'eventType' => 'subscription.update', 'object' => ['id' => 'sub_test', 'product' => 'prod_max_monthly']];
     sendCreem($event)->assertOk();
     expect($sub->fresh()->plan->key->value)->toBe('pro');
+});
+
+function creemRefund(array $transaction, array $checkout = [], string $id = 'ref_1'): array
+{
+    return ['id' => 'evt_'.$id, 'eventType' => 'refund.created', 'object' => [
+        'id' => $id, 'status' => 'succeeded', 'refund_amount' => $transaction['refunded_amount'], 'refund_currency' => 'USD',
+        'transaction' => $transaction + ['currency' => 'USD', 'status' => 'refunded'],
+        'checkout' => $checkout,
+    ]];
+}
+
+function paidTopUp(User $user): CreditPurchase
+{
+    $purchase = CreditPurchase::create(['user_id' => $user->id, 'units' => 10, 'credits' => 100000, 'amount' => 1000, 'status' => 'paid']);
+    Wallet::credit($user, WalletTransactionType::CreditsTopUp, 100000, 'credit_purchase', $purchase->id, null, Wallet::CREDITS);
+
+    return $purchase;
+}
+
+it('refunds a subscription invoice and reverses its held commission', function () {
+    $sub = Subscription::factory()->create(['creem_subscription_id' => 'sub_test']);
+    $invoice = Invoice::factory()->for($sub)->create(['status' => 'paid', 'amount' => 999, 'creem_transaction_id' => 'tran_r']);
+    $commission = Commission::create([
+        'referral_id' => Referral::factory()->create(['referred_user_id' => $sub->user_id])->id,
+        'invoice_id' => $invoice->id, 'amount' => 100, 'tier_percent' => '20.00', 'installment_no' => 1, 'hold_until' => now()->addMonth(),
+    ]);
+    sendCreem(creemRefund(['id' => 'tran_r', 'amount' => 999, 'refunded_amount' => 999]))->assertOk();
+    expect($invoice->fresh()->status)->toBe(InvoiceStatus::Refunded)
+        ->and($commission->fresh()->status)->toBe(CommissionStatus::Reversed);
+});
+
+it('leaves a partially refunded invoice for staff', function () {
+    $staff = User::factory()->create(['is_staff' => true]);
+    $sub = Subscription::factory()->create(['creem_subscription_id' => 'sub_test']);
+    $invoice = Invoice::factory()->for($sub)->create(['status' => 'paid', 'amount' => 999, 'creem_transaction_id' => 'tran_p']);
+    sendCreem(creemRefund(['id' => 'tran_p', 'amount' => 999, 'refunded_amount' => 500]))->assertOk();
+    expect($invoice->fresh()->status)->toBe(InvoiceStatus::Paid);
+    Notification::assertSentTo($staff, BillingNeedsReview::class);
+});
+
+it('takes refunded Credits back once, across replays', function () {
+    $user = User::factory()->create();
+    $purchase = paidTopUp($user);
+    $event = creemRefund(['id' => 'tran_c', 'amount' => 1000, 'refunded_amount' => 1000], ['request_id' => $purchase->ulid]);
+    sendCreem($event)->assertOk();
+    $event['id'] = 'evt_redelivered';
+    sendCreem($event)->assertOk();
+    expect(Wallet::balance($user, Wallet::CREDITS))->toBe(0)
+        ->and($purchase->fresh()->status)->toBe('refunded');
+});
+
+it('takes a partial refund in proportion and the rest on a second refund', function () {
+    $user = User::factory()->create();
+    $purchase = paidTopUp($user);
+    sendCreem(creemRefund(['id' => 'tran_c', 'amount' => 1000, 'refunded_amount' => 400], ['request_id' => $purchase->ulid], 'ref_a'))->assertOk();
+    expect(Wallet::balance($user, Wallet::CREDITS))->toBe(60000);
+    sendCreem(creemRefund(['id' => 'tran_c', 'amount' => 1000, 'refunded_amount' => 1000], ['request_id' => $purchase->ulid], 'ref_b'))->assertOk();
+    expect(Wallet::balance($user, Wallet::CREDITS))->toBe(0);
+});
+
+it('never takes the Credits balance negative and tells staff the shortfall', function () {
+    $staff = User::factory()->create(['is_staff' => true]);
+    $user = User::factory()->create();
+    $purchase = paidTopUp($user);
+    Wallet::debit($user, WalletTransactionType::CreditsSend, 70000, null, null, null, Wallet::CREDITS);
+    sendCreem(creemRefund(['id' => 'tran_c', 'amount' => 1000, 'refunded_amount' => 1000], ['request_id' => $purchase->ulid]))->assertOk();
+    expect(Wallet::balance($user, Wallet::CREDITS))->toBe(0);
+    Notification::assertSentTo($staff, BillingNeedsReview::class, fn ($n) => str_contains($n->reason, '70000'));
+});
+
+it('tells staff about a dispute', function () {
+    $staff = User::factory()->create(['is_staff' => true]);
+    sendCreem(['id' => 'evt_dispute', 'eventType' => 'dispute.created', 'object' => ['id' => 'dis_1']])->assertOk();
+    Notification::assertSentTo($staff, BillingNeedsReview::class);
 });

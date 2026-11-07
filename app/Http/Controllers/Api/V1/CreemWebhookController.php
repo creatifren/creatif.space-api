@@ -11,6 +11,8 @@ use App\Models\Invoice;
 use App\Models\Plan;
 use App\Models\Subscription;
 use App\Models\User;
+use App\Models\WalletTransaction;
+use App\Notifications\BillingNeedsReview;
 use App\Notifications\SubscriptionPastDue;
 use App\Notifications\SubscriptionStarted;
 use App\Services\CreemService;
@@ -58,7 +60,8 @@ class CreemWebhookController extends Controller
                 // A product update is not proof a proration charge succeeded.
                 // Paid events alone grant upgraded features.
                 'subscription.update', 'subscription.active' => null,
-                'refund.created', 'dispute.created' => $this->review($event),
+                'refund.created' => $this->refund($event),
+                'dispute.created' => $this->dispute($event),
                 default => null,
             };
         });
@@ -236,12 +239,80 @@ class CreemWebhookController extends Controller
         throw ValidationException::withMessages(['object' => 'Unknown product.']);
     }
 
-    /** Refunds/disputes need an explicit operator decision; never hide one. */
-    private function review(array $event): void
+    /**
+     * A refund settles what our side can settle by itself and hands the rest
+     * to staff: a partial subscription refund, Credits already spent.
+     */
+    private function refund(array $event): void
     {
-        Log::warning('billing.review_required', ['event_id' => $event['id'], 'type' => $event['eventType']]);
-        // ponytail: refund clawback is manual until partial refunds and spent
-        // Credits have a debt policy. The durable event is the review queue.
+        $object = $event['object'];
+        $transaction = is_array($object['transaction'] ?? null) ? $object['transaction'] : [];
+        // Cumulative across refunds of the same payment, so a second partial
+        // refund and a replayed one both settle from the running total.
+        $refunded = $transaction['refunded_amount'] ?? $object['refund_amount'] ?? null;
+        $paid = $transaction['amount_paid'] ?? $transaction['amount'] ?? null;
+        $this->require(($object['status'] ?? '') === 'succeeded'
+            && ($object['refund_currency'] ?? '') === 'USD'
+            && is_int($refunded) && $refunded > 0 && is_int($paid) && $paid > 0);
+        $full = $refunded >= $paid;
+
+        $invoice = is_string($transaction['id'] ?? null)
+            ? Invoice::query()->where('creem_transaction_id', $transaction['id'])->lockForUpdate()->first()
+            : null;
+        if ($invoice !== null) {
+            if ($invoice->status === InvoiceStatus::Refunded) {
+                return;
+            }
+            if (! $full) {
+                BillingNeedsReview::staff($event['eventType'], $event['id'], "Partial refund on invoice {$invoice->number}: plan and commission left as they are.");
+
+                return;
+            }
+            $invoice->update(['status' => InvoiceStatus::Refunded]);
+            CommissionEngine::reverseForInvoice($invoice);
+
+            return;
+        }
+
+        $checkout = is_array($object['checkout'] ?? null) ? $object['checkout'] : [];
+        $purchase = CreditPurchase::query()
+            ->where('ulid', (string) ($checkout['request_id'] ?? ''))
+            ->lockForUpdate()->first();
+        if ($purchase === null || $purchase->status === 'pending') {
+            BillingNeedsReview::staff($event['eventType'], $event['id'], 'Refund matches no paid invoice or Credits purchase.');
+
+            return;
+        }
+        if ($purchase->status === 'refunded') {
+            return;
+        }
+        $user = User::query()->whereKey($purchase->user_id)->lockForUpdate()->firstOrFail();
+        // The refunded share of what was bought, less what earlier refunds
+        // already took. Credits already spent stay spent: the ledger never
+        // goes negative, staff settle the rest.
+        $share = $full ? $purchase->credits : intdiv($purchase->credits * $refunded, $paid);
+        $owed = max(0, $share + (int) WalletTransaction::query()
+            ->where('reference_type', 'credit_purchase')->where('reference_id', $purchase->id)
+            ->where('type', WalletTransactionType::CreditsRefund)->sum('amount'));
+        $taken = min($owed, Wallet::balance($user, Wallet::CREDITS));
+        if ($taken > 0) {
+            Wallet::debit($user, WalletTransactionType::CreditsRefund, $taken,
+                'credit_purchase', $purchase->id, 'Creem refund '.$object['id'], Wallet::CREDITS);
+        }
+        if ($full) {
+            $purchase->update(['status' => 'refunded']);
+        }
+        if ($taken < $owed) {
+            BillingNeedsReview::staff($event['eventType'], $event['id'],
+                'Refunded Credits purchase '.$purchase->ulid.': '.($owed - $taken).' Credits were already spent.');
+        }
+    }
+
+    /** A dispute is the bank's call; Creem fights it, staff decide the rest. */
+    private function dispute(array $event): void
+    {
+        Log::warning('billing.dispute', ['event_id' => $event['id']]);
+        BillingNeedsReview::staff($event['eventType'], $event['id'], 'A customer opened a dispute in Creem.');
     }
 
     private function id(mixed $value): ?string

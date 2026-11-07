@@ -25,4 +25,6 @@ enum WalletTransactionType: string
     case CreditsSendReturn = 'credits_send_return';
     /** Storage blocks, on the first of the month or when one is added. */
     case CreditsRent = 'credits_rent';
+    /** A refunded top-up takes its Credits back — never below zero. */
+    case CreditsRefund = 'credits_refund';
 }

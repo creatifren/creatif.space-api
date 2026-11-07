@@ -124,6 +124,12 @@ class CreemService
     }
 
     /** @return array<string, mixed> */
+    public function fetchProduct(string $id): array
+    {
+        return $this->api()->get('/products/'.rawurlencode($id))->json();
+    }
+
+    /** @return array<string, mixed> */
     public function transaction(string $id): array
     {
         return $this->api()->get('/transactions', ['transaction_id' => $id])->json();
