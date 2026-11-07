@@ -10,6 +10,7 @@ use App\Http\Controllers\Controller;
 use App\Http\Resources\SocialAccountResource;
 use App\Models\SocialAccount;
 use App\Models\SocialPost;
+use App\Models\User;
 use App\Services\PostForMeService;
 use App\Support\Credits;
 use App\Support\PlanQuota;
@@ -18,9 +19,13 @@ use App\Support\Workspace;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Gate;
+use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
+use Illuminate\Validation\ValidationException;
+use Throwable;
 
 class SocialAccountController extends Controller
 {
@@ -52,15 +57,7 @@ class SocialAccountController extends Controller
             'app_password' => ['required_if:platform,bluesky', 'nullable', 'string', 'max:64'],
         ]);
 
-        // Refused before the provider's consent page, where a refusal would
-        // otherwise surface as an account that connected and then vanished.
-        if (! PlanQuota::canConnectSocialAccount($request->user())) {
-            $limit = Workspace::owner($request->user())->plan()->quota('social_accounts');
-
-            throw ValidationException::withMessages([
-                'platform' => "Free connects up to {$limit} social accounts. Upgrade to Pro or Max to add more.",
-            ]);
-        }
+        $this->ensureRoom($request->user(), 'platform');
 
         $url = $postForMe->authUrl(
             $validated['platform'],
@@ -74,6 +71,69 @@ class SocialAccountController extends Controller
     }
 
     /**
+     * Claim an account another Creatif Space user holds. The provider keeps
+     * one owner per platform account and refuses a second, so the claimant
+     * proves it by signing in again: the account is parked under a one-off
+     * tag for the trip (the provider would refuse it under the claimant's
+     * own id), and `sync` moves it only if that sign-in renewed its token.
+     * The error URL that names the account is unsigned — it decides nothing.
+     */
+    public function claim(Request $request, PostForMeService $postForMe): JsonResponse
+    {
+        $validated = $request->validate(['account_id' => ['required', 'string', 'max:64']]);
+        $user = $request->user();
+
+        $remote = $postForMe->account($validated['account_id']);
+        $platform = SocialPlatform::tryFrom((string) ($remote['platform'] ?? ''));
+        $owner = (string) ($remote['external_id'] ?? '');
+
+        if (str_starts_with($owner, self::CLAIM)) {
+            $pending = Cache::get("social-claim:{$owner}");
+
+            if ($pending === null || $pending['until'] > now()->timestamp) {
+                throw ValidationException::withMessages([
+                    'account_id' => 'Someone is claiming this account right now. Try again in a few minutes.',
+                ]);
+            }
+
+            // An abandoned claim: take over from it, for the same owner.
+            Cache::forget("social-claim:{$owner}");
+            $owner = $pending['owner'];
+        }
+
+        // Bluesky signs in with an app password, not a trip — nothing to renew.
+        if ($platform === null || $platform === SocialPlatform::Bluesky || $owner === '' || $owner === $user->ulid) {
+            throw ValidationException::withMessages(['account_id' => 'This account cannot be claimed.']);
+        }
+
+        $this->ensureRoom($user, 'account_id');
+
+        $tag = self::CLAIM.Str::random(24);
+        $postForMe->assignAccount($validated['account_id'], $tag);
+
+        try {
+            $url = $postForMe->authUrl($platform->value, $tag);
+        } catch (Throwable $e) {
+            $postForMe->assignAccount($validated['account_id'], $owner);
+
+            throw $e;
+        }
+
+        // No TTL: the record is the only way back to the owner, so it lives
+        // until the claim finishes or the owner's sync undoes it.
+        Cache::forever("social-claim:{$tag}", [
+            'claimant' => $user->id,
+            'owner' => $owner,
+            'account_id' => $validated['account_id'],
+            'token' => hash('sha256', (string) ($remote['access_token'] ?? '')),
+            'until' => now()->addMinutes(self::CLAIM_MINUTES)->timestamp,
+        ]);
+        Cache::forever("social-claim-by:{$user->id}", $tag);
+
+        return response()->json(['data' => ['url' => $url]]);
+    }
+
+    /**
      * Reconcile local rows against the provider. Called by the frontend
      * after the OAuth redirect returns; also the safety net for missed
      * webhooks. Accounts connected without our external_id (e.g. via the
@@ -82,6 +142,7 @@ class SocialAccountController extends Controller
     public function sync(Request $request, PostForMeService $postForMe): AnonymousResourceCollection
     {
         $user = $request->user();
+        $this->finishClaim($user, $postForMe);
         $remote = $postForMe->accountsFor($user->ulid);
 
         $seen = [];
@@ -112,11 +173,15 @@ class SocialAccountController extends Controller
             );
         }
 
-        // A row the provider no longer lists lost its grant.
+        // A row the provider no longer lists lost its grant — unless it is
+        // only parked for someone's claim: that one comes back if the claim
+        // goes nowhere.
         $user->socialAccounts()
             ->whereNotIn('provider_account_id', $seen)
             ->where('status', SocialAccountStatus::Connected)
-            ->update(['status' => SocialAccountStatus::Disconnected]);
+            ->get()
+            ->reject(fn (SocialAccount $a) => $this->parked($a->provider_account_id, $user, $postForMe))
+            ->each(fn (SocialAccount $a) => $a->update(['status' => SocialAccountStatus::Disconnected]));
 
         return SocialAccountResource::collection(
             $user->socialAccounts()->orderBy('platform')->orderBy('username')->get(),
@@ -193,5 +258,99 @@ class SocialAccountController extends Controller
         $socialAccount->update(['status' => SocialAccountStatus::Disconnected]);
 
         return response()->json(null, 204);
+    }
+
+    /** Prefix of the one-off tag an account wears while it is being claimed. */
+    private const CLAIM = 'claim_';
+
+    /** How long the claimant has to finish signing in. */
+    private const CLAIM_MINUTES = 15;
+
+    /**
+     * Refused before the provider's consent page, where a refusal would
+     * otherwise surface as an account that connected and then vanished.
+     */
+    private function ensureRoom(User $user, string $field): void
+    {
+        if (PlanQuota::canConnectSocialAccount($user)) {
+            return;
+        }
+
+        $limit = Workspace::owner($user)->plan()->quota('social_accounts');
+
+        throw ValidationException::withMessages([
+            $field => "Free connects up to {$limit} social accounts. Upgrade to Pro or Max to add more.",
+        ]);
+    }
+
+    /**
+     * The claimant is back from signing in. The claimed account moves to
+     * them only if its token changed under the claim tag — that is the
+     * sign-in we asked for. Anything else goes back to its owner. Other
+     * accounts the same sign-in brought along are the claimant's own.
+     */
+    private function finishClaim(User $user, PostForMeService $postForMe): void
+    {
+        $tag = Cache::get("social-claim-by:{$user->id}");
+        $claim = $tag ? Cache::get("social-claim:{$tag}") : null;
+
+        if ($claim === null || $claim['claimant'] !== $user->id) {
+            Cache::forget("social-claim-by:{$user->id}");
+
+            return;
+        }
+
+        foreach ($postForMe->accountsFor($tag) as $account) {
+            $id = (string) ($account['id'] ?? '');
+
+            if ($id === '') {
+                continue;
+            }
+
+            // The claimed one is read on its own: an empty token from a list
+            // that leaves it out must never pass as "changed".
+            $token = $id === $claim['account_id']
+                ? (string) ($postForMe->account($id)['access_token'] ?? '')
+                : '';
+            $proven = $id !== $claim['account_id']
+                || ($token !== '' && hash('sha256', $token) !== $claim['token']);
+
+            $postForMe->assignAccount($id, $proven ? $user->ulid : $claim['owner']);
+
+            if ($proven && $id === $claim['account_id']) {
+                // The old owner's row stays, Disconnected — their published
+                // posts reference it.
+                SocialAccount::query()
+                    ->where('provider_account_id', $id)
+                    ->where('user_id', '!=', $user->id)
+                    ->update(['status' => SocialAccountStatus::Disconnected]);
+            }
+        }
+
+        // Forgotten only once every account is re-tagged: a provider hiccup
+        // above leaves the claim for the next sync to finish.
+        Cache::forget("social-claim:{$tag}");
+        Cache::forget("social-claim-by:{$user->id}");
+    }
+
+    /**
+     * Is this account only away on a claim? An abandoned claim is undone
+     * here, on the owner's next sync, so the account cannot stay parked.
+     */
+    private function parked(string $accountId, User $owner, PostForMeService $postForMe): bool
+    {
+        $tag = (string) ($postForMe->account($accountId)['external_id'] ?? '');
+        $claim = str_starts_with($tag, self::CLAIM) ? Cache::get("social-claim:{$tag}") : null;
+
+        if ($claim === null || $claim['owner'] !== $owner->ulid) {
+            return false;
+        }
+
+        if ($claim['until'] <= now()->timestamp) {
+            Cache::forget("social-claim:{$tag}");
+            $postForMe->assignAccount($accountId, $owner->ulid);
+        }
+
+        return true;
     }
 }

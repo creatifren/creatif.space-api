@@ -23,6 +23,7 @@ use App\Http\Controllers\Api\V1\PublicTransferController;
 use App\Http\Controllers\Api\V1\SocialAccountController;
 use App\Http\Controllers\Api\V1\SocialApprovalController;
 use App\Http\Controllers\Api\V1\SocialFeedController;
+use App\Http\Controllers\Api\V1\SocialPlanLinkController;
 use App\Http\Controllers\Api\V1\SocialPostController;
 use App\Http\Controllers\Api\V1\SocialSettingsController;
 use App\Http\Controllers\Api\V1\SpaceController;
@@ -32,6 +33,7 @@ use App\Http\Controllers\Api\V1\SubscriptionController;
 use App\Http\Controllers\Api\V1\TeamController;
 use App\Http\Controllers\Api\V1\TourController;
 use App\Http\Controllers\Api\V1\TransferController;
+use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
 
 // Public
@@ -50,8 +52,12 @@ Route::post('/webhooks/postforme', PostForMeWebhookController::class)
 // The same URL doubles as the project's OAuth return: the browser arrives
 // here with GET after granting an account (the dashboard's redirect URL is
 // this public tunnel), and is handed on to the connect page, which syncs.
-Route::get('/webhooks/postforme', function () {
-    return redirect(config('app.frontend_url').'/social/connect?social=connected');
+// The provider's isSuccess/error params ride along — dropping them made a
+// refused connection look like nothing happened.
+Route::get('/webhooks/postforme', function (Request $request) {
+    $query = http_build_query(['social' => 'connected'] + $request->only(['isSuccess', 'error']));
+
+    return redirect(config('app.frontend_url').'/social/connect?'.$query);
 })->name('api.v1.webhooks.postforme.return');
 
 Route::get('/handles/availability', [HandleController::class, 'availability'])
@@ -88,6 +94,11 @@ Route::post('/a/{token}/posts/{post}/comments', [PublicApprovalController::class
 Route::post('/a/{token}/approve-all', [PublicApprovalController::class, 'approveAll'])
     ->middleware('throttle:10,1')
     ->name('api.v1.approval-links.approve-all');
+
+// Content Plan share link — read-only, the token is the credential.
+Route::get('/plan/{token}', [SocialPlanLinkController::class, 'show'])
+    ->middleware('throttle:60,1')
+    ->name('api.v1.plan-links.show');
 
 // A referral link was opened. Answers 204 whatever the code was: an
 // unknown one must not tell a stranger which codes exist.
@@ -147,6 +158,9 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::post('/social-accounts/auth-url', [SocialAccountController::class, 'authUrl'])
         ->middleware('throttle:30,1')
         ->name('api.v1.social-accounts.auth-url');
+    Route::post('/social-accounts/claim', [SocialAccountController::class, 'claim'])
+        ->middleware('throttle:10,1')
+        ->name('api.v1.social-accounts.claim');
     Route::post('/social-accounts/sync', [SocialAccountController::class, 'sync'])
         ->middleware('throttle:30,1')
         ->name('api.v1.social-accounts.sync');
@@ -203,6 +217,13 @@ Route::middleware('auth:sanctum')->group(function () {
         ->name('api.v1.social-approval-links.approve');
     Route::delete('/social-approval-links/{socialApprovalLink}', [SocialApprovalController::class, 'revoke'])
         ->name('api.v1.social-approval-links.destroy');
+    Route::get('/social-plan-links', [SocialPlanLinkController::class, 'index'])
+        ->name('api.v1.social-plan-links.index');
+    Route::post('/social-plan-links', [SocialPlanLinkController::class, 'store'])
+        ->middleware('throttle:30,1')
+        ->name('api.v1.social-plan-links.store');
+    Route::delete('/social-plan-links/{socialPlanLink}', [SocialPlanLinkController::class, 'destroy'])
+        ->name('api.v1.social-plan-links.destroy');
     Route::delete('/social-posts/{socialPost}', [SocialPostController::class, 'destroy'])->name('api.v1.social-posts.destroy');
 
     // Crefile — the file library (R2-hosted)

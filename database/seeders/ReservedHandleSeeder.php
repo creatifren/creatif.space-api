@@ -46,7 +46,8 @@ class ReservedHandleSeeder extends Seeder
             //                             shipped
             // 'a'      Approval links     /a/{token}
             // 'report' Client reports     /report/{slug}
-            'r', 'req', 't', 'a', 'report',
+            // 'plan'   Content Plan links /plan/{token}
+            'r', 'req', 't', 'a', 'report', 'plan',
 
             // Infrastructure & app
             'admin', 'api', 'auth', 'webhooks', 'app', 'dashboard', 'www',

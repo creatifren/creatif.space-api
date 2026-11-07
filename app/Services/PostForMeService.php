@@ -37,6 +37,11 @@ class PostForMeService
         $payload = [
             'platform' => $platform,
             'external_id' => $externalId,
+            // Always show the sign-in / account picker. Instagram (Business
+            // Login) and X default to false: a second connect silently reused
+            // the account the browser was already signed in to, so the
+            // "new" account came back as the old one and nothing was added.
+            'force_reauth' => true,
         ];
 
         // Two platforms take a connection_type. Instagram signs in on
@@ -83,6 +88,40 @@ class PostForMeService
         $response->throw();
 
         return (array) $response->json('data', []);
+    }
+
+    /**
+     * One provider account, or null when it does not exist.
+     *
+     * @return array<string, mixed>|null
+     *
+     * @throws ConnectionException
+     */
+    public function account(string $accountId): ?array
+    {
+        $response = $this->client()->get('/social-accounts/'.rawurlencode($accountId));
+
+        if ($response->status() === 404) {
+            return null;
+        }
+
+        $response->throw();
+
+        return (array) $response->json();
+    }
+
+    /**
+     * Re-tag an account with another of our users. The provider keeps one
+     * external_id per platform account, so this moves it — the old owner
+     * stops seeing it.
+     *
+     * @throws ConnectionException
+     */
+    public function assignAccount(string $accountId, string $externalId): void
+    {
+        $this->client()
+            ->patch('/social-accounts/'.rawurlencode($accountId), ['external_id' => $externalId])
+            ->throw();
     }
 
     /**

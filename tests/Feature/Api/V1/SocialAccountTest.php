@@ -43,6 +43,8 @@ describe('social accounts', function () {
 
         Http::assertSent(fn ($request) => $request['platform'] === 'instagram'
             && $request['external_id'] === $user->ulid
+            // Or a second Instagram reuses the signed-in one.
+            && $request['force_reauth'] === true
             // Login with Instagram, not via a Facebook Page.
             && $request['platform_data']['instagram']['connection_type'] === 'instagram');
     });
@@ -157,6 +159,73 @@ describe('social accounts', function () {
         Http::assertSent(fn ($r) => $r->method() === 'DELETE' && str_ends_with($r->url(), '/social-posts/post_only'));
         Http::assertSent(fn ($r) => $r->method() === 'PUT' && str_ends_with($r->url(), '/social-posts/post_shared')
             && $r['social_accounts'] === [$kept->provider_account_id]);
+    });
+
+    it('claims: parks the account, moves it only after a fresh sign-in', function () {
+        $owner = User::factory()->create();
+        $claimant = User::factory()->create();
+        $old = SocialAccount::factory()->for($owner)->create([
+            'platform' => 'instagram',
+            'provider_account_id' => 'spc_ig',
+        ]);
+
+        $remote = ['id' => 'spc_ig', 'platform' => 'instagram', 'username' => '@shop',
+            'status' => 'connected', 'external_id' => $owner->ulid, 'access_token' => 'tok_old'];
+        $fake = function ($request) use (&$remote) {
+            $url = $request->url();
+            if ($request->method() === 'PATCH') {
+                $remote['external_id'] = $request['external_id'];
+
+                return Http::response($remote);
+            }
+            if (str_contains($url, '/auth-url')) {
+                return Http::response(['url' => 'https://auth.postforme.test/claim']);
+            }
+            if (str_contains($url, '/social-accounts/spc_ig')) {
+                return Http::response($remote);
+            }
+            parse_str((string) parse_url($url, PHP_URL_QUERY), $q);
+
+            return Http::response(['data' => ($q['external_id'] ?? '') === $remote['external_id'] ? [$remote] : []]);
+        };
+        Http::fake(['api.postforme.test/*' => $fake]);
+
+        $this->actingAs($claimant)
+            ->postJson('/api/v1/social-accounts/claim', ['account_id' => 'spc_ig'])
+            ->assertOk()
+            ->assertJsonPath('data.url', 'https://auth.postforme.test/claim');
+        $tag = $remote['external_id'];
+        expect($tag)->toStartWith('claim_');
+
+        // The owner syncing mid-claim keeps the row.
+        $this->actingAs($owner)->postJson('/api/v1/social-accounts/sync')->assertOk();
+        expect($old->fresh()->status->value)->toBe('connected');
+
+        // Back without a fresh sign-in: the account goes home.
+        $this->actingAs($claimant)->postJson('/api/v1/social-accounts/sync')->assertJsonCount(0, 'data');
+        expect($remote['external_id'])->toBe($owner->ulid);
+
+        // Again, this time the sign-in renewed the token.
+        $this->actingAs($claimant)->postJson('/api/v1/social-accounts/claim', ['account_id' => 'spc_ig'])->assertOk();
+        $remote['access_token'] = 'tok_new';
+        $this->actingAs($claimant)->postJson('/api/v1/social-accounts/sync')->assertJsonCount(1, 'data');
+
+        expect($remote['external_id'])->toBe($claimant->ulid)
+            ->and($old->fresh()->status->value)->toBe('disconnected')
+            ->and($claimant->socialAccounts()->where('provider_account_id', 'spc_ig')->exists())->toBeTrue();
+    });
+
+    it('refuses to claim an account one already owns', function () {
+        $user = User::factory()->create();
+        Http::fake(['api.postforme.test/*' => Http::response([
+            'id' => 'spc_mine', 'platform' => 'instagram', 'external_id' => $user->ulid,
+        ])]);
+
+        $this->actingAs($user)
+            ->postJson('/api/v1/social-accounts/claim', ['account_id' => 'spc_mine'])
+            ->assertUnprocessable();
+
+        Http::assertNotSent(fn ($r) => $r->method() === 'PATCH');
     });
 
     it("forbids touching another user's account", function () {

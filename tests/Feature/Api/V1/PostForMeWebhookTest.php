@@ -16,6 +16,13 @@ function postforme_webhook($test, array $payload, string $secret = 'whsec_test')
 }
 
 describe('the postforme webhook', function () {
+    it('passes the provider\'s connect failure on to the channels page', function () {
+        config(['app.frontend_url' => 'https://app.test']);
+
+        $this->get('/api/v1/webhooks/postforme?isSuccess=false&error=External+Id+already+exists+for+account+x&provider=instagram')
+            ->assertRedirect('https://app.test/social/connect?social=connected&isSuccess=false&error=External+Id+already+exists+for+account+x');
+    });
+
     it('rejects a missing or wrong secret', function () {
         $this->postJson('/api/v1/webhooks/postforme', ['event_type' => 'social.account.created'])
             ->assertForbidden();

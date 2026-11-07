@@ -418,6 +418,14 @@ class SocialPostController extends Controller
     ): JsonResponse {
         Gate::allowIf(fn ($user) => $socialPost->user_id === $user->id);
 
+        // A failed post never went out and its publishes already came back
+        // with the failure: nothing to cancel, so it is simply removed.
+        if ($socialPost->status === SocialPostStatus::Failed) {
+            $socialPost->delete();
+
+            return response()->json(null, 204);
+        }
+
         if ($socialPost->status !== SocialPostStatus::Scheduled) {
             return response()->json([
                 'message' => 'Only scheduled posts can be cancelled.',

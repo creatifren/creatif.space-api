@@ -326,6 +326,19 @@ describe('listing and cancelling', function () {
         Http::assertNothingSent();
     });
 
+    it('deletes a failed post without calling the provider', function () {
+        Http::fake();
+        $user = User::factory()->create();
+        $post = SocialPost::factory()->for($user)->create(['status' => 'failed']);
+
+        $this->actingAs($user)
+            ->deleteJson("/api/v1/social-posts/{$post->ulid}")
+            ->assertNoContent();
+
+        expect(SocialPost::query()->find($post->id))->toBeNull();
+        Http::assertNothingSent();
+    });
+
     it("forbids cancelling another user's post", function () {
         $post = SocialPost::factory()->create();
 
