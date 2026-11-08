@@ -11,10 +11,11 @@ use App\Http\Resources\SocialAccountResource;
 use App\Models\SocialAccount;
 use App\Models\SocialPost;
 use App\Models\User;
-use App\Services\PostForMeService;
+use App\Contracts\SocialProvider;
 use App\Support\Credits;
 use App\Support\PlanQuota;
 use App\Support\SocialPostRelay;
+use App\Support\SocialProviders;
 use App\Support\Workspace;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -45,10 +46,10 @@ class SocialAccountController extends Controller
 
     /**
      * Where the user goes to sign in and grant an account. The external_id
-     * is our user's ulid — it is what makes the shared Post for Me
+     * is our user's ulid — it is what makes the provider's shared
      * workspace multi-tenant.
      */
-    public function authUrl(Request $request, PostForMeService $postForMe): JsonResponse
+    public function authUrl(Request $request, SocialProvider $provider): JsonResponse
     {
         $validated = $request->validate([
             'platform' => ['required', Rule::enum(SocialPlatform::class)],
@@ -59,7 +60,7 @@ class SocialAccountController extends Controller
 
         $this->ensureRoom($request->user(), 'platform');
 
-        $url = $postForMe->authUrl(
+        $url = $provider->authUrl(
             $validated['platform'],
             $request->user()->ulid,
             $validated['platform'] === 'bluesky'
@@ -77,13 +78,16 @@ class SocialAccountController extends Controller
      * tag for the trip (the provider would refuse it under the claimant's
      * own id), and `sync` moves it only if that sign-in renewed its token.
      * The error URL that names the account is unsigned — it decides nothing.
+     *
+     * A provider that cannot re-tag (Outstand) gets no parking: the claimant
+     * signs in under their own tenant, and that sign-in is the proof.
      */
-    public function claim(Request $request, PostForMeService $postForMe): JsonResponse
+    public function claim(Request $request, SocialProvider $provider): JsonResponse
     {
         $validated = $request->validate(['account_id' => ['required', 'string', 'max:64']]);
         $user = $request->user();
 
-        $remote = $postForMe->account($validated['account_id']);
+        $remote = $provider->account($validated['account_id']);
         $platform = SocialPlatform::tryFrom((string) ($remote['platform'] ?? ''));
         $owner = (string) ($remote['external_id'] ?? '');
 
@@ -108,13 +112,17 @@ class SocialAccountController extends Controller
 
         $this->ensureRoom($user, 'account_id');
 
+        if (! $provider->canReassign()) {
+            return response()->json(['data' => ['url' => $provider->authUrl($platform->value, $user->ulid)]]);
+        }
+
         $tag = self::CLAIM.Str::random(24);
-        $postForMe->assignAccount($validated['account_id'], $tag);
+        $provider->assignAccount($validated['account_id'], $tag);
 
         try {
-            $url = $postForMe->authUrl($platform->value, $tag);
+            $url = $provider->authUrl($platform->value, $tag);
         } catch (Throwable $e) {
-            $postForMe->assignAccount($validated['account_id'], $owner);
+            $provider->assignAccount($validated['account_id'], $owner);
 
             throw $e;
         }
@@ -139,11 +147,13 @@ class SocialAccountController extends Controller
      * webhooks. Accounts connected without our external_id (e.g. via the
      * provider dashboard) are invisible here — accepted for now.
      */
-    public function sync(Request $request, PostForMeService $postForMe): AnonymousResourceCollection
+    public function sync(Request $request, SocialProvider $provider): AnonymousResourceCollection
     {
         $user = $request->user();
-        $this->finishClaim($user, $postForMe);
-        $remote = $postForMe->accountsFor($user->ulid);
+        if ($provider->canReassign()) {
+            $this->finishClaim($user, $provider);
+        }
+        $remote = $provider->accountsFor($user->ulid);
 
         $seen = [];
 
@@ -159,6 +169,7 @@ class SocialAccountController extends Controller
 
             $user->socialAccounts()->updateOrCreate(
                 [
+                    'provider' => $provider->name(),
                     'platform' => $platform,
                     'provider_account_id' => $providerId,
                 ],
@@ -175,12 +186,16 @@ class SocialAccountController extends Controller
 
         // A row the provider no longer lists lost its grant — unless it is
         // only parked for someone's claim: that one comes back if the claim
-        // goes nowhere.
+        // goes nowhere. A row another relay holds cannot be posted through
+        // this one: it goes too, and is reconnected here.
         $user->socialAccounts()
-            ->whereNotIn('provider_account_id', $seen)
             ->where('status', SocialAccountStatus::Connected)
+            ->where(fn ($q) => $q->where('provider', '!=', $provider->name())
+                ->orWhereNotIn('provider_account_id', $seen))
             ->get()
-            ->reject(fn (SocialAccount $a) => $this->parked($a->provider_account_id, $user, $postForMe))
+            ->reject(fn (SocialAccount $a) => $a->provider === $provider->name()
+                && $provider->canReassign()
+                && $this->parked($a->provider_account_id, $user, $provider))
             ->each(fn (SocialAccount $a) => $a->update(['status' => SocialAccountStatus::Disconnected]));
 
         return SocialAccountResource::collection(
@@ -197,7 +212,7 @@ class SocialAccountController extends Controller
     public function destroy(
         Request $request,
         SocialAccount $socialAccount,
-        PostForMeService $postForMe,
+        SocialProviders $providers,
         SocialPostRelay $relay,
     ): JsonResponse {
         Gate::allowIf(fn ($user) => $socialAccount->user_id === $user->id);
@@ -241,7 +256,12 @@ class SocialAccountController extends Controller
                         fn (array $c) => $c['social_account_id'] !== $leaving,
                     ));
                 }
-                $postForMe->updatePost($post->provider_post_id, $payload);
+                // A relay that cannot drop a destination in place re-creates
+                // the post, so its id may change.
+                $id = $providers->for($post)->replaceTargets($post->provider_post_id, $payload);
+                if ($id !== $post->provider_post_id) {
+                    $post->update(['provider_post_id' => $id]);
+                }
             }
 
             DB::transaction(function () use ($post, $target, $why) {
@@ -252,8 +272,9 @@ class SocialAccountController extends Controller
             });
         }
 
-        $postForMe->disconnect($socialAccount->provider_account_id);
-        $postForMe->deleteAccount($socialAccount->provider_account_id);
+        $provider = $providers->for($socialAccount);
+        $provider->disconnect($socialAccount->provider_account_id);
+        $provider->deleteAccount($socialAccount->provider_account_id);
 
         $socialAccount->update(['status' => SocialAccountStatus::Disconnected]);
 
@@ -289,7 +310,7 @@ class SocialAccountController extends Controller
      * sign-in we asked for. Anything else goes back to its owner. Other
      * accounts the same sign-in brought along are the claimant's own.
      */
-    private function finishClaim(User $user, PostForMeService $postForMe): void
+    private function finishClaim(User $user, SocialProvider $provider): void
     {
         $tag = Cache::get("social-claim-by:{$user->id}");
         $claim = $tag ? Cache::get("social-claim:{$tag}") : null;
@@ -300,7 +321,7 @@ class SocialAccountController extends Controller
             return;
         }
 
-        foreach ($postForMe->accountsFor($tag) as $account) {
+        foreach ($provider->accountsFor($tag) as $account) {
             $id = (string) ($account['id'] ?? '');
 
             if ($id === '') {
@@ -310,12 +331,12 @@ class SocialAccountController extends Controller
             // The claimed one is read on its own: an empty token from a list
             // that leaves it out must never pass as "changed".
             $token = $id === $claim['account_id']
-                ? (string) ($postForMe->account($id)['access_token'] ?? '')
+                ? (string) ($provider->account($id)['access_token'] ?? '')
                 : '';
             $proven = $id !== $claim['account_id']
                 || ($token !== '' && hash('sha256', $token) !== $claim['token']);
 
-            $postForMe->assignAccount($id, $proven ? $user->ulid : $claim['owner']);
+            $provider->assignAccount($id, $proven ? $user->ulid : $claim['owner']);
 
             if ($proven && $id === $claim['account_id']) {
                 // The old owner's row stays, Disconnected — their published
@@ -337,9 +358,9 @@ class SocialAccountController extends Controller
      * Is this account only away on a claim? An abandoned claim is undone
      * here, on the owner's next sync, so the account cannot stay parked.
      */
-    private function parked(string $accountId, User $owner, PostForMeService $postForMe): bool
+    private function parked(string $accountId, User $owner, SocialProvider $provider): bool
     {
-        $tag = (string) ($postForMe->account($accountId)['external_id'] ?? '');
+        $tag = (string) ($provider->account($accountId)['external_id'] ?? '');
         $claim = str_starts_with($tag, self::CLAIM) ? Cache::get("social-claim:{$tag}") : null;
 
         if ($claim === null || $claim['owner'] !== $owner->ulid) {
@@ -348,7 +369,7 @@ class SocialAccountController extends Controller
 
         if ($claim['until'] <= now()->timestamp) {
             Cache::forget("social-claim:{$tag}");
-            $postForMe->assignAccount($accountId, $owner->ulid);
+            $provider->assignAccount($accountId, $owner->ulid);
         }
 
         return true;

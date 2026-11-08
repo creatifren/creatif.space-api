@@ -11,10 +11,11 @@ use App\Http\Controllers\Controller;
 use App\Http\Resources\SocialPostResource;
 use App\Models\Activity;
 use App\Models\SocialPost;
-use App\Services\PostForMeService;
+use App\Contracts\SocialProvider;
 use App\Support\Credits;
 use App\Support\PlanQuota;
 use App\Support\SocialPostRelay;
+use App\Support\SocialProviders;
 use App\Support\Workspace;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -67,7 +68,7 @@ class SocialPostController extends Controller
      * account_ids is the tenant boundary: only the user's own Connected
      * accounts resolve to provider ids, and nothing is sent otherwise.
      */
-    public function store(Request $request, PostForMeService $postForMe): JsonResponse
+    public function store(Request $request, SocialProvider $provider): JsonResponse
     {
         $validated = $request->validate([
             // Facebook's cap — the largest of the nine; per-platform limits
@@ -80,7 +81,7 @@ class SocialPostController extends Controller
             'captions.*' => ['string', 'max:63206'],
             'media' => ['sometimes', 'array', 'max:10'],
             'media.*.url' => ['required', 'url:https'],
-            // A video's cover. Post for Me hands it to the platforms that take one.
+            // A video's cover, handed to the platforms that take one.
             'media.*.thumbnail_url' => ['sometimes', 'nullable', 'url:https'],
             'scheduled_at' => ['sometimes', 'nullable', 'date', 'after:now'],
             // Off when absent. `awaiting` waits for the editor's own yes,
@@ -118,9 +119,12 @@ class SocialPostController extends Controller
             ]);
         }
 
+        // Only accounts the current relay holds: another relay's ids mean
+        // nothing to it (they are marked Disconnected on the next sync).
         $accounts = $user->socialAccounts()
             ->whereIn('ulid', $ids)
             ->where('status', SocialAccountStatus::Connected)
+            ->where('provider', $provider->name())
             ->get();
 
         if ($accounts->count() !== count($ids)) {
@@ -204,7 +208,7 @@ class SocialPostController extends Controller
 
         if ($sendsNow) {
             try {
-                $remote = $postForMe->createPost($payload);
+                $remote = $provider->createPost($payload);
             } catch (Throwable $e) {
                 // Nothing went out: give the publishes back and forget the row.
                 DB::transaction(function () use ($post) {
@@ -238,7 +242,7 @@ class SocialPostController extends Controller
     public function update(
         Request $request,
         SocialPost $socialPost,
-        PostForMeService $postForMe,
+        SocialProviders $providers,
         SocialPostRelay $relay,
     ): SocialPostResource|JsonResponse {
         Gate::allowIf(fn ($user) => $socialPost->user_id === $user->id);
@@ -276,7 +280,7 @@ class SocialPostController extends Controller
 
         // Provider first: the row only changes once the plan really moved.
         if ($socialPost->provider_post_id !== null) {
-            $postForMe->updatePost(
+            $providers->for($socialPost)->updatePost(
                 $socialPost->provider_post_id,
                 $relay->payload($socialPost, $caption, $scheduledAt),
             );
@@ -307,7 +311,7 @@ class SocialPostController extends Controller
      * if the second provider replace fails, the first is put back before
      * answering, and the rows only change once both landed.
      */
-    public function swap(Request $request, PostForMeService $postForMe, SocialPostRelay $relay): JsonResponse
+    public function swap(Request $request, SocialProviders $providers, SocialPostRelay $relay): JsonResponse
     {
         $validated = $request->validate([
             'a' => ['required', 'string'],
@@ -330,7 +334,7 @@ class SocialPostController extends Controller
         [$atA, $atB] = [$a->scheduled_at, $b->scheduled_at];
 
         $replace = fn (SocialPost $p, $at) => $p->provider_post_id === null ? null
-            : $postForMe->updatePost($p->provider_post_id, $relay->payload($p, null, $at));
+            : $providers->for($p)->updatePost($p->provider_post_id, $relay->payload($p, null, $at));
 
         $replace($a, $atB);
         try {
@@ -414,7 +418,7 @@ class SocialPostController extends Controller
     public function destroy(
         Request $request,
         SocialPost $socialPost,
-        PostForMeService $postForMe,
+        SocialProviders $providers,
     ): JsonResponse {
         Gate::allowIf(fn ($user) => $socialPost->user_id === $user->id);
 
@@ -434,7 +438,7 @@ class SocialPostController extends Controller
 
         $sent = $socialPost->provider_post_id !== null;
         if ($sent) {
-            $postForMe->deletePost($socialPost->provider_post_id);
+            $providers->for($socialPost)->deletePost($socialPost->provider_post_id);
         }
 
         DB::transaction(function () use ($socialPost, $sent) {

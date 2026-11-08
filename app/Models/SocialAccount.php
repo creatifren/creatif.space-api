@@ -18,6 +18,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
  * @property int $id
  * @property string $ulid
  * @property int $user_id
+ * @property string $provider
  * @property SocialPlatform $platform
  * @property string $provider_account_id
  * @property string|null $username
@@ -32,6 +33,7 @@ class SocialAccount extends Model
 
     protected $fillable = [
         'user_id',
+        'provider',
         'platform',
         'provider_account_id',
         'username',
@@ -61,6 +63,8 @@ class SocialAccount extends Model
     {
         static::creating(function (self $account): void {
             $account->ulid ??= (string) str()->ulid();
+            // Which relay holds it; ids mean nothing to the other one.
+            $account->provider ??= (string) config('services.social.provider');
         });
     }
 

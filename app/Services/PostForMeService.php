@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use App\Contracts\SocialProvider;
 use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Http\Client\PendingRequest;
 use Illuminate\Http\Client\RequestException;
@@ -16,8 +17,19 @@ use RuntimeException;
  * ours, so tenancy is carried in `external_id` (our user's ulid) and
  * enforced on our side before any call is made.
  */
-class PostForMeService
+class PostForMeService implements SocialProvider
 {
+    public function name(): string
+    {
+        return 'postforme';
+    }
+
+    /** One external_id per platform account, and it can be PATCHed. */
+    public function canReassign(): bool
+    {
+        return true;
+    }
+
     /**
      * Auth URL the user is redirected to in order to sign in on the
      * platform and grant the account. `external_id` tags the resulting
@@ -249,6 +261,40 @@ class PostForMeService
         }
 
         return hash_equals($secret, (string) $request->header('Post-For-Me-Webhook-Secret'));
+    }
+
+    /**
+     * The PUT takes the full body, destinations included, so a changed
+     * destination list is an ordinary replace and the id stays.
+     *
+     * @param  array<string, mixed>  $payload
+     *
+     * @throws ConnectionException
+     */
+    public function replaceTargets(string $postId, array $payload): string
+    {
+        $this->updatePost($postId, $payload);
+
+        return $postId;
+    }
+
+    /**
+     * Post for Me's events are already in our shape; only the names map.
+     * The wrapper's field name is not pinned down by the docs — both
+     * spellings are accepted rather than dropping deliveries.
+     *
+     * @return list<array{type: string, data: array<string, mixed>}>
+     */
+    public function webhookEvents(Request $request): array
+    {
+        $type = match ((string) ($request->input('event_type') ?? $request->input('type'))) {
+            'social.account.created', 'social.account.updated' => 'account',
+            'social.post.updated' => 'post',
+            'social.post.result.created' => 'result',
+            default => null,
+        };
+
+        return $type === null ? [] : [['type' => $type, 'data' => (array) $request->input('data', [])]];
     }
 
     private function client(): PendingRequest

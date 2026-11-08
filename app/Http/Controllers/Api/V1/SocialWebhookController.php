@@ -9,38 +9,42 @@ use App\Http\Controllers\Controller;
 use App\Models\SocialAccount;
 use App\Models\SocialPost;
 use App\Models\User;
-use App\Services\PostForMeService;
+use App\Contracts\SocialProvider;
 use App\Support\SocialPostRelay;
+use App\Support\SocialProviders;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 
 /**
- * Post for Me calls this on account and post events. Public route: the
- * shared secret header is the authentication. Unknown events and unknown
- * ids answer 200 — a non-2XX makes the provider retry ~8 times, and there
- * is nothing a redelivery of an unknown event could fix.
+ * A relay calls this on account and post events — one route per relay,
+ * the route says which. Public: the provider's signature (or shared
+ * secret) is the authentication. Unknown events and unknown ids answer
+ * 200 — a non-2XX makes the provider retry, and there is nothing a
+ * redelivery of an unknown event could fix. Only rows that relay holds
+ * are touched.
  */
-class PostForMeWebhookController extends Controller
+class SocialWebhookController extends Controller
 {
-    public function __invoke(Request $request, PostForMeService $postForMe): JsonResponse
+    private SocialProvider $provider;
+
+    public function __invoke(Request $request, SocialProviders $providers, string $provider): JsonResponse
     {
-        if (! $postForMe->verifyWebhook($request)) {
+        $this->provider = $providers->named($provider);
+
+        if (! $this->provider->verifyWebhook($request)) {
             return response()->json(['message' => 'Invalid signature.'], 403);
         }
 
-        // The wrapper's field name is not pinned down by the docs — accept
-        // both spellings rather than dropping deliveries.
-        $event = (string) ($request->input('event_type') ?? $request->input('type'));
-        $data = (array) $request->input('data', []);
-
-        match ($event) {
-            'social.account.created',
-            'social.account.updated' => $this->upsertAccount($data),
-            'social.post.updated' => $this->updatePost($data),
-            'social.post.result.created' => $this->recordResult($data),
-            default => null,
-        };
+        foreach ($this->provider->webhookEvents($request) as $event) {
+            match ($event['type']) {
+                'account' => $this->upsertAccount($event['data']),
+                'account.lost' => $this->loseAccount($event['data']),
+                'post' => $this->updatePost($event['data']),
+                'result' => $this->recordResult($event['data']),
+                default => null,
+            };
+        }
 
         return response()->json(['message' => 'ok']);
     }
@@ -63,6 +67,7 @@ class PostForMeWebhookController extends Controller
 
         $user->socialAccounts()->updateOrCreate(
             [
+                'provider' => $this->provider->name(),
                 'platform' => $platform,
                 'provider_account_id' => $providerId,
             ],
@@ -75,6 +80,26 @@ class PostForMeWebhookController extends Controller
                 'connected_at' => now(),
             ],
         );
+    }
+
+    /**
+     * The account's grant stopped working (Outstand: its token would not
+     * refresh). It is Disconnected until the user connects it again.
+     *
+     * @param  array<string, mixed>  $data
+     */
+    private function loseAccount(array $data): void
+    {
+        $id = (string) ($data['id'] ?? '');
+
+        if ($id === '') {
+            return;
+        }
+
+        SocialAccount::query()
+            ->where('provider', $this->provider->name())
+            ->where('provider_account_id', $id)
+            ->update(['status' => SocialAccountStatus::Disconnected]);
     }
 
     /**
@@ -114,12 +139,15 @@ class PostForMeWebhookController extends Controller
     private function recordResult(array $data): void
     {
         $post = SocialPost::query()
+            ->where('provider', $this->provider->name())
             ->where('provider_post_id', (string) ($data['post_id'] ?? ''))
             ->first();
 
-        $account = SocialAccount::query()
-            ->where('provider_account_id', (string) ($data['social_account_id'] ?? ''))
-            ->first();
+        // The post's own target, not any row with the id: the same platform
+        // account can sit under two of our users (one Disconnected).
+        $account = $post?->targets()->with('account')->get()
+            ->first(fn ($t) => $t->account->provider_account_id === (string) ($data['social_account_id'] ?? ''))
+            ?->account;
 
         if ($post === null || $account === null) {
             return;
@@ -140,6 +168,7 @@ class PostForMeWebhookController extends Controller
         $externalId = (string) ($data['external_id'] ?? '');
 
         return SocialPost::query()
+            ->where('provider', $this->provider->name())
             ->when($providerId !== '', fn ($q) => $q->where('provider_post_id', $providerId))
             ->when(
                 $providerId === '' && $externalId !== '',

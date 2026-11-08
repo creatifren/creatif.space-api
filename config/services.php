@@ -54,6 +54,22 @@ return [
         ],
     ],
 
+    // Social posting — which relay new accounts and posts go through.
+    // Rows remember their own provider, so switching leaves earlier posts
+    // with the one that holds them.
+    'social' => [
+        'provider' => env('SOCIAL_PROVIDER', 'outstand'),
+    ],
+
+    // Outstand — the relay since the 11 Nov launch. Same tenancy as below,
+    // in Outstand's tenant_id. The webhook secret is the signing secret
+    // set on the webhook in Outstand's dashboard (Settings → Webhooks).
+    'outstand' => [
+        'key' => env('OUTSTAND_API_KEY'),
+        'base_url' => env('OUTSTAND_BASE_URL') ?: 'https://api.outstand.so/v1',
+        'webhook_secret' => env('OUTSTAND_WEBHOOK_SECRET'),
+    ],
+
     // Social posting — Post for Me relays posts to the nine platforms. One
     // API key, one shared workspace: tenancy lives in external_id (our user
     // ulid), enforced on our side. The webhook secret is issued when the

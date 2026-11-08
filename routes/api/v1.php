@@ -14,7 +14,7 @@ use App\Http\Controllers\Api\V1\HandleController;
 use App\Http\Controllers\Api\V1\MeController;
 use App\Http\Controllers\Api\V1\MyProfileController;
 use App\Http\Controllers\Api\V1\NotificationController;
-use App\Http\Controllers\Api\V1\PostForMeWebhookController;
+use App\Http\Controllers\Api\V1\OutstandConnectController;
 use App\Http\Controllers\Api\V1\ProfileFontController;
 use App\Http\Controllers\Api\V1\PublicApprovalController;
 use App\Http\Controllers\Api\V1\PublicProfileController;
@@ -26,6 +26,7 @@ use App\Http\Controllers\Api\V1\SocialFeedController;
 use App\Http\Controllers\Api\V1\SocialPlanLinkController;
 use App\Http\Controllers\Api\V1\SocialPostController;
 use App\Http\Controllers\Api\V1\SocialSettingsController;
+use App\Http\Controllers\Api\V1\SocialWebhookController;
 use App\Http\Controllers\Api\V1\SpaceController;
 use App\Http\Controllers\Api\V1\SpaceEventController;
 use App\Http\Controllers\Api\V1\StorageController;
@@ -46,7 +47,8 @@ Route::post('/webhooks/creem', CreemWebhookController::class)
 
 // Post for Me calls this on account and post events: no auth, the shared
 // secret header is the authentication.
-Route::post('/webhooks/postforme', PostForMeWebhookController::class)
+Route::post('/webhooks/postforme', SocialWebhookController::class)
+    ->defaults('provider', 'postforme')
     ->name('api.v1.webhooks.postforme');
 
 // The same URL doubles as the project's OAuth return: the browser arrives
@@ -59,6 +61,19 @@ Route::get('/webhooks/postforme', function (Request $request) {
 
     return redirect(config('app.frontend_url').'/social/connect?'.$query);
 })->name('api.v1.webhooks.postforme.return');
+
+// Outstand calls this on post and account events: no auth, the
+// X-Outstand-Signature HMAC of the raw body is the authentication.
+Route::post('/webhooks/outstand', SocialWebhookController::class)
+    ->defaults('provider', 'outstand')
+    ->name('api.v1.webhooks.outstand');
+
+// And the same URL with GET is the redirect_uri we hand Outstand per
+// sign-in: the browser lands here, with a pending `session` for the
+// networks that pick pages, and is handed on to the connect page.
+Route::get('/webhooks/outstand', [OutstandConnectController::class, 'return'])
+    ->middleware('throttle:30,1')
+    ->name('api.v1.webhooks.outstand.return');
 
 Route::get('/handles/availability', [HandleController::class, 'availability'])
     ->middleware('throttle:30,1')
@@ -141,7 +156,7 @@ Route::middleware('auth:sanctum')->group(function () {
         ->middleware('throttle:10,1')
         ->name('api.v1.me.profile.font');
 
-    // Social — accounts connected through Post for Me
+    // Social — accounts connected through the relay (Outstand / Post for Me)
     // Credits — one balance for sends and storage
     Route::get('/credits', [CreditsController::class, 'show'])->name('api.v1.credits.show');
     Route::get('/credits/ledger', [CreditsController::class, 'ledger'])->name('api.v1.credits.ledger');
@@ -161,6 +176,13 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::post('/social-accounts/claim', [SocialAccountController::class, 'claim'])
         ->middleware('throttle:10,1')
         ->name('api.v1.social-accounts.claim');
+    // Outstand only: the pages a Facebook / LinkedIn / Google sign-in offers.
+    Route::get('/social-accounts/pending', [OutstandConnectController::class, 'pending'])
+        ->middleware('throttle:30,1')
+        ->name('api.v1.social-accounts.pending');
+    Route::post('/social-accounts/pending', [OutstandConnectController::class, 'finalize'])
+        ->middleware('throttle:10,1')
+        ->name('api.v1.social-accounts.pending.finalize');
     Route::post('/social-accounts/sync', [SocialAccountController::class, 'sync'])
         ->middleware('throttle:30,1')
         ->name('api.v1.social-accounts.sync');
