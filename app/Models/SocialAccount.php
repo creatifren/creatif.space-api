@@ -6,12 +6,14 @@ use App\Enums\SocialAccountStatus;
 use App\Enums\SocialPlatform;
 use Carbon\CarbonImmutable;
 use Database\Factories\SocialAccountFactory;
+use Illuminate\Database\Eloquent\Attributes\Scope;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 /**
- * A social account connected through Post for Me. We hold only the mapping
+ * A social account connected through a relay (Outstand, or Post for Me before it). We hold only the mapping
  * from our user to the provider's account id — the OAuth tokens live with
  * the provider and never touch this table.
  *
@@ -79,6 +81,46 @@ class SocialAccount extends Model
         return 'ulid';
     }
 
+    /** The relay new posts go through (`SOCIAL_PROVIDER`). */
+    public static function currentProvider(): string
+    {
+        return (string) config('services.social.provider');
+    }
+
+    /**
+     * The one meaning of "usable": Connected, and held by the current
+     * relay. A row another relay holds (Post for Me before the Outstand
+     * switch) cannot be posted through this one — its ids mean nothing
+     * here — so it neither counts toward the plan nor goes in a post.
+     *
+     * @param  Builder<self>  $query
+     */
+    #[Scope]
+    protected function usable(Builder $query): void
+    {
+        $query->where('status', SocialAccountStatus::Connected)
+            ->where('provider', self::currentProvider());
+    }
+
+    public function isUsable(): bool
+    {
+        return $this->status === SocialAccountStatus::Connected
+            && $this->provider === self::currentProvider();
+    }
+
+    /** Connected under another relay: the user has to reconnect it. */
+    public function isLegacy(): bool
+    {
+        return $this->status === SocialAccountStatus::Connected
+            && $this->provider !== self::currentProvider();
+    }
+
+    /** How it is named to the user: "instagram @handle". */
+    public function label(): string
+    {
+        return $this->platform->value.($this->username ? ' @'.ltrim($this->username, '@') : '');
+    }
+
     /** DMs go through Outstand, on Instagram only (Oct 2026). */
     public function supportsMessages(): bool
     {
@@ -97,7 +139,7 @@ class SocialAccount extends Model
     {
         return (bool) config('services.inbox.enabled')
             && $this->supportsMessages()
-            && $this->status === SocialAccountStatus::Connected
+            && $this->isUsable()
             && $this->messages_scope_at !== null;
     }
 
@@ -106,7 +148,7 @@ class SocialAccount extends Model
     {
         return (bool) config('services.inbox.enabled')
             && $this->supportsMessages()
-            && $this->status === SocialAccountStatus::Connected
+            && $this->isUsable()
             && $this->messages_scope_at === null;
     }
 

@@ -447,7 +447,13 @@ describe('conversations', function () {
         $thread = inboxThread($account, ['provider' => 'postforme']);
         Http::fake();
 
+        // Under Outstand, a Post for Me row is a reconnect waiting to happen.
         $this->actingAs($account->user)->postJson("/api/v1/inbox/conversations/{$thread->ulid}/messages", ['content' => 'hi'])
+            ->assertUnprocessable()->assertJsonPath('code', 'account_reconnect_required');
+
+        // With Post for Me as the relay, the account is usable — the relay has no Inbox.
+        config(['services.social.provider' => 'postforme']);
+        $this->postJson("/api/v1/inbox/conversations/{$thread->ulid}/messages", ['content' => 'hi'])
             ->assertUnprocessable()->assertJsonPath('code', 'inbox_unsupported');
         Http::assertNothingSent();
     });

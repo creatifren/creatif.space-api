@@ -2,7 +2,6 @@
 
 namespace App\Http\Controllers\Api\V1;
 
-use App\Enums\SocialAccountStatus;
 use App\Http\Controllers\Controller;
 use App\Services\OutstandService;
 use App\Support\Workspace;
@@ -97,7 +96,7 @@ class OutstandConnectController extends Controller
         // The same count PlanQuota::canConnectSocialAccount keeps, for N at once.
         $owner = Workspace::owner($user);
         $limit = $owner->plan()->quota('social_accounts');
-        $used = $owner->socialAccounts()->where('status', SocialAccountStatus::Connected)->count();
+        $used = $owner->socialAccounts()->usable()->count();
         if ($limit !== null && $used + count($ids) > $limit) {
             throw ValidationException::withMessages([
                 'page_ids' => "Your plan connects up to {$limit} social accounts. Choose fewer, or upgrade to add more.",

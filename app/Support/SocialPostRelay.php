@@ -6,6 +6,7 @@ use App\Enums\SocialPlatform;
 use App\Enums\SocialPostApproval;
 use App\Enums\SocialPostStatus;
 use App\Enums\SocialPostTargetStatus;
+use App\Exceptions\AccountReconnectRequired;
 use App\Models\SocialAccount;
 use App\Models\SocialPost;
 use App\Models\SocialPostTarget;
@@ -101,9 +102,14 @@ class SocialPostRelay
      * Hand a held post to the provider now that it may go.
      *
      * @throws ConnectionException
+     * @throws AccountReconnectRequired when a destination is not usable
      */
     public function send(SocialPost $post): void
     {
+        // A destination left under another relay cannot be sent through
+        // this one: named, before anything is charged.
+        self::ensureUsable($post);
+
         // Refuse before the provider, not after: a short balance must not
         // leave a post live on the platform that was never paid for.
         $need = Credits::sendPrice($post->user, self::destinations($post));
@@ -136,6 +142,20 @@ class SocialPostRelay
     }
 
     /**
+     * Refuse when a destination is not usable (Connected, under the current
+     * relay) — the one gate for send, approve and any edit that reaches the
+     * provider.
+     *
+     * @throws AccountReconnectRequired
+     */
+    public static function ensureUsable(SocialPost $post): void
+    {
+        AccountReconnectRequired::unlessUsable(
+            $post->targets()->with('account')->orderBy('id')->get()->pluck('account')->filter(),
+        );
+    }
+
+    /**
      * Send a held post and record who said yes — the one path for the
      * owner's approve, a client's decision, and both Approve-alls.
      *
@@ -148,6 +168,7 @@ class SocialPostRelay
      *
      * @throws ConnectionException
      * @throws ValidationException when the Credits do not cover it
+     * @throws AccountReconnectRequired when a destination is not usable
      */
     public function approve(SocialPost $post, string $by, array $from): bool
     {

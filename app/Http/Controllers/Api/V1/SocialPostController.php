@@ -3,10 +3,10 @@
 namespace App\Http\Controllers\Api\V1;
 
 use App\Enums\ActivityAction;
-use App\Enums\SocialAccountStatus;
 use App\Enums\SocialPostApproval;
 use App\Enums\SocialPostStatus;
 use App\Enums\SocialPostTargetStatus;
+use App\Exceptions\AccountReconnectRequired;
 use App\Http\Controllers\Controller;
 use App\Http\Resources\SocialPostResource;
 use App\Models\Activity;
@@ -112,13 +112,11 @@ class SocialPostController extends Controller
         $ids = array_values(array_unique($validated['account_ids']));
         $sendsNow = $approval === null && ! $draft;
 
-        // Only accounts the current relay holds: another relay's ids mean
-        // nothing to it (they are marked Disconnected on the next sync).
-        $accounts = $user->socialAccounts()
-            ->whereIn('ulid', $ids)
-            ->where('status', SocialAccountStatus::Connected)
-            ->where('provider', $provider->name())
-            ->get();
+        // Only usable accounts: Connected, under the current relay. One the
+        // user owns but left under another relay (or disconnected) gets a
+        // named "reconnect" answer; anything else is not theirs.
+        $accounts = $user->socialAccounts()->whereIn('ulid', $ids)->get();
+        AccountReconnectRequired::unlessUsable($accounts);
 
         if ($accounts->count() !== count($ids)) {
             throw ValidationException::withMessages([
@@ -294,6 +292,7 @@ class SocialPostController extends Controller
 
         // Provider first: the row only changes once the plan really moved.
         if ($socialPost->provider_post_id !== null) {
+            SocialPostRelay::ensureUsable($socialPost);
             $providers->for($socialPost)->updatePost(
                 $socialPost->provider_post_id,
                 $relay->payload($socialPost, $caption, $scheduledAt),
@@ -345,6 +344,11 @@ class SocialPostController extends Controller
         }
 
         [$a, $b] = [$posts[$validated['a']], $posts[$validated['b']]];
+        foreach ([$a, $b] as $p) {
+            if ($p->provider_post_id !== null) {
+                SocialPostRelay::ensureUsable($p);
+            }
+        }
         [$atA, $atB] = [$a->scheduled_at, $b->scheduled_at];
 
         $replace = fn (SocialPost $p, $at) => $p->provider_post_id === null ? null

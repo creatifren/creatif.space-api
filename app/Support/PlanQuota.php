@@ -2,7 +2,6 @@
 
 namespace App\Support;
 
-use App\Enums\SocialAccountStatus;
 use App\Enums\SpaceStatus;
 use App\Models\File;
 use App\Models\FileVersion;
@@ -186,7 +185,8 @@ class PlanQuota
     /**
      * Room to connect one more social account? Free stops at three. An
      * account already connected is never cut off by a downgrade — only
-     * adding one is refused.
+     * adding one is refused. Only usable rows count: one left under a
+     * previous relay is a reconnect waiting to happen, not a slot.
      */
     public static function canConnectSocialAccount(User $user): bool
     {
@@ -194,7 +194,7 @@ class PlanQuota
         $limit = $owner->plan()->quota('social_accounts');
 
         return $limit === null
-            || $owner->socialAccounts()->where('status', SocialAccountStatus::Connected)->count() < $limit;
+            || $owner->socialAccounts()->usable()->count() < $limit;
     }
 
     /**

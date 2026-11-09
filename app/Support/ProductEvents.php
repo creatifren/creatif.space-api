@@ -3,7 +3,6 @@
 namespace App\Support;
 
 use App\Enums\PlanKey;
-use App\Enums\SocialAccountStatus;
 use App\Enums\SocialPostApproval;
 use App\Enums\SocialPostTargetStatus;
 use App\Models\SocialAccount;
@@ -111,7 +110,7 @@ final class ProductEvents
 
     private static function connectedCount(User $user): int
     {
-        return $user->socialAccounts()->where('status', SocialAccountStatus::Connected)->count();
+        return $user->socialAccounts()->usable()->count();
     }
 
     /** @param  'draft'|'scheduled'|'approval'|'now'  $status */

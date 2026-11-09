@@ -2,8 +2,8 @@
 
 namespace App\Http\Controllers\Api\V1;
 
-use App\Enums\SocialAccountStatus;
 use App\Enums\SocialPlatform;
+use App\Exceptions\AccountReconnectRequired;
 use App\Http\Controllers\Controller;
 use App\Http\Resources\SocialConversationResource;
 use App\Http\Resources\SocialMessageResource;
@@ -131,6 +131,7 @@ class InboxController extends Controller
             'file_ids.*' => ['string', 'max:26', 'distinct'],
         ]);
         $account = $conversation->account;
+        AccountReconnectRequired::unlessUsable([$account], 'content');
 
         if ($account->needsReconnectForMessages()) {
             return response()->json([
@@ -269,7 +270,7 @@ class InboxController extends Controller
         SocialAccount::query()
             ->whereIn('user_id', Inbox::userIds($user))
             ->where('provider', 'outstand')
-            ->where('status', SocialAccountStatus::Connected)
+            ->usable()
             ->whereIn('platform', [SocialPlatform::Instagram, SocialPlatform::Facebook])
             ->whereNull('inbox_synced_at')
             ->pluck('id')
