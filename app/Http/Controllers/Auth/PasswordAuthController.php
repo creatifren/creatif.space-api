@@ -7,6 +7,7 @@ use App\Http\Controllers\Controller;
 use App\Models\User;
 use App\Support\AutoHandle;
 use App\Support\ReferralAttribution;
+use App\Support\SafePath;
 use App\Support\TeamInvite;
 use Illuminate\Auth\Events\PasswordReset;
 use Illuminate\Http\JsonResponse;
@@ -48,15 +49,20 @@ class PasswordAuthController extends Controller
             'email' => ['required', 'string', 'email', 'max:255'],
             'password' => ['required', 'string', PasswordRule::min(8)->max(72)],
             'ref' => ['nullable', 'string', 'max:30'],
+            // Where the verify link lands, e.g. the pricing page's
+            // /settings?...&plan=pro. Anything SafePath refuses lands on Home,
+            // the same as a Google sign-in with a bad ?next=.
+            'next' => ['nullable', 'string', 'max:2000'],
         ]);
         $email = Str::lower($data['email']);
+        $next = SafePath::of($data['next'] ?? null);
 
         if (User::withTrashed()->where('email', $email)->exists()) {
             Password::sendResetLink(['email' => $email]);
         } else {
             // A mail that fails to send takes the account with it, so a
             // retry starts clean instead of hitting "already registered".
-            DB::transaction(function () use ($data, $email): void {
+            DB::transaction(function () use ($data, $email, $next): void {
                 $user = User::query()->create([
                     // ponytail: the part before the @ until they rename themselves in
                     // Settings — Google hands us a real name, a form does not.
@@ -64,6 +70,12 @@ class PasswordAuthController extends Controller
                     'email' => $email,
                     'password' => $data['password'],
                 ]);
+
+                // Only on a brand-new account: a register request for an
+                // address that exists must not change anything about it.
+                if ($next !== '/') {
+                    $user->forceFill(['signup_next_path' => $next])->save();
+                }
 
                 if (isset($data['ref'])) {
                     ReferralAttribution::attach($user, $data['ref']);
@@ -142,8 +154,16 @@ class PasswordAuthController extends Controller
         $user->markEmailAsVerified();
         $this->signIn($request, $user);
 
-        // Same landing as the Google callback.
-        return redirect($frontend.'/home');
+        /* Where the signup asked to land, checked again on the way out —
+           a stored value is only as safe as what was put in it. Used once. */
+        $wanted = SafePath::of($user->signup_next_path);
+
+        if ($user->signup_next_path !== null) {
+            $user->forceFill(['signup_next_path' => null])->save();
+        }
+
+        // Otherwise the same landing as the Google callback.
+        return redirect($frontend.($wanted !== '/' ? $wanted : '/home'));
     }
 
     /**
