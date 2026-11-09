@@ -4,7 +4,9 @@ namespace App\Jobs;
 
 use App\Enums\SubscriptionStatus;
 use App\Models\Subscription;
+use App\Models\User;
 use App\Services\CreemService;
+use App\Support\ProductEvents;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Queue\Queueable;
 use Illuminate\Support\Facades\Log;
@@ -22,11 +24,13 @@ class ExpireSubscriptions implements ShouldQueue
     {
         // Grace is ours to close: a card Creem keeps retrying must not keep
         // the plan forever.
-        Subscription::query()
+        $lapsing = Subscription::query()
             ->where('status', SubscriptionStatus::PastDue)
             ->whereNotNull('grace_ends_at')
-            ->where('grace_ends_at', '<=', now())
-            ->update(['status' => SubscriptionStatus::Expired]);
+            ->where('grace_ends_at', '<=', now());
+        $users = User::query()->whereIn('id', (clone $lapsing)->select('user_id'))->get();
+        $lapsing->update(['status' => SubscriptionStatus::Expired]);
+        $users->each(fn (User $u) => ProductEvents::planChanged($u));
 
         Subscription::query()
             ->whereIn('status', [SubscriptionStatus::Active, SubscriptionStatus::PastDue])
@@ -46,6 +50,7 @@ class ExpireSubscriptions implements ShouldQueue
                 ]);
                 if (in_array($remote['status'] ?? null, ['expired', 'unpaid', 'canceled'], true)) {
                     $subscription->update(['status' => SubscriptionStatus::Expired]);
+                    ProductEvents::planChanged($subscription->user);
                 }
             });
     }

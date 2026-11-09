@@ -9,6 +9,7 @@ use App\Models\SocialComment;
 use App\Support\Credits;
 use App\Support\Inbox;
 use App\Support\InboxStore;
+use App\Support\ProductEvents;
 use App\Support\SocialProviders;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -84,6 +85,7 @@ class InboxCommentController extends Controller
 
         InboxStore::rememberOwnComment($result['id'] ?? null);
         $comment->forceFill(['replied_at' => now(), 'read_at' => $comment->read_at ?? now()])->save();
+        ProductEvents::replySent($request->user(), 'comment', $comment->network);
 
         return response()->json(['data' => new SocialCommentResource($comment)]);
     }
@@ -163,6 +165,7 @@ class InboxCommentController extends Controller
             'read_at' => $comment->read_at ?? now(),
             'private_reply_conversation_id' => $conversation?->id,
         ])->save();
+        ProductEvents::replySent($request->user(), 'private_reply', $comment->network);
 
         return response()->json([
             'data' => new SocialCommentResource($comment->load('privateReplyConversation')),

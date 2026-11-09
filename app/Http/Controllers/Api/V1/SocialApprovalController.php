@@ -11,6 +11,7 @@ use App\Models\SocialPost;
 use App\Models\SocialPostComment;
 use App\Support\Credits;
 use App\Support\PlanQuota;
+use App\Support\ProductEvents;
 use App\Support\SocialPostRelay;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\JsonResponse;
@@ -92,6 +93,7 @@ class SocialApprovalController extends Controller
         $link->posts()->attach($posts->pluck('id'));
         SocialPost::query()->whereIn('id', $posts->pluck('id'))
             ->update(['approval' => SocialPostApproval::Client->value]);
+        ProductEvents::approvalLinkCreated($link, $posts->count(), $hours);
 
         return response()->json(['data' => $this->linkArray($this->withCounts($link))], 201);
     }

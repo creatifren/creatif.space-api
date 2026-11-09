@@ -14,6 +14,7 @@ use App\Models\SocialPost;
 use App\Contracts\SocialProvider;
 use App\Support\Credits;
 use App\Support\PlanQuota;
+use App\Support\ProductEvents;
 use App\Support\SocialPostRelay;
 use App\Support\SocialProviders;
 use App\Support\Workspace;
@@ -233,6 +234,13 @@ class SocialPostController extends Controller
                     : SocialPostStatus::Scheduled,
             ]);
         }
+
+        ProductEvents::postCreated($post, match (true) {
+            $draft => 'draft',
+            $approval !== null => 'approval',
+            $scheduledAt !== null => 'scheduled',
+            default => 'now',
+        });
 
         return (new SocialPostResource($post->load('targets.account')))
             ->response()

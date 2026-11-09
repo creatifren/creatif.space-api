@@ -15,6 +15,7 @@ use App\Models\User;
 use App\Services\OutstandService;
 use App\Support\Credits;
 use App\Support\PlanQuota;
+use App\Support\ProductEvents;
 use App\Support\SocialPostRelay;
 use App\Support\SocialProviders;
 use App\Support\Workspace;
@@ -188,6 +189,10 @@ class SocialAccountController extends Controller
             );
 
             $this->recordMessagesScope($row, $account, $askedForMessages);
+
+            if ($row->wasRecentlyCreated) {
+                ProductEvents::channelConnected($user, $row);
+            }
         }
 
         if ($askedForMessages) {
@@ -198,7 +203,7 @@ class SocialAccountController extends Controller
         // only parked for someone's claim: that one comes back if the claim
         // goes nowhere. A row another relay holds cannot be posted through
         // this one: it goes too, and is reconnected here.
-        $user->socialAccounts()
+        $lost = $user->socialAccounts()
             ->where('status', SocialAccountStatus::Connected)
             ->where(fn ($q) => $q->where('provider', '!=', $provider->name())
                 ->orWhereNotIn('provider_account_id', $seen))
@@ -207,6 +212,10 @@ class SocialAccountController extends Controller
                 && $provider->canReassign()
                 && $this->parked($a->provider_account_id, $user, $provider))
             ->each(fn (SocialAccount $a) => $a->update(['status' => SocialAccountStatus::Disconnected]));
+
+        if ($lost->isNotEmpty()) {
+            ProductEvents::channelsCount($user);
+        }
 
         return SocialAccountResource::collection(
             $user->socialAccounts()->orderBy('platform')->orderBy('username')->get(),
@@ -287,6 +296,7 @@ class SocialAccountController extends Controller
         $provider->deleteAccount($socialAccount->provider_account_id);
 
         $socialAccount->update(['status' => SocialAccountStatus::Disconnected]);
+        ProductEvents::channelsCount($socialAccount->user);
 
         return response()->json(null, 204);
     }

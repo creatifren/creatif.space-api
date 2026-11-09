@@ -16,6 +16,7 @@
         "laravel/socialite": "^5.29",
         "laravel/tinker": "^3.0",
         "league/flysystem-aws-s3-v3": "^3.0",
+        "posthog/posthog-php": "^4.22",
         "resend/resend-laravel": "*",
         "spatie/laravel-permission": "^8.3"
     },

@@ -17,6 +17,7 @@ use App\Models\User;
 use App\Support\Credits;
 use App\Support\Inbox;
 use App\Support\InboxStore;
+use App\Support\ProductEvents;
 use App\Support\SocialProviders;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -187,6 +188,7 @@ class InboxController extends Controller
 
         // Replying is reading.
         $conversation->forceFill(['unread_count' => 0])->save();
+        ProductEvents::replySent($request->user(), 'dm', $account->platform->value);
 
         return response()->json(['data' => new SocialMessageResource($message)], 202);
     }

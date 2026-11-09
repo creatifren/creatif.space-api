@@ -17,6 +17,7 @@ use App\Notifications\SubscriptionPastDue;
 use App\Notifications\SubscriptionStarted;
 use App\Services\CreemService;
 use App\Support\CommissionEngine;
+use App\Support\ProductEvents;
 use App\Support\Wallet;
 use Carbon\CarbonImmutable;
 use Illuminate\Http\JsonResponse;
@@ -101,6 +102,8 @@ class CreemWebhookController extends Controller
             ]);
             Wallet::credit($purchase->user, WalletTransactionType::CreditsTopUp, $purchase->credits,
                 'credit_purchase', $purchase->id, 'Creem checkout '.$object['id'], Wallet::CREDITS);
+            // Once: a replay finds the purchase paid and returns above.
+            ProductEvents::creditsPurchased($purchase->user, (int) $purchase->amount, (int) $purchase->credits);
 
             return;
         }
@@ -151,6 +154,7 @@ class CreemWebhookController extends Controller
         }
 
         $first = ! $subscription->invoices()->where('status', InvoiceStatus::Paid)->exists();
+        $planBefore = ProductEvents::planOf($subscription->user);
         $invoice = $subscription->invoices()->where('status', InvoiceStatus::Pending)->oldest('id')->lockForUpdate()->first();
         if ($invoice === null) {
             $invoice = $subscription->invoices()->create(['number' => Invoice::nextNumber(), 'amount' => $transaction['amount'], 'currency' => 'USD']);
@@ -177,6 +181,11 @@ class CreemWebhookController extends Controller
             return;
         }
         CommissionEngine::forInvoice($invoice);
+        // Once per subscription: a replayed or later paid event finds a paid invoice.
+        if ($first) {
+            ProductEvents::subscriptionStarted($subscription->user, $plan->key, $period, (int) $transaction['amount']);
+        }
+        ProductEvents::planChanged($subscription->user, $planBefore);
         if ($first) {
             DB::afterCommit(fn () => $subscription->user->notify(new SubscriptionStarted($subscription->fresh()->load('plan'), $invoice)));
         }
@@ -190,7 +199,12 @@ class CreemWebhookController extends Controller
             && CarbonImmutable::parse($object['current_period_start_date'])->lt($subscription->current_period_start)) {
             return;
         }
+        $planBefore = ProductEvents::planOf($subscription->user);
         if (in_array($type, ['subscription.scheduled_cancel', 'subscription.canceled'], true)) {
+            // Once: the cancel endpoint or an earlier event may have recorded it.
+            if ($subscription->cancelled_at === null) {
+                ProductEvents::subscriptionCanceled($subscription->user, $subscription->plan->key);
+            }
             $subscription->update(['cancelled_at' => $subscription->cancelled_at ?? now()]);
             if ($type === 'subscription.canceled' && $subscription->current_period_end?->isPast()) {
                 $subscription->update(['status' => SubscriptionStatus::Expired]);
@@ -208,6 +222,7 @@ class CreemWebhookController extends Controller
         } else {
             $subscription->update(['status' => SubscriptionStatus::Expired]);
         }
+        ProductEvents::planChanged($subscription->user, $planBefore);
     }
 
     private function localSubscription(array $object): Subscription

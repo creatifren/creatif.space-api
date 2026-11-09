@@ -8,6 +8,7 @@ use App\Enums\SocialPostStatus;
 use App\Enums\SocialPostTargetStatus;
 use App\Models\SocialAccount;
 use App\Models\SocialPost;
+use App\Models\SocialPostTarget;
 use App\Models\User;
 use Carbon\CarbonInterface;
 use Illuminate\Http\Client\ConnectionException;
@@ -227,6 +228,9 @@ class SocialPostRelay
     /**
      * One destination's outcome, from the webhook or from `reconcile`.
      * Redeliveries overwrite the same values — idempotent by construction.
+     * The analytics event goes out only on a change of state, read under a
+     * row lock, so a redelivered result (or reconcile racing the webhook)
+     * is not a second publish.
      *
      * @param  array<string, mixed>  $data  a post result in SocialProvider's shape
      */
@@ -239,6 +243,8 @@ class SocialPostRelay
         }
 
         DB::transaction(function () use ($post, $target, $data): void {
+            $target = SocialPostTarget::query()->whereKey($target->id)->lockForUpdate()->firstOrFail();
+            $before = $target->status;
             $success = (bool) ($data['success'] ?? false);
 
             // The vendor refused it: nothing left our hands, so its publish
@@ -267,6 +273,8 @@ class SocialPostRelay
                 ]);
 
             $post->recomputeFromTargets();
+
+            ProductEvents::publishResult($post, $target, $before, is_string($data['error'] ?? null) ? $data['error'] : null);
         });
     }
 

@@ -10,6 +10,7 @@ use App\Models\SocialPost;
 use App\Models\SocialPostComment;
 use App\Notifications\SocialPostDecided;
 use App\Support\Credits;
+use App\Support\ProductEvents;
 use App\Support\SocialPostRelay;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -25,7 +26,7 @@ use Throwable;
  */
 class PublicApprovalController extends Controller
 {
-    public function show(string $token): JsonResponse
+    public function show(Request $request, string $token): JsonResponse
     {
         $link = $this->resolve($token);
         if ($link instanceof JsonResponse) {
@@ -36,6 +37,8 @@ class PublicApprovalController extends Controller
             ->with(['targets.account', 'comments.replies'])
             ->orderBy('scheduled_at')
             ->get();
+
+        ProductEvents::approvalLinkOpened($link, $posts->count(), $request);
 
         return response()->json(['data' => [
             'editor' => $link->user->name,
@@ -79,6 +82,7 @@ class PublicApprovalController extends Controller
                 return response()->json(['message' => $outcome], 422);
             }
             $link->user->notify(new SocialPostDecided($link, SocialPostDecided::APPROVED, $validated['name'], 1, $socialPost));
+            ProductEvents::approvalDecision($link, $socialPost, 'approved');
         } else {
             $socialPost->update([
                 'approval' => SocialPostApproval::Revision,
@@ -95,6 +99,7 @@ class PublicApprovalController extends Controller
                 $link, SocialPostDecided::REVISE, $validated['name'], 1, $socialPost,
                 str($validated['reason'])->limit(200)->toString(),
             ));
+            ProductEvents::approvalDecision($link, $socialPost, 'changes_requested');
         }
 
         return response()->json(['data' => $this->postArray($socialPost->fresh(['targets.account', 'comments.replies']))]);
@@ -160,6 +165,9 @@ class PublicApprovalController extends Controller
                 'message' => is_string($outcome) ? $outcome : null,
             ];
             $approved += $outcome === true ? 1 : 0;
+            if ($outcome === true) {
+                ProductEvents::approvalDecision($link, $post, 'approved');
+            }
         }
 
         if ($approved > 0) {
@@ -239,6 +247,7 @@ class PublicApprovalController extends Controller
             'role' => 'APPROVER',
             'body' => $was === SocialPostApproval::Approved ? 'Approval taken back.' : 'Request for changes taken back.',
         ]);
+        ProductEvents::approvalDecision($link, $socialPost, 'retracted');
 
         return response()->json(['data' => $this->postArray($socialPost->fresh(['targets.account', 'comments.replies']))]);
     }
