@@ -217,12 +217,17 @@ class User extends Authenticatable implements FilamentUser
 
     /**
      * The subscription that entitles this user to a paid plan right now —
-     * active, or inside the grace window after a missed payment.
+     * active, trialing, or inside the grace window after a missed payment.
      */
     public function activeSubscription(): ?Subscription
     {
         return $this->subscriptions()
-            ->whereIn('status', [SubscriptionStatus::Active, SubscriptionStatus::PastDue])
+            ->whereIn('status', SubscriptionStatus::entitled())
+            // A cancelled trial is Free the moment it ends, not when the
+            // daily job or Creem's event gets round to marking it.
+            ->where(fn ($q) => $q->where('status', '!=', SubscriptionStatus::Trialing)
+                ->orWhereNull('cancelled_at')
+                ->orWhere('current_period_end', '>', now()))
             ->with('plan')
             ->latest('id')
             ->first();

@@ -505,8 +505,8 @@ describe('billing', function () {
         $user = User::factory()->create();
         $this->actingAs($user)->postJson('/api/v1/me/subscription/checkout', ['plan' => 'pro', 'period' => 'monthly'])->assertCreated();
 
-        $m = ae()->assertCapturedWithKeys('checkout_started', ['kind', 'plan', 'period', 'amount_usd']);
-        expect($m['properties'])->toBe(['kind' => 'subscription', 'plan' => 'pro', 'period' => 'monthly', 'amount_usd' => 9.99]);
+        $m = ae()->assertCapturedWithKeys('checkout_started', ['kind', 'plan', 'period', 'amount_usd', 'trial']);
+        expect($m['properties'])->toBe(['kind' => 'subscription', 'plan' => 'pro', 'period' => 'monthly', 'amount_usd' => 9.99, 'trial' => true]);
 
         $sub = Subscription::factory()->create(['creem_subscription_id' => 'sub_test']);
         $this->actingAs($sub->user)->postJson('/api/v1/me/subscription/checkout', ['plan' => 'max', 'period' => 'yearly'])->assertStatus(202);
@@ -517,8 +517,8 @@ describe('billing', function () {
         $user = User::factory()->create();
         $this->actingAs($user)->postJson('/api/v1/credits/top-up', ['dollars' => 20])->assertCreated();
 
-        $m = ae()->assertCapturedWithKeys('checkout_started', ['kind', 'plan', 'period', 'amount_usd']);
-        expect($m['properties'])->toBe(['kind' => 'credits', 'plan' => null, 'period' => null, 'amount_usd' => 20.0]);
+        $m = ae()->assertCapturedWithKeys('checkout_started', ['kind', 'plan', 'period', 'amount_usd', 'trial']);
+        expect($m['properties'])->toBe(['kind' => 'credits', 'plan' => null, 'period' => null, 'amount_usd' => 20.0, 'trial' => false]);
     });
 
     it('fires subscription_started and $set plan once on the first paid event', function () {

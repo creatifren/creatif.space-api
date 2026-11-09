@@ -17,6 +17,8 @@ use App\Notifications\SubscriptionPastDue;
 use App\Notifications\SubscriptionStarted;
 use App\Services\CreemService;
 use App\Support\CommissionEngine;
+use App\Support\CreemProducts;
+use App\Support\CreemTrial;
 use App\Support\ProductEvents;
 use App\Support\Wallet;
 use Carbon\CarbonImmutable;
@@ -56,6 +58,7 @@ class CreemWebhookController extends Controller
             match ($event['eventType']) {
                 'checkout.completed' => $this->checkout($object),
                 'subscription.paid' => $this->paid($object, $creem),
+                'subscription.trialing' => $this->trialing($object),
                 'subscription.past_due', 'subscription.unpaid', 'subscription.expired',
                 'subscription.canceled', 'subscription.scheduled_cancel' => $this->lifecycle($event['eventType'], $object),
                 // A product update is not proof a proration charge succeeded.
@@ -111,14 +114,34 @@ class CreemWebhookController extends Controller
         $invoice = Invoice::query()->where('number', $requestId)->lockForUpdate()->firstOrFail();
         $subscription = $invoice->subscription()->lockForUpdate()->firstOrFail();
         $remoteId = $this->id($object['subscription'] ?? null);
+        $period = $subscription->billing_period->value;
         $this->require($remoteId !== null
             && ($subscription->creem_subscription_id === null || $subscription->creem_subscription_id === $remoteId)
-            && $this->id($object['product'] ?? null) === $subscription->plan->creemProduct($subscription->billing_period->value));
+            && in_array($this->id($object['product'] ?? null), CreemProducts::accepted($subscription->plan, $period), true));
         $subscription->update([
             'creem_subscription_id' => $remoteId,
             'creem_customer_id' => $this->id($object['customer'] ?? null),
         ]);
         $invoice->update(['creem_checkout_id' => $object['id']]);
+
+        // The expanded subscription may already be trialing: start it here
+        // too, so a lost subscription.trialing still grants the trial.
+        $remote = $object['subscription'] ?? null;
+        if (is_array($remote) && ($remote['status'] ?? null) === 'trialing') {
+            $this->trialing($remote + ['product' => $object['product'] ?? null, 'customer' => $object['customer'] ?? null]);
+        }
+    }
+
+    /**
+     * subscription.trialing: see CreemTrial.
+     *
+     * @param  array<string, mixed>  $object
+     */
+    private function trialing(array $object): void
+    {
+        $subscription = $this->localSubscription($object);
+        User::query()->whereKey($subscription->user_id)->lockForUpdate()->firstOrFail();
+        CreemTrial::start($subscription, $object);
     }
 
     private function paid(array $object, CreemService $creem): void
@@ -132,6 +155,19 @@ class CreemWebhookController extends Controller
         }
 
         $transaction = $object['last_transaction'] ?? $creem->transaction($transactionId);
+        // Creem's trial opens with a $0 "paid" transaction (the card check).
+        // It is not the first payment: it starts the trial, or — not
+        // trialing — is recorded nowhere. Never a 422, or Creem retries it
+        // forever and the trial never shows.
+        if (($transaction['amount'] ?? null) === 0) {
+            if (($object['status'] ?? null) === 'trialing') {
+                CreemTrial::start($subscription, $object);
+            } else {
+                Log::info('billing.zero_paid_ignored', ['subscription' => $subscription->ulid, 'transaction' => $transactionId]);
+            }
+
+            return;
+        }
         $this->require(($transaction['id'] ?? '') === $transactionId
             && ($transaction['currency'] ?? '') === 'USD'
             && in_array($transaction['status'] ?? '', ['paid', 'completed'], true)
@@ -145,7 +181,7 @@ class CreemWebhookController extends Controller
         // The second is left for an operator to refund in Creem.
         $other = Subscription::query()->where('user_id', $subscription->user_id)
             ->whereKeyNot($subscription->id)
-            ->whereIn('status', [SubscriptionStatus::Active, SubscriptionStatus::PastDue])
+            ->whereIn('status', SubscriptionStatus::entitled())
             ->exists();
         if ($other) {
             Log::warning('billing.duplicate_subscription_paid', [
@@ -241,17 +277,10 @@ class CreemWebhookController extends Controller
         return $subscription;
     }
 
+    /** @return array{0: Plan, 1: string} */
     private function plan(?string $product): array
     {
-        foreach (['pro', 'max'] as $key) {
-            foreach (['monthly', 'yearly'] as $period) {
-                $expected = config("services.creem.products.{$key}_{$period}");
-                if ($product !== null && is_string($expected) && $expected !== '' && $product === $expected) {
-                    return [Plan::query()->where('key', $key)->where('is_active', true)->firstOrFail(), $period];
-                }
-            }
-        }
-        throw ValidationException::withMessages(['object' => 'Unknown product.']);
+        return CreemProducts::plan($product);
     }
 
     /**

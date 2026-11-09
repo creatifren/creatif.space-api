@@ -113,16 +113,17 @@ class Subscription extends Model
     }
 
     /**
-     * Still entitled to the plan: paid up, or inside the grace window that
-     * follows a missed payment.
+     * Still entitled to the plan: paid up, trialing, or inside the grace
+     * window that follows a missed payment.
      */
     public function isEntitled(): bool
     {
-        return in_array(
-            $this->status,
-            [SubscriptionStatus::Active, SubscriptionStatus::PastDue],
-            true,
-        );
+        return in_array($this->status, SubscriptionStatus::entitled(), true);
+    }
+
+    public function isTrialing(): bool
+    {
+        return $this->status === SubscriptionStatus::Trialing;
     }
 
     public function isInGrace(): bool
@@ -137,6 +138,6 @@ class Subscription extends Model
     public function isEndingAtPeriodEnd(): bool
     {
         return $this->cancelled_at !== null
-            && $this->status === SubscriptionStatus::Active;
+            && in_array($this->status, [SubscriptionStatus::Active, SubscriptionStatus::Trialing], true);
     }
 }
