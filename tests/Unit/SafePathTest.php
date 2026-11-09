@@ -15,6 +15,10 @@ it('keeps a path on our own frontend', function (string $path) {
     '/space-editor?space=01HZX',
     '/rani/winter-noel',
     '/',
+    // The pricing page's paid sign-up hands these through (creatif.space#4).
+    'query string' => '/settings?tab=subscription&plan=pro&period=yearly',
+    'encoded query' => '/settings?next=%2Fspaces&plan=max',
+    'fragment' => '/settings?plan=pro#billing',
 ]);
 
 it('refuses anything that leaves our origin', function (mixed $path) {
@@ -29,6 +33,15 @@ it('refuses anything that leaves our origin', function (mixed $path) {
     'backslash pair' => '\\\\evil.test',
     'mixed slashes' => '/\\evil.test',
     'scheme relative backslash' => '\\/evil.test',
+    // Browsers strip tab/CR/LF anywhere in a URL: these become //evil.test.
+    'tab' => "/\t/evil.test",
+    'newline' => "/\n/evil.test",
+    'carriage return' => "/\r/evil.test",
+    'null byte' => "/\0/evil.test",
+    'absolute with a query' => 'https://evil.test/settings?plan=pro',
+    'protocol relative with a query' => '//evil.test/settings?plan=pro',
+    'query only' => '?plan=pro',
+    'relative path' => 'settings?plan=pro',
     // Not a path at all.
     'bare host' => 'evil.test',
     'empty' => '',

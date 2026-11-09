@@ -28,10 +28,15 @@ final class SafePath
      * - `/\evil.test` and `\/evil.test` — browsers normalise a backslash
      *   to a forward slash in the authority position, which makes these
      *   protocol-relative too by the time they are followed.
+     * - `/\t/evil.test` (any ASCII control character) — browsers strip tab,
+     *   CR and LF from anywhere in a URL before following it, which turns
+     *   this into `//evil.test`. Nothing legitimate carries one unencoded.
+     *
+     * A query string is fine: `/settings?tab=billing&plan=pro` stays as is.
      */
     public static function of(mixed $path): string
     {
-        if (! is_string($path) || $path === '') {
+        if (! is_string($path) || $path === '' || preg_match('/[\x00-\x1F\x7F]/', $path) === 1) {
             return '/';
         }
 

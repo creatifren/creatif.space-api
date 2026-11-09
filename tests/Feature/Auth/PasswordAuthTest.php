@@ -136,6 +136,74 @@ it('verifies and signs in from the email link', function () {
     $this->assertAuthenticatedAs($user);
 });
 
+describe('landing where the signup asked (next)', function () {
+    it('lands the verify link on the path the signup sent, query string and all', function () {
+        $next = '/settings?tab=subscription&plan=pro&period=yearly';
+
+        $this->postJson('/auth/register', ['email' => 'rani@example.test', 'password' => 'correct-horse', 'next' => $next])
+            ->assertStatus(202);
+
+        $user = User::query()->firstWhere('email', 'rani@example.test');
+        expect($user->signup_next_path)->toBe($next);
+
+        $this->get(verifyUrl($user))
+            ->assertRedirect(config('app.frontend_url').$next);
+        $this->assertAuthenticatedAs($user);
+        // Used once.
+        expect($user->fresh()->signup_next_path)->toBeNull();
+    });
+
+    it('lands on Home when the signup sent nothing', function () {
+        $this->postJson('/auth/register', ['email' => 'rani@example.test', 'password' => 'correct-horse'])
+            ->assertStatus(202);
+
+        $user = User::query()->firstWhere('email', 'rani@example.test');
+        expect($user->signup_next_path)->toBeNull();
+
+        $this->get(verifyUrl($user))->assertRedirect(config('app.frontend_url').'/home');
+    });
+
+    it('never stores a destination that leaves our origin', function (string $hostile) {
+        $this->postJson('/auth/register', ['email' => 'rani@example.test', 'password' => 'correct-horse', 'next' => $hostile])
+            ->assertStatus(202);
+
+        $user = User::query()->firstWhere('email', 'rani@example.test');
+        expect($user->signup_next_path)->toBeNull();
+
+        $this->get(verifyUrl($user))->assertRedirect(config('app.frontend_url').'/home');
+    })->with([
+        'absolute' => 'https://evil.test/settings?plan=pro',
+        'protocol relative' => '//evil.test/settings',
+        'mixed slashes' => '/\\evil.test',
+        'tab' => "/\t/evil.test",
+        'relative' => 'settings?plan=pro',
+    ]);
+
+    it('checks the stored value again on the way out', function () {
+        // A row written by something other than register still cannot
+        // turn the verify link into an open redirect.
+        $user = passwordUser(['email_verified_at' => null]);
+        $user->forceFill(['signup_next_path' => '//evil.test'])->save();
+
+        $this->get(verifyUrl($user))->assertRedirect(config('app.frontend_url').'/home');
+    });
+
+    it('does not let a register request for a taken address change its landing', function () {
+        $user = passwordUser(['email' => 'taken@example.test', 'email_verified_at' => null]);
+
+        $this->postJson('/auth/register', ['email' => 'taken@example.test', 'password' => 'other-horse', 'next' => '/settings?plan=pro'])
+            ->assertStatus(202);
+
+        expect($user->fresh()->signup_next_path)->toBeNull();
+    });
+
+    it('refuses an oversized next', function () {
+        $this->postJson('/auth/register', ['email' => 'rani@example.test', 'password' => 'correct-horse', 'next' => '/'.str_repeat('a', 2000)])
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors('next');
+    });
+});
+
 it('gives the account an address from its email, skipping taken and reserved ones', function () {
     Handle::factory()->reserved()->create(['name' => 'admin']);
     Handle::factory()->create(['name' => 'admin2']);
