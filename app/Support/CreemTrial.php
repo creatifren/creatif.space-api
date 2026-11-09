@@ -28,11 +28,13 @@ class CreemTrial
      */
     public static function start(Subscription $subscription, array $remote): bool
     {
-        // Late: the first charge already landed, or the trial already ended
-        // (a fresh checkout is Expired too, but has no period yet).
-        if (in_array($subscription->status, [SubscriptionStatus::Active, SubscriptionStatus::PastDue, SubscriptionStatus::Cancelled], true)
+        // Late: the first real charge already landed, or the trial already
+        // ended (a fresh checkout is Expired too, but has no period yet).
+        // Active without a real charge is a trial recorded as paid before
+        // trials were understood (its "payment" was Creem's $0 card check).
+        if (in_array($subscription->status, [SubscriptionStatus::PastDue, SubscriptionStatus::Cancelled], true)
             || ($subscription->status === SubscriptionStatus::Expired && $subscription->current_period_start !== null)
-            || $subscription->invoices()->where('status', InvoiceStatus::Paid)->exists()) {
+            || self::charged($subscription)) {
             return false;
         }
 
@@ -74,6 +76,18 @@ class CreemTrial
         ProductEvents::planChanged($subscription->user, $planBefore);
 
         return ! $already;
+    }
+
+    /**
+     * Has real money been taken? A $0 "paid" invoice is the card check that
+     * opens a Creem trial, not a charge.
+     */
+    public static function charged(Subscription $subscription): bool
+    {
+        return $subscription->invoices()
+            ->where('status', InvoiceStatus::Paid)
+            ->where('amount', '>', 0)
+            ->exists();
     }
 
     private static function date(mixed $value): CarbonImmutable

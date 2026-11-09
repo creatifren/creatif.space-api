@@ -2,6 +2,7 @@
 
 namespace App\Console\Commands;
 
+use App\Enums\InvoiceStatus;
 use App\Enums\SubscriptionStatus;
 use App\Models\Subscription;
 use App\Models\User;
@@ -14,10 +15,16 @@ use Throwable;
 /**
  * Before trial support, the $0 subscription.paid that opens a Creem trial
  * was refused (422) and subscription.trialing ignored, so anyone who
- * started a trial was left on Free until the first real charge. This asks
- * Creem about every checkout that was bound to a Creem subscription but
- * never started, and starts the ones Creem says are trialing. Safe to run
- * again; --dry-run only reports.
+ * started a trial was left on Free until the first real charge — or, where
+ * the $0 card check was taken for a payment, recorded as Active with no
+ * trial end. This asks Creem about every subscription in either state:
+ *
+ * - Expired, bound to Creem, never started;
+ * - Active, bound to Creem, with no real charge (only $0 "paid" invoices);
+ *
+ * and turns the ones Creem says are trialing into Trialing, with Creem's
+ * period. Credits are not touched; trial_started fires at most once. Safe
+ * to run again; --dry-run only reports.
  */
 class ReconcileTrials extends Command
 {
@@ -28,9 +35,12 @@ class ReconcileTrials extends Command
     public function handle(CreemService $creem): int
     {
         $candidates = Subscription::query()
-            ->where('status', SubscriptionStatus::Expired)
             ->whereNotNull('creem_subscription_id')
-            ->whereNull('current_period_start')
+            ->where(fn ($q) => $q
+                ->where(fn ($q) => $q->where('status', SubscriptionStatus::Expired)->whereNull('current_period_start'))
+                ->orWhere(fn ($q) => $q->where('status', SubscriptionStatus::Active)
+                    ->whereDoesntHave('invoices', fn ($i) => $i->where('status', InvoiceStatus::Paid)->where('amount', '>', 0))))
+            ->orderBy('id')
             ->get();
 
         $started = 0;
@@ -38,18 +48,19 @@ class ReconcileTrials extends Command
             try {
                 $remote = $creem->subscription((string) $subscription->creem_subscription_id);
             } catch (Throwable $e) {
-                $this->error("{$subscription->ulid}: {$e->getMessage()}");
+                $this->error("{$subscription->ulid} (user {$subscription->user_id}): {$e->getMessage()}");
 
                 continue;
             }
             $status = $remote['status'] ?? null;
+            $label = "{$subscription->ulid} (user {$subscription->user_id}, {$subscription->status->value} here)";
             if (($remote['id'] ?? null) !== $subscription->creem_subscription_id || $status !== 'trialing') {
-                $this->line("{$subscription->ulid}: Creem says ".json_encode($status).' — left as is');
+                $this->line("{$label}: Creem says ".json_encode($status).' — left as is');
 
                 continue;
             }
             if ($this->option('dry-run')) {
-                $this->info("{$subscription->ulid}: trialing in Creem — would start");
+                $this->info("{$label}: trialing in Creem until ".($remote['current_period_end_date'] ?? '?').' — would start');
 
                 continue;
             }
@@ -61,7 +72,7 @@ class ReconcileTrials extends Command
                 return CreemTrial::start($row, $remote);
             });
             $started += $did ? 1 : 0;
-            $this->info("{$subscription->ulid}: ".($did ? 'trial started' : 'already handled'));
+            $this->info("{$label}: ".($did ? 'trial started' : 'already handled'));
         }
 
         $this->info("{$candidates->count()} checked, {$started} trial(s) started.");
