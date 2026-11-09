@@ -53,10 +53,11 @@ Schedule::job(new ReleaseCommissions)->dailyAt('02:55');
 
 /*
  * Uploads that were presigned but never completed leave pending rows (and
- * possibly orphaned R2 objects). A daily sweep is plenty — the presign
- * window is 15 minutes.
+ * possibly orphaned R2 objects). Hourly, so dead rows and objects do not
+ * pile up for a day; the quota already stops counting them once the
+ * 15-minute presign window has passed (PlanQuota::storageUsed).
  */
-Schedule::job(new PruneStaleUploads)->dailyAt('01:30');
+Schedule::job(new PruneStaleUploads)->hourly();
 
 /*
  * The Trash empties itself 30 days after deletion. After the stale-upload

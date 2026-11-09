@@ -76,6 +76,9 @@ class File extends Model
         return preg_match('/^[0-9a-f]{32}$/i', $etag) === 1 ? strtolower($etag) : null;
     }
 
+    /** How long a presigned upload URL stays valid. */
+    public const PRESIGN_TTL_MINUTES = 15;
+
     public const STATUS_PENDING = 'pending';
 
     public const STATUS_READY = 'ready';
