@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Api\V1;
 
+use App\Contracts\SocialProvider;
 use App\Enums\SocialAccountStatus;
 use App\Enums\SocialPlatform;
 use App\Enums\SocialPostStatus;
@@ -11,7 +12,7 @@ use App\Http\Resources\SocialAccountResource;
 use App\Models\SocialAccount;
 use App\Models\SocialPost;
 use App\Models\User;
-use App\Contracts\SocialProvider;
+use App\Services\OutstandService;
 use App\Support\Credits;
 use App\Support\PlanQuota;
 use App\Support\SocialPostRelay;
@@ -156,6 +157,9 @@ class SocialAccountController extends Controller
         $remote = $provider->accountsFor($user->ulid);
 
         $seen = [];
+        // An Instagram sign-in that asked for the messages scope just ended.
+        $scopeMarker = OutstandService::MESSAGES_SCOPE_MARKER.$user->ulid;
+        $askedForMessages = $provider->name() === 'outstand' && Cache::has($scopeMarker);
 
         foreach ($remote as $account) {
             $platform = SocialPlatform::tryFrom((string) ($account['platform'] ?? ''));
@@ -167,7 +171,7 @@ class SocialAccountController extends Controller
 
             $seen[] = $providerId;
 
-            $user->socialAccounts()->updateOrCreate(
+            $row = $user->socialAccounts()->updateOrCreate(
                 [
                     'provider' => $provider->name(),
                     'platform' => $platform,
@@ -182,6 +186,12 @@ class SocialAccountController extends Controller
                     'connected_at' => now(),
                 ],
             );
+
+            $this->recordMessagesScope($row, $account, $askedForMessages);
+        }
+
+        if ($askedForMessages) {
+            Cache::forget($scopeMarker);
         }
 
         // A row the provider no longer lists lost its grant — unless it is
@@ -279,6 +289,36 @@ class SocialAccountController extends Controller
         $socialAccount->update(['status' => SocialAccountStatus::Disconnected]);
 
         return response()->json(null, 204);
+    }
+
+    /**
+     * Does this account's grant read DMs? Outstand's word when it reports
+     * scopes; otherwise an Instagram account seen right after a sign-in
+     * that asked for the messages scope is taken to have it (a DM or a
+     * thread list later proves it; a 403 takes it back).
+     *
+     * @param  array<string, mixed>  $remote
+     */
+    private function recordMessagesScope(SocialAccount $row, array $remote, bool $askedForMessages): void
+    {
+        if (! $row->supportsMessages()) {
+            return;
+        }
+
+        $scopes = $remote['scopes'] ?? null;
+
+        if (is_array($scopes)) {
+            $has = in_array(OutstandService::MESSAGES_SCOPE, $scopes, true);
+            if ($has !== ($row->messages_scope_at !== null)) {
+                $row->forceFill(['messages_scope_at' => $has ? now() : null])->save();
+            }
+
+            return;
+        }
+
+        if ($askedForMessages && $row->messages_scope_at === null) {
+            $row->forceFill(['messages_scope_at' => now()])->save();
+        }
     }
 
     /** Prefix of the one-off tag an account wears while it is being claimed. */

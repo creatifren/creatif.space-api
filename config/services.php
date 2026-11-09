@@ -76,6 +76,20 @@ return [
         'key' => env('OUTSTAND_API_KEY'),
         'base_url' => env('OUTSTAND_BASE_URL') ?: 'https://api.outstand.so/v1',
         'webhook_secret' => env('OUTSTAND_WEBHOOK_SECRET'),
+        // Instagram sign-in: `scopes` replaces Outstand's defaults, so this is
+        // the default list; instagram_business_manage_messages is added to it.
+        // Verify against Outstand's docs/dashboard — see the Inbox PR.
+        'instagram_scopes' => array_values(array_filter(explode(',', (string) (env('OUTSTAND_INSTAGRAM_SCOPES')
+            ?: 'instagram_business_basic,instagram_business_content_publish,instagram_business_manage_comments,instagram_business_manage_insights')))),
+        // Private reply body: nested (instagram.comment_id + author_id),
+        // top_level (comment_id), or auto (nested, then top level).
+        'private_reply_shape' => env('OUTSTAND_PRIVATE_REPLY_SHAPE', 'auto'),
+    ],
+
+    'inbox' => [
+        'enabled' => (bool) env('INBOX_ENABLED', true),
+        // Credits one Inbox reply costs (DM, comment reply, private reply). 0 = free.
+        'credits_per_reply' => (int) env('CREDITS_PER_REPLY', 0),
     ],
 
     // Social posting — Post for Me relays posts to the nine platforms. One

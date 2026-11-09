@@ -25,6 +25,8 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
  * @property string|null $profile_photo_url
  * @property SocialAccountStatus $status
  * @property CarbonImmutable|null $connected_at
+ * @property CarbonImmutable|null $messages_scope_at
+ * @property CarbonImmutable|null $inbox_synced_at
  */
 class SocialAccount extends Model
 {
@@ -40,6 +42,8 @@ class SocialAccount extends Model
         'profile_photo_url',
         'status',
         'connected_at',
+        'messages_scope_at',
+        'inbox_synced_at',
     ];
 
     /**
@@ -53,6 +57,8 @@ class SocialAccount extends Model
             'platform' => SocialPlatform::class,
             'status' => SocialAccountStatus::class,
             'connected_at' => 'datetime',
+            'messages_scope_at' => 'datetime',
+            'inbox_synced_at' => 'datetime',
         ];
     }
 
@@ -71,6 +77,37 @@ class SocialAccount extends Model
     public function getRouteKeyName(): string
     {
         return 'ulid';
+    }
+
+    /** DMs go through Outstand, on Instagram only (Oct 2026). */
+    public function supportsMessages(): bool
+    {
+        return $this->provider === 'outstand' && $this->platform === SocialPlatform::Instagram;
+    }
+
+    /** Comments are read on Instagram and Facebook. */
+    public function supportsComments(): bool
+    {
+        return $this->provider === 'outstand'
+            && in_array($this->platform, [SocialPlatform::Instagram, SocialPlatform::Facebook], true);
+    }
+
+    /** Connected with the messages scope: the Inbox can read and send DMs. */
+    public function messagingEnabled(): bool
+    {
+        return (bool) config('services.inbox.enabled')
+            && $this->supportsMessages()
+            && $this->status === SocialAccountStatus::Connected
+            && $this->messages_scope_at !== null;
+    }
+
+    /** Connected before the Inbox (or without the scope): reconnect to read DMs. */
+    public function needsReconnectForMessages(): bool
+    {
+        return (bool) config('services.inbox.enabled')
+            && $this->supportsMessages()
+            && $this->status === SocialAccountStatus::Connected
+            && $this->messages_scope_at === null;
     }
 
     /**

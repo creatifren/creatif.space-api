@@ -27,6 +27,21 @@ use Illuminate\Http\Request;
  * Webhook event: {type: 'account'|'account.lost'|'post'|'result', data}
  *            where data is an Account, {id?, external_id?, status?}, an
  *            account id ({id}), or a Result.
+ *
+ * Inbox (DMs and comments) — a relay without one throws InboxUnsupported:
+ * Conversation: {id, social_account_id?, network, contact: {id?, username?,
+ *            name?, avatar_url?}, last_message?: string, last_message_at?,
+ *            last_inbound_at?, unread_count?: int, status?: string}
+ * Message:  {id, conversation_id, direction: 'in'|'out', content?,
+ *            media_urls: list<string>, status: 'pending'|'sent'|'failed',
+ *            error?, source?: 'api'|'contact'|'native_app',
+ *            platform_message_id?, scheduled_at?, sent_at?}
+ * Comment:  {id, post_id?, platform_post_id?, parent_comment_id?,
+ *            author_id?, author_username?, text?, created_at?, account_id?}
+ * Inbox webhook events carry an `id` to deduplicate on and are one of
+ *            'conversation' (Conversation), 'message' (Message, maybe
+ *            partial: a status change), 'message.read' ({conversation_id,
+ *            read_at?}), 'comment' (Comment, with network).
  */
 interface SocialProvider
 {
@@ -92,7 +107,7 @@ interface SocialProvider
      * Create (and schedule) a post.
      *
      * @param  array<string, mixed>  $payload
-     * @return array<string, mixed>  at least `id`; `status` 'processed' when already out
+     * @return array<string, mixed> at least `id`; `status` 'processed' when already out
      *
      * @throws ConnectionException
      */
@@ -153,4 +168,83 @@ interface SocialProvider
      * @return list<array{type: string, data: array<string, mixed>}>
      */
     public function webhookEvents(Request $request): array;
+
+    /** Whether this relay has an Inbox (DMs and comments) at all. */
+    public function supportsInbox(): bool;
+
+    /**
+     * DM threads on an account, newest first.
+     *
+     * @return array{data: list<array<string, mixed>>, cursor: string|null}
+     *
+     * @throws ConnectionException
+     */
+    public function conversations(string $accountId, ?string $cursor = null, int $limit = 50): array;
+
+    /**
+     * One thread, or null when it does not exist.
+     *
+     * @return array<string, mixed>|null
+     *
+     * @throws ConnectionException
+     */
+    public function conversation(string $conversationId): ?array;
+
+    /**
+     * Messages in a thread, newest first.
+     *
+     * @return array{data: list<array<string, mixed>>, cursor: string|null}
+     *
+     * @throws ConnectionException
+     */
+    public function messages(string $conversationId, ?string $cursor = null, int $limit = 50): array;
+
+    /**
+     * Send a DM. Accepted, not delivered: the result is `pending` until a
+     * webhook says otherwise.
+     *
+     * @param  array{content?: string|null, media_urls?: list<string>, scheduled_at?: string|null}  $message
+     * @return array<string, mixed> a Message
+     *
+     * @throws ConnectionException
+     */
+    public function sendMessage(string $conversationId, array $message): array;
+
+    /**
+     * Take back a scheduled DM that has not gone out. A 404 is success.
+     *
+     * @throws ConnectionException
+     */
+    public function deleteScheduledMessage(string $conversationId, string $messageId): void;
+
+    /** @throws ConnectionException */
+    public function markConversationRead(string $conversationId): void;
+
+    /**
+     * The one private DM reply a public comment allows (Instagram, within
+     * 7 days, text only).
+     *
+     * @return array<string, mixed> {conversation_id?: string, message_id?: string}
+     *
+     * @throws ConnectionException
+     */
+    public function privateReply(string $accountId, string $commentId, ?string $authorId, string $content): array;
+
+    /**
+     * Comments on one post of an account.
+     *
+     * @return list<array<string, mixed>>
+     *
+     * @throws ConnectionException
+     */
+    public function comments(string $postId, string $network, string $accountUsername): array;
+
+    /**
+     * Reply publicly, threaded under a comment.
+     *
+     * @return array<string, mixed> {id?: string}
+     *
+     * @throws ConnectionException
+     */
+    public function replyToComment(string $postId, string $commentId, string $content, string $accountUsername): array;
 }

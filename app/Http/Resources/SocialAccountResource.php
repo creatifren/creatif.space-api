@@ -25,6 +25,8 @@ class SocialAccountResource extends JsonResource
             'profile_photo_url' => $this->profile_photo_url,
             'status' => $this->status,
             'connected_at' => $this->connected_at,
+            'messaging_enabled' => $this->messagingEnabled(),
+            'needs_reconnect_for_messages' => $this->needsReconnectForMessages(),
         ];
     }
 }

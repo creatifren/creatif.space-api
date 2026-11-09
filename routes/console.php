@@ -11,6 +11,7 @@ use App\Jobs\PurgeTrashedFiles;
 use App\Jobs\ReleaseCommissions;
 use App\Jobs\RenewCredits;
 use App\Jobs\RenewMonthlyCredits;
+use App\Jobs\SyncInboxes;
 use Illuminate\Foundation\Inspiring;
 use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\Schedule;
@@ -88,3 +89,10 @@ Schedule::job(new PruneSpaceArchives)->dailyAt('01:50');
  * finds nothing.
  */
 Schedule::job(new BackfillFileChecksums)->dailyAt('01:55');
+
+/*
+ * The Inbox's safety net: webhooks are the live path, this backfills what
+ * they missed, for accounts whose Inbox has been opened. Hourly, and each
+ * account's job backs off on its own when Outstand rate-limits.
+ */
+Schedule::job(new SyncInboxes)->hourly();

@@ -2,14 +2,17 @@
 
 namespace App\Http\Controllers\Api\V1;
 
+use App\Contracts\SocialProvider;
 use App\Enums\SocialAccountStatus;
 use App\Enums\SocialPlatform;
 use App\Enums\SocialPostStatus;
 use App\Http\Controllers\Controller;
 use App\Models\SocialAccount;
+use App\Models\SocialConversation;
 use App\Models\SocialPost;
 use App\Models\User;
-use App\Contracts\SocialProvider;
+use App\Support\InboxNotifier;
+use App\Support\InboxStore;
 use App\Support\SocialPostRelay;
 use App\Support\SocialProviders;
 use Illuminate\Http\JsonResponse;
@@ -28,6 +31,9 @@ class SocialWebhookController extends Controller
 {
     private SocialProvider $provider;
 
+    /** Inbox events: deduplicated in webhook_events, ignored while the Inbox is off. */
+    private const INBOX = ['conversation', 'message', 'message.read', 'comment'];
+
     public function __invoke(Request $request, SocialProviders $providers, string $provider): JsonResponse
     {
         $this->provider = $providers->named($provider);
@@ -37,6 +43,12 @@ class SocialWebhookController extends Controller
         }
 
         foreach ($this->provider->webhookEvents($request) as $event) {
+            if (in_array($event['type'], self::INBOX, true)) {
+                $this->inbox($event);
+
+                continue;
+            }
+
             match ($event['type']) {
                 'account' => $this->upsertAccount($event['data']),
                 'account.lost' => $this->loseAccount($event['data']),
@@ -176,5 +188,118 @@ class SocialWebhookController extends Controller
             )
             ->when($providerId === '' && $externalId === '', fn ($q) => $q->whereRaw('1 = 0'))
             ->first();
+    }
+
+    /**
+     * One Inbox event, once. The receipt and its writes commit together,
+     * as with Creem: a handler that fails leaves no receipt, so the
+     * provider's retry is not mistaken for a duplicate.
+     *
+     * @param  array{type: string, data: array<string, mixed>, id?: string}  $event
+     */
+    private function inbox(array $event): void
+    {
+        if (! config('services.inbox.enabled')) {
+            return;
+        }
+
+        DB::transaction(function () use ($event): void {
+            if (isset($event['id']) && ! DB::table('webhook_events')->insertOrIgnore([
+                'source' => $this->provider->name(),
+                'event_id' => substr($event['id'], 0, 64),
+                'type' => substr('inbox.'.$event['type'], 0, 64),
+                'payload' => json_encode($event['data'], JSON_THROW_ON_ERROR),
+                'created_at' => now(),
+                'updated_at' => now(),
+            ])) {
+                return;
+            }
+
+            match ($event['type']) {
+                'conversation' => $this->startConversation($event['data']),
+                'message' => $this->recordMessage($event['data']),
+                'message.read' => $this->readMessages($event['data']),
+                'comment' => $this->recordComment($event['data']),
+                default => null,
+            };
+        });
+    }
+
+    /**
+     * @param  array<string, mixed>  $data
+     */
+    private function startConversation(array $data): void
+    {
+        $account = InboxStore::account($this->provider->name(), (string) ($data['social_account_id'] ?? ''));
+
+        if ($account !== null) {
+            InboxStore::upsertConversation($account, $data);
+        } else {
+            InboxStore::resolveConversation($this->provider, (string) ($data['id'] ?? ''), $data['network'] ?? null);
+        }
+    }
+
+    /**
+     * A DM in or out, or the outcome of one of ours. message.received
+     * names no account — the thread does, so an unknown thread is looked
+     * up at the provider. A new inbound message rings the owner's bell.
+     *
+     * @param  array<string, mixed>  $data
+     */
+    private function recordMessage(array $data): void
+    {
+        $conversation = InboxStore::resolveConversation($this->provider, (string) ($data['conversation_id'] ?? ''), $data['network'] ?? null);
+
+        if ($conversation === null) {
+            return;
+        }
+
+        if (($data['contact_id'] ?? null) !== null && $conversation->contact_id === null) {
+            $conversation->contact_id = (string) $data['contact_id'];
+        }
+
+        [, $inbound] = InboxStore::upsertMessage($conversation, $data, countUnread: true);
+
+        if ($inbound) {
+            // A DM arriving proves the account's grant includes messages.
+            $conversation->account()->whereNull('messages_scope_at')->update(['messages_scope_at' => now()]);
+            InboxNotifier::message($conversation->user, $conversation->ulid);
+        }
+    }
+
+    /**
+     * @param  array<string, mixed>  $data
+     */
+    private function readMessages(array $data): void
+    {
+        $conversation = SocialConversation::query()
+            ->where('provider', $this->provider->name())
+            ->where('provider_conversation_id', (string) ($data['conversation_id'] ?? ''))
+            ->first();
+
+        if ($conversation !== null) {
+            InboxStore::markSeen($conversation, $data['read_at'] ?? null);
+        }
+    }
+
+    /**
+     * A comment on one of the account's posts. Our own replies come back
+     * through here too and are dropped by InboxStore.
+     *
+     * @param  array<string, mixed>  $data
+     */
+    private function recordComment(array $data): void
+    {
+        $account = InboxStore::account($this->provider->name(), (string) ($data['account_id'] ?? ''));
+
+        if ($account === null || ! $account->supportsComments()) {
+            return;
+        }
+
+        $comment = InboxStore::upsertComment($account, $data, (string) ($data['network'] ?? ''));
+
+        if ($comment !== null && $comment->wasRecentlyCreated) {
+            InboxNotifier::comment($account->user);
+        }
     }
 }

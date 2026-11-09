@@ -13,6 +13,9 @@ enum NotificationType: string
     // A client approved or asked for changes on an approval link (RF-043).
     case SocialPostDecision = 'social.post.decision';
     case ProductNews = 'product.news';
+    // New DMs and comments in the Inbox — bell only, batched (InboxNotifier).
+    // Not on the Settings screen yet: see the open question in the PR.
+    case InboxActivity = 'inbox.activity';
 
     // Money. Deliberately absent from the Settings screen: "your
     // subscription lapses in 7 days" is not a preference, and neither is
