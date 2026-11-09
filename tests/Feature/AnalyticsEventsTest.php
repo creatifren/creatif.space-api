@@ -506,7 +506,7 @@ describe('billing', function () {
         $this->actingAs($user)->postJson('/api/v1/me/subscription/checkout', ['plan' => 'pro', 'period' => 'monthly'])->assertCreated();
 
         $m = ae()->assertCapturedWithKeys('checkout_started', ['kind', 'plan', 'period', 'amount_usd', 'trial']);
-        expect($m['properties'])->toBe(['kind' => 'subscription', 'plan' => 'pro', 'period' => 'monthly', 'amount_usd' => 9.99, 'trial' => false]);
+        expect($m['properties'])->toBe(['kind' => 'subscription', 'plan' => 'pro', 'period' => 'monthly', 'amount_usd' => 9.99, 'trial' => true]);
 
         $sub = Subscription::factory()->create(['creem_subscription_id' => 'sub_test']);
         $this->actingAs($sub->user)->postJson('/api/v1/me/subscription/checkout', ['plan' => 'max', 'period' => 'yearly'])->assertStatus(202);

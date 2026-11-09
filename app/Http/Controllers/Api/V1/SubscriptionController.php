@@ -68,9 +68,9 @@ class SubscriptionController extends Controller
                 'seats' => Workspace::seats($user),
                 'seats_used' => Workspace::seatsUsed($user),
                 // What the plan picker may offer. Eligible = never had a
-                // trial or a paid plan, and a trial product is configured.
+                // trial or a paid plan; the trial itself is on Creem's Pro.
                 'trial' => [
-                    'eligible' => Trial::offered($user),
+                    'eligible' => Trial::eligible($user),
                     'days' => Trial::days(),
                 ],
                 'founding' => [
@@ -127,7 +127,7 @@ class SubscriptionController extends Controller
                 ]);
             }
 
-            $creem->upgrade($current, (string) $plan->creemProduct($validated['period']));
+            $creem->upgrade($current, (string) Trial::changeProduct($plan, $validated['period']));
             ProductEvents::checkoutStarted($user, 'subscription', $plan->key, $validated['period'], (int) $plan->priceFor($validated['period']), false);
 
             return response()->json(['data' => [
@@ -179,16 +179,17 @@ class SubscriptionController extends Controller
             ]);
         });
 
-        // Pro's trial twin when this owner never had a trial or a paid plan;
-        // the Founding code on any yearly plan (dropped if Creem refuses it).
-        $trialProduct = Trial::eligible($user) ? Trial::product($plan, $validated['period']) : null;
+        // Pro carries Creem's trial; an owner who had one (or a paid plan)
+        // gets the no-trial twin. The Founding code goes on any yearly plan
+        // (dropped if Creem refuses it).
+        ['product' => $product, 'trial' => $trial] = Trial::checkoutProduct($plan, $validated['period'], $user);
 
         // Reused bill: the same hosted page, never a second checkout for it.
         if ($invoice->creem_checkout_url === null) {
             $checkout = $creem->subscriptionCheckout(
                 $invoice->load('subscription.plan'),
                 $user,
-                $trialProduct ?? $plan->creemProduct($validated['period']),
+                $product,
                 Founding::codeFor($validated['period']),
             );
             $invoice->forceFill([
@@ -197,14 +198,14 @@ class SubscriptionController extends Controller
             ])->save();
         }
 
-        ProductEvents::checkoutStarted($user, 'subscription', $plan->key, $validated['period'], (int) $invoice->amount, $trialProduct !== null);
+        ProductEvents::checkoutStarted($user, 'subscription', $plan->key, $validated['period'], (int) $invoice->amount, $trial);
 
         return response()->json([
             'data' => [
                 'checkout_url' => $invoice->creem_checkout_url,
                 'amount' => $invoice->amount,
                 // Days free before `amount` is first charged; null = no trial.
-                'trial_days' => $trialProduct !== null ? Trial::days() : null,
+                'trial_days' => $trial ? Trial::days() : null,
                 'invoice' => (new InvoiceResource($invoice))->toArray($request),
             ],
         ], 201);

@@ -3,7 +3,6 @@
 namespace App\Http\Controllers\Api\V1;
 
 use App\Enums\InvoiceStatus;
-use App\Enums\PlanKey;
 use App\Enums\SubscriptionStatus;
 use App\Enums\WalletTransactionType;
 use App\Http\Controllers\Controller;
@@ -18,8 +17,9 @@ use App\Notifications\SubscriptionPastDue;
 use App\Notifications\SubscriptionStarted;
 use App\Services\CreemService;
 use App\Support\CommissionEngine;
+use App\Support\CreemProducts;
+use App\Support\CreemTrial;
 use App\Support\ProductEvents;
-use App\Support\Trial;
 use App\Support\Wallet;
 use Carbon\CarbonImmutable;
 use Illuminate\Http\JsonResponse;
@@ -117,10 +117,7 @@ class CreemWebhookController extends Controller
         $period = $subscription->billing_period->value;
         $this->require($remoteId !== null
             && ($subscription->creem_subscription_id === null || $subscription->creem_subscription_id === $remoteId)
-            && in_array($this->id($object['product'] ?? null), array_filter([
-                $subscription->plan->creemProduct($period),
-                Trial::product($subscription->plan, $period),
-            ]), true));
+            && in_array($this->id($object['product'] ?? null), CreemProducts::accepted($subscription->plan, $period), true));
         $subscription->update([
             'creem_subscription_id' => $remoteId,
             'creem_customer_id' => $this->id($object['customer'] ?? null),
@@ -136,11 +133,7 @@ class CreemWebhookController extends Controller
     }
 
     /**
-     * Creem's trial began (card on file, nothing charged): the plan's
-     * features until current_period_end_date, which is the first charge —
-     * or, cancelled meanwhile, the day it goes back to Free. Idempotent:
-     * a replay, or the same trial seen via checkout.completed, changes
-     * nothing and fires trial_started once.
+     * subscription.trialing: see CreemTrial.
      *
      * @param  array<string, mixed>  $object
      */
@@ -148,49 +141,7 @@ class CreemWebhookController extends Controller
     {
         $subscription = $this->localSubscription($object);
         User::query()->whereKey($subscription->user_id)->lockForUpdate()->firstOrFail();
-
-        // Late: the first charge already landed, or the trial already ended
-        // (a pending checkout is Expired too, but has no period yet).
-        if (in_array($subscription->status, [SubscriptionStatus::Active, SubscriptionStatus::PastDue, SubscriptionStatus::Cancelled], true)
-            || ($subscription->status === SubscriptionStatus::Expired && $subscription->current_period_start !== null)
-            || $subscription->invoices()->where('status', InvoiceStatus::Paid)->exists()) {
-            return;
-        }
-
-        [$plan, $period] = $this->plan($this->id($object['product'] ?? null));
-        $start = CarbonImmutable::parse($object['current_period_start_date'] ?? throw ValidationException::withMessages(['object' => 'Missing trial period.']));
-        $end = CarbonImmutable::parse($object['current_period_end_date'] ?? throw ValidationException::withMessages(['object' => 'Missing trial period.']));
-        $this->require($end->gt($start));
-        if ($subscription->current_period_start !== null && $start->lt($subscription->current_period_start)) {
-            return;
-        }
-
-        $other = Subscription::query()->where('user_id', $subscription->user_id)
-            ->whereKeyNot($subscription->id)
-            ->whereIn('status', SubscriptionStatus::entitled())
-            ->exists();
-        if ($other) {
-            Log::warning('billing.duplicate_subscription_trialing', [
-                'subscription' => $subscription->ulid, 'creem_subscription' => $object['id'],
-            ]);
-
-            return;
-        }
-
-        $started = $subscription->status === SubscriptionStatus::Trialing;
-        $planBefore = ProductEvents::planOf($subscription->user);
-        $subscription->update([
-            'plan_id' => $plan->id, 'billing_period' => $period,
-            'status' => SubscriptionStatus::Trialing,
-            'creem_subscription_id' => $object['id'],
-            'creem_customer_id' => $this->id($object['customer'] ?? null) ?? $subscription->creem_customer_id,
-            'current_period_start' => $start, 'current_period_end' => $end,
-            'grace_ends_at' => null,
-        ]);
-        if (! $started) {
-            ProductEvents::trialStarted($subscription->user, $plan->key, $period, Trial::days());
-        }
-        ProductEvents::planChanged($subscription->user, $planBefore);
+        CreemTrial::start($subscription, $object);
     }
 
     private function paid(array $object, CreemService $creem): void
@@ -204,9 +155,17 @@ class CreemWebhookController extends Controller
         }
 
         $transaction = $object['last_transaction'] ?? $creem->transaction($transactionId);
-        // A $0 transaction at a trial's start verifies the card; it is not
-        // the first payment. subscription.trialing grants the trial.
-        if (($transaction['amount'] ?? null) === 0 && $this->isTrialProduct($this->id($object['product'] ?? null))) {
+        // Creem's trial opens with a $0 "paid" transaction (the card check).
+        // It is not the first payment: it starts the trial, or — not
+        // trialing — is recorded nowhere. Never a 422, or Creem retries it
+        // forever and the trial never shows.
+        if (($transaction['amount'] ?? null) === 0) {
+            if (($object['status'] ?? null) === 'trialing') {
+                CreemTrial::start($subscription, $object);
+            } else {
+                Log::info('billing.zero_paid_ignored', ['subscription' => $subscription->ulid, 'transaction' => $transactionId]);
+            }
+
             return;
         }
         $this->require(($transaction['id'] ?? '') === $transactionId
@@ -318,28 +277,10 @@ class CreemWebhookController extends Controller
         return $subscription;
     }
 
+    /** @return array{0: Plan, 1: string} */
     private function plan(?string $product): array
     {
-        foreach (['pro', 'max'] as $key) {
-            foreach (['monthly', 'yearly'] as $period) {
-                $expected = config("services.creem.products.{$key}_{$period}");
-                if ($product !== null && is_string($expected) && $expected !== '' && $product === $expected) {
-                    return [Plan::query()->where('key', $key)->where('is_active', true)->firstOrFail(), $period];
-                }
-            }
-        }
-        // The trial twins are Pro: the same plan once the trial converts.
-        foreach (Trial::products() as $period => $expected) {
-            if ($product === $expected) {
-                return [Plan::query()->where('key', PlanKey::Pro)->where('is_active', true)->firstOrFail(), $period];
-            }
-        }
-        throw ValidationException::withMessages(['object' => 'Unknown product.']);
-    }
-
-    private function isTrialProduct(?string $product): bool
-    {
-        return $product !== null && in_array($product, Trial::products(), true);
+        return CreemProducts::plan($product);
     }
 
     /**
