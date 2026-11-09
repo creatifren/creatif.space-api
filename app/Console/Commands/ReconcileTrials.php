@@ -8,6 +8,7 @@ use App\Models\Subscription;
 use App\Models\User;
 use App\Services\CreemService;
 use App\Support\CreemTrial;
+use App\Support\TrialInvoiceRepair;
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\DB;
 use Throwable;
@@ -20,11 +21,15 @@ use Throwable;
  * trial end. This asks Creem about every subscription in either state:
  *
  * - Expired, bound to Creem, never started;
- * - Active, bound to Creem, with no real charge (only $0 "paid" invoices);
+ * - Active, bound to Creem, with at most one paid invoice (a trial's card
+ *   check may have been recorded as $0, or at the plan's list price);
  *
  * and turns the ones Creem says are trialing into Trialing, with Creem's
- * period. Credits are not touched; trial_started fires at most once. Safe
- * to run again; --dry-run only reports.
+ * period. First each Paid invoice is checked against its Creem
+ * transaction and corrected to what Creem really took (TrialInvoiceRepair);
+ * if any of them is a real charge, the subscription is left alone.
+ * Credits are not touched; trial_started fires at most once. Safe to run
+ * again; --dry-run prints every planned correction and changes nothing.
  */
 class ReconcileTrials extends Command
 {
@@ -39,7 +44,7 @@ class ReconcileTrials extends Command
             ->where(fn ($q) => $q
                 ->where(fn ($q) => $q->where('status', SubscriptionStatus::Expired)->whereNull('current_period_start'))
                 ->orWhere(fn ($q) => $q->where('status', SubscriptionStatus::Active)
-                    ->whereDoesntHave('invoices', fn ($i) => $i->where('status', InvoiceStatus::Paid)->where('amount', '>', 0))))
+                    ->has('invoices', '<=', 1, 'and', fn ($i) => $i->where('status', InvoiceStatus::Paid))))
             ->orderBy('id')
             ->get();
 
@@ -59,15 +64,26 @@ class ReconcileTrials extends Command
 
                 continue;
             }
+            try {
+                $corrections = TrialInvoiceRepair::plan($subscription, $creem);
+            } catch (Throwable $e) {
+                $this->warn("{$label}: trialing in Creem, but {$e->getMessage()} — left as is");
+
+                continue;
+            }
+            foreach (TrialInvoiceRepair::describe($subscription, $corrections) as $line) {
+                $this->line("{$label}: {$line}");
+            }
             if ($this->option('dry-run')) {
                 $this->info("{$label}: trialing in Creem until ".($remote['current_period_end_date'] ?? '?').' — would start');
 
                 continue;
             }
 
-            $did = DB::transaction(function () use ($subscription, $remote): bool {
+            $did = DB::transaction(function () use ($subscription, $remote, $corrections): bool {
                 $row = Subscription::query()->whereKey($subscription->id)->lockForUpdate()->firstOrFail();
                 User::query()->whereKey($row->user_id)->lockForUpdate()->firstOrFail();
+                TrialInvoiceRepair::apply($row, $corrections);
 
                 return CreemTrial::start($row, $remote);
             });

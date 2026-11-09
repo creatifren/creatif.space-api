@@ -163,6 +163,20 @@ class CreemService
     }
 
     /**
+     * A customer's transactions (first 100), newest first as Creem lists them.
+     *
+     * @return list<array<string, mixed>>
+     */
+    public function customerTransactions(string $customerId): array
+    {
+        $items = $this->api()->get('/transactions/search', [
+            'customer_id' => $customerId, 'page_number' => 1, 'page_size' => 100,
+        ])->json('items');
+
+        return is_array($items) ? array_values(array_filter($items, 'is_array')) : [];
+    }
+
+    /**
      * Creem signs the raw body with HMAC-SHA256 under the webhook secret and
      * sends the hex digest in `creem-signature`.
      *

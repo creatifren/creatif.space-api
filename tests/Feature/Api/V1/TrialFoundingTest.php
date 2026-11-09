@@ -3,12 +3,15 @@
 use App\Enums\InvoiceStatus;
 use App\Enums\SubscriptionStatus;
 use App\Jobs\ExpireSubscriptions;
+use App\Models\Commission;
 use App\Models\Invoice;
 use App\Models\Plan;
+use App\Models\Referral;
 use App\Models\Subscription;
 use App\Models\User;
 use App\Services\Analytics;
 use App\Services\CreemService;
+use App\Support\CommissionEngine;
 use App\Support\Credits;
 use App\Support\CreemTrial;
 use App\Support\Trial;
@@ -435,7 +438,7 @@ describe('webhooks', function () {
  * understood, recorded as Active from its $0 "paid" card check — period
  * set, no trial end, Monthly Credits already granted.
  */
-function activeFromZeroPaid(int $amount = 0): Subscription
+function activeFromZeroPaid(int $amount = 0, ?string $transaction = 'tran_card_check'): Subscription
 {
     $user = User::factory()->create();
     $sub = Subscription::factory()->for($user)->create([
@@ -448,19 +451,31 @@ function activeFromZeroPaid(int $amount = 0): Subscription
     ]);
     $sub->invoices()->create([
         'number' => Invoice::nextNumber(), 'amount' => $amount, 'currency' => 'USD',
-        'status' => InvoiceStatus::Paid, 'creem_transaction_id' => 'tran_card_check', 'paid_at' => now()->subDays(2),
+        'status' => InvoiceStatus::Paid, 'creem_transaction_id' => $transaction, 'paid_at' => now()->subDays(2),
     ]);
 
     return $sub;
 }
 
-function creemSays(Subscription $sub, string $status): void
+/**
+ * Creem's side: the subscription, the card-check transaction behind the
+ * invoice (what Creem really took), and the customer's transaction list.
+ *
+ * @param  list<array<string, mixed>>|null  $listed
+ */
+function creemSays(Subscription $sub, string $status, int $taken = 0, ?array $listed = null): void
 {
-    freshCreemFake(['test-api.creem.io/v1/subscriptions*' => Http::response([
-        'id' => 'sub_trial', 'status' => $status, 'product' => 'prod_pro_monthly', 'customer' => 'cust_trial',
-        'current_period_start_date' => $sub->current_period_start->toIso8601String(),
-        'current_period_end_date' => $sub->current_period_end->toIso8601String(),
-    ])]);
+    $tx = ['id' => 'tran_card_check', 'object' => 'transaction', 'amount' => $taken, 'amount_paid' => $taken,
+        'currency' => 'USD', 'status' => 'paid', 'type' => 'invoice', 'subscription' => 'sub_trial', 'customer' => 'cust_trial'];
+    freshCreemFake([
+        'test-api.creem.io/v1/subscriptions*' => Http::response([
+            'id' => 'sub_trial', 'status' => $status, 'product' => 'prod_pro_monthly', 'customer' => 'cust_trial',
+            'current_period_start_date' => $sub->current_period_start->toIso8601String(),
+            'current_period_end_date' => $sub->current_period_end->toIso8601String(),
+        ]),
+        'test-api.creem.io/v1/transactions/search*' => Http::response(['items' => $listed ?? [$tx], 'pagination' => []]),
+        'test-api.creem.io/v1/transactions*' => Http::response($tx),
+    ]);
 }
 
 describe('billing:reconcile-trials', function () {
@@ -523,15 +538,119 @@ describe('billing:reconcile-trials', function () {
         $this->analytics->assertCapturedOnce('trial_started');
     });
 
-    it('leaves an Active subscription with a real charge alone, without asking Creem', function () {
+    it('never touches an invoice whose Creem transaction is a real charge', function () {
         $sub = activeFromZeroPaid(999);
+        creemSays($sub, 'trialing', taken: 999);
+
+        $this->artisan('billing:reconcile-trials')
+            ->expectsOutputToContain('trialing in Creem, but invoice '.$sub->invoices()->sole()->number.': Creem transaction tran_card_check is a real charge of $9.99 — left as is')
+            ->expectsOutputToContain('1 checked, 0 trial(s) started.')
+            ->assertSuccessful();
+
+        expect($sub->fresh()->status)->toBe(SubscriptionStatus::Active)
+            ->and($sub->invoices()->sole()->amount)->toBe(999);
+        $this->analytics->assertNotCaptured('trial_started');
+    });
+
+    it('does not ask Creem about a subscription that has renewed', function () {
+        $sub = activeFromZeroPaid(999);
+        $sub->invoices()->create(['number' => Invoice::nextNumber(), 'amount' => 999, 'currency' => 'USD', 'status' => InvoiceStatus::Paid]);
         creemSays($sub, 'trialing');
 
         $this->artisan('billing:reconcile-trials')->expectsOutputToContain('0 checked, 0 trial(s) started.')->assertSuccessful();
 
-        expect($sub->fresh()->status)->toBe(SubscriptionStatus::Active);
         Http::assertNothingSent();
-        $this->analytics->assertNotCaptured('trial_started');
+    });
+
+    it('corrects a $0 trial check recorded at list price, undoes its commission and referral, then starts the trial', function () {
+        // Prod: sub 11 / invoice 11, "$9.99 paid" on 7 Nov; Creem's only payment is $0.00.
+        $sub = activeFromZeroPaid(999);
+        $user = $sub->user;
+        $invoice = $sub->invoices()->sole();
+        $referral = Referral::factory()->create(['referred_user_id' => $user->id]);
+        CommissionEngine::forInvoice($invoice);
+        $affiliate = $referral->affiliate->fresh();
+        expect($affiliate->paid_referrals_count)->toBe(1)
+            ->and(Commission::query()->where('invoice_id', $invoice->id)->where('status', 'holding')->count())->toBe(12);
+        creemSays($sub, 'trialing');
+        $monthly = Credits::monthlyBalance($user);
+        $ledger = DB::table('wallet_transactions')->count();
+        $label = "{$sub->ulid} (user {$user->id}, active here)";
+
+        $this->artisan('billing:reconcile-trials --dry-run')
+            ->expectsOutputToContain("{$label}: invoice {$invoice->number}: \$9.99 → \$0.00 (Creem transaction tran_card_check)")
+            ->expectsOutputToContain("{$label}:   commission on {$invoice->number}: 12 holding row(s), \$1.99 → reversed")
+            ->expectsOutputToContain("{$label}:   referral: first payment undone (affiliate {$affiliate->id}: paid referrals 1 → 0)")
+            ->expectsOutputToContain("{$label}: trialing in Creem until ")
+            ->expectsOutputToContain('1 checked, 0 trial(s) started.')
+            ->assertSuccessful();
+        expect($invoice->fresh()->amount)->toBe(999)
+            ->and($sub->fresh()->status)->toBe(SubscriptionStatus::Active)
+            ->and(Commission::query()->where('invoice_id', $invoice->id)->where('status', 'holding')->count())->toBe(12);
+
+        $this->artisan('billing:reconcile-trials')->expectsOutputToContain('1 checked, 1 trial(s) started.')->assertSuccessful();
+
+        $invoice->refresh();
+        expect($invoice->amount)->toBe(0)
+            ->and($invoice->status)->toBe(InvoiceStatus::Paid)
+            ->and(Commission::query()->where('invoice_id', $invoice->id)->where('status', 'reversed')->count())->toBe(12)
+            ->and($referral->fresh()->first_paid_at)->toBeNull()
+            ->and($affiliate->fresh()->paid_referrals_count)->toBe(0)
+            ->and($sub->fresh()->status)->toBe(SubscriptionStatus::Trialing)
+            ->and(Credits::monthlyBalance($user))->toBe($monthly)
+            ->and(DB::table('wallet_transactions')->count())->toBe($ledger)
+            ->and(Trial::eligible($user))->toBeFalse();
+        $this->actingAs($user)->getJson('/api/v1/me/subscription')
+            ->assertJsonPath('data.subscription.status', 'trialing')
+            ->assertJsonPath('data.subscription.trial_ends_at', $sub->current_period_end->toJSON());
+
+        $this->artisan('billing:reconcile-trials')->expectsOutputToContain('0 checked, 0 trial(s) started.')->assertSuccessful();
+        $this->analytics->assertCapturedOnce('trial_started');
+    });
+
+    it('finds the transaction through Creem when the invoice has none, and links it', function () {
+        $sub = activeFromZeroPaid(999, transaction: null);
+        creemSays($sub, 'trialing');
+
+        $this->artisan('billing:reconcile-trials')
+            ->expectsOutputToContain('$9.99 → $0.00 (Creem transaction tran_card_check, linked now)')
+            ->expectsOutputToContain('1 checked, 1 trial(s) started.')
+            ->assertSuccessful();
+
+        expect($sub->invoices()->sole()->only(['amount', 'creem_transaction_id']))
+            ->toBe(['amount' => 0, 'creem_transaction_id' => 'tran_card_check']);
+    });
+
+    it('leaves an invoice without a transaction id alone when Creem lists a real payment', function () {
+        $sub = activeFromZeroPaid(999, transaction: null);
+        creemSays($sub, 'trialing', listed: [
+            ['id' => 'tran_real', 'amount' => 999, 'amount_paid' => 999, 'currency' => 'USD', 'subscription' => 'sub_trial'],
+        ]);
+
+        $this->artisan('billing:reconcile-trials')
+            ->expectsOutputToContain('Creem lists a real payment (tran_real: $9.99) — left as is')
+            ->assertSuccessful();
+
+        expect($sub->invoices()->sole()->amount)->toBe(999)
+            ->and($sub->fresh()->status)->toBe(SubscriptionStatus::Active);
+    });
+
+    it('keeps released commission and tells staff, but still corrects the invoice', function () {
+        $sub = activeFromZeroPaid(999);
+        $invoice = $sub->invoices()->sole();
+        Referral::factory()->create(['referred_user_id' => $sub->user_id]);
+        CommissionEngine::forInvoice($invoice);
+        Commission::query()->where('invoice_id', $invoice->id)->where('installment_no', 1)->update(['status' => 'released']);
+        creemSays($sub, 'trialing');
+
+        $this->artisan('billing:reconcile-trials --dry-run')
+            ->expectsOutputToContain('already released to a wallet → staff told, not clawed back')
+            ->assertSuccessful();
+        $this->artisan('billing:reconcile-trials')->assertSuccessful();
+
+        expect($invoice->fresh()->amount)->toBe(0)
+            ->and(Commission::query()->where('invoice_id', $invoice->id)->where('status', 'released')->count())->toBe(1)
+            ->and(Commission::query()->where('invoice_id', $invoice->id)->where('status', 'reversed')->count())->toBe(11);
     });
 
     it('leaves an Active $0 subscription alone when Creem says it is active', function () {
