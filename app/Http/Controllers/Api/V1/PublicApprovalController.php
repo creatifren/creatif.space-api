@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Api\V1;
 
 use App\Enums\SocialPostApproval;
 use App\Enums\SocialPostStatus;
+use App\Exceptions\AccountReconnectRequired;
 use App\Http\Controllers\Controller;
 use App\Models\SocialApprovalLink;
 use App\Models\SocialPost;
@@ -196,7 +197,7 @@ class PublicApprovalController extends Controller
     {
         try {
             return $relay->approve($post, $name, [SocialPostApproval::Client, SocialPostApproval::Revision]);
-        } catch (ValidationException $e) {
+        } catch (ValidationException|AccountReconnectRequired $e) {
             $why = $e->getMessage();
         } catch (Throwable $e) {
             report($e);

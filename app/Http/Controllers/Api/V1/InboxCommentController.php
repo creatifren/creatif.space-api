@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Api\V1;
 
+use App\Exceptions\AccountReconnectRequired;
 use App\Http\Controllers\Controller;
 use App\Http\Resources\SocialCommentResource;
 use App\Http\Resources\SocialConversationResource;
@@ -60,6 +61,7 @@ class InboxCommentController extends Controller
         Gate::authorize('reply', $comment);
         $validated = $request->validate(['content' => ['required', 'string', 'max:2200']]);
         $account = $comment->account;
+        AccountReconnectRequired::unlessUsable([$account], 'content');
 
         if ($comment->provider_post_id === null) {
             return response()->json([
@@ -99,6 +101,7 @@ class InboxCommentController extends Controller
         Gate::authorize('reply', $comment);
         $validated = $request->validate(['content' => ['required', 'string', 'max:1000']]);
         $account = $comment->account;
+        AccountReconnectRequired::unlessUsable([$account], 'content');
 
         if ($comment->network !== 'instagram') {
             return response()->json(['message' => 'Private replies are Instagram only.', 'code' => 'private_reply_unsupported'], 422);

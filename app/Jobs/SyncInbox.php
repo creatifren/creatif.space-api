@@ -3,7 +3,6 @@
 namespace App\Jobs;
 
 use App\Contracts\SocialProvider;
-use App\Enums\SocialAccountStatus;
 use App\Enums\SocialPostStatus;
 use App\Exceptions\InboxUnsupported;
 use App\Exceptions\ProviderRateLimited;
@@ -58,7 +57,7 @@ class SyncInbox implements ShouldBeUnique, ShouldQueue
         $account = SocialAccount::query()->find($this->accountId);
 
         if ($account === null
-            || $account->status !== SocialAccountStatus::Connected
+            || ! $account->isUsable()
             || ! config('services.inbox.enabled')
             || ! ($account->supportsMessages() || $account->supportsComments())) {
             return;
