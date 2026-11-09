@@ -15,6 +15,7 @@ use App\Models\User;
 use App\Services\CreemService;
 use App\Support\Credits;
 use App\Support\PlanQuota;
+use App\Support\ProductEvents;
 use App\Support\Workspace;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -106,6 +107,7 @@ class SubscriptionController extends Controller
             }
 
             $creem->upgrade($current, (string) $plan->creemProduct($validated['period']));
+            ProductEvents::checkoutStarted($user, 'subscription', $plan->key, $validated['period'], (int) $plan->priceFor($validated['period']));
 
             return response()->json(['data' => [
                 'checkout_url' => null,
@@ -165,6 +167,8 @@ class SubscriptionController extends Controller
             ])->save();
         }
 
+        ProductEvents::checkoutStarted($user, 'subscription', $plan->key, $validated['period'], (int) $invoice->amount);
+
         return response()->json([
             'data' => [
                 'checkout_url' => $invoice->creem_checkout_url,
@@ -208,6 +212,9 @@ class SubscriptionController extends Controller
 
         // Recorded now as well, so the screen says so before the webhook
         // lands; the webhook writing the same thing again changes nothing.
+        if ($subscription->cancelled_at === null) {
+            ProductEvents::subscriptionCanceled($request->user(), $subscription->plan->key);
+        }
         $subscription->forceFill(['cancelled_at' => $subscription->cancelled_at ?? now()])->save();
 
         return response()->json([

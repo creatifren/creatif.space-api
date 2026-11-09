@@ -9,6 +9,7 @@ use App\Models\WalletTransaction;
 use App\Services\CreemService;
 use App\Support\Credits;
 use App\Support\PlanQuota;
+use App\Support\ProductEvents;
 use App\Support\Wallet;
 use App\Support\Workspace;
 use Illuminate\Http\JsonResponse;
@@ -130,6 +131,7 @@ class CreditsController extends Controller
 
         $checkout = $creem->creditsCheckout($purchase, $request->user());
         $purchase->forceFill(['creem_checkout_id' => $checkout['id']])->save();
+        ProductEvents::checkoutStarted($request->user(), 'credits', null, null, (int) $purchase->amount);
 
         return response()->json(['data' => [
             'checkout_url' => $checkout['checkout_url'],

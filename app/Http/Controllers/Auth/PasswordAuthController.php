@@ -6,6 +6,7 @@ use App\Enums\UserStatus;
 use App\Http\Controllers\Controller;
 use App\Models\User;
 use App\Support\AutoHandle;
+use App\Support\ProductEvents;
 use App\Support\ReferralAttribution;
 use App\Support\SafePath;
 use App\Support\TeamInvite;
@@ -53,6 +54,10 @@ class PasswordAuthController extends Controller
             // /settings?...&plan=pro. Anything SafePath refuses lands on Home,
             // the same as a Google sign-in with a bad ?next=.
             'next' => ['nullable', 'string', 'max:2000'],
+            // Campaign attribution, for analytics only.
+            'utm_source' => ['nullable', 'string', 'max:100'],
+            'utm_medium' => ['nullable', 'string', 'max:100'],
+            'utm_campaign' => ['nullable', 'string', 'max:100'],
         ]);
         $email = Str::lower($data['email']);
         $next = SafePath::of($data['next'] ?? null);
@@ -62,7 +67,7 @@ class PasswordAuthController extends Controller
         } else {
             // A mail that fails to send takes the account with it, so a
             // retry starts clean instead of hitting "already registered".
-            DB::transaction(function () use ($data, $email, $next): void {
+            DB::transaction(function () use ($data, $email, $next, $request): void {
                 $user = User::query()->create([
                     // ponytail: the part before the @ until they rename themselves in
                     // Settings — Google hands us a real name, a form does not.
@@ -82,6 +87,9 @@ class PasswordAuthController extends Controller
                 }
 
                 $user->sendEmailVerificationNotification();
+
+                // Queued after commit: a signup the mail failure rolls back never happened.
+                ProductEvents::signedUp($user, 'email', ['ref' => $data['ref'] ?? null] + ProductEvents::utmFrom($request));
             });
         }
 

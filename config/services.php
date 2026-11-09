@@ -109,6 +109,24 @@ return [
         'model' => env('AI_MODEL'),
     ],
 
+    /*
+     * Server-side product analytics (PostHog). Empty key = off: nothing is
+     * queued, nothing is sent. The internal lists mark staff and test
+     * accounts as is_internal so dashboards can filter them out.
+     */
+    'posthog' => [
+        'key' => env('POSTHOG_API_KEY'),
+        'host' => env('POSTHOG_HOST', 'https://us.i.posthog.com'),
+        'internal_email_domains' => array_values(array_filter(array_map(
+            fn (string $d) => strtolower(ltrim(trim($d), '@')),
+            explode(',', (string) env('ANALYTICS_INTERNAL_EMAIL_DOMAINS', '')),
+        ))),
+        'internal_emails' => array_values(array_filter(array_map(
+            fn (string $e) => strtolower(trim($e)),
+            explode(',', (string) env('ANALYTICS_INTERNAL_EMAILS', '')),
+        ))),
+    ],
+
     'postmark' => [
         'key' => env('POSTMARK_API_KEY'),
     ],

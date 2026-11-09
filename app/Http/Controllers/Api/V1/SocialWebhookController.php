@@ -13,6 +13,7 @@ use App\Models\SocialPost;
 use App\Models\User;
 use App\Support\InboxNotifier;
 use App\Support\InboxStore;
+use App\Support\ProductEvents;
 use App\Support\SocialPostRelay;
 use App\Support\SocialProviders;
 use Illuminate\Http\JsonResponse;
@@ -77,7 +78,7 @@ class SocialWebhookController extends Controller
             return;
         }
 
-        $user->socialAccounts()->updateOrCreate(
+        $row = $user->socialAccounts()->updateOrCreate(
             [
                 'provider' => $this->provider->name(),
                 'platform' => $platform,
@@ -92,6 +93,12 @@ class SocialWebhookController extends Controller
                 'connected_at' => now(),
             ],
         );
+
+        // The row is unique per user + account, so the sync that follows
+        // finds it and does not count the connect a second time.
+        if ($row->wasRecentlyCreated) {
+            ProductEvents::channelConnected($user, $row);
+        }
     }
 
     /**
@@ -108,10 +115,19 @@ class SocialWebhookController extends Controller
             return;
         }
 
+        $lost = SocialAccount::query()
+            ->where('provider', $this->provider->name())
+            ->where('provider_account_id', $id)
+            ->where('status', SocialAccountStatus::Connected)
+            ->with('user')
+            ->get();
+
         SocialAccount::query()
             ->where('provider', $this->provider->name())
             ->where('provider_account_id', $id)
             ->update(['status' => SocialAccountStatus::Disconnected]);
+
+        $lost->pluck('user')->filter()->unique('id')->each(fn (User $u) => ProductEvents::channelsCount($u));
     }
 
     /**

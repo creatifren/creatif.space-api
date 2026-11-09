@@ -6,6 +6,7 @@ use App\Enums\UserStatus;
 use App\Http\Controllers\Controller;
 use App\Models\User;
 use App\Support\AutoHandle;
+use App\Support\ProductEvents;
 use App\Support\ReferralAttribution;
 use App\Support\SafePath;
 use App\Support\TeamInvite;
@@ -39,6 +40,12 @@ class GoogleAuthController extends Controller
         // through the session for the same reason as the referral code, and is
         // checked here as well as on the way back — the value came from a URL
         // a stranger could have written.
+        // Campaign attribution for the signup event, the same trip as ?ref=.
+        $utm = ProductEvents::utmFrom($request);
+        if ($utm !== []) {
+            $request->session()->put('signup_utm', $utm);
+        }
+
         $next = $request->query('next');
 
         if (is_string($next) && $next !== '') {
@@ -93,6 +100,9 @@ class GoogleAuthController extends Controller
             if (is_string($code)) {
                 ReferralAttribution::attach($user, $code);
             }
+
+            $utm = request()->session()->pull('signup_utm');
+            ProductEvents::signedUp($user, 'google', ['ref' => is_string($code) ? $code : null] + (is_array($utm) ? $utm : []));
         } elseif ($user->google_id === null) {
             // Existing account (e.g. staff) signing in with Google for the first time.
             $user->forceFill(['google_id' => $googleUser->getId()])->save();
