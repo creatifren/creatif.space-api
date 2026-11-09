@@ -3,6 +3,7 @@
 namespace App\Services;
 
 use App\Contracts\SocialProvider;
+use App\Exceptions\InboxUnsupported;
 use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Http\Client\PendingRequest;
 use Illuminate\Http\Client\RequestException;
@@ -327,5 +328,60 @@ class PostForMeService implements SocialProvider
                 throw $e;
             }
         }
+    }
+
+    /*
+     * No Inbox on Post for Me: every call says so plainly. Accounts held
+     * here reconnect through Outstand to get DMs and comments.
+     */
+
+    public function supportsInbox(): bool
+    {
+        return false;
+    }
+
+    public function conversations(string $accountId, ?string $cursor = null, int $limit = 50): array
+    {
+        throw InboxUnsupported::for('Post for Me', 'direct messages');
+    }
+
+    public function conversation(string $conversationId): ?array
+    {
+        throw InboxUnsupported::for('Post for Me', 'direct messages');
+    }
+
+    public function messages(string $conversationId, ?string $cursor = null, int $limit = 50): array
+    {
+        throw InboxUnsupported::for('Post for Me', 'direct messages');
+    }
+
+    public function sendMessage(string $conversationId, array $message): array
+    {
+        throw InboxUnsupported::for('Post for Me', 'direct messages');
+    }
+
+    public function deleteScheduledMessage(string $conversationId, string $messageId): void
+    {
+        throw InboxUnsupported::for('Post for Me', 'direct messages');
+    }
+
+    public function markConversationRead(string $conversationId): void
+    {
+        throw InboxUnsupported::for('Post for Me', 'direct messages');
+    }
+
+    public function privateReply(string $accountId, string $commentId, ?string $authorId, string $content): array
+    {
+        throw InboxUnsupported::for('Post for Me', 'private replies');
+    }
+
+    public function comments(string $postId, string $network, string $accountUsername): array
+    {
+        throw InboxUnsupported::for('Post for Me', 'reading comments');
+    }
+
+    public function replyToComment(string $postId, string $commentId, string $content, string $accountUsername): array
+    {
+        throw InboxUnsupported::for('Post for Me', 'replying to comments');
     }
 }

@@ -10,6 +10,8 @@ use App\Http\Controllers\Api\V1\FileController;
 use App\Http\Controllers\Api\V1\FileVersionController;
 use App\Http\Controllers\Api\V1\FolderController;
 use App\Http\Controllers\Api\V1\HandleController;
+use App\Http\Controllers\Api\V1\InboxCommentController;
+use App\Http\Controllers\Api\V1\InboxController;
 use App\Http\Controllers\Api\V1\MeController;
 use App\Http\Controllers\Api\V1\MyProfileController;
 use App\Http\Controllers\Api\V1\NotificationController;
@@ -31,6 +33,7 @@ use App\Http\Controllers\Api\V1\StorageController;
 use App\Http\Controllers\Api\V1\SubscriptionController;
 use App\Http\Controllers\Api\V1\TeamController;
 use App\Http\Controllers\Api\V1\TourController;
+use App\Http\Middleware\EnsureInboxEnabled;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
 
@@ -233,6 +236,41 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::delete('/social-plan-links/{socialPlanLink}', [SocialPlanLinkController::class, 'destroy'])
         ->name('api.v1.social-plan-links.destroy');
     Route::delete('/social-posts/{socialPost}', [SocialPostController::class, 'destroy'])->name('api.v1.social-posts.destroy');
+
+    // Inbox — DMs (Instagram) and comments (Instagram, Facebook) via Outstand.
+    // Owner and team see (policies); INBOX_ENABLED=false answers 404.
+    Route::prefix('inbox')->middleware(EnsureInboxEnabled::class)->group(function () {
+        Route::get('/summary', [InboxController::class, 'summary'])
+            ->middleware('throttle:120,1')
+            ->name('api.v1.inbox.summary');
+        Route::get('/conversations', [InboxController::class, 'index'])
+            ->middleware('throttle:60,1')
+            ->name('api.v1.inbox.conversations.index');
+        Route::get('/conversations/{conversation}', [InboxController::class, 'show'])
+            ->middleware('throttle:60,1')
+            ->name('api.v1.inbox.conversations.show');
+        Route::patch('/conversations/{conversation}', [InboxController::class, 'update'])
+            ->middleware('throttle:60,1')
+            ->name('api.v1.inbox.conversations.update');
+        Route::post('/conversations/{conversation}/messages', [InboxController::class, 'send'])
+            ->middleware('throttle:30,1')
+            ->name('api.v1.inbox.conversations.messages.store');
+        Route::post('/conversations/{conversation}/read', [InboxController::class, 'read'])
+            ->middleware('throttle:60,1')
+            ->name('api.v1.inbox.conversations.read');
+        Route::get('/comments', [InboxCommentController::class, 'index'])
+            ->middleware('throttle:60,1')
+            ->name('api.v1.inbox.comments.index');
+        Route::post('/comments/{comment}/reply', [InboxCommentController::class, 'reply'])
+            ->middleware('throttle:30,1')
+            ->name('api.v1.inbox.comments.reply');
+        Route::post('/comments/{comment}/private-reply', [InboxCommentController::class, 'privateReply'])
+            ->middleware('throttle:30,1')
+            ->name('api.v1.inbox.comments.private-reply');
+        Route::post('/comments/{comment}/read', [InboxCommentController::class, 'read'])
+            ->middleware('throttle:60,1')
+            ->name('api.v1.inbox.comments.read');
+    });
 
     // Crefile — the file library (R2-hosted)
     Route::get('/files', [FileController::class, 'index'])->name('api.v1.files.index');

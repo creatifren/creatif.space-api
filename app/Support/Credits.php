@@ -526,6 +526,76 @@ final class Credits
         return $outcome;
     }
 
+    /** One Inbox reply (CREDITS_PER_REPLY); zero means replies are free. */
+    public static function perReply(): int
+    {
+        $price = config('services.inbox.credits_per_reply');
+
+        return is_numeric($price) && (int) $price > 0 ? (int) $price : 0;
+    }
+
+    /**
+     * Pay for one Inbox reply about to reach the provider, Monthly Credits
+     * first, then Top-up — the same order as a send. Returns the parts
+     * taken, [Monthly, Top-up], for returnReply when the provider refuses.
+     * Free (the default) takes nothing.
+     *
+     * @return array{0: int, 1: int}
+     *
+     * @throws ValidationException
+     */
+    public static function chargeReply(User $user, string $note, string $field = 'content'): array
+    {
+        $price = self::perReply();
+        if ($price === 0) {
+            return [0, 0];
+        }
+
+        $owner = self::owner($user);
+        self::renewMonthly($owner);
+
+        return DB::transaction(function () use ($owner, $price, $note, $field) {
+            User::query()->whereKey($owner->id)->lockForUpdate()->first();
+
+            $monthly = min($price, Wallet::balance($owner, Wallet::MONTHLY));
+            $topup = $price - $monthly;
+
+            if ($topup > 0) {
+                try {
+                    Wallet::debit($owner, WalletTransactionType::CreditsReply, $topup, null, null, $note, Wallet::CREDITS);
+                } catch (RuntimeException) {
+                    throw ValidationException::withMessages([
+                        $field => "A reply costs {$price} Credits and the balance has ".self::total($owner).' — top up to reply.',
+                    ]);
+                }
+            }
+
+            if ($monthly > 0) {
+                Wallet::debit($owner, WalletTransactionType::CreditsReply, $monthly, null, null, $note.' · Monthly Credits', Wallet::MONTHLY);
+            }
+
+            return [$monthly, $topup];
+        });
+    }
+
+    /**
+     * Give back what chargeReply took, each part to its bucket.
+     *
+     * @param  array{0: int, 1: int}  $parts
+     */
+    public static function returnReply(User $user, array $parts, string $why): void
+    {
+        $owner = self::owner($user);
+        [$monthly, $topup] = $parts;
+
+        if ($topup > 0) {
+            Wallet::credit($owner, WalletTransactionType::CreditsReplyReturn, $topup, null, null, $why, Wallet::CREDITS);
+        }
+        if ($monthly > 0) {
+            Wallet::credit($owner, WalletTransactionType::CreditsReplyReturn, $monthly, null, null, $why, Wallet::MONTHLY);
+        }
+    }
+
     /**
      * Credits taken for sends handed over but not yet out: [Top-up, Monthly].
      *

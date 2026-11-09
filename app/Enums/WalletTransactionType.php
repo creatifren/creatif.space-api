@@ -31,4 +31,8 @@ enum WalletTransactionType: string
     case CreditsRent = 'credits_rent';
     /** A refunded top-up takes its Credits back — never below zero. */
     case CreditsRefund = 'credits_refund';
+    /** An Inbox reply (DM or comment), when CREDITS_PER_REPLY is above zero. */
+    case CreditsReply = 'credits_reply';
+    /** A reply the provider refused gives its Credits back. */
+    case CreditsReplyReturn = 'credits_reply_return';
 }
