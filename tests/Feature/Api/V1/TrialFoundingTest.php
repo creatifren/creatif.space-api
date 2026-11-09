@@ -10,9 +10,11 @@ use App\Models\User;
 use App\Services\Analytics;
 use App\Services\CreemService;
 use App\Support\Credits;
+use App\Support\CreemTrial;
 use App\Support\Trial;
 use Illuminate\Http\Client\Factory as HttpFactory;
 use Illuminate\Http\Client\Request as HttpRequest;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Notification;
@@ -428,6 +430,39 @@ describe('webhooks', function () {
     });
 });
 
+/**
+ * The prod case (user 4, sub 11): a Creem trial started before trials were
+ * understood, recorded as Active from its $0 "paid" card check — period
+ * set, no trial end, Monthly Credits already granted.
+ */
+function activeFromZeroPaid(int $amount = 0): Subscription
+{
+    $user = User::factory()->create();
+    $sub = Subscription::factory()->for($user)->create([
+        'plan_id' => Plan::query()->where('key', 'pro')->value('id'),
+        'billing_period' => 'monthly',
+        'status' => SubscriptionStatus::Active,
+        'creem_subscription_id' => 'sub_trial', 'creem_customer_id' => 'cust_trial',
+        'current_period_start' => now()->subDays(2)->startOfSecond(),
+        'current_period_end' => now()->addDays(5)->startOfSecond(),
+    ]);
+    $sub->invoices()->create([
+        'number' => Invoice::nextNumber(), 'amount' => $amount, 'currency' => 'USD',
+        'status' => InvoiceStatus::Paid, 'creem_transaction_id' => 'tran_card_check', 'paid_at' => now()->subDays(2),
+    ]);
+
+    return $sub;
+}
+
+function creemSays(Subscription $sub, string $status): void
+{
+    freshCreemFake(['test-api.creem.io/v1/subscriptions*' => Http::response([
+        'id' => 'sub_trial', 'status' => $status, 'product' => 'prod_pro_monthly', 'customer' => 'cust_trial',
+        'current_period_start_date' => $sub->current_period_start->toIso8601String(),
+        'current_period_end_date' => $sub->current_period_end->toIso8601String(),
+    ])]);
+}
+
 describe('billing:reconcile-trials', function () {
     it('starts trials Creem has that main left on Free, once', function () {
         $sub = trialCheckout();
@@ -452,5 +487,87 @@ describe('billing:reconcile-trials', function () {
 
         $this->artisan('billing:reconcile-trials')->expectsOutputToContain('left as is')->assertSuccessful();
         expect($sub->fresh()->status)->toBe(SubscriptionStatus::Expired);
+    });
+
+    it('turns an Active trial recorded from its $0 card check into Trialing, credits untouched', function () {
+        $sub = activeFromZeroPaid();
+        $user = $sub->user;
+        creemSays($sub, 'trialing');
+        $monthly = Credits::monthlyBalance($user);
+        $ledger = DB::table('wallet_transactions')->count();
+
+        $this->artisan('billing:reconcile-trials --dry-run')
+            ->expectsOutputToContain("{$sub->ulid} (user {$user->id}, active here): trialing in Creem until "
+                .$sub->current_period_end->toIso8601String().' — would start')
+            ->expectsOutputToContain('1 checked, 0 trial(s) started.')
+            ->assertSuccessful();
+        expect($sub->fresh()->status)->toBe(SubscriptionStatus::Active);
+
+        $this->artisan('billing:reconcile-trials')->expectsOutputToContain('1 checked, 1 trial(s) started.')->assertSuccessful();
+
+        $fresh = $sub->fresh();
+        expect($fresh->status)->toBe(SubscriptionStatus::Trialing)
+            ->and($fresh->current_period_start->equalTo($sub->current_period_start))->toBeTrue()
+            ->and($fresh->current_period_end->equalTo($sub->current_period_end))->toBeTrue()
+            ->and(Credits::monthlyBalance($user))->toBe($monthly)
+            ->and(DB::table('wallet_transactions')->count())->toBe($ledger)
+            ->and(Trial::eligible($user))->toBeFalse();
+        $this->actingAs($user)->getJson('/api/v1/me/subscription')
+            ->assertJsonPath('data.subscription.status', 'trialing')
+            ->assertJsonPath('data.subscription.trial_ends_at', $sub->current_period_end->toJSON())
+            ->assertJsonPath('data.trial.eligible', false)
+            ->assertJsonPath('data.plan.key', 'pro');
+
+        // Idempotent: no longer a candidate, and trial_started stays at one.
+        $this->artisan('billing:reconcile-trials')->expectsOutputToContain('0 checked, 0 trial(s) started.')->assertSuccessful();
+        $this->analytics->assertCapturedOnce('trial_started');
+    });
+
+    it('leaves an Active subscription with a real charge alone, without asking Creem', function () {
+        $sub = activeFromZeroPaid(999);
+        creemSays($sub, 'trialing');
+
+        $this->artisan('billing:reconcile-trials')->expectsOutputToContain('0 checked, 0 trial(s) started.')->assertSuccessful();
+
+        expect($sub->fresh()->status)->toBe(SubscriptionStatus::Active);
+        Http::assertNothingSent();
+        $this->analytics->assertNotCaptured('trial_started');
+    });
+
+    it('leaves an Active $0 subscription alone when Creem says it is active', function () {
+        $sub = activeFromZeroPaid();
+        creemSays($sub, 'active');
+
+        $this->artisan('billing:reconcile-trials')
+            ->expectsOutputToContain('Creem says "active" — left as is')
+            ->expectsOutputToContain('1 checked, 0 trial(s) started.')
+            ->assertSuccessful();
+
+        expect($sub->fresh()->status)->toBe(SubscriptionStatus::Active);
+        $this->analytics->assertNotCaptured('trial_started');
+    });
+
+    it('counts the first real charge after such a trial as the first payment', function () {
+        $sub = activeFromZeroPaid();
+        creemSays($sub, 'trialing');
+        $this->artisan('billing:reconcile-trials')->assertSuccessful();
+        $this->travel(6)->days();
+
+        trialHook(trialPaidEvent($sub, 'tran_first', 999, 'evt_first'))->assertOk();
+
+        expect($sub->fresh()->status)->toBe(SubscriptionStatus::Active)
+            ->and(CreemTrial::charged($sub))->toBeTrue();
+        $this->analytics->assertCapturedOnce('subscription_started', fn ($p) => $p['amount_usd'] === 9.99);
+    });
+
+    it('converts such a row on Creem\'s subscription.trialing too', function () {
+        $sub = activeFromZeroPaid();
+
+        trialHook(trialingEvent($sub, 'evt_late_trialing', [
+            'current_period_start_date' => $sub->current_period_start->toIso8601String(),
+            'current_period_end_date' => $sub->current_period_end->toIso8601String(),
+        ]))->assertOk();
+
+        expect($sub->fresh()->status)->toBe(SubscriptionStatus::Trialing);
     });
 });

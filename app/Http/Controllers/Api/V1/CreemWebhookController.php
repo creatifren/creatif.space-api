@@ -189,7 +189,8 @@ class CreemWebhookController extends Controller
             ]);
         }
 
-        $first = ! $subscription->invoices()->where('status', InvoiceStatus::Paid)->exists();
+        // A $0 "paid" invoice (a trial's card check) is not a first payment.
+        $first = ! CreemTrial::charged($subscription);
         $planBefore = ProductEvents::planOf($subscription->user);
         $invoice = $subscription->invoices()->where('status', InvoiceStatus::Pending)->oldest('id')->lockForUpdate()->first();
         if ($invoice === null) {
