@@ -80,9 +80,17 @@ class PlanQuota
            makes "empty the Trash to free 340 MB" a true sentence rather than
            an invitation to park 20 GB in the bin for a month. Without it the
            soft delete would have silently handed everyone free storage. */
+        /* A pending row only holds its space while its presigned URL can
+           still be used. Past the window the PUT can no longer start, so the
+           reservation is dead weight until PruneStaleUploads removes it —
+           counting it would lock people out of uploads they never made. */
         $current = (int) $user->files()
             ->withTrashed()
-            ->whereIn('status', [File::STATUS_PENDING, File::STATUS_READY])
+            ->where(fn ($q) => $q
+                ->where('status', File::STATUS_READY)
+                ->orWhere(fn ($q) => $q
+                    ->where('status', File::STATUS_PENDING)
+                    ->where('created_at', '>=', now()->subMinutes(File::PRESIGN_TTL_MINUTES))))
             ->sum('size_bytes');
 
         $history = (int) FileVersion::query()

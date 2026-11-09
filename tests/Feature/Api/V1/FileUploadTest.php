@@ -4,6 +4,7 @@ use App\Models\File;
 use App\Models\Space;
 use App\Models\SpaceItem;
 use App\Models\User;
+use App\Support\PlanQuota;
 use Illuminate\Support\Facades\Storage;
 
 describe('presign', function () {
@@ -71,6 +72,33 @@ describe('presign', function () {
             ])
             ->assertUnprocessable()
             ->assertJsonValidationErrors('size_bytes');
+    });
+
+    it('stops counting a pending upload once its presign window has passed', function () {
+        $user = User::factory()->create();
+        File::factory()->for($user)->create(['size_bytes' => 1_000]);
+
+        // Presigned, never PUT. Inside the window it still holds its space.
+        File::factory()->for($user)->pending()->create([
+            'size_bytes' => 2 * 1024 * 1024 * 1024,
+        ]);
+        expect(PlanQuota::storageUsed($user))->toBe(1_000 + 2 * 1024 * 1024 * 1024);
+
+        $this->travel(File::PRESIGN_TTL_MINUTES)->minutes();
+        $this->travel(1)->seconds();
+
+        // The URL is dead, so the reservation is too — long before the
+        // stale-upload prune gets to the row.
+        expect(PlanQuota::storageUsed($user))->toBe(1_000)
+            ->and(File::query()->where('status', File::STATUS_PENDING)->count())->toBe(1);
+
+        $this->actingAs($user)
+            ->postJson('/api/v1/files/presign', [
+                'name' => 'after-cancel.jpg',
+                'mime_type' => 'image/jpeg',
+                'size_bytes' => 1_000_000,
+            ])
+            ->assertCreated();
     });
 });
 

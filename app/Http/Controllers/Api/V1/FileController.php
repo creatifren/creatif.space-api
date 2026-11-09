@@ -216,14 +216,14 @@ class FileController extends Controller
         // exactly the declared mime or R2 refuses the PUT.
         ['url' => $url] = Storage::disk('s3')->temporaryUploadUrl(
             $file->path,
-            now()->addMinutes(15),
+            now()->addMinutes(File::PRESIGN_TTL_MINUTES),
             ['ContentType' => $validated['mime_type']],
         );
 
         return response()->json(['data' => [
             'id' => $file->ulid,
             'upload_url' => $url,
-            'expires_at' => now()->addMinutes(15),
+            'expires_at' => now()->addMinutes(File::PRESIGN_TTL_MINUTES),
         ]], 201);
     }
 

@@ -13,6 +13,7 @@ use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Laravel\Socialite\Facades\Socialite;
+use Laravel\Socialite\Two\InvalidStateException;
 use Laravel\Socialite\Two\User as GoogleUser;
 use Symfony\Component\HttpFoundation\RedirectResponse as SymfonyRedirectResponse;
 
@@ -51,10 +52,21 @@ class GoogleAuthController extends Controller
      * Handle the OAuth callback: find or create the creator, start the
      * session (Sanctum SPA cookie), and hand off to the Next.js frontend.
      */
-    public function callback(): RedirectResponse
+    public function callback(Request $request): RedirectResponse
     {
-        /** @var GoogleUser $googleUser */
-        $googleUser = Socialite::driver('google')->user();
+        /* Cancel on Google's consent screen comes back as ?error=access_denied
+           with no code; a stale or replayed callback fails the state check.
+           Neither is a server fault: send them back to the login page. */
+        if ($request->filled('error') || ! $request->filled('code')) {
+            return $this->cancelled();
+        }
+
+        try {
+            /** @var GoogleUser $googleUser */
+            $googleUser = Socialite::driver('google')->user();
+        } catch (InvalidStateException) {
+            return $this->cancelled();
+        }
 
         $user = User::query()
             ->where('google_id', $googleUser->getId())
@@ -108,5 +120,10 @@ class GoogleAuthController extends Controller
         $wanted = SafePath::of(request()->session()->pull('next_path'));
 
         return redirect(config('app.frontend_url').($wanted !== '/' ? $wanted : '/home'));
+    }
+
+    private function cancelled(): RedirectResponse
+    {
+        return redirect(config('app.frontend_url').'/login?error=google_cancelled');
     }
 }

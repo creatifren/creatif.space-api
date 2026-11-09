@@ -2,10 +2,10 @@
 
 namespace App\Http\Controllers\Api\V1;
 
-use App\Models\Activity;
 use App\Enums\ActivityAction;
 use App\Http\Controllers\Controller;
 use App\Http\Resources\FileVersionResource;
+use App\Models\Activity;
 use App\Models\File;
 use App\Models\FileVersion;
 use App\Support\AcceptedUploads;
@@ -77,14 +77,14 @@ class FileVersionController extends Controller
 
         ['url' => $url] = Storage::disk($file->disk)->temporaryUploadUrl(
             $path,
-            now()->addMinutes(15),
+            now()->addMinutes(File::PRESIGN_TTL_MINUTES),
             ['ContentType' => $file->mime_type],
         );
 
         return response()->json(['data' => [
             'upload_id' => $ulid,
             'upload_url' => $url,
-            'expires_at' => now()->addMinutes(15),
+            'expires_at' => now()->addMinutes(File::PRESIGN_TTL_MINUTES),
         ]], 201);
     }
 
@@ -135,7 +135,7 @@ class FileVersionController extends Controller
         $disk->copy($incoming, $file->path);
         $disk->delete($incoming);
 
-        DB::transaction(function () use ($file, $user, $validated, $archived, $realSize, $disk) {
+        DB::transaction(function () use ($file, $user, $validated, $archived, $realSize) {
             $file->versions()->create([
                 'number' => $file->currentVersionNumber(),
                 'disk' => $file->disk,

@@ -2,6 +2,7 @@
 
 use App\Jobs\PruneStaleUploads;
 use App\Models\File;
+use Illuminate\Console\Scheduling\Schedule;
 use Illuminate\Support\Facades\Storage;
 
 it('deletes pending uploads older than a day, object and row', function () {
@@ -35,4 +36,12 @@ it('leaves fresh pending uploads and ready files alone', function () {
         ->toContain($old->id)
         ->not->toContain($fresh->id);
     Storage::disk('s3')->assertExists($ready->path);
+});
+
+it('is scheduled hourly', function () {
+    $event = collect(app(Schedule::class)->events())
+        ->first(fn ($event) => $event->description === PruneStaleUploads::class);
+
+    expect($event)->not->toBeNull()
+        ->and($event->expression)->toBe('0 * * * *');
 });
