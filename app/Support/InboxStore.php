@@ -277,9 +277,14 @@ class InboxStore
         }
 
         try {
-            return is_numeric($value)
+            $at = is_numeric($value)
                 ? CarbonImmutable::createFromTimestamp((int) $value > 1_000_000_000_000 ? intdiv((int) $value, 1000) : (int) $value)
                 : CarbonImmutable::parse((string) $value);
+
+            // Eloquent writes a date's wall clock without converting it, and
+            // reads it back in the app timezone (Asia/Jakarta). A provider's
+            // "…Z" time must be moved there first, or it lands 7h early.
+            return $at->setTimezone((string) config('app.timezone'));
         } catch (Throwable) {
             return null;
         }
