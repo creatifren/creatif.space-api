@@ -137,6 +137,8 @@ class NotificationController extends Controller
             ->where('created_at', '>=', now()->subDays(7))
             ->selectRaw('action, COUNT(*) as total')
             ->groupBy('action')
+            // GROUP BY alone has no order (MySQL differs from sqlite).
+            ->orderBy('action')
             ->pluck('total', 'action')
             ->map(fn ($total) => (int) $total)
             ->all();

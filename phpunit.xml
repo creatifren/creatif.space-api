@@ -27,6 +27,10 @@
         <env name="DB_DATABASE" value=":memory:"/>
         <env name="DB_URL" value=""/>
         <env name="MAIL_MAILER" value="array"/>
+        <!-- Presigned R2 URLs are signed offline but need some credentials;
+             without them the AWS SDK asks the instance metadata service. -->
+        <env name="AWS_ACCESS_KEY_ID" value="testing"/>
+        <env name="AWS_SECRET_ACCESS_KEY" value="testing"/>
         <!-- Creem is faked in tests. Fixtures sign raw bodies with this secret. -->
         <env name="SOCIAL_PROVIDER" value="postforme"/>
         <env name="CREEM_API_KEY" value="creem_test_fixture"/>
