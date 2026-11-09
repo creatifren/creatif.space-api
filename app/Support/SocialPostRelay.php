@@ -2,6 +2,7 @@
 
 namespace App\Support;
 
+use App\Enums\SocialPlatform;
 use App\Enums\SocialPostApproval;
 use App\Enums\SocialPostStatus;
 use App\Enums\SocialPostTargetStatus;
@@ -102,11 +103,9 @@ class SocialPostRelay
      */
     public function send(SocialPost $post): void
     {
-        $destinations = $post->targets()->count();
-
         // Refuse before the provider, not after: a short balance must not
         // leave a post live on the platform that was never paid for.
-        $need = Credits::sendPrice($post->user, $destinations);
+        $need = Credits::sendPrice($post->user, self::platforms($post));
         if (Credits::balance($post->user) < $need) {
             throw ValidationException::withMessages([
                 'caption' => "This needs {$need} Credits and the balance has ".Credits::balance($post->user)
@@ -181,12 +180,26 @@ class SocialPostRelay
      */
     public static function need(User $owner, iterable $posts): int
     {
-        $destinations = 0;
+        $platforms = [];
         foreach ($posts as $post) {
-            $destinations += $post->targets()->count();
+            array_push($platforms, ...self::platforms($post));
         }
 
-        return Credits::sendPrice($owner, $destinations);
+        return Credits::sendPrice($owner, $platforms);
+    }
+
+    /**
+     * The post's destinations' platforms in target order — the order
+     * Credits::chargeSend spends the allowance in — for pricing.
+     *
+     * @return list<SocialPlatform>
+     */
+    private static function platforms(SocialPost $post): array
+    {
+        return $post->targets()->with('account')->orderBy('id')->get()
+            ->map(fn ($t) => $t->account->platform)
+            ->values()
+            ->all();
     }
 
     /**

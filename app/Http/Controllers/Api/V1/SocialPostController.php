@@ -56,6 +56,7 @@ class SocialPostController extends Controller
             // goes first, so it needs both.
             'credits' => Credits::balance($request->user()),
             'per_send' => Credits::PER_SEND,
+            'per_send_by_platform' => Credits::perSendByPlatform(),
             'posts_used' => Credits::allowanceUsed($request->user()),
             'posts_limit' => PlanQuota::socialPostsLimit($request->user()),
             'posts_reset_at' => Credits::allowanceSince(Workspace::owner($request->user()))

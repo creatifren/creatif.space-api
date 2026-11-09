@@ -37,6 +37,7 @@ class CreditsController extends Controller
             'rate' => [
                 'per_dollar' => Credits::PER_DOLLAR,
                 'per_send' => Credits::PER_SEND,
+                'per_send_by_platform' => Credits::perSendByPlatform(),
                 'block_gb' => Credits::BLOCK_GB,
                 'per_block' => Credits::PER_BLOCK,
                 'per_block_bulk' => Credits::PER_BLOCK_BULK,

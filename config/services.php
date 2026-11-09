@@ -59,6 +59,13 @@ return [
     // with the one that holds them.
     'social' => [
         'provider' => env('SOCIAL_PROVIDER', 'outstand'),
+        // Credits for one publish past the allowance, by platform; a
+        // platform not listed costs Credits::PER_SEND (300). X is here
+        // because X's API bills us per post ($0.015, $0.20 with a URL) —
+        // still 300 until it is priced.
+        'per_send' => [
+            'x' => (int) env('CREDITS_PER_SEND_X', 300),
+        ],
     ],
 
     // Outstand — the relay since the 11 Nov launch. Same tenancy as below,

@@ -21,6 +21,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
  * @property string|null $platform_url
  * @property string|null $provider_result_id
  * @property string|null $paid_with self::ALLOWANCE or self::CREDITS; null = not charged
+ * @property int|null $charged_credits Credits this destination paid; null = allowance, not charged, or charged before the column (300)
  * @property CarbonImmutable|null $charged_at
  */
 class SocialPostTarget extends Model
@@ -38,6 +39,7 @@ class SocialPostTarget extends Model
         'platform_url',
         'provider_result_id',
         'paid_with',
+        'charged_credits',
         'charged_at',
     ];
 
@@ -51,6 +53,7 @@ class SocialPostTarget extends Model
         return [
             'configuration' => 'array',
             'status' => SocialPostTargetStatus::class,
+            'charged_credits' => 'integer',
             'charged_at' => 'datetime',
         ];
     }

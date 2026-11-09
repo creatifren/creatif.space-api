@@ -2,6 +2,7 @@
 
 namespace App\Support;
 
+use App\Enums\SocialPlatform;
 use App\Enums\SocialPostStatus;
 use App\Enums\SocialPostTargetStatus;
 use App\Enums\WalletTransactionType;
@@ -41,7 +42,11 @@ final class Credits
     /** Credits one US dollar buys. */
     public const PER_DOLLAR = 10_000;
 
-    /** One publish past the monthly allowance. */
+    /**
+     * One publish past the monthly allowance — the price on every platform
+     * unless `services.social.per_send.<platform>` says otherwise (today:
+     * X, from CREDITS_PER_SEND_X, defaulting to this same 300).
+     */
     public const PER_SEND = 300;
 
     public const BLOCK_GB = 5;
@@ -111,7 +116,7 @@ final class Credits
     public static function committed(User $user): array
     {
         return [
-            'sends' => self::pendingDestinations($user) * self::PER_SEND,
+            'sends' => self::pendingSendCredits($user),
             'rent' => self::rent($user),
         ];
     }
@@ -119,8 +124,8 @@ final class Credits
     /**
      * Pay for a post about to reach the provider: each destination not yet
      * paid for takes one publish from the monthly allowance while it lasts,
-     * then 300 Credits. Each target remembers which, so a return goes back
-     * to the right place. Refuses with a validation error the composer can
+     * then its platform's send price (perSend). Each target remembers which,
+     * and what it paid, so a return gives back exactly that. Refuses with a validation error the composer can
      * show, and then nothing is marked.
      *
      * The owner's row is locked for the count: two sends at once must not
@@ -138,6 +143,7 @@ final class Credits
             $targets = $post->targets()
                 ->where('status', SocialPostTargetStatus::Pending)
                 ->whereNull('paid_with')
+                ->with('account')
                 ->orderBy('id')
                 ->get();
 
@@ -149,8 +155,14 @@ final class Credits
             $paid = $targets->count() - $free;
             $now = now();
 
+            // The allowance covers the first destinations; the rest pay
+            // their own platform's price.
+            $prices = $targets->values()->map(fn (SocialPostTarget $t, int $i) => $i < $free
+                ? null
+                : self::perSend($t->account->platform));
+
             if ($paid > 0) {
-                $price = $paid * self::PER_SEND;
+                $price = (int) $prices->sum();
 
                 try {
                     Wallet::debit(
@@ -170,8 +182,9 @@ final class Credits
                 }
             }
 
-            $targets->each(fn (SocialPostTarget $target, int $i) => $target->update([
+            $targets->values()->each(fn (SocialPostTarget $target, int $i) => $target->update([
                 'paid_with' => $i < $free ? SocialPostTarget::ALLOWANCE : SocialPostTarget::CREDITS,
+                'charged_credits' => $prices[$i],
                 'charged_at' => $now,
             ]));
         });
@@ -194,14 +207,18 @@ final class Credits
             // Fresh state under the same lock as charging. Two failures or a
             // cancel racing a failure must not return a target twice.
             $charged = $post->targets()->whereKey($ids)->whereNotNull('paid_with')->lockForUpdate()->get();
-            $credits = $charged->where('paid_with', SocialPostTarget::CREDITS)->count();
-            SocialPostTarget::query()->whereKey($charged->pluck('id'))->update(['paid_with' => null, 'charged_at' => null]);
+            // What each paid when charged — a price changed since then does
+            // not change the refund. Rows charged before the column read 300.
+            $credits = (int) $charged->where('paid_with', SocialPostTarget::CREDITS)
+                ->sum(fn (SocialPostTarget $t) => $t->charged_credits ?? self::PER_SEND);
+            SocialPostTarget::query()->whereKey($charged->pluck('id'))
+                ->update(['paid_with' => null, 'charged_at' => null, 'charged_credits' => null]);
 
             if ($credits > 0) {
                 Wallet::credit(
                     self::owner($post->user),
                     WalletTransactionType::CreditsSendReturn,
-                    $credits * self::PER_SEND,
+                    $credits,
                     'social_post',
                     $post->id,
                     $why,
@@ -212,12 +229,49 @@ final class Credits
     }
 
     /**
-     * Credits a send of $destinations would take right now: only what the
-     * remaining allowance does not cover.
+     * Credits a send would take right now: only what the remaining
+     * allowance does not cover. Given a count, every destination is priced
+     * at PER_SEND; given the destinations' platforms in target order, each
+     * past the allowance at its own price — what chargeSend will take.
+     *
+     * @param  int|iterable<SocialPlatform|string|null>  $destinations
      */
-    public static function sendPrice(User $user, int $destinations): int
+    public static function sendPrice(User $user, int|iterable $destinations): int
     {
-        return max(0, $destinations - self::allowanceLeft(self::owner($user))) * self::PER_SEND;
+        $left = self::allowanceLeft(self::owner($user));
+
+        if (is_int($destinations)) {
+            return max(0, $destinations - $left) * self::PER_SEND;
+        }
+
+        return (int) collect($destinations)->values()
+            ->slice($left)
+            ->sum(fn ($platform) => self::perSend($platform));
+    }
+
+    /**
+     * One publish past the allowance on this platform. 300 everywhere
+     * unless configured: X is priced separately because X's API bills us
+     * per post (more for one with a link), see services.social.per_send.
+     */
+    public static function perSend(SocialPlatform|string|null $platform = null): int
+    {
+        $key = $platform instanceof SocialPlatform ? $platform->value : $platform;
+        $price = $key === null ? null : config("services.social.per_send.{$key}");
+
+        return is_numeric($price) && (int) $price >= 0 ? (int) $price : self::PER_SEND;
+    }
+
+    /**
+     * The send price of every platform, for the screens that show one.
+     *
+     * @return array<string, int>
+     */
+    public static function perSendByPlatform(): array
+    {
+        return collect(SocialPlatform::cases())
+            ->mapWithKeys(fn (SocialPlatform $p) => [$p->value => self::perSend($p)])
+            ->all();
     }
 
     /** Publishes taken from the allowance in the current period. */
@@ -346,19 +400,21 @@ final class Credits
         return $outcome;
     }
 
-    private static function pendingDestinations(User $user): int
+    /** Credits taken for sends handed over but not yet out. */
+    private static function pendingSendCredits(User $user): int
     {
         $owner = self::owner($user);
 
-        return (int) SocialPost::query()
-            ->whereIn('user_id', Workspace::memberIds($owner))
-            ->where('status', SocialPostStatus::Scheduled)
-            ->whereNotNull('provider_post_id')
-            // Only what Credits paid for: an allowance publish costs nothing back.
-            ->withCount(['targets' => fn ($q) => $q->where('status', SocialPostTargetStatus::Pending)
-                ->where('paid_with', SocialPostTarget::CREDITS)])
-            ->get()
-            ->sum('targets_count');
+        // Only what Credits paid for: an allowance publish costs nothing back.
+        return (int) SocialPostTarget::query()
+            ->where('status', SocialPostTargetStatus::Pending)
+            ->where('paid_with', SocialPostTarget::CREDITS)
+            ->whereHas('post', fn ($q) => $q
+                ->whereIn('user_id', Workspace::memberIds($owner))
+                ->where('status', SocialPostStatus::Scheduled)
+                ->whereNotNull('provider_post_id'))
+            ->get(['id', 'charged_credits'])
+            ->sum(fn (SocialPostTarget $t) => $t->charged_credits ?? self::PER_SEND);
     }
 
     private static function planGb(User $owner): int
