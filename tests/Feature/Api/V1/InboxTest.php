@@ -177,6 +177,19 @@ describe('webhooks', function () {
         expect($thread->fresh()->status)->toBe('open');
     });
 
+    it('keeps a provider\'s UTC timestamp as the same instant (24h window is not shifted)', function () {
+        $thread = inboxThread(inboxAccount(), ['last_inbound_at' => now()->subDays(2), 'last_message_at' => now()->subDays(2)]);
+        $sent = now()->utc()->subHours(20)->startOfSecond();
+
+        inboxHook($this, 'message.received', ['conversationId' => $thread->provider_conversation_id, 'messageId' => 'tz_1',
+            'content' => 'hi', 'sentAt' => $sent->format('Y-m-d\\TH:i:s\\Z')])->assertOk();
+
+        $thread->refresh();
+        expect($thread->last_inbound_at->equalTo($sent))->toBeTrue()
+            ->and($thread->messages()->sole()->sent_at->equalTo($sent))->toBeTrue()
+            ->and($thread->canReplyUntil()->equalTo($sent->addDay()))->toBeTrue();
+    });
+
     it('turns our pending message sent, then records a failure, and a read', function () {
         $thread = inboxThread(inboxAccount());
         $mine = $thread->messages()->create(['provider_message_id' => 'out_1', 'direction' => 'out', 'content' => 'Hi', 'status' => 'pending', 'source' => 'api']);

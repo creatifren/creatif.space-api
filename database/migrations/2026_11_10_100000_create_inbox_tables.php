@@ -9,6 +9,13 @@ use Illuminate\Support\Facades\Schema;
  * of a connected account. Rows belong to the account's user, the same
  * tenancy as social_accounts; provider ids are unique per relay so a
  * webhook and a backfill of the same thing meet on one row.
+ *
+ * Every index and foreign key is named explicitly. Laravel's generated
+ * names (table_columns_type) passed 64 characters on social_messages and
+ * MySQL refused the migration (1059); short names keep every identifier
+ * well under MySQL's 64. Indexed strings stay within InnoDB's 3072-byte
+ * key limit under utf8mb4 (4 bytes a character); the widest key here is
+ * 8 + 191×4 = 772 bytes.
  */
 return new class extends Migration
 {
@@ -16,9 +23,9 @@ return new class extends Migration
     {
         Schema::create('social_conversations', function (Blueprint $table) {
             $table->id();
-            $table->ulid()->unique();
-            $table->foreignId('user_id')->constrained()->cascadeOnDelete();
-            $table->foreignId('social_account_id')->constrained()->cascadeOnDelete();
+            $table->ulid()->unique('soc_conv_ulid_uq');
+            $table->foreignId('user_id')->constrained(indexName: 'soc_conv_user_fk')->cascadeOnDelete();
+            $table->foreignId('social_account_id')->constrained(indexName: 'soc_conv_account_fk')->cascadeOnDelete();
             $table->string('provider', 20);
             $table->string('provider_conversation_id', 128);
             $table->string('network', 20);
@@ -35,14 +42,14 @@ return new class extends Migration
             $table->timestamp('messages_synced_at')->nullable();
             $table->timestamps();
 
-            $table->unique(['provider', 'provider_conversation_id']);
-            $table->index(['user_id', 'status', 'last_message_at']);
+            $table->unique(['provider', 'provider_conversation_id'], 'soc_conv_provider_uq');
+            $table->index(['user_id', 'status', 'last_message_at'], 'soc_conv_user_status_idx');
         });
 
         Schema::create('social_messages', function (Blueprint $table) {
             $table->id();
-            $table->ulid()->unique();
-            $table->foreignId('social_conversation_id')->constrained()->cascadeOnDelete();
+            $table->ulid()->unique('soc_msg_ulid_uq');
+            $table->foreignId('social_conversation_id')->constrained(indexName: 'soc_msg_conv_fk')->cascadeOnDelete();
             $table->string('provider_message_id', 128)->nullable();
             $table->string('platform_message_id', 191)->nullable();
             $table->string('direction', 3);
@@ -57,16 +64,16 @@ return new class extends Migration
             $table->timestamp('read_at')->nullable();
             $table->timestamps();
 
-            $table->unique(['social_conversation_id', 'provider_message_id']);
-            $table->index(['social_conversation_id', 'sent_at']);
+            $table->unique(['social_conversation_id', 'provider_message_id'], 'soc_msg_conv_provider_uq');
+            $table->index(['social_conversation_id', 'sent_at'], 'soc_msg_conv_sent_idx');
         });
 
         Schema::create('social_comments', function (Blueprint $table) {
             $table->id();
-            $table->ulid()->unique();
-            $table->foreignId('user_id')->constrained()->cascadeOnDelete();
-            $table->foreignId('social_account_id')->constrained()->cascadeOnDelete();
-            $table->foreignId('social_post_id')->nullable()->constrained()->nullOnDelete();
+            $table->ulid()->unique('soc_cmt_ulid_uq');
+            $table->foreignId('user_id')->constrained(indexName: 'soc_cmt_user_fk')->cascadeOnDelete();
+            $table->foreignId('social_account_id')->constrained(indexName: 'soc_cmt_account_fk')->cascadeOnDelete();
+            $table->foreignId('social_post_id')->nullable()->constrained(indexName: 'soc_cmt_post_fk')->nullOnDelete();
             $table->string('provider', 20);
             $table->string('provider_post_id', 128)->nullable();
             $table->string('platform_post_id', 191)->nullable();
@@ -81,11 +88,11 @@ return new class extends Migration
             $table->timestamp('replied_at')->nullable();
             $table->timestamp('private_replied_at')->nullable();
             $table->foreignId('private_reply_conversation_id')->nullable()
-                ->constrained('social_conversations')->nullOnDelete();
+                ->constrained('social_conversations', indexName: 'soc_cmt_private_conv_fk')->nullOnDelete();
             $table->timestamps();
 
-            $table->unique(['social_account_id', 'comment_id']);
-            $table->index(['user_id', 'replied_at']);
+            $table->unique(['social_account_id', 'comment_id'], 'soc_cmt_account_comment_uq');
+            $table->index(['user_id', 'replied_at'], 'soc_cmt_user_replied_idx');
         });
 
         Schema::table('social_accounts', function (Blueprint $table) {
