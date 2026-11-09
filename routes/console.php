@@ -10,6 +10,7 @@ use App\Jobs\PruneStaleUploads;
 use App\Jobs\PurgeTrashedFiles;
 use App\Jobs\ReleaseCommissions;
 use App\Jobs\RenewCredits;
+use App\Jobs\RenewMonthlyCredits;
 use Illuminate\Foundation\Inspiring;
 use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\Schedule;
@@ -29,6 +30,13 @@ Schedule::job(new ExpireSubscriptions)->dailyAt('03:00');
  * settled who is still on a plan, before anyone is sending.
  */
 Schedule::job(new RenewCredits)->monthlyOn(1, '03:20');
+
+/*
+ * Monthly Credits: each owner's cycle turns on their own day (sign-up or
+ * subscription start), so every day — after billing has settled plans,
+ * after the 1st's rent, before anyone is sending.
+ */
+Schedule::job(new RenewMonthlyCredits)->dailyAt('03:40');
 
 /*
  * Yesterday's traffic becomes today's chart. Runs before billing so a slow

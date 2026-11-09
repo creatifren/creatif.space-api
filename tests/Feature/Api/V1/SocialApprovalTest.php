@@ -17,7 +17,7 @@ use Illuminate\Support\Facades\Notification;
 beforeEach(function () {
     // Keep these approval/retry cases on the Credits path.
     foreach (Plan::all() as $plan) {
-        $plan->update(['quotas' => [...$plan->quotas, 'social_posts_monthly' => 0]]);
+        $plan->update(['quotas' => [...$plan->quotas, 'social_posts_monthly' => 0, 'credits_monthly' => 0]]);
     }
     config([
         'services.postforme.key' => 'test-key',

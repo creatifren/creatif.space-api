@@ -30,8 +30,11 @@ final class Wallet
 
     public const AFFILIATE = 'affiliate';
 
-    /** Prepaid Credits — spent on sends and storage rent, never withdrawn here. */
+    /** Top-up Credits — bought or granted, never expire; sends and rent. */
     public const CREDITS = 'credits';
+
+    /** Monthly Credits — the plan's per cycle, expire at its end; sends only. */
+    public const MONTHLY = 'monthly';
 
     /**
      * What this user can withdraw from one wallet right now.

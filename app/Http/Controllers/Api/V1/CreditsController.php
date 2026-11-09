@@ -32,18 +32,24 @@ class CreditsController extends Controller
         return response()->json(['data' => [
             // Whose plan the wallet hangs off — a teammate sees the owner's.
             'plan' => Workspace::owner($user)->plan()->key,
+            // Top-up Credits, as before; the rest is the Monthly bucket.
             'balance' => Credits::balance($user),
+            'monthly_balance' => Credits::monthlyBalance($user),
+            'monthly_resets_at' => Credits::cycleEnds(Workspace::owner($user))->toIso8601String(),
+            'monthly_amount' => Credits::monthlyAmount(Workspace::owner($user)),
+            'topup_balance' => Credits::balance($user),
+            'total' => Credits::total($user),
             'committed' => Credits::committed($user),
             'rate' => [
                 'per_dollar' => Credits::PER_DOLLAR,
-                'per_send' => Credits::PER_SEND,
+                'per_send' => Credits::perSend(),
                 'per_send_by_platform' => Credits::perSendByPlatform(),
                 'block_gb' => Credits::BLOCK_GB,
                 'per_block' => Credits::PER_BLOCK,
                 'per_block_bulk' => Credits::PER_BLOCK_BULK,
                 'bulk_from_gb' => Credits::BULK_FROM_GB,
             ],
-            // Publishes the plan includes this period — used before Credits.
+            // Legacy: the old count-based allowance, no longer charged.
             'allowance' => [
                 'limit' => PlanQuota::socialPostsLimit($user),
                 'used' => Credits::allowanceUsed($user),
@@ -72,7 +78,7 @@ class CreditsController extends Controller
 
         $rows = WalletTransaction::query()
             ->where('user_id', $owner->id)
-            ->where('wallet', Wallet::CREDITS)
+            ->whereIn('wallet', [Wallet::CREDITS, Wallet::MONTHLY])
             ->orderByDesc('id')
             ->cursorPaginate(30);
 
@@ -87,6 +93,8 @@ class CreditsController extends Controller
                 'id' => $t->ulid,
                 'type' => $t->type->value,
                 'amount' => $t->amount,
+                // balance_after is that bucket's own running balance.
+                'bucket' => $t->wallet === Wallet::MONTHLY ? 'monthly' : 'topup',
                 'balance_after' => $t->balance_after,
                 'note' => $t->note,
                 'post' => $t->reference_type === 'social_post' && isset($posts[$t->reference_id])

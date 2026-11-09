@@ -10,7 +10,7 @@ use Illuminate\Support\Facades\Http;
 
 beforeEach(function () {
     foreach (Plan::all() as $plan) {
-        $plan->update(['quotas' => [...$plan->quotas, 'social_posts_monthly' => 0]]);
+        $plan->update(['quotas' => [...$plan->quotas, 'social_posts_monthly' => 0, 'credits_monthly' => 0]]);
     }
     config([
         'services.postforme.key' => 'test-key',
@@ -32,7 +32,8 @@ it('prices every platform, X included, at 300 by default', function () {
     expect(Credits::perSend('x'))->toBe(300)
         ->and(Credits::perSend('instagram'))->toBe(300)
         ->and(Credits::perSend())->toBe(Credits::PER_SEND)
-        ->and(array_unique(Credits::perSendByPlatform()))->toBe(['instagram' => 300]);
+        ->and(Credits::perSend('x', 'see https://creatif.space'))->toBe(2000)
+        ->and(array_unique(Credits::perSendByPlatform()))->toBe(['instagram' => 300, 'x_link' => 2000]);
 });
 
 it('charges X its own price and gives back exactly what was paid', function () {

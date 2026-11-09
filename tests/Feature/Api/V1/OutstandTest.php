@@ -19,7 +19,7 @@ use Illuminate\Support\Facades\Http;
 
 beforeEach(function () {
     foreach (Plan::all() as $plan) {
-        $plan->update(['quotas' => [...$plan->quotas, 'social_posts_monthly' => 0]]);
+        $plan->update(['quotas' => [...$plan->quotas, 'social_posts_monthly' => 0, 'credits_monthly' => 0]]);
     }
     config([
         'services.social.provider' => 'outstand',

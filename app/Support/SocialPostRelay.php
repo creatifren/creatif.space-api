@@ -105,7 +105,7 @@ class SocialPostRelay
     {
         // Refuse before the provider, not after: a short balance must not
         // leave a post live on the platform that was never paid for.
-        $need = Credits::sendPrice($post->user, self::platforms($post));
+        $need = Credits::sendPrice($post->user, self::destinations($post));
         if (Credits::balance($post->user) < $need) {
             throw ValidationException::withMessages([
                 'caption' => "This needs {$need} Credits and the balance has ".Credits::balance($post->user)
@@ -174,30 +174,30 @@ class SocialPostRelay
     /**
      * Credits a set of posts needs to go out — checked once, up front, by
      * an Approve-all, so a short balance refuses the batch before a single
-     * post reaches the provider. What the allowance still covers is free.
+     * post reaches the provider. What the Monthly Credits still cover comes from them.
      *
      * @param  iterable<SocialPost>  $posts
      */
     public static function need(User $owner, iterable $posts): int
     {
-        $platforms = [];
+        $destinations = [];
         foreach ($posts as $post) {
-            array_push($platforms, ...self::platforms($post));
+            array_push($destinations, ...self::destinations($post));
         }
 
-        return Credits::sendPrice($owner, $platforms);
+        return Credits::sendPrice($owner, $destinations);
     }
 
     /**
-     * The post's destinations' platforms in target order — the order
-     * Credits::chargeSend spends the allowance in — for pricing.
+     * Each destination as [platform, caption] — what Credits prices: X
+     * costs more when its caption has a link.
      *
-     * @return list<SocialPlatform>
+     * @return list<array{0: SocialPlatform, 1: string|null}>
      */
-    private static function platforms(SocialPost $post): array
+    private static function destinations(SocialPost $post): array
     {
         return $post->targets()->with('account')->orderBy('id')->get()
-            ->map(fn ($t) => $t->account->platform)
+            ->map(fn ($t) => [$t->account->platform, $t->configuration['caption'] ?? $post->caption])
             ->values()
             ->all();
     }

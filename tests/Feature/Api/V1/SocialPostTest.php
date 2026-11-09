@@ -10,9 +10,9 @@ use App\Support\Credits;
 use Illuminate\Support\Facades\Http;
 
 beforeEach(function () {
-    // This suite covers paid sends; allowance-first behavior has its own tests.
+    // This suite covers Top-up sends; Monthly Credits have their own tests.
     foreach (Plan::all() as $plan) {
-        $plan->update(['quotas' => [...$plan->quotas, 'social_posts_monthly' => 0]]);
+        $plan->update(['quotas' => [...$plan->quotas, 'social_posts_monthly' => 0, 'credits_monthly' => 0]]);
     }
     config([
         'services.postforme.key' => 'test-key',

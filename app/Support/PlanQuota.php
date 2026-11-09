@@ -135,9 +135,9 @@ class PlanQuota
     }
 
     /**
-     * The publishing allowance: publishes a period, per seat and pooled like
-     * storage. Null means no limit. What has been used is
-     * Credits::allowanceUsed.
+     * Legacy: the old publishing allowance (`social_posts_monthly`), still
+     * readable for older screens. Nothing charges against it any more —
+     * the plan's Monthly Credits (`credits_monthly`) replaced it.
      */
     public static function socialPostsLimit(User $user): ?int
     {
@@ -148,10 +148,13 @@ class PlanQuota
     }
 
     /**
-     * Room to send to $destinations accounts: whatever the allowance does
-     * not cover must be in Credits.
+     * Room to send to these destinations (a count, or per destination its
+     * platform / [platform, caption]): whatever this cycle's Monthly
+     * Credits do not cover must be in Top-up Credits.
+     *
+     * @param  int|iterable<mixed>  $destinations
      */
-    public static function canPostSocial(User $user, int $destinations = 1): bool
+    public static function canPostSocial(User $user, int|iterable $destinations = 1): bool
     {
         return Credits::balance($user) >= Credits::sendPrice($user, $destinations);
     }

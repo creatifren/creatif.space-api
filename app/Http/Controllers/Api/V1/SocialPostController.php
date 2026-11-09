@@ -52,11 +52,14 @@ class SocialPostController extends Controller
                 ->latest()
                 ->get(),
         )->additional(['meta' => [
-            // The composer's "uses N of your Credits" line: the allowance
-            // goes first, so it needs both.
+            // The composer's "uses N of your Credits" line: Monthly Credits
+            // go first, then Top-up (`credits`). posts_* are the legacy
+            // allowance, kept for older screens.
             'credits' => Credits::balance($request->user()),
-            'per_send' => Credits::PER_SEND,
+            'per_send' => Credits::perSend(),
             'per_send_by_platform' => Credits::perSendByPlatform(),
+            'monthly_balance' => Credits::monthlyBalance($request->user()),
+            'monthly_resets_at' => Credits::cycleEnds(Workspace::owner($request->user()))->toIso8601String(),
             'posts_used' => Credits::allowanceUsed($request->user()),
             'posts_limit' => PlanQuota::socialPostsLimit($request->user()),
             'posts_reset_at' => Credits::allowanceSince(Workspace::owner($request->user()))
@@ -108,18 +111,6 @@ class SocialPostController extends Controller
         $ids = array_values(array_unique($validated['account_ids']));
         $sendsNow = $approval === null && ! $draft;
 
-        // The allowance first, then Credits::PER_SEND a destination past it,
-        // checked before anything reaches the provider. Held posts and drafts
-        // are checked when they are approved or sent — holding one costs nothing.
-        if ($sendsNow && ! PlanQuota::canPostSocial($user, count($ids))) {
-            $need = Credits::sendPrice($user, count($ids));
-
-            throw ValidationException::withMessages([
-                'caption' => "This needs {$need} Credits and the balance has ".Credits::balance($user)
-                    .' — top up, or send to fewer accounts.',
-            ]);
-        }
-
         // Only accounts the current relay holds: another relay's ids mean
         // nothing to it (they are marked Disconnected on the next sync).
         $accounts = $user->socialAccounts()
@@ -135,6 +126,20 @@ class SocialPostController extends Controller
         }
 
         $captions = $validated['captions'] ?? [];
+
+        // Monthly Credits first, then Top-up, each destination at its price
+        // (X more with a link), checked before anything reaches the
+        // provider. Held posts and drafts are checked when they are approved
+        // or sent — holding one costs nothing.
+        $destinations = $accounts->map(fn ($a) => [$a->platform, $captions[$a->ulid] ?? $validated['caption']])->all();
+        if ($sendsNow && ! PlanQuota::canPostSocial($user, $destinations)) {
+            $need = Credits::sendPrice($user, $destinations);
+
+            throw ValidationException::withMessages([
+                'caption' => "This needs {$need} Credits past this month's and the balance has ".Credits::balance($user)
+                    .' — top up, or send to fewer accounts.',
+            ]);
+        }
         $scheduledAt = isset($validated['scheduled_at'])
             ? Carbon::parse($validated['scheduled_at'])
             : null;

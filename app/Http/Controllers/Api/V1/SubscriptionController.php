@@ -52,10 +52,16 @@ class SubscriptionController extends Controller
                     ? null
                     : (new SubscriptionResource($subscription->load(['plan', 'invoices'])))->toArray($request),
                 'quota' => PlanQuota::meta($user),
+                // Legacy: the old count-based allowance, no longer charged.
                 'allowance' => [
                     'limit' => PlanQuota::socialPostsLimit($user),
                     'used' => Credits::allowanceUsed($user),
                 ],
+                'monthly_balance' => Credits::monthlyBalance($user),
+                'monthly_resets_at' => Credits::cycleEnds($user)->toIso8601String(),
+                'monthly_amount' => Credits::monthlyAmount($user),
+                'topup_balance' => Credits::balance($user),
+                'total' => Credits::total($user),
                 'seats' => Workspace::seats($user),
                 'seats_used' => Workspace::seatsUsed($user),
             ],

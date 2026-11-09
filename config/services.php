@@ -59,12 +59,13 @@ return [
     // with the one that holds them.
     'social' => [
         'provider' => env('SOCIAL_PROVIDER', 'outstand'),
-        // Credits for one publish past the allowance, by platform; a
-        // platform not listed costs Credits::PER_SEND (300). X is here
-        // because X's API bills us per post ($0.015, $0.20 with a URL) —
-        // still 300 until it is priced.
+        // Credits for one publish (one post to one account), by platform; a
+        // platform not listed costs `default`. X has its own because X's API
+        // bills us per post: $0.015, or $0.20 when it contains a URL.
         'per_send' => [
+            'default' => (int) env('CREDITS_PER_SEND', 300),
             'x' => (int) env('CREDITS_PER_SEND_X', 300),
+            'x_link' => (int) env('CREDITS_PER_SEND_X_LINK', 2000),
         ],
     ],
 
