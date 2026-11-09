@@ -12,7 +12,6 @@ use App\Models\Referral;
 use App\Models\Subscription;
 use App\Models\User;
 use App\Models\WalletTransaction;
-use App\Models\Withdrawal;
 use App\Support\CommissionEngine;
 use App\Support\ReferralAttribution;
 use App\Support\Wallet;
@@ -61,32 +60,6 @@ describe('the wallet split', function () {
             50_000,
             wallet: Wallet::AFFILIATE,
         ))->toThrow(RuntimeException::class);
-    });
-
-    it('pays out each balance separately, and one queue does not block the other', function () {
-        $user = User::factory()->create();
-        Wallet::credit($user, WalletTransactionType::SaleCredit, 200_000);
-        Wallet::credit($user, WalletTransactionType::CommissionCredit, 200_000, wallet: Wallet::AFFILIATE);
-
-        $bank = ['paypal_email' => 'rani@example.com'];
-
-        $this->actingAs($user)
-            ->postJson('/api/v1/me/withdrawals', $bank + ['amount' => 50_000])
-            ->assertCreated();
-
-        // A sales payout in flight must not stop an affiliate payout.
-        $this->actingAs($user)
-            ->postJson('/api/v1/me/withdrawals', $bank + ['amount' => 50_000, 'wallet' => 'affiliate'])
-            ->assertCreated();
-
-        // A second one on the same wallet is still refused.
-        $this->actingAs($user)
-            ->postJson('/api/v1/me/withdrawals', $bank + ['amount' => 50_000])
-            ->assertUnprocessable();
-
-        expect(Wallet::balance($user))->toBe(150_000)
-            ->and(Wallet::balance($user, Wallet::AFFILIATE))->toBe(150_000)
-            ->and(Withdrawal::query()->where('wallet', 'affiliate')->count())->toBe(1);
     });
 });
 

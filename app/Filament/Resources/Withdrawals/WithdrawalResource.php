@@ -31,6 +31,11 @@ class WithdrawalResource extends Resource
 
     protected static ?int $navigationSort = 4;
 
+    /* Payouts are off for the soft launch: the API routes are gone, so the
+       queue stays out of the menu. The page itself is kept for a later
+       cleanup or re-enable. */
+    protected static bool $shouldRegisterNavigation = false;
+
     public static function form(Schema $schema): Schema
     {
         return $schema->components([]);
