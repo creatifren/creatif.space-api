@@ -23,7 +23,11 @@ class SubscriptionResource extends JsonResource
                 'name' => $this->plan->name,
             ],
             'billing_period' => $this->billing_period,
+            // active | trialing | past_due | cancelled | expired
             'status' => $this->status,
+            // Creem's current_period_end while trialing: the first charge,
+            // or — cancelled — the day it goes back to Free.
+            'trial_ends_at' => $this->isTrialing() ? $this->current_period_end : null,
             'seats' => $this->seats,
             'current_period_start' => $this->current_period_start,
             'current_period_end' => $this->current_period_end,

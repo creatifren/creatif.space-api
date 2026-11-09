@@ -10,6 +10,7 @@ use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Http\Client\PendingRequest;
 use Illuminate\Http\Client\RequestException;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Log;
 use RuntimeException;
 
 /**
@@ -30,21 +31,47 @@ class CreemService
      * A hosted checkout for a plan's first payment. `request_id` is our
      * invoice number, so the webhook can find the bill it settles.
      *
+     * `$productId` is the plan's product, or its trial twin. A discount code
+     * (Founding 100) is a bonus, never a condition: if Creem refuses it
+     * (used up, expired, not for this product) the checkout is opened again
+     * without it rather than failing the purchase.
+     *
      * @return array{id: string, checkout_url: string}
      *
      * @throws ConnectionException|RequestException
      */
-    public function subscriptionCheckout(Invoice $invoice, User $user): array
+    public function subscriptionCheckout(Invoice $invoice, User $user, ?string $productId = null, ?string $discountCode = null): array
     {
         $subscription = $invoice->subscription;
-
-        return $this->checkout([
-            'product_id' => $this->product($subscription->plan->creemProduct($subscription->billing_period->value)),
+        $body = [
+            'product_id' => $this->product($productId ?? $subscription->plan->creemProduct($subscription->billing_period->value)),
             'request_id' => $invoice->number,
             'customer' => ['email' => $user->email],
             'metadata' => ['invoice' => $invoice->ulid, 'subscription' => $subscription->ulid],
             'success_url' => config('app.frontend_url').'/settings?section=subscription&checkout=done',
-        ]);
+        ];
+
+        if ($discountCode === null) {
+            return $this->checkout($body);
+        }
+
+        try {
+            return $this->checkout($body + ['discount_code' => $discountCode]);
+        } catch (RequestException $e) {
+            // A 4xx is Creem's verdict on the request — most likely the code.
+            // A 5xx is not about the code; let it fail as it would have.
+            if (! $e->response->clientError()) {
+                throw $e;
+            }
+            Log::warning('billing.discount_code_rejected', [
+                'invoice' => $invoice->number,
+                'code' => $discountCode,
+                'status' => $e->response->status(),
+                'error' => mb_substr((string) $e->response->body(), 0, 300),
+            ]);
+
+            return $this->checkout($body);
+        }
     }
 
     /**

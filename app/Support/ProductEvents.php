@@ -241,13 +241,24 @@ final class ProductEvents
     /**
      * @param  'subscription'|'credits'  $kind
      */
-    public static function checkoutStarted(User $user, string $kind, PlanKey|string|null $plan, ?string $period, int $amountCents): void
+    public static function checkoutStarted(User $user, string $kind, PlanKey|string|null $plan, ?string $period, int $amountCents, bool $trial = false): void
     {
         self::analytics()->capture($user->ulid, 'checkout_started', [
             'kind' => $kind,
             'plan' => self::key($plan),
             'period' => $period,
             'amount_usd' => round($amountCents / 100, 2),
+            'trial' => $trial,
+        ]);
+    }
+
+    /** Once per subscription: Creem says its trial began. */
+    public static function trialStarted(User $user, PlanKey|string $plan, string $period, int $days): void
+    {
+        self::analytics()->capture($user->ulid, 'trial_started', [
+            'plan' => self::key($plan),
+            'period' => $period,
+            'trial_days' => $days,
         ]);
     }
 

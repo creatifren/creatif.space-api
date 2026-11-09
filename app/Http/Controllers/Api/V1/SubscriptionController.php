@@ -14,8 +14,10 @@ use App\Models\Plan;
 use App\Models\User;
 use App\Services\CreemService;
 use App\Support\Credits;
+use App\Support\Founding;
 use App\Support\PlanQuota;
 use App\Support\ProductEvents;
+use App\Support\Trial;
 use App\Support\Workspace;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -65,6 +67,17 @@ class SubscriptionController extends Controller
                 'total' => Credits::total($user),
                 'seats' => Workspace::seats($user),
                 'seats_used' => Workspace::seatsUsed($user),
+                // What the plan picker may offer. Eligible = never had a
+                // trial or a paid plan, and a trial product is configured.
+                'trial' => [
+                    'eligible' => Trial::offered($user),
+                    'days' => Trial::days(),
+                ],
+                'founding' => [
+                    'active' => Founding::active(),
+                    'percent' => Founding::percent(),
+                    'applies_to' => 'yearly',
+                ],
             ],
         ]);
     }
@@ -94,6 +107,14 @@ class SubscriptionController extends Controller
         $current = $user->activeSubscription();
 
         if ($current !== null) {
+            // Creem would charge a proration now and end the trial early;
+            // the trial runs out (or is cancelled) first.
+            if ($current->isTrialing()) {
+                throw ValidationException::withMessages([
+                    'plan' => 'You’re on a '.$current->plan->name.' trial — the plan can be changed once it ends.',
+                ]);
+            }
+
             if ($current->plan->key === $plan->key && $current->billing_period->value === $validated['period']) {
                 throw ValidationException::withMessages([
                     'plan' => 'You’re already on '.$plan->name.'.',
@@ -107,7 +128,7 @@ class SubscriptionController extends Controller
             }
 
             $creem->upgrade($current, (string) $plan->creemProduct($validated['period']));
-            ProductEvents::checkoutStarted($user, 'subscription', $plan->key, $validated['period'], (int) $plan->priceFor($validated['period']));
+            ProductEvents::checkoutStarted($user, 'subscription', $plan->key, $validated['period'], (int) $plan->priceFor($validated['period']), false);
 
             return response()->json(['data' => [
                 'checkout_url' => null,
@@ -158,21 +179,32 @@ class SubscriptionController extends Controller
             ]);
         });
 
+        // Pro's trial twin when this owner never had a trial or a paid plan;
+        // the Founding code on any yearly plan (dropped if Creem refuses it).
+        $trialProduct = Trial::eligible($user) ? Trial::product($plan, $validated['period']) : null;
+
         // Reused bill: the same hosted page, never a second checkout for it.
         if ($invoice->creem_checkout_url === null) {
-            $checkout = $creem->subscriptionCheckout($invoice->load('subscription.plan'), $user);
+            $checkout = $creem->subscriptionCheckout(
+                $invoice->load('subscription.plan'),
+                $user,
+                $trialProduct ?? $plan->creemProduct($validated['period']),
+                Founding::codeFor($validated['period']),
+            );
             $invoice->forceFill([
                 'creem_checkout_id' => $checkout['id'],
                 'creem_checkout_url' => $checkout['checkout_url'],
             ])->save();
         }
 
-        ProductEvents::checkoutStarted($user, 'subscription', $plan->key, $validated['period'], (int) $invoice->amount);
+        ProductEvents::checkoutStarted($user, 'subscription', $plan->key, $validated['period'], (int) $invoice->amount, $trialProduct !== null);
 
         return response()->json([
             'data' => [
                 'checkout_url' => $invoice->creem_checkout_url,
                 'amount' => $invoice->amount,
+                // Days free before `amount` is first charged; null = no trial.
+                'trial_days' => $trialProduct !== null ? Trial::days() : null,
                 'invoice' => (new InvoiceResource($invoice))->toArray($request),
             ],
         ], 201);

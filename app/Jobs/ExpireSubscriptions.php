@@ -32,8 +32,19 @@ class ExpireSubscriptions implements ShouldQueue
         $lapsing->update(['status' => SubscriptionStatus::Expired]);
         $users->each(fn (User $u) => ProductEvents::planChanged($u));
 
+        // A trial cancelled before it ended goes back to Free when it would
+        // have charged. Nothing was paid, so there is nothing to ask Creem.
+        $endedTrials = Subscription::query()
+            ->where('status', SubscriptionStatus::Trialing)
+            ->whereNotNull('cancelled_at')
+            ->whereNotNull('current_period_end')
+            ->where('current_period_end', '<=', now());
+        $trialUsers = User::query()->whereIn('id', (clone $endedTrials)->select('user_id'))->get();
+        $endedTrials->update(['status' => SubscriptionStatus::Expired]);
+        $trialUsers->each(fn (User $u) => ProductEvents::planChanged($u));
+
         Subscription::query()
-            ->whereIn('status', [SubscriptionStatus::Active, SubscriptionStatus::PastDue])
+            ->whereIn('status', SubscriptionStatus::entitled())
             ->whereNotNull('creem_subscription_id')
             ->where('current_period_end', '<', now()->subDays(3))
             ->lazyById()

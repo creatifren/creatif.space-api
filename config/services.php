@@ -51,7 +51,18 @@ return [
             'max_yearly' => env('CREEM_PRODUCT_MAX_YEARLY'),
             // One-time, $1 a unit = 10,000 Credits; checkout sends the units.
             'credits' => env('CREEM_PRODUCT_CREDITS'),
+            // Pro with Creem's product-level 7-day trial (card required).
+            // Separate products so the normal ones stay trial-free; empty
+            // turns the trial off for that period.
+            'pro_monthly_trial' => env('CREEM_PRODUCT_PRO_MONTHLY_TRIAL'),
+            'pro_yearly_trial' => env('CREEM_PRODUCT_PRO_YEARLY_TRIAL'),
         ],
+        // Must match trial_period_days on the trial products in Creem.
+        'trial_days' => 7,
+        // "Founding 100": a Creem discount code (30% off the first yearly
+        // payment, 100 redemptions) sent on every yearly checkout. Empty = off.
+        'founding_code' => env('CREEM_FOUNDING_CODE'),
+        'founding_percent' => 30,
     ],
 
     // Social posting — which relay new accounts and posts go through.
