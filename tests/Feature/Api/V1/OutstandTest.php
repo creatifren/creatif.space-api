@@ -46,15 +46,20 @@ function outstandAccount(User $user, string $platform = 'instagram', array $attr
     return SocialAccount::factory()->for($user)->create(['platform' => $platform, 'provider' => 'outstand'] + $attrs);
 }
 
+/**
+ * A delivery as Outstand sends it: the raw JSON body, signed over exactly
+ * those bytes. Server vars are built here (CONTENT_TYPE, HTTP_*), since
+ * transformHeadersToServerVars is protected on the TestCase.
+ */
 function outstandHook($test, array $payload, ?string $secret = 'whsec_out')
 {
-    $body = json_encode($payload);
-    $headers = ['Content-Type' => 'application/json'];
+    $body = json_encode($payload, JSON_THROW_ON_ERROR);
+    $server = ['CONTENT_TYPE' => 'application/json', 'HTTP_ACCEPT' => 'application/json'];
     if ($secret !== null) {
-        $headers['X-Outstand-Signature'] = 'sha256='.hash_hmac('sha256', $body, $secret);
+        $server['HTTP_X_OUTSTAND_SIGNATURE'] = 'sha256='.hash_hmac('sha256', $body, $secret);
     }
 
-    return $test->call('POST', '/api/v1/webhooks/outstand', [], [], [], $test->transformHeadersToServerVars($headers), $body);
+    return $test->call('POST', '/api/v1/webhooks/outstand', [], [], [], $server, $body);
 }
 
 describe('connecting', function () {
