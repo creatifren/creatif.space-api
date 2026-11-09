@@ -30,7 +30,7 @@ class SocialPostFailed extends Notification implements ShouldQueue
 
     public function toMail(object $notifiable): MailMessage
     {
-        $caption = str($this->post->caption)->limit(60);
+        $caption = $this->caption();
 
         return (new MailMessage)
             ->subject('Post didn’t publish: '.$caption)
@@ -41,6 +41,12 @@ class SocialPostFailed extends Notification implements ShouldQueue
             ->line('The post is still there — you can edit and try again.');
     }
 
+    /** The caption on one line — it lands in a subject, which must not break. */
+    private function caption(): string
+    {
+        return str($this->post->caption)->squish()->limit(60)->toString();
+    }
+
     /**
      * @return array<string, mixed>
      */
@@ -49,7 +55,7 @@ class SocialPostFailed extends Notification implements ShouldQueue
         return [
             'type' => NotificationType::SocialPostFailed->value,
             'post_id' => $this->post->ulid,
-            'caption' => str($this->post->caption)->limit(60)->toString(),
+            'caption' => $this->caption(),
             'fail_reason' => $this->post->fail_reason,
         ];
     }
