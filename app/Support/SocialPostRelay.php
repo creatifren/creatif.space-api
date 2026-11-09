@@ -2,13 +2,13 @@
 
 namespace App\Support;
 
+use App\Enums\SocialPlatform;
 use App\Enums\SocialPostApproval;
 use App\Enums\SocialPostStatus;
 use App\Enums\SocialPostTargetStatus;
 use App\Models\SocialAccount;
 use App\Models\SocialPost;
 use App\Models\User;
-use App\Services\PostForMeService;
 use Carbon\CarbonInterface;
 use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Support\Facades\Cache;
@@ -18,20 +18,20 @@ use Illuminate\Validation\ValidationException;
 use Throwable;
 
 /**
- * A stored post as the provider's create/replace body. Post for Me's PUT is
- * a full replace, and a held post is sent only once approved — both rebuild
+ * A stored post as the provider's create/replace body (SocialProvider's
+ * shape; each provider translates). Replaces are full replaces, and a held post is sent only once approved — both rebuild
  * the body from the row, so destinations, media and per-account captions
  * are whatever was saved, never a guess.
  */
 class SocialPostRelay
 {
-    /** Our post type → Post for Me's placement value. */
+    /** Our post type → the placement value in our post body. */
     private const PLACEMENT = ['reels' => 'reels', 'story' => 'stories'];
 
-    /** The platforms Post for Me takes a placement for. */
+    /** The platforms that take a placement. */
     private const PLACED = ['facebook', 'instagram', 'threads'];
 
-    public function __construct(private PostForMeService $postForMe) {}
+    public function __construct(private SocialProviders $providers) {}
 
     /**
      * The body from the row; `$caption`/`$at` override it for an edit that
@@ -103,11 +103,9 @@ class SocialPostRelay
      */
     public function send(SocialPost $post): void
     {
-        $destinations = $post->targets()->count();
-
         // Refuse before the provider, not after: a short balance must not
         // leave a post live on the platform that was never paid for.
-        $need = Credits::sendPrice($post->user, $destinations);
+        $need = Credits::sendPrice($post->user, self::destinations($post));
         if (Credits::balance($post->user) < $need) {
             throw ValidationException::withMessages([
                 'caption' => "This needs {$need} Credits and the balance has ".Credits::balance($post->user)
@@ -120,7 +118,7 @@ class SocialPostRelay
         Credits::chargeSend($post);
 
         try {
-            $remote = $this->postForMe->createPost($this->payload($post));
+            $remote = $this->providers->for($post)->createPost($this->payload($post));
         } catch (Throwable $e) {
             Credits::returnSend($post, $post->targets()->get(), 'Not sent · the provider refused it');
 
@@ -176,18 +174,32 @@ class SocialPostRelay
     /**
      * Credits a set of posts needs to go out — checked once, up front, by
      * an Approve-all, so a short balance refuses the batch before a single
-     * post reaches the provider. What the allowance still covers is free.
+     * post reaches the provider. What the Monthly Credits still cover comes from them.
      *
      * @param  iterable<SocialPost>  $posts
      */
     public static function need(User $owner, iterable $posts): int
     {
-        $destinations = 0;
+        $destinations = [];
         foreach ($posts as $post) {
-            $destinations += $post->targets()->count();
+            array_push($destinations, ...self::destinations($post));
         }
 
         return Credits::sendPrice($owner, $destinations);
+    }
+
+    /**
+     * Each destination as [platform, caption] — what Credits prices: X
+     * costs more when its caption has a link.
+     *
+     * @return list<array{0: SocialPlatform, 1: string|null}>
+     */
+    private static function destinations(SocialPost $post): array
+    {
+        return $post->targets()->with('account')->orderBy('id')->get()
+            ->map(fn ($t) => [$t->account->platform, $t->configuration['caption'] ?? $post->caption])
+            ->values()
+            ->all();
     }
 
     /**
@@ -203,7 +215,7 @@ class SocialPostRelay
             return;
         }
 
-        $this->postForMe->deletePost($post->provider_post_id);
+        $this->providers->for($post)->deletePost($post->provider_post_id);
         Credits::returnSend(
             $post,
             $post->targets()->where('status', SocialPostTargetStatus::Pending)->get(),
@@ -216,7 +228,7 @@ class SocialPostRelay
      * One destination's outcome, from the webhook or from `reconcile`.
      * Redeliveries overwrite the same values — idempotent by construction.
      *
-     * @param  array<string, mixed>  $data  a Post for Me post result
+     * @param  array<string, mixed>  $data  a post result in SocialProvider's shape
      */
     public static function applyResult(SocialPost $post, SocialAccount $account, array $data): void
     {
@@ -278,22 +290,27 @@ class SocialPostRelay
             return;
         }
 
-        try {
-            $results = $this->postForMe->resultsFor($overdue->pluck('provider_post_id')->all());
-        } catch (Throwable) {
-            return;
-        }
+        // Each relay is asked about its own posts; one being down leaves
+        // the other's to settle.
+        foreach ($overdue->groupBy('provider') as $provider => $posts) {
+            try {
+                $results = $this->providers->named((string) $provider)
+                    ->resultsFor($posts->pluck('provider_post_id')->values()->all());
+            } catch (Throwable) {
+                continue;
+            }
 
-        $byProviderId = $overdue->keyBy('provider_post_id');
+            $byProviderId = $posts->keyBy('provider_post_id');
 
-        foreach ($results as $result) {
-            $post = $byProviderId->get((string) ($result['post_id'] ?? ''));
-            $account = $post?->targets
-                ->first(fn ($t) => $t->account->provider_account_id === (string) ($result['social_account_id'] ?? ''))
-                ?->account;
+            foreach ($results as $result) {
+                $post = $byProviderId->get((string) ($result['post_id'] ?? ''));
+                $account = $post?->targets
+                    ->first(fn ($t) => $t->account->provider_account_id === (string) ($result['social_account_id'] ?? ''))
+                    ?->account;
 
-            if ($post !== null && $account !== null) {
-                self::applyResult($post, $account, $result);
+                if ($post !== null && $account !== null) {
+                    self::applyResult($post, $account, $result);
+                }
             }
         }
     }

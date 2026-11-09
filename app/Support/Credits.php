@@ -2,6 +2,7 @@
 
 namespace App\Support;
 
+use App\Enums\SocialPlatform;
 use App\Enums\SocialPostStatus;
 use App\Enums\SocialPostTargetStatus;
 use App\Enums\WalletTransactionType;
@@ -18,15 +19,18 @@ use RuntimeException;
  * One balance for sends and storage (the Credits comp, 2026-10).
  *
  * The whole price list: $1 buys 10.000 Credits ($10 = 100.000, the smallest
- * top-up), a publish past the plan's monthly allowance costs 300 ($0.03),
- * a 5 GB block of storage costs 5.000 a month — 4.500 once the account
- * passes 100 GB, on every block, not only the ones above the line.
- * Purchased Credits never expire.
+ * top-up), a publish costs 300 ($0.03) — on X 2.000 when the caption has a
+ * link (X bills us $0.20 for those) — a 5 GB block of storage costs 5.000 a
+ * month, 4.500 once the account passes 100 GB, on every block.
  *
- * A publish is one post to one destination account. The plan's monthly
- * allowance is used first; only publishes past it cost Credits. The
- * allowance resets each period and never rolls over, and never turns into
- * Credits.
+ * Two buckets (owner decision, 2026-11-09):
+ * - Monthly Credits (wallet `monthly`): the plan's `credits_monthly`, granted
+ *   at the start of each cycle and expired, unused, at its end — no rollover.
+ *   Free 3.000, Pro 45.000, Max 150.000: yesterday's 10/150/500 publishes.
+ * - Top-up Credits (wallet `credits`): purchases and grants. Never expire.
+ * A send spends Monthly first, then Top-up; a destination that never goes
+ * out gives each part back to the bucket it came from (Monthly only while
+ * its cycle lasts — after that it had expired anyway). Rent is Top-up only.
  *
  * Order matters: rent is taken on the first, before anything is sent, so
  * a send never spends money the rent was going to need. A send is taken
@@ -41,8 +45,16 @@ final class Credits
     /** Credits one US dollar buys. */
     public const PER_DOLLAR = 10_000;
 
-    /** One publish past the monthly allowance. */
+    /**
+     * One publish, when config says nothing: `services.social.per_send`
+     * holds the live prices (CREDITS_PER_SEND, CREDITS_PER_SEND_X,
+     * CREDITS_PER_SEND_X_LINK). Also what a legacy charge without a
+     * recorded price is worth.
+     */
     public const PER_SEND = 300;
+
+    /** X's price for a caption with a link, when config says nothing. */
+    public const PER_SEND_X_LINK = 2000;
 
     public const BLOCK_GB = 5;
 
@@ -61,9 +73,74 @@ final class Credits
 
     public const TOP_UP_MAX = 1000;
 
+    /** Top-up Credits: purchased and granted, never expire. */
     public static function balance(User $user): int
     {
         return Wallet::balance(self::owner($user), Wallet::CREDITS);
+    }
+
+    /** What is left of this cycle's Monthly Credits (granted on first ask). */
+    public static function monthlyBalance(User $user): int
+    {
+        $owner = self::owner($user);
+        self::renewMonthly($owner);
+
+        return Wallet::balance($owner, Wallet::MONTHLY);
+    }
+
+    /** Everything a send can spend right now: Monthly plus Top-up. */
+    public static function total(User $user): int
+    {
+        return self::monthlyBalance($user) + self::balance($user);
+    }
+
+    /** The plan's Monthly Credits per cycle — per seat, pooled like storage. */
+    public static function monthlyAmount(User $owner): int
+    {
+        $owner = self::owner($owner);
+        $per = $owner->plan()->quota('credits_monthly');
+
+        return $per === null ? 0 : max(0, (int) $per) * Workspace::seats($owner);
+    }
+
+    /**
+     * Start the cycle if it has not been started: what is left of the last
+     * cycle's Monthly Credits expires, this cycle's are granted — a ledger
+     * row for each. A plan bought mid-cycle tops the cycle up to its own
+     * amount (never back down, and never twice). Safe to call on every
+     * read; the job calls it daily so expiry shows even for the idle.
+     */
+    public static function renewMonthly(User $owner): void
+    {
+        $owner = self::owner($owner);
+        $since = self::cycleSince($owner);
+        $amount = self::monthlyAmount($owner);
+
+        DB::transaction(function () use ($owner, $since, $amount) {
+            User::query()->whereKey($owner->id)->lockForUpdate()->first();
+
+            $grants = WalletTransaction::query()
+                ->where('user_id', $owner->id)
+                ->where('wallet', Wallet::MONTHLY)
+                ->where('type', WalletTransactionType::CreditsMonthly)
+                ->where('created_at', '>=', $since);
+            $started = (clone $grants)->exists();
+            $granted = (int) $grants->sum('amount');
+
+            if (! $started) {
+                $left = Wallet::balance($owner, Wallet::MONTHLY);
+                if ($left > 0) {
+                    Wallet::debit($owner, WalletTransactionType::CreditsExpired, $left, null, null,
+                        'Monthly Credits expired · cycle to '.$since->format('j M Y'), Wallet::MONTHLY);
+                }
+            }
+
+            if ($amount > $granted) {
+                $plan = $owner->plan();
+                Wallet::credit($owner, WalletTransactionType::CreditsMonthly, $amount - $granted, 'plan', $plan->id,
+                    "{$plan->name} Monthly Credits · from ".$since->format('j M Y'), Wallet::MONTHLY);
+            }
+        });
     }
 
     /**
@@ -103,34 +180,39 @@ final class Credits
     }
 
     /**
-     * Already spoken for: sends handed over but not yet out, and next
-     * month's rent — the two numbers the screen shows as committed.
+     * Already spoken for: sends handed over but not yet out (Top-up, and
+     * Monthly apart), and next month's rent.
      *
-     * @return array{sends: int, rent: int}
+     * @return array{sends: int, sends_monthly: int, rent: int}
      */
     public static function committed(User $user): array
     {
+        [$topup, $monthly] = self::pendingSendCredits($user);
+
         return [
-            'sends' => self::pendingDestinations($user) * self::PER_SEND,
+            'sends' => $topup,
+            'sends_monthly' => $monthly,
             'rent' => self::rent($user),
         ];
     }
 
     /**
      * Pay for a post about to reach the provider: each destination not yet
-     * paid for takes one publish from the monthly allowance while it lasts,
-     * then 300 Credits. Each target remembers which, so a return goes back
-     * to the right place. Refuses with a validation error the composer can
-     * show, and then nothing is marked.
+     * paid for costs its price (perSend: platform, and on X whether its
+     * caption has a link), from Monthly Credits while they last, then from
+     * Top-up. Each target remembers both parts, so a return gives back
+     * exactly that to each bucket. Refuses with a validation error the
+     * composer can show, and then nothing is taken or marked.
      *
-     * The owner's row is locked for the count: two sends at once must not
-     * both spend the last publish in the allowance.
+     * The owner's row is locked: two sends at once must not both spend the
+     * last of the Monthly Credits.
      *
      * @throws ValidationException
      */
     public static function chargeSend(SocialPost $post): void
     {
         $owner = self::owner($post->user);
+        self::renewMonthly($owner);
 
         DB::transaction(function () use ($post, $owner) {
             User::query()->whereKey($owner->id)->lockForUpdate()->first();
@@ -138,6 +220,7 @@ final class Credits
             $targets = $post->targets()
                 ->where('status', SocialPostTargetStatus::Pending)
                 ->whereNull('paid_with')
+                ->with('account')
                 ->orderBy('id')
                 ->get();
 
@@ -145,42 +228,56 @@ final class Credits
                 return;
             }
 
-            $free = min($targets->count(), self::allowanceLeft($owner));
-            $paid = $targets->count() - $free;
-            $now = now();
+            $monthlyLeft = Wallet::balance($owner, Wallet::MONTHLY);
+            $parts = [];
+            foreach ($targets as $target) {
+                $price = self::priceFor($post, $target);
+                $monthly = min($price, $monthlyLeft);
+                $monthlyLeft -= $monthly;
+                $parts[] = [$target, $monthly, $price - $monthly];
+            }
 
-            if ($paid > 0) {
-                $price = $paid * self::PER_SEND;
+            $fromMonthly = array_sum(array_column($parts, 1));
+            $fromTopup = array_sum(array_column($parts, 2));
+            $note = count($parts).' publish'.(count($parts) === 1 ? '' : 'es');
 
+            // Top-up first: it is the one that can refuse, and a refusal must
+            // leave the Monthly Credits untouched (the transaction rolls back).
+            if ($fromTopup > 0) {
                 try {
-                    Wallet::debit(
-                        $owner,
-                        WalletTransactionType::CreditsSend,
-                        $price,
-                        'social_post',
-                        $post->id,
-                        $paid.' publish'.($paid === 1 ? '' : 'es').' past the allowance',
-                        Wallet::CREDITS,
-                    );
+                    Wallet::debit($owner, WalletTransactionType::CreditsSend, $fromTopup,
+                        'social_post', $post->id, $note, Wallet::CREDITS);
                 } catch (RuntimeException) {
                     throw ValidationException::withMessages([
-                        'caption' => "This needs {$price} Credits and the balance has ".self::balance($owner)
-                            .' — top up, or send to fewer accounts.',
+                        'caption' => "This needs {$fromTopup} Credits past this month's and the balance has "
+                            .self::balance($owner).' — top up, or send to fewer accounts.',
                     ]);
                 }
             }
 
-            $targets->each(fn (SocialPostTarget $target, int $i) => $target->update([
-                'paid_with' => $i < $free ? SocialPostTarget::ALLOWANCE : SocialPostTarget::CREDITS,
-                'charged_at' => $now,
-            ]));
+            if ($fromMonthly > 0) {
+                Wallet::debit($owner, WalletTransactionType::CreditsSend, $fromMonthly,
+                    'social_post', $post->id, $note.' · Monthly Credits', Wallet::MONTHLY);
+            }
+
+            $now = now();
+            foreach ($parts as [$target, $monthly, $topup]) {
+                $target->update([
+                    'paid_with' => $monthly > 0 ? SocialPostTarget::MONTHLY : SocialPostTarget::CREDITS,
+                    'charged_monthly' => $monthly,
+                    'charged_credits' => $topup,
+                    'charged_at' => $now,
+                ]);
+            }
         });
     }
 
     /**
-     * Give back the publishes of destinations that never went out: Credits
-     * to the balance, allowance to this period's count (by forgetting it was
-     * used). A target already given back, or never charged, gives nothing.
+     * Give back what destinations that never went out paid, each part to
+     * its bucket: Top-up always, Monthly only while the cycle it was spent
+     * in lasts. A target already given back, or never charged, gives
+     * nothing; a legacy allowance publish gives nothing (the allowance is
+     * gone), a legacy Credits one gives 300.
      *
      * @param  iterable<SocialPostTarget>  $targets
      */
@@ -188,39 +285,114 @@ final class Credits
     {
         $ids = collect($targets)->pluck('id');
         $owner = self::owner($post->user);
+        $since = self::cycleSince($owner);
 
-        DB::transaction(function () use ($post, $ids, $owner, $why) {
+        DB::transaction(function () use ($post, $ids, $owner, $why, $since) {
             User::query()->whereKey($owner->id)->lockForUpdate()->firstOrFail();
             // Fresh state under the same lock as charging. Two failures or a
             // cancel racing a failure must not return a target twice.
             $charged = $post->targets()->whereKey($ids)->whereNotNull('paid_with')->lockForUpdate()->get();
-            $credits = $charged->where('paid_with', SocialPostTarget::CREDITS)->count();
-            SocialPostTarget::query()->whereKey($charged->pluck('id'))->update(['paid_with' => null, 'charged_at' => null]);
 
-            if ($credits > 0) {
-                Wallet::credit(
-                    self::owner($post->user),
-                    WalletTransactionType::CreditsSendReturn,
-                    $credits * self::PER_SEND,
-                    'social_post',
-                    $post->id,
-                    $why,
-                    Wallet::CREDITS,
-                );
+            $topup = (int) $charged->sum(fn (SocialPostTarget $t) => match ($t->paid_with) {
+                SocialPostTarget::CREDITS => $t->charged_credits ?? self::PER_SEND,
+                SocialPostTarget::MONTHLY => (int) $t->charged_credits,
+                default => 0,
+            });
+            $monthly = (int) $charged
+                ->filter(fn (SocialPostTarget $t) => $t->charged_at !== null && $t->charged_at->greaterThanOrEqualTo($since))
+                ->sum(fn (SocialPostTarget $t) => (int) $t->charged_monthly);
+
+            SocialPostTarget::query()->whereKey($charged->pluck('id'))->update([
+                'paid_with' => null, 'charged_at' => null, 'charged_credits' => null, 'charged_monthly' => null,
+            ]);
+
+            if ($topup > 0) {
+                Wallet::credit($owner, WalletTransactionType::CreditsSendReturn, $topup,
+                    'social_post', $post->id, $why, Wallet::CREDITS);
+            }
+
+            if ($monthly > 0) {
+                Wallet::credit($owner, WalletTransactionType::CreditsSendReturn, $monthly,
+                    'social_post', $post->id, $why, Wallet::MONTHLY);
             }
         });
     }
 
     /**
-     * Credits a send of $destinations would take right now: only what the
-     * remaining allowance does not cover.
+     * Top-up Credits a send would take right now: its price past what the
+     * Monthly Credits cover — so it compares with balance(). Destinations
+     * are a count (each at the default price) or, per destination, its
+     * platform or [platform, caption] — what chargeSend will price.
+     *
+     * @param  int|iterable<SocialPlatform|string|array{0: SocialPlatform|string|null, 1?: string|null}|null>  $destinations
      */
-    public static function sendPrice(User $user, int $destinations): int
+    public static function sendPrice(User $user, int|iterable $destinations): int
     {
-        return max(0, $destinations - self::allowanceLeft(self::owner($user))) * self::PER_SEND;
+        $price = is_int($destinations)
+            ? $destinations * self::perSend()
+            : (int) collect($destinations)->sum(fn ($d) => is_array($d)
+                ? self::perSend($d[0] ?? null, $d[1] ?? null)
+                : self::perSend($d));
+
+        return max(0, $price - self::monthlyBalance($user));
     }
 
-    /** Publishes taken from the allowance in the current period. */
+    /**
+     * One publish on this platform. X costs more when the caption carries
+     * a link, because X's API bills us $0.20 for those ($0.015 without).
+     */
+    public static function perSend(SocialPlatform|string|null $platform = null, ?string $caption = null): int
+    {
+        $key = $platform instanceof SocialPlatform ? $platform->value : $platform;
+
+        if ($key === 'x' && $caption !== null && self::hasLink($caption)) {
+            return self::price('x_link', self::PER_SEND_X_LINK);
+        }
+
+        return $key !== null && config("services.social.per_send.{$key}") !== null
+            ? self::price($key, self::PER_SEND)
+            : self::price('default', self::PER_SEND);
+    }
+
+    /** One target's price: its platform, its own caption or the post's. */
+    public static function priceFor(SocialPost $post, SocialPostTarget $target): int
+    {
+        $caption = $target->configuration['caption'] ?? $post->caption;
+
+        return self::perSend($target->account->platform, is_string($caption) ? $caption : null);
+    }
+
+    /**
+     * Would X count a link in this text? Close to X's own rule: a scheme,
+     * a www., or a bare domain on a common TLD (example.com, shop.id/x).
+     */
+    public static function hasLink(string $text): bool
+    {
+        return (bool) preg_match(
+            '~(?:https?://|\bwww\.)\S|\b[a-z0-9][a-z0-9-]*(?:\.[a-z0-9-]+)*\.(?:com|net|org|io|co|id|me|app|dev|ly|so|link|xyz|ai|gg|tv|shop|store|site|online|info|biz|us|uk|to|be|page|art|space)\b(?:/\S*)?~i',
+            $text,
+        );
+    }
+
+    /**
+     * The send price of every platform (X without a link), plus `x_link`,
+     * for the screens that show one.
+     *
+     * @return array<string, int>
+     */
+    public static function perSendByPlatform(): array
+    {
+        return collect(SocialPlatform::cases())
+            ->mapWithKeys(fn (SocialPlatform $p) => [$p->value => self::perSend($p)])
+            ->put('x_link', self::perSend('x', 'https://x.com'))
+            ->all();
+    }
+
+    /**
+     * Legacy: publishes taken from the count-based allowance this cycle.
+     * Nothing is charged to it any more, so this reads 0 once a cycle has
+     * passed; kept for responses that still show it.
+     */
     public static function allowanceUsed(User $user): int
     {
         $owner = self::owner($user);
@@ -232,20 +404,18 @@ final class Credits
             ->count();
     }
 
-    /** What is left of this period's allowance; a plan without a ceiling never runs out. */
-    public static function allowanceLeft(User $user): int
+    /** @deprecated the allowance became Monthly Credits; same cycle. */
+    public static function allowanceSince(User $owner): CarbonImmutable
     {
-        $limit = PlanQuota::socialPostsLimit($user);
-
-        return $limit === null ? PHP_INT_MAX : max(0, $limit - self::allowanceUsed($user));
+        return self::cycleSince($owner);
     }
 
     /**
-     * When the current allowance period began. It resets monthly on the day
-     * of the sign-up (Free) or of the subscription's start (Pro, Max, yearly
-     * plans too); a month without that day resets on its last day.
+     * When the current Monthly Credits cycle began. It turns monthly on the
+     * day of the sign-up (Free) or of the subscription's start (Pro, Max,
+     * yearly plans too); a month without that day turns on its last day.
      */
-    public static function allowanceSince(User $owner): CarbonImmutable
+    public static function cycleSince(User $owner): CarbonImmutable
     {
         $anchor = $owner->activeSubscription()?->current_period_start ?? $owner->created_at;
         $day = $anchor === null ? 1 : $anchor->day;
@@ -257,8 +427,18 @@ final class Credits
         return $start->isFuture() ? $on($month->subMonthNoOverflow()) : $start;
     }
 
+    /** When this cycle ends and the next one's Monthly Credits arrive. */
+    public static function cycleEnds(User $owner): CarbonImmutable
+    {
+        $anchor = $owner->activeSubscription()?->current_period_start ?? $owner->created_at;
+        $day = $anchor === null ? 1 : $anchor->day;
+        $next = self::cycleSince($owner)->startOfMonth()->addMonthNoOverflow();
+
+        return $next->setDay(min($day, $next->daysInMonth))->startOfDay();
+    }
+
     /**
-     * Grant Credits (plan monthly, Free welcome, an admin gift).
+     * Grant Top-up Credits (Free welcome, an admin gift). Never expire.
      */
     public static function grant(User $user, int $credits, string $why): void
     {
@@ -322,8 +502,8 @@ final class Credits
 
     /**
      * The first of the month: rent. Rent that cannot be paid lapses the
-     * blocks (storage read-only until it fits; nothing is deleted). Plans
-     * add no Credits — they bring a publishing allowance instead.
+     * blocks (storage read-only until it fits; nothing is deleted). Rent is
+     * paid from Top-up Credits only; Monthly Credits are for publishing.
      *
      * @return 'renewed'|'lapsed'|'none'
      */
@@ -346,19 +526,36 @@ final class Credits
         return $outcome;
     }
 
-    private static function pendingDestinations(User $user): int
+    /**
+     * Credits taken for sends handed over but not yet out: [Top-up, Monthly].
+     *
+     * @return array{0: int, 1: int}
+     */
+    private static function pendingSendCredits(User $user): array
     {
         $owner = self::owner($user);
 
-        return (int) SocialPost::query()
-            ->whereIn('user_id', Workspace::memberIds($owner))
-            ->where('status', SocialPostStatus::Scheduled)
-            ->whereNotNull('provider_post_id')
-            // Only what Credits paid for: an allowance publish costs nothing back.
-            ->withCount(['targets' => fn ($q) => $q->where('status', SocialPostTargetStatus::Pending)
-                ->where('paid_with', SocialPostTarget::CREDITS)])
-            ->get()
-            ->sum('targets_count');
+        $targets = SocialPostTarget::query()
+            ->where('status', SocialPostTargetStatus::Pending)
+            ->whereIn('paid_with', [SocialPostTarget::CREDITS, SocialPostTarget::MONTHLY])
+            ->whereHas('post', fn ($q) => $q
+                ->whereIn('user_id', Workspace::memberIds($owner))
+                ->where('status', SocialPostStatus::Scheduled)
+                ->whereNotNull('provider_post_id'))
+            ->get(['id', 'paid_with', 'charged_credits', 'charged_monthly']);
+
+        return [
+            (int) $targets->sum(fn (SocialPostTarget $t) => $t->charged_credits
+                ?? ($t->paid_with === SocialPostTarget::CREDITS ? self::PER_SEND : 0)),
+            (int) $targets->sum(fn (SocialPostTarget $t) => (int) $t->charged_monthly),
+        ];
+    }
+
+    private static function price(string $key, int $fallback): int
+    {
+        $price = config("services.social.per_send.{$key}");
+
+        return is_numeric($price) && (int) $price >= 0 ? (int) $price : $fallback;
     }
 
     private static function planGb(User $owner): int

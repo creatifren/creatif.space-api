@@ -12,8 +12,8 @@ use Illuminate\Foundation\Queue\Queueable;
 use Illuminate\Support\Facades\Log;
 
 /**
- * The first of the month: rent first, then the plan's Credits, for every
- * account that owns either. Members are skipped — their storage and
+ * The first of the month: storage rent, for every account that owns
+ * blocks. The plan's Monthly Credits renew per cycle in RenewMonthlyCredits. Members are skipped — their storage and
  * Credits are the owner's.
  *
  * Idempotent per month: an account with any Credits movement from this

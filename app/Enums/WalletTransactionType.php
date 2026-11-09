@@ -17,8 +17,12 @@ enum WalletTransactionType: string
 
     /* ── Credits wallet ── */
     case CreditsTopUp = 'credits_top_up';
-    /** The plan's monthly Credits, or Free's thirty at sign-up. */
+    /** Top-up Credits given, not bought: Free's welcome, an admin gift. */
     case CreditsGrant = 'credits_grant';
+    /** A cycle's Monthly Credits from the plan (wallet `monthly`). */
+    case CreditsMonthly = 'credits_monthly';
+    /** What was left of a cycle's Monthly Credits when it ended. */
+    case CreditsExpired = 'credits_expired';
     /** Three per destination, taken when the post is handed to the provider. */
     case CreditsSend = 'credits_send';
     /** A destination that never went out — failed or cancelled — comes back. */

@@ -54,7 +54,9 @@ class PlanSeeder extends Seeder
                     'seats' => 1,
                     'custom_domains' => 0,
                     'social_accounts' => 3,
-                    // Publishes a month: one post to one account is one.
+                    // Monthly Credits: granted each cycle, expire at its end.
+                    'credits_monthly' => 3000,
+                    // Legacy, unused: publishes a month before Monthly Credits.
                     'social_posts_monthly' => 10,
                 ],
                 'features' => [
@@ -72,7 +74,7 @@ class PlanSeeder extends Seeder
                 'name' => 'Pro',
                 'price_monthly' => 999,
                 'price_yearly' => 9990,
-                'quotas' => $paidQuotas + ['social_posts_monthly' => 150],
+                'quotas' => $paidQuotas + ['credits_monthly' => 45000, 'social_posts_monthly' => 150],
                 'features' => $paidFeatures,
                 'is_active' => true,
                 'sort_order' => 2,
@@ -82,7 +84,7 @@ class PlanSeeder extends Seeder
                 'name' => 'Max',
                 'price_monthly' => 1499,
                 'price_yearly' => 14990,
-                'quotas' => $paidQuotas + ['social_posts_monthly' => 500],
+                'quotas' => $paidQuotas + ['credits_monthly' => 150000, 'social_posts_monthly' => 500],
                 'features' => $paidFeatures,
                 'is_active' => true,
                 'sort_order' => 3,
@@ -97,6 +99,7 @@ class PlanSeeder extends Seeder
                     // Per-seat: PlanQuota multiplies storage and publishes by
                     // the seats bought, pooled across the workspace.
                     'seats' => 3,
+                    'credits_monthly' => 45000,
                     'social_posts_monthly' => 150,
                 ],
                 'features' => $paidFeatures,

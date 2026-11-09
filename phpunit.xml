@@ -28,6 +28,7 @@
         <env name="DB_URL" value=""/>
         <env name="MAIL_MAILER" value="array"/>
         <!-- Creem is faked in tests. Fixtures sign raw bodies with this secret. -->
+        <env name="SOCIAL_PROVIDER" value="postforme"/>
         <env name="CREEM_API_KEY" value="creem_test_fixture"/>
         <env name="CREEM_WEBHOOK_SECRET" value="creem_webhook_fixture"/>
         <env name="CREEM_TEST_MODE" value="true"/>

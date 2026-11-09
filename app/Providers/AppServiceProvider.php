@@ -2,7 +2,9 @@
 
 namespace App\Providers;
 
+use App\Contracts\SocialProvider;
 use App\Models\User;
+use App\Support\SocialProviders;
 use Carbon\CarbonImmutable;
 use Illuminate\Auth\Notifications\ResetPassword;
 use Illuminate\Database\Eloquent\Model;
@@ -19,7 +21,9 @@ class AppServiceProvider extends ServiceProvider
      */
     public function register(): void
     {
-        //
+        // The relay for new accounts and posts; rows that exist ask
+        // SocialProviders::for() for the one that holds them.
+        $this->app->bind(SocialProvider::class, fn ($app) => $app->make(SocialProviders::class)->current());
     }
 
     /**

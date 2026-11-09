@@ -20,14 +20,21 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
  * @property string|null $fail_reason
  * @property string|null $platform_url
  * @property string|null $provider_result_id
- * @property string|null $paid_with self::ALLOWANCE or self::CREDITS; null = not charged
+ * @property string|null $paid_with self::MONTHLY (some or all from Monthly Credits) or self::CREDITS (Top-up only); self::ALLOWANCE on legacy rows; null = not charged
+ * @property int|null $charged_credits Top-up Credits this destination paid; null on legacy rows (a CREDITS one = 300)
+ * @property int|null $charged_monthly Monthly Credits this destination paid
  * @property CarbonImmutable|null $charged_at
  */
 class SocialPostTarget extends Model
 {
+    /** Legacy: the count-based allowance, before Monthly Credits. */
     public const ALLOWANCE = 'allowance';
 
+    /** Paid from Top-up Credits only. */
     public const CREDITS = 'credits';
+
+    /** Paid at least partly from Monthly Credits (charged_monthly), rest Top-up. */
+    public const MONTHLY = 'monthly';
 
     protected $fillable = [
         'social_post_id',
@@ -38,6 +45,8 @@ class SocialPostTarget extends Model
         'platform_url',
         'provider_result_id',
         'paid_with',
+        'charged_credits',
+        'charged_monthly',
         'charged_at',
     ];
 
@@ -51,6 +60,8 @@ class SocialPostTarget extends Model
         return [
             'configuration' => 'array',
             'status' => SocialPostTargetStatus::class,
+            'charged_credits' => 'integer',
+            'charged_monthly' => 'integer',
             'charged_at' => 'datetime',
         ];
     }

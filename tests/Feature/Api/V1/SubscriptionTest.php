@@ -29,7 +29,10 @@ it('sells only Free Pro and Max at the approved USD prices', function () {
         ->and($rows['free']['quotas']['spaces_total'])->toBe(15)
         ->and($rows['free']['quotas']['social_posts_monthly'])->toBe(10)
         ->and($rows['pro']['quotas']['social_posts_monthly'])->toBe(150)
-        ->and($rows['max']['quotas']['social_posts_monthly'])->toBe(500);
+        ->and($rows['max']['quotas']['social_posts_monthly'])->toBe(500)
+        ->and($rows['free']['quotas']['credits_monthly'])->toBe(3000)
+        ->and($rows['pro']['quotas']['credits_monthly'])->toBe(45000)
+        ->and($rows['max']['quotas']['credits_monthly'])->toBe(150000);
 });
 
 it('reports Free without a subscription', function () {

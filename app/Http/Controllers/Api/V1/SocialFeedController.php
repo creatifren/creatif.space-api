@@ -4,7 +4,7 @@ namespace App\Http\Controllers\Api\V1;
 
 use App\Http\Controllers\Controller;
 use App\Models\SocialAccount;
-use App\Services\PostForMeService;
+use App\Support\SocialProviders;
 use Illuminate\Http\Client\RequestException;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -36,7 +36,7 @@ class SocialFeedController extends Controller
         'reach' => ['reach'],
     ];
 
-    public function show(Request $request, SocialAccount $socialAccount, PostForMeService $postForMe): JsonResponse
+    public function show(Request $request, SocialAccount $socialAccount, SocialProviders $providers): JsonResponse
     {
         Gate::allowIf(fn ($user) => $socialAccount->user_id === $user->id);
 
@@ -44,7 +44,7 @@ class SocialFeedController extends Controller
         $key = "social-feed:{$socialAccount->id}:".($cursor ?? 'first');
 
         try {
-            $feed = Cache::remember($key, now()->addMinutes(10), fn () => $postForMe->feed(
+            $feed = Cache::remember($key, now()->addMinutes(10), fn () => $providers->for($socialAccount)->feed(
                 $socialAccount->provider_account_id,
                 $cursor,
             ));
@@ -57,6 +57,9 @@ class SocialFeedController extends Controller
         }
 
         $ours = $request->user()->socialPosts()->pluck('ulid')->flip();
+        // A relay that keeps no external id (Outstand) names its own post id.
+        $byProviderId = $request->user()->socialPosts()->whereNotNull('provider_post_id')
+            ->pluck('ulid', 'provider_post_id');
 
         return response()->json([
             'data' => array_map(fn (array $p) => [
@@ -66,7 +69,9 @@ class SocialFeedController extends Controller
                 'posted_at' => $p['posted_at'] ?? null,
                 'media' => $this->mediaUrls($p['media'] ?? []),
                 // Made through us when the provider echoes our post ulid back.
-                'post_id' => isset($p['external_post_id'], $ours[$p['external_post_id']]) ? $p['external_post_id'] : null,
+                'post_id' => isset($p['external_post_id'], $ours[$p['external_post_id']])
+                    ? $p['external_post_id']
+                    : $byProviderId->get((string) ($p['provider_post_id'] ?? '')),
                 'metrics' => $this->metrics((array) ($p['metrics'] ?? [])),
             ], $feed['data']),
             'meta' => ['next_cursor' => $feed['cursor']],

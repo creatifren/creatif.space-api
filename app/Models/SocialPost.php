@@ -18,6 +18,7 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
  * @property int $id
  * @property string $ulid
  * @property int $user_id
+ * @property string $provider
  * @property string|null $provider_post_id
  * @property string $caption
  * @property string $type
@@ -41,6 +42,7 @@ class SocialPost extends Model
         // as external_id before the row exists.
         'ulid',
         'user_id',
+        'provider',
         'provider_post_id',
         'caption',
         'type',
@@ -104,6 +106,8 @@ class SocialPost extends Model
     {
         static::creating(function (self $post): void {
             $post->ulid ??= (string) str()->ulid();
+            // Which relay holds it; ids mean nothing to the other one.
+            $post->provider ??= (string) config('services.social.provider');
         });
     }
 
