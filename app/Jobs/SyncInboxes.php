@@ -2,7 +2,6 @@
 
 namespace App\Jobs;
 
-use App\Enums\SocialAccountStatus;
 use App\Enums\SocialPlatform;
 use App\Models\SocialAccount;
 use Illuminate\Contracts\Queue\ShouldQueue;
@@ -24,7 +23,7 @@ class SyncInboxes implements ShouldQueue
 
         SocialAccount::query()
             ->where('provider', 'outstand')
-            ->where('status', SocialAccountStatus::Connected)
+            ->usable()
             ->whereIn('platform', [SocialPlatform::Instagram, SocialPlatform::Facebook])
             ->whereNotNull('inbox_synced_at')
             ->select('id')
