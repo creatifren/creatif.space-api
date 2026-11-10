@@ -79,7 +79,7 @@ class SocialPlanLinkController extends Controller
 
     public function show(string $token): JsonResponse
     {
-        $link = SocialPlanLink::query()->where('token', $token)->with('user')->first();
+        $link = SocialPlanLink::query()->where('token_hash', SocialPlanLink::hashToken($token))->with('user')->first();
         if ($link === null) {
             abort(404);
         }

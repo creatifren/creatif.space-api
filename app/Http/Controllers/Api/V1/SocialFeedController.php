@@ -4,6 +4,8 @@ namespace App\Http\Controllers\Api\V1;
 
 use App\Http\Controllers\Controller;
 use App\Models\SocialAccount;
+use App\Models\SocialPost;
+use App\Support\Workspace;
 use App\Support\SocialProviders;
 use Illuminate\Http\Client\RequestException;
 use Illuminate\Http\JsonResponse;
@@ -38,7 +40,9 @@ class SocialFeedController extends Controller
 
     public function show(Request $request, SocialAccount $socialAccount, SocialProviders $providers): JsonResponse
     {
-        Gate::allowIf(fn ($user) => $socialAccount->user_id === $user->id);
+        // A team member reads the workspace's feeds, as in the rest of Social.
+        $workspace = Workspace::memberIds(Workspace::owner($request->user()));
+        Gate::allowIf(fn () => $workspace->contains($socialAccount->user_id));
 
         $cursor = $request->string('cursor')->toString() ?: null;
         $key = "social-feed:{$socialAccount->id}:".($cursor ?? 'first');
@@ -56,9 +60,10 @@ class SocialFeedController extends Controller
             ], $e->response->status() === 404 ? 404 : 409);
         }
 
-        $ours = $request->user()->socialPosts()->pluck('ulid')->flip();
+        $posts = SocialPost::query()->whereIn('user_id', $workspace);
+        $ours = (clone $posts)->pluck('ulid')->flip();
         // A relay that keeps no external id (Outstand) names its own post id.
-        $byProviderId = $request->user()->socialPosts()->whereNotNull('provider_post_id')
+        $byProviderId = (clone $posts)->whereNotNull('provider_post_id')
             ->pluck('ulid', 'provider_post_id');
 
         return response()->json([

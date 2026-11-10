@@ -293,7 +293,7 @@ class PublicApprovalController extends Controller
 
     private function resolve(string $token): SocialApprovalLink|JsonResponse
     {
-        $link = SocialApprovalLink::query()->where('token', $token)->with('user')->first();
+        $link = SocialApprovalLink::query()->where('token_hash', SocialApprovalLink::hashToken($token))->with('user')->first();
 
         if ($link === null) {
             abort(404);
