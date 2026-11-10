@@ -19,7 +19,8 @@ return [
 
     // PUBLIC_URL: client pages (Space password gate, downloads, view events)
     // are served from creatif.space via the marketing proxy and call the API from there.
-    'allowed_origins' => array_values(array_unique(array_filter([env('FRONTEND_URL', 'http://localhost:3000'), env('PUBLIC_URL')]))), // env() is fine here: config files are the one place it is allowed
+    // MARKETING_URL: the creatif.space waitlist form (only its endpoint takes that origin; see MarketingSiteOrigin).
+    'allowed_origins' => array_values(array_unique(array_filter([env('FRONTEND_URL', 'http://localhost:3000'), env('PUBLIC_URL'), rtrim((string) env('MARKETING_URL', 'https://creatif.space'), '/')]))), // env() is fine here: config files are the one place it is allowed
 
     'allowed_origins_patterns' => [],
 

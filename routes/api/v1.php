@@ -35,7 +35,7 @@ use App\Http\Controllers\Api\V1\TeamController;
 use App\Http\Controllers\Api\V1\TourController;
 use App\Http\Controllers\Api\V1\WaitlistController;
 use App\Http\Middleware\EnsureInboxEnabled;
-use App\Http\Middleware\PublicSiteOrigin;
+use App\Http\Middleware\MarketingSiteOrigin;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
 
@@ -80,7 +80,7 @@ Route::get('/webhooks/outstand', [OutstandConnectController::class, 'return'])
 // Public waitlists (double opt-in). The form posts from creatif.space only;
 // the confirm link is opened from the email.
 Route::post('/waitlist', [WaitlistController::class, 'join'])
-    ->middleware([PublicSiteOrigin::class, 'throttle:5,1'])
+    ->middleware([MarketingSiteOrigin::class, 'throttle:5,1'])
     ->name('api.v1.waitlist.join');
 Route::get('/waitlist/confirm', [WaitlistController::class, 'confirm'])
     ->middleware('throttle:30,1')

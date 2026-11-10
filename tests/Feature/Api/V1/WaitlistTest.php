@@ -1,5 +1,6 @@
 <?php
 
+use App\Models\SocialApprovalLink;
 use App\Notifications\WaitlistConfirm;
 use App\Notifications\WaitlistOnTheList;
 use App\Notifications\WaitlistPriority;
@@ -19,7 +20,9 @@ use Illuminate\Support\Str;
 
 beforeEach(function () {
     config([
-        'app.public_url' => 'https://creatif.space',
+        // As on prod: PUBLIC_URL unset, so public_url is the app's URL.
+        'app.public_url' => 'https://app.creatif.space',
+        'app.marketing_url' => 'https://creatif.space',
         'services.resend.key' => 're_test',
         'services.resend.waitlist_segments.mcp' => 'seg_mcp',
     ]);
@@ -332,4 +335,31 @@ it('sends a Resend failure to waitlist=error, without an event or email', functi
 
     $this->analytics->assertNotCaptured('waitlist_joined');
     Notification::assertNotSentTo(new AnonymousNotifiable, WaitlistOnTheList::class);
+});
+
+it('answers the marketing site\'s CORS preflight, and refuses the app origin on the form', function () {
+    $this->withHeaders([
+        'Origin' => 'https://creatif.space',
+        'Access-Control-Request-Method' => 'POST',
+        'Access-Control-Request-Headers' => 'content-type',
+    ])->options('/api/v1/waitlist')
+        ->assertNoContent()
+        ->assertHeader('Access-Control-Allow-Origin', 'https://creatif.space');
+
+    joinWaitlist($this, ['email' => 'a@example.com'])->assertStatus(202);
+    joinWaitlist($this, ['email' => 'b@example.com'], 'https://app.creatif.space')->assertForbidden();
+});
+
+it('builds every waitlist link on marketing_url and leaves public_url alone', function () {
+    config(['app.marketing_url' => 'https://mk.test/']);
+    $store = fakeResend();
+
+    $this->withHeader('Origin', 'https://mk.test')->postJson('/api/v1/waitlist', ['email' => 'm@example.com', 'list' => 'mcp'])->assertStatus(202);
+    $this->get('/api/v1/waitlist/confirm?token='.urlencode(Waitlist::token('m@example.com', 'mcp')))
+        ->assertRedirect('https://mk.test/mcp?waitlist=confirmed&code='.Waitlist::refCode('m@example.com'));
+    $this->get('/api/v1/waitlist/confirm?token=forged')->assertRedirect('https://mk.test/mcp?waitlist=expired');
+
+    Notification::assertSentOnDemand(WaitlistOnTheList::class, fn ($n) => $n->shareUrl === 'https://mk.test/mcp?ref='.Waitlist::refCode('m@example.com'));
+    expect(config('app.public_url'))->toBe('https://app.creatif.space')
+        ->and((new SocialApprovalLink)->forceFill(['token' => 't0k'])->url())->toStartWith('https://app.creatif.space/a/');
 });
