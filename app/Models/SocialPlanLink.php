@@ -15,6 +15,7 @@ use Illuminate\Support\Str;
  * @property string $ulid
  * @property int $user_id
  * @property string $token
+ * @property string $token_hash
  * @property string|null $title
  * @property CarbonImmutable $starts_at
  * @property CarbonImmutable $ends_at
@@ -48,7 +49,24 @@ class SocialPlanLink extends Model
         static::creating(function (self $link): void {
             $link->ulid ??= (string) Str::ulid();
             $link->token ??= Str::random(40);
+            // What lookups use: a stolen row cannot open the link.
+            $link->token_hash = self::hashToken($link->token);
         });
+    }
+
+    public static function hashToken(string $token): string
+    {
+        return hash('sha256', $token);
+    }
+
+    /** The link a public URL's token names — looked up by its hash, never the token. */
+    public static function findByToken(?string $token): ?self
+    {
+        if (! is_string($token) || $token === '' || strlen($token) > 255) {
+            return null;
+        }
+
+        return static::query()->where('token_hash', self::hashToken($token))->first();
     }
 
     public function getRouteKeyName(): string

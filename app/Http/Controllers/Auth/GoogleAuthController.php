@@ -13,6 +13,7 @@ use App\Support\TeamInvite;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Log;
 use Laravel\Socialite\Facades\Socialite;
 use Laravel\Socialite\Two\InvalidStateException;
 use Laravel\Socialite\Two\User as GoogleUser;
@@ -80,13 +81,23 @@ class GoogleAuthController extends Controller
             return $this->cancelled();
         }
 
-        $user = User::query()
-            ->where('google_id', $googleUser->getId())
-            ->orWhere('email', $googleUser->getEmail())
-            ->first();
+        // The account this Google identity already belongs to wins; only
+        // then an account with the same address.
+        $user = User::query()->where('google_id', $googleUser->getId())->first()
+            ?? User::query()->where('email', $googleUser->getEmail())->first();
 
         if ($user?->status === UserStatus::Suspended) {
             return redirect(config('app.frontend_url').'/login?error=suspended');
+        }
+
+        /* Staff (anyone who can reach /admin) are never linked or signed in
+           by email: a Google account that merely carries a staff address —
+           a re-created mailbox, a shared domain — must not become a way into
+           the panel. Their google_id has to match, set beforehand. */
+        if ($user !== null && $user->is_staff && $user->google_id !== $googleUser->getId()) {
+            Log::warning('auth.google_staff_link_refused', ['user' => $user->ulid, 'had_google_id' => $user->google_id !== null]);
+
+            return redirect(config('app.frontend_url').'/login?error=google_not_linked');
         }
 
         if ($user === null) {
@@ -113,7 +124,7 @@ class GoogleAuthController extends Controller
                 'entry' => is_string($entry) ? $entry : null,
             ] + (is_array($utm) ? $utm : []));
         } elseif ($user->google_id === null) {
-            // Existing account (e.g. staff) signing in with Google for the first time.
+            // Existing (non-staff) account signing in with Google for the first time.
             $user->forceFill(['google_id' => $googleUser->getId()])->save();
 
             // A password signup nobody confirmed: whoever typed that password

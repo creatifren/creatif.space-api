@@ -10,10 +10,12 @@ use App\Http\Resources\SocialPostResource;
 use App\Models\SocialApprovalLink;
 use App\Models\SocialPost;
 use App\Models\SocialPostComment;
+use App\Models\User;
 use App\Support\Credits;
 use App\Support\PlanQuota;
 use App\Support\ProductEvents;
 use App\Support\SocialPostRelay;
+use App\Support\Workspace;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -42,7 +44,7 @@ class SocialApprovalController extends Controller
      */
     public function approve(Request $request, SocialPost $socialPost, SocialPostRelay $relay): SocialPostResource|JsonResponse
     {
-        Gate::allowIf(fn ($user) => $socialPost->user_id === $user->id);
+        Gate::allowIf(fn ($user) => self::mayWrite($user, $socialPost->user_id));
 
         if (! $socialPost->held() || $socialPost->status !== SocialPostStatus::Scheduled) {
             return response()->json(['message' => 'This post is not waiting for approval.'], 422);
@@ -76,7 +78,9 @@ class SocialApprovalController extends Controller
 
         // Held posts, and drafts (API clients share a draft straight to a
         // client — the same hold that sending it with approval=client makes).
-        $posts = $request->user()->socialPosts()
+        abort_unless(Workspace::canWrite($request->user()), 403, 'Viewers cannot share posts for approval.');
+
+        $posts = SocialPost::query()->whereIn('user_id', self::workspaceIds($request->user()))
             ->whereIn('ulid', array_unique($validated['post_ids']))
             ->where(fn ($q) => $q
                 ->where(fn ($held) => $held->where('status', SocialPostStatus::Scheduled)->whereNull('provider_post_id'))
@@ -89,7 +93,8 @@ class SocialApprovalController extends Controller
 
         $hours = $validated['expires_in_hours'] ?? null;
         $link = SocialApprovalLink::create([
-            'user_id' => $request->user()->id,
+            // The workspace's link, whoever on the team made it.
+            'user_id' => Workspace::owner($request->user())->id,
             'title' => $validated['title'] ?? null,
             'client_name' => $validated['client_name'] ?? null,
             'expires_at' => $hours ? now()->addHours($hours) : null,
@@ -112,7 +117,7 @@ class SocialApprovalController extends Controller
     public function links(Request $request): JsonResponse
     {
         $links = $this->withCounts(SocialApprovalLink::query())
-            ->where('user_id', $request->user()->id)
+            ->whereIn('user_id', self::workspaceIds($request->user()))
             ->latest('id')
             ->limit(200)
             ->get();
@@ -126,7 +131,7 @@ class SocialApprovalController extends Controller
      */
     public function show(Request $request, SocialApprovalLink $socialApprovalLink): JsonResponse
     {
-        Gate::allowIf(fn ($user) => $socialApprovalLink->user_id === $user->id);
+        Gate::allowIf(fn ($user) => self::mayRead($user, $socialApprovalLink->user_id));
 
         return response()->json(['data' => $this->detail($socialApprovalLink)]);
     }
@@ -138,7 +143,7 @@ class SocialApprovalController extends Controller
      */
     public function update(Request $request, SocialApprovalLink $socialApprovalLink): JsonResponse
     {
-        Gate::allowIf(fn ($user) => $socialApprovalLink->user_id === $user->id);
+        Gate::allowIf(fn ($user) => self::mayWrite($user, $socialApprovalLink->user_id));
 
         $validated = $request->validate([
             'title' => ['sometimes', 'nullable', 'string', 'max:120'],
@@ -162,7 +167,7 @@ class SocialApprovalController extends Controller
         }
 
         $add = isset($validated['add_post_ids'])
-            ? $request->user()->socialPosts()
+            ? SocialPost::query()->whereIn('user_id', self::workspaceIds($request->user()))
                 ->whereIn('ulid', array_unique($validated['add_post_ids']))
                 ->where('status', SocialPostStatus::Scheduled)
                 ->whereNull('provider_post_id')
@@ -222,7 +227,7 @@ class SocialApprovalController extends Controller
      */
     public function approveAll(Request $request, SocialApprovalLink $socialApprovalLink, SocialPostRelay $relay): JsonResponse
     {
-        Gate::allowIf(fn ($user) => $socialApprovalLink->user_id === $user->id);
+        Gate::allowIf(fn ($user) => self::mayWrite($user, $socialApprovalLink->user_id));
         $link = $socialApprovalLink;
 
         if ($link->revoked_at !== null) {
@@ -274,7 +279,7 @@ class SocialApprovalController extends Controller
      */
     public function linkFor(Request $request, SocialPost $socialPost): JsonResponse
     {
-        Gate::allowIf(fn ($user) => $socialPost->user_id === $user->id);
+        Gate::allowIf(fn ($user) => self::mayRead($user, $socialPost->user_id));
 
         $link = $this->withCounts(SocialApprovalLink::query())
             ->whereHas('posts', fn ($q) => $q->whereKey($socialPost->id))
@@ -294,7 +299,7 @@ class SocialApprovalController extends Controller
      */
     public function revoke(Request $request, SocialApprovalLink $socialApprovalLink): JsonResponse
     {
-        Gate::allowIf(fn ($user) => $socialApprovalLink->user_id === $user->id);
+        Gate::allowIf(fn ($user) => self::mayWrite($user, $socialApprovalLink->user_id));
 
         if ($socialApprovalLink->revoked_at === null) {
             DB::transaction(function () use ($socialApprovalLink): void {
@@ -311,7 +316,7 @@ class SocialApprovalController extends Controller
      */
     public function comments(Request $request, SocialPost $socialPost): JsonResponse
     {
-        Gate::allowIf(fn ($user) => $socialPost->user_id === $user->id);
+        Gate::allowIf(fn ($user) => self::mayRead($user, $socialPost->user_id));
 
         return response()->json([
             'data' => $socialPost->comments()->with('replies')->get()
@@ -321,7 +326,7 @@ class SocialApprovalController extends Controller
 
     public function comment(Request $request, SocialPost $socialPost): JsonResponse
     {
-        Gate::allowIf(fn ($user) => $socialPost->user_id === $user->id);
+        Gate::allowIf(fn ($user) => self::mayWrite($user, $socialPost->user_id));
 
         $validated = $request->validate([
             'body' => ['required', 'string', 'max:5000'],
@@ -349,7 +354,7 @@ class SocialApprovalController extends Controller
      */
     public function resolve(Request $request, SocialPostComment $socialPostComment): JsonResponse
     {
-        Gate::allowIf(fn ($user) => $socialPostComment->post->user_id === $user->id);
+        Gate::allowIf(fn ($user) => self::mayWrite($user, $socialPostComment->post->user_id));
         $socialPostComment->update(['resolved_at' => now()]);
 
         return response()->json(['data' => $socialPostComment->toPublicArray()]);
@@ -363,7 +368,7 @@ class SocialApprovalController extends Controller
     public function applySuggestion(Request $request, SocialPostComment $socialPostComment): SocialPostResource|JsonResponse
     {
         $post = $socialPostComment->post;
-        Gate::allowIf(fn ($user) => $post->user_id === $user->id);
+        Gate::allowIf(fn ($user) => self::mayWrite($user, $post->user_id));
 
         if ($socialPostComment->suggestion === null || ! $post->held()) {
             return response()->json(['message' => 'There is no suggestion to apply here.'], 422);
@@ -458,5 +463,28 @@ class SocialApprovalController extends Controller
             'revoked_at' => $link->revoked_at?->toIso8601String(),
             'created_at' => $link->created_at?->toIso8601String(),
         ];
+    }
+
+    /**
+     * Everyone whose posts and links are this workspace's: the owner and
+     * their active team members (Workspace::owner), as in the rest of Social.
+     *
+     * @return Collection<int, int>
+     */
+    private static function workspaceIds(User $user): Collection
+    {
+        return Workspace::memberIds(Workspace::owner($user));
+    }
+
+    /** A team member sees the workspace's posts and links. */
+    private static function mayRead(User $user, int $ownerId): bool
+    {
+        return self::workspaceIds($user)->contains($ownerId);
+    }
+
+    /** …and acts on them, unless they are a viewer. */
+    private static function mayWrite(User $user, int $ownerId): bool
+    {
+        return self::mayRead($user, $ownerId) && Workspace::canWrite($user);
     }
 }
