@@ -291,7 +291,7 @@ describe('connecting', function () {
 
         $this->get('/api/v1/webhooks/outstand?state='.urlencode(OutstandService::seal($user->ulid)))
             ->assertRedirect('https://app.test/social/connect?'.http_build_query([
-                'social' => 'connected', 'isSuccess' => 'false',
+                'social' => 'failed', 'isSuccess' => 'false',
                 'error' => 'The sign-in finished, but no account came back from it. Try connecting again.',
                 'connect' => 'failed', 'reason' => 'no_account',
             ]));
@@ -307,7 +307,7 @@ describe('connecting', function () {
             'id' => 'k7gqh', 'network' => 'instagram', 'username' => 'loyaldigicard', 'tenant_id' => $user->ulid, 'isActive' => 1,
         ]], 'count' => 1, 'total' => 1])]);
         $elsewhere = 'https://app.test/social/connect?'.http_build_query([
-            'social' => 'connected', 'isSuccess' => 'false', 'code' => 'already_connected_elsewhere',
+            'social' => 'failed', 'isSuccess' => 'false', 'code' => 'already_connected_elsewhere',
             'error' => 'This account is already connected to another Creatif Space account',
             'connect' => 'failed', 'reason' => 'already_connected_elsewhere',
         ]);
@@ -339,7 +339,7 @@ describe('connecting', function () {
     it('refuses a return without a good state', function () {
         $this->get('/api/v1/webhooks/outstand?state=forged&session=abc')
             ->assertRedirect('https://app.test/social/connect?'.http_build_query([
-                'social' => 'connected', 'isSuccess' => 'false',
+                'social' => 'failed', 'isSuccess' => 'false',
                 'error' => 'That sign-in link is not valid any more. Try connecting again.',
                 'connect' => 'failed', 'reason' => 'invalid_state',
             ]));

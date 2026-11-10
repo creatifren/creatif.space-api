@@ -224,11 +224,15 @@ class OutstandConnectController extends Controller
         return config('app.frontend_url').'/social/connect?'.http_build_query(array_filter($params, fn ($v) => $v !== null));
     }
 
-    /** A failed connect, in both the older params and connect/network/reason. */
+    /**
+     * A failed connect, in both the older params and connect/network/reason.
+     * Never `social=connected` (that reads as a success to older code):
+     * `social=failed`, alongside `isSuccess=false` and the message.
+     */
     private static function failed(?string $network, string $reason): string
     {
         return self::page([
-            'social' => 'connected',
+            'social' => 'failed',
             'isSuccess' => 'false',
             'code' => $reason === 'already_connected_elsewhere' ? $reason : null,
             'error' => self::MESSAGES[$reason] ?? self::MESSAGES['error'],

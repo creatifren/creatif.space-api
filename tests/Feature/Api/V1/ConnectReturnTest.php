@@ -32,6 +32,13 @@ function connectReturn($response): array
     expect($location)->toStartWith('https://app.test/social/connect?');
     parse_str((string) parse_url($location, PHP_URL_QUERY), $q);
 
+    // A failure never carries the old success marker next to connect=failed.
+    if (($q['connect'] ?? null) === 'failed') {
+        expect($q['social'] ?? null)->toBe('failed')
+            ->and($q['isSuccess'] ?? null)->toBe('false')
+            ->and($location)->not->toContain('social=connected');
+    }
+
     return $q;
 }
 
@@ -49,7 +56,7 @@ describe('every failure comes back to the app, per network', function () {
 
         expect($q)->toMatchArray([
             'connect' => 'failed', 'network' => $network, 'reason' => $reason,
-            'social' => 'connected', 'isSuccess' => 'false',
+            'social' => 'failed', 'isSuccess' => 'false',
         ])->and($q['error'])->toBeString()->not->toBe('');
         Http::assertNothingSent();
         expect(OutstandService::attempt($user->ulid))->toMatchArray(['status' => 'failed', 'reason' => $reason, 'network' => $network]);
@@ -190,3 +197,32 @@ it('maps provider error text to reasons', function (string $text, string $reason
     ['server_error', 'error'],
     ['unsuccessful', 'error'],
 ]);
+
+it('never sends social=connected on any failure reason', function (string $reason, string $url) {
+    Http::fake(['api.outstand.test/*' => Http::response('', 503)]);
+    $user = User::factory()->create();
+    $url = str_replace('{state}', OutstandService::seal($user->ulid, 'instagram'), $url);
+
+    $q = connectReturn($this->get($url));
+
+    expect($q['connect'])->toBe('failed')
+        ->and($q['reason'])->toBe($reason)
+        ->and($q['social'])->toBe('failed');
+})->with([
+    'expired' => ['expired', '/api/v1/webhooks/outstand?state='.str_repeat('a', 40)],
+    'invalid_state' => ['invalid_state', '/api/v1/webhooks/outstand?state=forged'],
+    'cancelled' => ['cancelled', '/api/v1/webhooks/outstand?state={state}&error=user_cancelled'],
+    'denied' => ['denied', '/api/v1/webhooks/outstand?state={state}&error=access_denied'],
+    'error' => ['error', '/api/v1/webhooks/outstand?state={state}&error=server_error'],
+    'unconfirmed' => ['unconfirmed', '/api/v1/webhooks/outstand?state={state}'],
+]);
+
+it('keeps success unchanged: social=connected, connect=success', function () {
+    $user = User::factory()->create();
+    Http::fake(['api.outstand.test/v1/social-accounts*' => Http::response(['success' => true, 'data' => [[
+        'id' => 'acc_ig', 'network' => 'instagram', 'username' => 'studio', 'tenant_id' => $user->ulid, 'isActive' => 1,
+    ]], 'count' => 1, 'total' => 1])]);
+
+    $this->get(returnUrl(OutstandService::seal($user->ulid, 'instagram')))
+        ->assertRedirect('https://app.test/social/connect?social=connected&count=1&connect=success&network=instagram');
+});
