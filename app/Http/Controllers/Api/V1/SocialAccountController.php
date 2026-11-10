@@ -26,6 +26,7 @@ use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Gate;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
@@ -33,12 +34,28 @@ use Throwable;
 
 class SocialAccountController extends Controller
 {
+    /** How often loading Channels may re-sync with the provider, per user. */
+    private const SELF_HEAL_MINUTES = 5;
+
     /**
      * The user's connected social accounts (the Connections board).
      * Grouping by platform is the client's job.
      */
-    public function index(Request $request): AnonymousResourceCollection
+    public function index(Request $request, SocialProvider $provider): AnonymousResourceCollection
     {
+        // Self-heal: a connect whose return never reached us (closed tab,
+        // a failed redirect) shows up the next time Channels loads. At most
+        // every SELF_HEAL_MINUTES per user, and never at the list's expense.
+        $user = $request->user();
+        if ((string) config("services.{$provider->name()}.key") !== ''
+            && Cache::add('social-self-heal:'.$user->ulid, true, now()->addMinutes(self::SELF_HEAL_MINUTES))) {
+            try {
+                $this->syncFor($user, $provider);
+            } catch (Throwable $e) {
+                Log::warning('social.self_heal_failed', ['user' => $user->ulid, 'error' => $e->getMessage()]);
+            }
+        }
+
         return SocialAccountResource::collection(
             $request->user()->socialAccounts()
                 ->orderBy('platform')
@@ -153,10 +170,26 @@ class SocialAccountController extends Controller
     public function sync(Request $request, SocialProvider $provider): AnonymousResourceCollection
     {
         $user = $request->user();
+        $this->syncFor($user, $provider);
+
+        return SocialAccountResource::collection(
+            $user->socialAccounts()->orderBy('platform')->orderBy('username')->get(),
+        );
+    }
+
+    /**
+     * The reconcile behind sync(), for a user without a request: the
+     * OAuth return (Outstand connects most networks directly, with no
+     * pending session) and the Channels list's self-heal.
+     *
+     * @param  array<int, array<string, mixed>>|null  $remote  the provider's list, when the caller already has it
+     */
+    public function syncFor(User $user, SocialProvider $provider, ?array $remote = null): void
+    {
         if ($provider->canReassign()) {
             $this->finishClaim($user, $provider);
         }
-        $remote = $provider->accountsFor($user->ulid);
+        $remote ??= $provider->accountsFor($user->ulid);
 
         $seen = [];
         // An Instagram sign-in that asked for the messages scope just ended.
@@ -218,10 +251,6 @@ class SocialAccountController extends Controller
         if ($lost->isNotEmpty()) {
             ProductEvents::channelsCount($user);
         }
-
-        return SocialAccountResource::collection(
-            $user->socialAccounts()->orderBy('platform')->orderBy('username')->get(),
-        );
     }
 
     /**

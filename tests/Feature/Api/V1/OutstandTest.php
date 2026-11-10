@@ -243,9 +243,95 @@ describe('connecting', function () {
             && $c['field'] === 'social_accounts.provider_account_id' && $c['length'] === 65)->once();
     });
 
-    it('lands a plain return on the connect page', function () {
-        $this->get('/api/v1/webhooks/outstand?state='.urlencode(OutstandService::seal('u1')).'&success=true&account_id=Kx7vQ')
-            ->assertRedirect('https://app.test/social/connect?social=connected&success=true');
+    // Prod 10 Nov (QA): Instagram, Threads, X, TikTok … are connected by
+    // Outstand directly — the return has no session, or one that 404s.
+    it('saves a directly connected account when the return has no session', function () {
+        Log::spy();
+        $user = User::factory()->create();
+        Http::fake(['api.outstand.test/v1/social-accounts*' => Http::response(['success' => true, 'data' => [[
+            'id' => 'k7gqh', 'network' => 'instagram', 'username' => 'loyaldigicard',
+            'profile_picture_url' => 'https://cdn/p.jpg', 'tenant_id' => $user->ulid, 'isActive' => 1,
+        ]], 'count' => 1, 'total' => 1])]);
+
+        $this->get('/api/v1/webhooks/outstand?state='.urlencode(OutstandService::seal($user->ulid)).'&success=true')
+            ->assertRedirect('https://app.test/social/connect?social=connected&count=1');
+
+        $row = $user->socialAccounts()->where('provider_account_id', 'k7gqh')->first();
+        expect($row->provider)->toBe('outstand')
+            ->and($row->platform->value)->toBe('instagram')
+            ->and($row->username)->toBe('loyaldigicard')
+            ->and($row->status->value)->toBe('connected');
+        Http::assertNotSent(fn (HttpRequest $r) => str_contains($r->url(), '/pending/'));
+        Log::shouldHaveReceived('info')->withArgs(fn ($m, $c) => $m === 'social.connect_return'
+            && $c['tenant'] === $user->ulid && $c['had_session'] === false && $c['pending_status'] === 'none'
+            && $c['accounts_found'] === 1 && $c['outcome'] === 'synced')->once();
+    });
+
+    it('saves the tenant\'s existing account when the pending session 404s', function () {
+        Log::spy();
+        $user = User::factory()->create();
+        Http::fake([
+            'api.outstand.test/v1/social-accounts/pending/*' => Http::response(['success' => false, 'error' => 'Not found'], 404),
+            'api.outstand.test/v1/social-accounts*' => Http::response(['success' => true, 'data' => [[
+                'id' => 'k7gqh', 'network' => 'instagram', 'username' => 'loyaldigicard', 'tenant_id' => $user->ulid, 'isActive' => 1,
+            ]], 'count' => 1, 'total' => 1]),
+        ]);
+
+        $this->get('/api/v1/webhooks/outstand?state='.urlencode(OutstandService::seal($user->ulid)).'&session=gone')
+            ->assertRedirect('https://app.test/social/connect?social=connected&count=1');
+
+        expect($user->socialAccounts()->where('provider_account_id', 'k7gqh')->exists())->toBeTrue();
+        Log::shouldHaveReceived('info')->withArgs(fn ($m, $c) => $m === 'social.connect_return'
+            && $c['had_session'] === true && $c['pending_status'] === '404' && $c['accounts_found'] === 1)->once();
+    });
+
+    it('says clearly when the sign-in left nothing to connect', function () {
+        $user = User::factory()->create();
+        Http::fake(['api.outstand.test/v1/social-accounts*' => Http::response(['success' => true, 'data' => [], 'count' => 0, 'total' => 0])]);
+
+        $this->get('/api/v1/webhooks/outstand?state='.urlencode(OutstandService::seal($user->ulid)))
+            ->assertRedirect('https://app.test/social/connect?'.http_build_query([
+                'social' => 'connected', 'isSuccess' => 'false',
+                'error' => 'The sign-in finished, but no account came back from it. Try connecting again.',
+            ]));
+
+        expect($user->socialAccounts()->count())->toBe(0);
+    });
+
+    it('refuses an account another Creatif Space user already holds', function () {
+        $other = User::factory()->create();
+        outstandAccount($other, 'instagram', ['provider_account_id' => 'k7gqh']);
+        $user = User::factory()->create();
+        Http::fake(['api.outstand.test/v1/social-accounts*' => Http::response(['success' => true, 'data' => [[
+            'id' => 'k7gqh', 'network' => 'instagram', 'username' => 'loyaldigicard', 'tenant_id' => $user->ulid, 'isActive' => 1,
+        ]], 'count' => 1, 'total' => 1])]);
+        $elsewhere = 'https://app.test/social/connect?'.http_build_query([
+            'social' => 'connected', 'isSuccess' => 'false', 'code' => 'already_connected_elsewhere',
+            'error' => 'This account is already connected to another Creatif Space account',
+        ]);
+
+        $this->get('/api/v1/webhooks/outstand?state='.urlencode(OutstandService::seal($user->ulid)))->assertRedirect($elsewhere);
+        expect($user->socialAccounts()->count())->toBe(0);
+
+        // Or when Outstand says so itself.
+        $this->get('/api/v1/webhooks/outstand?state='.urlencode(OutstandService::seal($user->ulid))
+            .'&error='.urlencode('Account is already connected to another tenant'))->assertRedirect($elsewhere);
+    });
+
+    it('re-syncs when Channels loads, at most every few minutes', function () {
+        $user = User::factory()->create();
+        Http::fake(['api.outstand.test/v1/social-accounts*' => Http::response(['success' => true, 'data' => [[
+            'id' => 'k7gqh', 'network' => 'instagram', 'username' => 'loyaldigicard', 'tenant_id' => $user->ulid, 'isActive' => 1,
+        ]], 'count' => 1, 'total' => 1])]);
+
+        $this->actingAs($user)->getJson('/api/v1/social-accounts')->assertOk()->assertJsonCount(1, 'data');
+        $this->actingAs($user)->getJson('/api/v1/social-accounts')->assertOk();
+        Http::assertSentCount(1);
+
+        // A provider that is down never takes the list with it.
+        Http::fake(['api.outstand.test/*' => Http::response('', 503)]);
+        $this->travel(6)->minutes();
+        $this->actingAs($user)->getJson('/api/v1/social-accounts')->assertOk()->assertJsonCount(1, 'data');
     });
 
     it('refuses a return without a good state', function () {
@@ -261,7 +347,7 @@ describe('connecting', function () {
             ]]),
         ]);
 
-        $this->get('/api/v1/webhooks/outstand?state='.urlencode(OutstandService::seal('u1')).'&session=sess1')
+        $this->get('/api/v1/webhooks/outstand?state='.urlencode(OutstandService::seal(User::factory()->create()->ulid)).'&session=sess1')
             ->assertRedirect('https://app.test/social/connect?social=connected');
 
         Http::assertSent(fn (HttpRequest $r) => str_ends_with($r->url(), '/finalize') && $r['selectedPageIds'] === ['pg1']);
