@@ -107,5 +107,10 @@ export function createApp(deps: AppDeps) {
     app.delete(path, auth, notAllowed);
   }
 
+  // Anything else: JSON, never Express's "Cannot GET" HTML page.
+  app.use((_req: Request, res: Response) => {
+    res.status(404).json({ error: 'not_found' });
+  });
+
   return app;
 }
