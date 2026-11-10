@@ -48,7 +48,7 @@ class MetadataController extends Controller
             'scopes_supported' => array_keys((array) config('mcp.scopes')),
             'bearer_methods_supported' => ['header'],
             'resource_name' => 'Creatif Space',
-            'resource_documentation' => rtrim((string) config('app.frontend_url'), '/').'/settings/api-keys',
+            'resource_documentation' => 'https://creatif.space/docs/mcp',
         ]);
     }
 
