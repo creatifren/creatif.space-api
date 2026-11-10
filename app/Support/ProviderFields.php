@@ -6,8 +6,8 @@ use Illuminate\Support\Facades\Log;
 
 /**
  * Provider values into our columns without a 1406 ("Data too long"):
- * names are clamped to the column, a URL that does not fit (or is not
- * http(s)) becomes null, and an id that does not fit is refused — a
+ * names are clamped to the column, a URL longer than 2048 (the URL
+ * columns are TEXT) or not http(s) becomes null, and an id that does not fit is refused — a
  * truncated id would point at the wrong thing.
  */
 final class ProviderFields
@@ -22,8 +22,8 @@ final class ProviderFields
         return mb_substr((string) $value, 0, $max);
     }
 
-    /** An http(s) URL that fits, or null (e.g. a 656-char Instagram CDN avatar). */
-    public static function url(mixed $value, int $max = 255): ?string
+    /** An http(s) URL up to $max chars (URL columns are TEXT), or null. */
+    public static function url(mixed $value, int $max = 2048): ?string
     {
         if (! is_string($value) || $value === '' || mb_strlen($value) > $max || ! preg_match('#^https?://#i', $value)) {
             return null;
