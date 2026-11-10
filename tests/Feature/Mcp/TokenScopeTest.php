@@ -55,7 +55,6 @@ describe('the scope fence', function () {
         ['GET', '/api/v1/spaces'],
         ['POST', '/api/v1/credits/top-up'],
         ['DELETE', '/api/v1/social-accounts/{account}'],
-        ['POST', '/api/v1/social-posts/{post}/send'],
         ['POST', '/api/v1/social-posts/{post}/approve'],
         ['DELETE', '/api/v1/social-posts/{post}/draft'],
         ['GET', '/api/v1/team/members'],

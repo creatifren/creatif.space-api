@@ -13,11 +13,32 @@ export type CallerAuth = AuthInfo & { extra: CallerExtra };
 
 export const metadataPath = '/.well-known/oauth-protected-resource';
 
+/** Every scope a tool can ask for (must match config/mcp.php on the API). */
+export const SCOPES = ['read', 'draft', 'approve', 'publish'] as const;
+
+/**
+ * Where the metadata lives for a resource URL, always built from its ORIGIN
+ * (never resourceUrl + path, which breaks once the resource has a path).
+ * `pathForm` is RFC 9728 §3.1's insertion of the resource path
+ * (…/oauth-protected-resource/mcp) and is what the 401 challenge
+ * advertises; `root` is served too, for clients that only try the root.
+ */
+export function metadataUrls(resourceUrl: string) {
+  const url = new URL(resourceUrl);
+  const path = url.pathname.replace(/\/+$/, '');
+  return {
+    root: `${url.origin}${metadataPath}`,
+    rootPath: metadataPath,
+    pathForm: `${url.origin}${metadataPath}${path}`,
+    pathFormPath: `${metadataPath}${path}`,
+  };
+}
+
 export function protectedResourceMetadata(resourceUrl: string, authorizationServer: string) {
   return {
     resource: resourceUrl,
     authorization_servers: [authorizationServer],
-    scopes_supported: ['read', 'draft'],
+    scopes_supported: [...SCOPES],
     bearer_methods_supported: ['header'],
     resource_name: 'creatif.space',
     resource_documentation: 'https://creatif.space',
@@ -25,7 +46,7 @@ export function protectedResourceMetadata(resourceUrl: string, authorizationServ
 }
 
 function challenge(res: Response, resourceUrl: string, error?: string, description?: string) {
-  const parts = [`resource_metadata="${resourceUrl}${metadataPath}"`];
+  const parts = [`resource_metadata="${metadataUrls(resourceUrl).pathForm}"`];
   if (error) parts.push(`error="${error}"`);
   if (description) parts.push(`error_description="${description}"`);
   res.setHeader('WWW-Authenticate', `Bearer ${parts.join(', ')}`);

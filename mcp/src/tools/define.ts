@@ -6,7 +6,7 @@ import type { CallerAuth } from '../auth/middleware.js';
 import { ToolError, toToolError } from '../errors.js';
 import type { V1Client } from '../v1.js';
 
-export type Scope = 'read' | 'draft';
+export type Scope = 'read' | 'draft' | 'approve' | 'publish';
 
 export interface ToolContext {
   v1: V1Client;
@@ -72,7 +72,8 @@ export function registerTool(server: McpServer, def: ToolDef<any>, deps: Registe
             { required: def.scope, granted: deps.auth.scopes },
           );
         }
-        const out = await def.run(args as never, { v1: deps.v1, auth: deps.auth });
+        const v1 = deps.v1.forTool(def.name, deps.auth.extra.clientName);
+        const out = await def.run(args as never, { v1, auth: deps.auth });
         ok = true;
         return result(out);
       } catch (e) {

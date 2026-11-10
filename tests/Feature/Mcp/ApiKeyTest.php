@@ -29,7 +29,7 @@ it('creates a cs_live_ key shown once and stores only its hash', function () {
 
 it('validates name, scopes and expiry', function () {
     $this->actingAs(User::factory()->create(), 'web')
-        ->postJson('/api/v1/me/api-keys', ['name' => '', 'scopes' => ['publish'], 'expires_in_days' => 7])
+        ->postJson('/api/v1/me/api-keys', ['name' => '', 'scopes' => ['admin'], 'expires_in_days' => 7])
         ->assertUnprocessable()
         ->assertJsonValidationErrors(['name', 'scopes.0', 'expires_in_days']);
 });

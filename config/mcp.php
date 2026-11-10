@@ -7,7 +7,7 @@
  * A token — OAuth or API key — only ever reaches the V1 routes listed in
  * `routes` below, and only with the scope written next to each. Anything
  * else answers 403 even if the session cookie for the same person could
- * do it. Approve and publish are reserved for M2 and are not listed.
+ * do it.
  */
 return [
 
@@ -22,6 +22,8 @@ return [
     'scopes' => [
         'read' => 'Read your channels, posts, files and Credits balance',
         'draft' => 'Save draft posts (never sends or schedules them)',
+        'approve' => 'Create client approval links for your posts (Pro and Max)',
+        'publish' => 'Schedule and publish your drafts, spending Credits (at most 20 a day)',
     ],
 
     'default_scopes' => ['read'],
@@ -57,5 +59,14 @@ return [
         // Drafts only: EnforceTokenScope refuses a body that would send,
         // schedule or ask for approval.
         'api.v1.social-posts.store' => 'draft',
+
+        // M2. Changing a post that is already queued additionally needs
+        // `publish`; the MCP server checks that before it calls.
+        'api.v1.social-posts.update' => 'draft',
+        'api.v1.social-posts.send-preview' => 'read',
+        // CapTokenSends holds bearer callers to 20 sends a day.
+        'api.v1.social-posts.send' => 'publish',
+        'api.v1.social-approval-links.store' => 'approve',
+        'api.v1.social-approval-links.show' => 'read',
     ],
 ];

@@ -5,7 +5,7 @@ export interface Config {
   host: string;
   /** Base of the V1 API, e.g. https://api.creatif.space/api/v1 (no trailing slash). */
   v1ApiUrl: string;
-  /** This server's public origin; the protected-resource identifier. */
+  /** The exact connector URL — the protected-resource identifier (token audience). */
   resourceUrl: string;
   /** The OAuth authorization server (Laravel / Passport). */
   authorizationServer: string;
@@ -39,7 +39,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
     port: Number(env.PORT ?? 3010),
     host: env.HOST ?? '127.0.0.1',
     v1ApiUrl: trimSlash(env.V1_API_URL ?? 'https://api.creatif.space/api/v1'),
-    resourceUrl: trimSlash(env.MCP_RESOURCE_URL ?? 'https://mcp.creatif.space'),
+    resourceUrl: trimSlash(env.MCP_RESOURCE_URL ?? 'https://mcp.creatif.space/mcp'),
     authorizationServer: trimSlash(env.MCP_AUTHORIZATION_SERVER ?? 'https://api.creatif.space'),
     introspectSecret,
     authMode,

@@ -74,10 +74,13 @@ class SocialApprovalController extends Controller
 
         PlanQuota::requireClientApprovals($request->user(), 'post_ids');
 
+        // Held posts, and drafts (API clients share a draft straight to a
+        // client — the same hold that sending it with approval=client makes).
         $posts = $request->user()->socialPosts()
             ->whereIn('ulid', array_unique($validated['post_ids']))
-            ->where('status', SocialPostStatus::Scheduled)
-            ->whereNull('provider_post_id')
+            ->where(fn ($q) => $q
+                ->where(fn ($held) => $held->where('status', SocialPostStatus::Scheduled)->whereNull('provider_post_id'))
+                ->orWhere('status', SocialPostStatus::Draft))
             ->get();
 
         if ($posts->isEmpty()) {
@@ -93,7 +96,7 @@ class SocialApprovalController extends Controller
         ]);
         $link->posts()->attach($posts->pluck('id'));
         SocialPost::query()->whereIn('id', $posts->pluck('id'))
-            ->update(['approval' => SocialPostApproval::Client->value]);
+            ->update(['approval' => SocialPostApproval::Client->value, 'status' => SocialPostStatus::Scheduled->value]);
         ProductEvents::approvalLinkCreated($link, $posts->count(), $hours);
 
         return response()->json(['data' => $this->linkArray($this->withCounts($link))], 201);

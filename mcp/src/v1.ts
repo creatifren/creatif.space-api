@@ -24,7 +24,20 @@ export class V1Client {
     private readonly baseUrl: string,
     private readonly token: string,
     private readonly fetchImpl: FetchLike = fetch,
+    private readonly extraHeaders: Record<string, string> = {},
   ) {}
+
+  /** The same caller, labelled for the API's audit log (X-MCP-Tool / X-MCP-Client). Never content. */
+  forTool(tool: string, clientName: string): V1Client {
+    return new V1Client(this.baseUrl, this.token, this.fetchImpl, {
+      'X-MCP-Tool': tool,
+      'X-MCP-Client': clientName.replace(/[^\x20-\x7E]/g, '').slice(0, 120),
+    });
+  }
+
+  patch<T = unknown>(path: string, body: unknown): Promise<T> {
+    return this.request<T>('PATCH', path, body);
+  }
 
   get<T = unknown>(path: string, query?: Query): Promise<T> {
     return this.request<T>('GET', path, undefined, query);
@@ -48,7 +61,8 @@ export class V1Client {
           Accept: 'application/json',
           Authorization: `Bearer ${this.token}`,
           ...(body !== undefined ? { 'Content-Type': 'application/json' } : {}),
-          'User-Agent': 'creatif-mcp/0.1',
+          'User-Agent': 'creatif-mcp/0.2',
+          ...this.extraHeaders,
         },
         ...(body !== undefined ? { body: JSON.stringify(body) } : {}),
         signal: AbortSignal.timeout(20_000),

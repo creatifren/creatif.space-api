@@ -27,7 +27,7 @@ describe('discovery', function () {
             ->assertJsonPath('revocation_endpoint', 'https://api.creatif.space/oauth/revoke')
             ->assertJsonPath('code_challenge_methods_supported', ['S256'])
             ->assertJsonPath('grant_types_supported', ['authorization_code', 'refresh_token'])
-            ->assertJsonPath('scopes_supported', ['read', 'draft']);
+            ->assertJsonPath('scopes_supported', ['read', 'draft', 'approve', 'publish']);
     });
 
     it('publishes RFC 9728 protected resource metadata for the MCP server', function (string $path) {
@@ -93,7 +93,7 @@ describe('dynamic client registration', function () {
 
         $this->postJson('/oauth/register', [
             'redirect_uris' => ['https://x.test/cb'],
-            'scope' => 'read publish',
+            'scope' => 'read admin',
         ])->assertStatus(400)->assertJsonPath('error', 'invalid_client_metadata');
     });
 

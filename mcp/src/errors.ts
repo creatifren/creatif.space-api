@@ -9,6 +9,8 @@ export type ErrorCode =
   | 'unauthorized'
   | 'forbidden'
   | 'rate_limited'
+  | 'daily_cap_reached'
+  | 'insufficient_credits'
   | 'upstream_unavailable';
 
 /** An error a tool returns to the model: a machine code plus what to do next. */
@@ -53,7 +55,8 @@ export function toToolError(e: unknown, notFoundWhat = 'That item'): ToolError {
   }
 
   const body = e.body ?? {};
-  const code = typeof body.code === 'string' ? body.code : undefined;
+  // `code` from V1 controllers, `error` from the API's token fence.
+  const code = typeof body.code === 'string' ? body.code : typeof body.error === 'string' ? body.error : undefined;
   const message = typeof body.message === 'string' ? body.message : e.message;
 
   if (code === 'account_reconnect_required') {
@@ -67,7 +70,21 @@ export function toToolError(e: unknown, notFoundWhat = 'That item'): ToolError {
   if (code === 'plan_required' || e.status === 402 || (e.status === 422 && PLAN_MESSAGE.test(message))) {
     return new ToolError('plan_required', message, 'This needs a higher creatif.space plan (Settings → Subscription). Tell the user; do not retry.');
   }
-  if (code === 'scope_missing') {
+  if (code === 'daily_send_cap') {
+    return new ToolError(
+      'daily_cap_reached',
+      message,
+      'The daily limit for sends from connected apps is reached. Tell the user they can send it from creatif.space, or retry tomorrow (UTC). Do not retry today.',
+      { resets_at: body.resets_at, cap: body.cap },
+    );
+  }
+  if (code === 'draft_only' || code === 'not_available') {
+    return new ToolError('forbidden', message, 'This action is not open to connected apps; the user can do it in creatif.space.');
+  }
+  if (e.status === 422 && /Credits/.test(message) && /top up|balance/i.test(message)) {
+    return new ToolError('insufficient_credits', message, 'Tell the user to top up Credits in creatif.space (Settings → Credits) or send to fewer channels.');
+  }
+  if (code === 'scope_missing' || code === 'insufficient_scope') {
     return new ToolError('scope_missing', message, 'Reconnect the creatif.space connector and grant the missing permission.');
   }
 
