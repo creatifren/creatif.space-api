@@ -11,6 +11,7 @@ export type ErrorCode =
   | 'rate_limited'
   | 'daily_cap_reached'
   | 'insufficient_credits'
+  | 'preview_stale'
   | 'upstream_unavailable';
 
 /** An error a tool returns to the model: a machine code plus what to do next. */

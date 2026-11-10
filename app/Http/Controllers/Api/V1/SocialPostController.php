@@ -18,6 +18,7 @@ use App\Contracts\SocialProvider;
 use App\Support\Credits;
 use App\Support\PlanQuota;
 use App\Support\ProductEvents;
+use App\Support\SendConfirmation;
 use App\Support\SocialPostRelay;
 use App\Support\SocialProviders;
 use App\Support\Workspace;
@@ -467,6 +468,12 @@ class SocialPostController extends Controller
                 'can_afford' => PlanQuota::canPostSocial($user, $destinations),
             ],
             'daily_cap' => CapTokenSends::status($user),
+            // A send through a connected app or API key must bring this back
+            // (10 minutes; bound to these destinations and this price).
+            ...($socialPost->status === SocialPostStatus::Draft ? [
+                'confirm_token' => SendConfirmation::issue($user, $socialPost),
+                'confirm_expires_at' => now()->addMinutes(SendConfirmation::TTL_MINUTES)->toIso8601String(),
+            ] : []),
         ]]);
     }
 
@@ -481,10 +488,29 @@ class SocialPostController extends Controller
         $validated = $request->validate([
             'scheduled_at' => ['sometimes', 'nullable', 'date', 'after:now'],
             'approval' => ['sometimes', 'nullable', Rule::in(['awaiting', 'client'])],
+            'confirm_token' => ['sometimes', 'nullable', 'string', 'max:1024'],
         ]);
 
         if ($socialPost->status !== SocialPostStatus::Draft) {
             return response()->json(['message' => 'Only a draft can be sent from here.'], 422);
+        }
+
+        // A connected app or API key sends only what the user saw in the
+        // send preview: same destinations, same price, at most 10 minutes
+        // ago. Holding the draft for approval sends nothing and needs none.
+        if (! isset($validated['approval']) && SendConfirmation::viaToken($request)) {
+            if (empty($validated['confirm_token'])) {
+                return response()->json([
+                    'message' => 'Sending from a connected app needs the confirm_token from GET /social-posts/{post}/send-preview.',
+                    'code' => 'confirm_token_required',
+                ], 422);
+            }
+            if (! SendConfirmation::matches($request->user(), $socialPost, $validated['confirm_token'])) {
+                return response()->json([
+                    'message' => 'The preview is out of date (channels or Credits changed, or 10 minutes passed). Show the user a new preview and confirm again.',
+                    'code' => 'preview_stale',
+                ], 409);
+            }
         }
 
         if (($validated['approval'] ?? null) === SocialPostApproval::Client->value) {

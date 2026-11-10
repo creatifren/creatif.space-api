@@ -54,10 +54,21 @@ Rate limit: 60 requests / minute / token (429 + `Retry-After`).
 token are capped at **20 per user per UTC day**, enforced in Laravel
 (`CapTokenSends`, 429 `daily_send_cap`); the app's cookie session is never capped.
 
+**confirm_token.** The send preview returns a `confirm_token` signed by the API
+(HMAC with the app key; bound to user + post + target ids + Credit price; valid
+10 minutes). A send from a bearer token (MCP guard or API key) must bring it
+back: none → 422 `confirm_token_required`; mismatched, expired or forged → 409
+`preview_stale`. Holding a draft for approval and the app's cookie session need
+none. This server keeps the token of the last preview per user + post in memory
+and sends it on `confirm: true` — the model never sees it. No preview on record
+(never shown, expired, already used, server restarted) → a fresh preview and
+nothing sent; a 409 → tool error `preview_stale` with the new preview in
+`details.preview`.
+
 Errors come back as tool results with `isError: true` and
 `{error: {code, message, hint, details?}}`; codes: `reconnect_required`,
 `scope_missing`, `plan_required`, `not_found`, `invalid_input`, `unauthorized`,
-`forbidden`, `rate_limited`, `daily_cap_reached`, `insufficient_credits`,
+`forbidden`, `rate_limited`, `daily_cap_reached`, `insufficient_credits`, `preview_stale`,
 `upstream_unavailable`.
 
 Each call emits PostHog `mcp_tool_called` `{tool, client_name, ok, ms}` (plus
