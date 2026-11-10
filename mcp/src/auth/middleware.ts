@@ -41,7 +41,7 @@ export function protectedResourceMetadata(resourceUrl: string, authorizationServ
     scopes_supported: [...SCOPES],
     bearer_methods_supported: ['header'],
     resource_name: 'creatif.space',
-    resource_documentation: 'https://creatif.space',
+    resource_documentation: 'https://creatif.space/docs/mcp',
   };
 }
 

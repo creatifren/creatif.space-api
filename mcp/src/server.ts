@@ -14,7 +14,8 @@ import { DEFAULT_GLAMA_CLAIM } from './config.js';
 
 export const SERVER_INFO = { name: 'creatif.space', version: '0.2.0' };
 
-const INSTRUCTIONS =
+export const INSTRUCTIONS =
+  'Get content approved & published faster. ' +
   'creatif.space plans, drafts and tracks social posts across the user’s connected channels. ' +
   'Start with list_channels. Drafts are safe: draft_post never publishes or spends Credits. ' +
   'schedule_post and publish_post first return a preview; call them with confirm: true only after the user explicitly agrees. ' +

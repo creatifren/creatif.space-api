@@ -81,6 +81,9 @@ return [
     // public_url, which Space, gate and download links use.
     'marketing_url' => env('MARKETING_URL', 'https://creatif.space'),
 
+    // Rizal's slogan, verbatim: never paraphrase, never env-overridable.
+    'slogan' => 'Get content approved & published faster.',
+
     /*
     |--------------------------------------------------------------------------
     | Application Timezone
