@@ -11,6 +11,7 @@ use App\Models\SocialAccount;
 use App\Models\SocialPost;
 use App\Models\SocialPostTarget;
 use App\Models\User;
+use Carbon\CarbonImmutable;
 use Carbon\CarbonInterface;
 use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Support\Facades\Cache;
@@ -253,9 +254,15 @@ class SocialPostRelay
      * row lock, so a redelivered result (or reconcile racing the webhook)
      * is not a second publish.
      *
+     * The status is always brought up to date, but the analytics event is
+     * held back for a post of a relay that is no longer current (the Post
+     * for Me backlog after the Outstand switch, settled by reconcile) and
+     * for a result stamped more than a day before the target was sent.
+     *
      * @param  array<string, mixed>  $data  a post result in SocialProvider's shape
+     * @param  'webhook'|'reconcile'|'job'  $source
      */
-    public static function applyResult(SocialPost $post, SocialAccount $account, array $data): void
+    public static function applyResult(SocialPost $post, SocialAccount $account, array $data, string $source = 'job'): void
     {
         $target = $post->targets()->where('social_account_id', $account->id)->first();
 
@@ -263,7 +270,7 @@ class SocialPostRelay
             return;
         }
 
-        DB::transaction(function () use ($post, $target, $data): void {
+        DB::transaction(function () use ($post, $target, $data, $source): void {
             $target = SocialPostTarget::query()->whereKey($target->id)->lockForUpdate()->firstOrFail();
             $before = $target->status;
             $success = (bool) ($data['success'] ?? false);
@@ -295,8 +302,38 @@ class SocialPostRelay
 
             $post->recomputeFromTargets();
 
-            ProductEvents::publishResult($post, $target, $before, is_string($data['error'] ?? null) ? $data['error'] : null);
+            if (self::countsAsNews($post, $target, $data)) {
+                ProductEvents::publishResult($post, $target, $before, is_string($data['error'] ?? null) ? $data['error'] : null, $source);
+            }
         });
+    }
+
+    /**
+     * Whether a result is today's news for analytics: the post's relay is
+     * the current one, and the result is not stamped more than a day
+     * before the target was sent (a replayed old result).
+     *
+     * @param  array<string, mixed>  $data
+     */
+    private static function countsAsNews(SocialPost $post, SocialPostTarget $target, array $data): bool
+    {
+        if ($post->provider !== (string) config('services.social.provider')) {
+            return false;
+        }
+
+        $stamp = $data['created_at'] ?? $data['published_at'] ?? $data['posted_at'] ?? null;
+        if (! is_string($stamp) || $stamp === '') {
+            return true;
+        }
+
+        try {
+            $at = CarbonImmutable::parse($stamp);
+        } catch (Throwable) {
+            return true;
+        }
+        $sent = $target->created_at ?? $post->created_at;
+
+        return $sent === null || $at->greaterThanOrEqualTo($sent->subDay());
     }
 
     /**
@@ -338,7 +375,7 @@ class SocialPostRelay
                     ?->account;
 
                 if ($post !== null && $account !== null) {
-                    self::applyResult($post, $account, $result);
+                    self::applyResult($post, $account, $result, 'reconcile');
                 }
             }
         }
