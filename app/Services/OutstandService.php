@@ -290,6 +290,48 @@ class OutstandService implements SocialProvider
     }
 
     /**
+     * DELETE /posts/{id}/remote takes the post down on each network that
+     * allows it (Instagram, Threads and TikTok do not); the post is then
+     * read back for each destination's word: `deleted`, or still up with
+     * the network's reason. A post Outstand no longer has took nothing down.
+     *
+     * @return array<string, array{removed: bool, error: string|null}>
+     *
+     * @throws ConnectionException
+     * @throws RequestException
+     */
+    public function deletePublished(string $postId): array
+    {
+        $path = '/posts/'.rawurlencode($postId);
+        $response = $this->client(retry: false)->delete($path.'/remote');
+        if ($response->status() === 404) {
+            return [];
+        }
+        $response->throw();
+
+        $read = $this->client()->get($path);
+        if ($read->status() === 404) {
+            return [];
+        }
+        $read->throw();
+
+        $out = [];
+        foreach ((array) ($read->json('post.socialAccounts') ?? $read->json('socialAccounts') ?? []) as $a) {
+            $id = (string) ($a['id'] ?? '');
+            if ($id === '') {
+                continue;
+            }
+            $removed = ($a['status'] ?? null) === 'deleted';
+            $out[$id] = [
+                'removed' => $removed,
+                'error' => $removed ? null : self::errorText($a['error'] ?? null),
+            ];
+        }
+
+        return $out;
+    }
+
+    /**
      * No batch read: one GET per post. Only finished destinations count —
      * `pending` is not a result yet, `deleted` is not ours to report.
      *
@@ -313,9 +355,10 @@ class OutstandService implements SocialProvider
 
             foreach ((array) $response->json('post.socialAccounts', []) as $a) {
                 $status = $a['status'] ?? null;
+                $live = self::live((array) $a);
 
-                if ($status === 'published' || $status === 'failed') {
-                    $out[] = self::result($postId, (string) ($a['id'] ?? ''), $status === 'published', $a['error'] ?? null, $a['platformPostUrl'] ?? null);
+                if ($live || $status === 'failed') {
+                    $out[] = self::result($postId, (string) ($a['id'] ?? ''), $live, $a['error'] ?? null, $a['platformPostUrl'] ?? null);
                 }
             }
         }
@@ -351,7 +394,7 @@ class OutstandService implements SocialProvider
             $mine = collect((array) ($post['socialAccounts'] ?? []))
                 ->first(fn ($a) => (string) ($a['id'] ?? '') === $accountId);
 
-            if (($mine['status'] ?? null) !== 'published') {
+            if (! self::live((array) $mine)) {
                 continue;
             }
 
@@ -802,6 +845,25 @@ class OutstandService implements SocialProvider
     }
 
     /**
+     * Is this destination's post up on the network? `published` is; so is a
+     * `failed` one that carries the network's post id and a publish time:
+     * that is a remote delete the network refused (Instagram, Threads and
+     * TikTok cannot delete through the API), and the post is still live.
+     * A failed publish never got a post id. `deleted` is gone.
+     *
+     * @param  array<string, mixed>  $a  one entry of a post's socialAccounts
+     */
+    public static function live(array $a): bool
+    {
+        $status = $a['status'] ?? null;
+
+        return $status === 'published'
+            || ($status === 'failed'
+                && (string) ($a['platformPostId'] ?? '') !== ''
+                && ! empty($a['publishedAt']));
+    }
+
+    /**
      * @param  array<string, mixed>  $a
      * @return array<string, mixed>
      */
@@ -818,6 +880,12 @@ class OutstandService implements SocialProvider
             'access_token' => $a['tokens']['access_token'] ?? null,
             // Only when Outstand says; null means "not reported", not "none".
             'scopes' => is_array($a['scopes'] ?? $a['permissions'] ?? null) ? array_values($a['scopes'] ?? $a['permissions']) : null,
+            // The network's own id: two relay accounts with the same one
+            // are the same account connected twice.
+            'network_unique_id' => is_scalar($a['network_unique_id'] ?? null) && (string) $a['network_unique_id'] !== ''
+                ? (string) $a['network_unique_id'] : null,
+            // When the relay first held this grant: a reconnect is a new one.
+            'connected_at' => $a['createdAt'] ?? null,
         ];
     }
 

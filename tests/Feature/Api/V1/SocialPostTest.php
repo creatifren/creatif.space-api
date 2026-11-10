@@ -315,16 +315,28 @@ describe('listing and cancelling', function () {
         Http::assertSent(fn ($request) => $request->method() === 'DELETE');
     });
 
-    it('refuses to cancel a published post', function () {
+    it('deletes a published post from the list; Post for Me cannot take it down', function () {
         Http::fake();
         $user = User::factory()->create();
         $post = SocialPost::factory()->for($user)->published()->create();
 
+        // Outstand's remote delete is covered in LiveRunFindingsTest.
+        $this->actingAs($user)
+            ->deleteJson("/api/v1/social-posts/{$post->ulid}")
+            ->assertOk()
+            ->assertJsonPath('data.removed_from_list', true);
+
+        expect(SocialPost::query()->whereKey($post->id)->exists())->toBeFalse();
+        Http::assertNothingSent();
+    });
+
+    it('still refuses to cancel a cancelled post', function () {
+        $user = User::factory()->create();
+        $post = SocialPost::factory()->for($user)->create(['status' => 'cancelled']);
+
         $this->actingAs($user)
             ->deleteJson("/api/v1/social-posts/{$post->ulid}")
             ->assertUnprocessable();
-
-        Http::assertNothingSent();
     });
 
     it('deletes a failed post without calling the provider', function () {

@@ -43,7 +43,7 @@
             <li><strong>Read</strong><span>{{ config('mcp.scopes.read') }}</span></li>
         @endforelse
     </ul>
-    <p class="never">It can never publish, schedule, approve, delete or spend Credits. You can disconnect it any time in Settings → Connected apps.</p>
+    <p class="never">{{ \App\Support\McpConsent::never(collect($scopes)->map(fn ($scope) => $scope->id)) }} You can disconnect it any time in Settings → Connected apps.</p>
 
     <div class="actions">
         <form method="post" action="{{ route('passport.authorizations.deny') }}">

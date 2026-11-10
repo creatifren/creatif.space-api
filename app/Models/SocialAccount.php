@@ -28,6 +28,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
  * @property SocialAccountStatus $status
  * @property CarbonImmutable|null $connected_at
  * @property int|null $followers_count
+ * @property string|null $network_unique_id
  * @property CarbonImmutable|null $followers_synced_at
  * @property CarbonImmutable|null $messages_scope_at
  * @property CarbonImmutable|null $inbox_synced_at
@@ -50,6 +51,7 @@ class SocialAccount extends Model
         'inbox_synced_at',
         'followers_count',
         'followers_synced_at',
+        'network_unique_id',
     ];
 
     /**
