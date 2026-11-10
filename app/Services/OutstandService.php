@@ -502,7 +502,7 @@ class OutstandService implements SocialProvider
                 'platform_post_id' => $d['platformPostId'] ?? null,
                 'parent_comment_id' => $d['parentCommentId'] ?? null,
                 'author_id' => $d['authorId'] ?? null,
-                'author_username' => $d['authorUsername'] ?? null,
+                'author_username' => $d['authorUsername'] ?? $d['authorName'] ?? null,
                 'text' => $d['text'] ?? null,
                 'network' => (string) ($d['network'] ?? ''),
                 'created_at' => $d['createdAt'] ?? null,
@@ -1312,11 +1312,19 @@ class OutstandService implements SocialProvider
             'id' => (string) (self::pick($c, 'id', 'conversationId', 'conversation_id') ?? ''),
             'social_account_id' => self::pick($c, 'socialAccountId', 'social_account_id', 'accountId', 'social_account.id', 'socialAccount.id'),
             'network' => (string) (self::pick($c, 'network') ?? 'instagram'),
+            // Outstand's Conversation names the other person with flat
+            // participant* fields (docs: participantId, participantDisplayName,
+            // participantProfilePicture); the nested shapes are kept for
+            // GET /conversations/{id}, whose "contact" is not documented.
             'contact' => [
-                'id' => self::pick($contact, 'id', 'platformId', 'platform_id') ?? self::pick($c, 'contactId', 'contact_id', 'senderId'),
-                'username' => self::pick($contact, 'username', 'handle') ?? self::pick($c, 'contactUsername', 'contact_username'),
-                'name' => self::pick($contact, 'name', 'displayName', 'display_name') ?? self::pick($c, 'contactName', 'contact_name'),
-                'avatar_url' => self::pick($contact, 'avatarUrl', 'avatar_url', 'profilePictureUrl', 'profile_picture_url') ?? self::pick($c, 'contactAvatarUrl'),
+                'id' => self::pick($contact, 'id', 'platformId', 'platform_id')
+                    ?? self::pick($c, 'participantId', 'participant_id', 'contactId', 'contact_id', 'senderId'),
+                'username' => self::pick($contact, 'username', 'handle')
+                    ?? self::pick($c, 'participantUsername', 'participant_username', 'contactUsername', 'contact_username'),
+                'name' => self::pick($contact, 'name', 'displayName', 'display_name')
+                    ?? self::pick($c, 'participantDisplayName', 'participant_display_name', 'participantName', 'contactName', 'contact_name'),
+                'avatar_url' => self::pick($contact, 'avatarUrl', 'avatar_url', 'profilePictureUrl', 'profile_picture_url', 'profilePicture')
+                    ?? self::pick($c, 'participantProfilePicture', 'participant_profile_picture', 'participantProfilePictureUrl', 'contactAvatarUrl'),
             ],
             'last_message' => is_array($last) ? self::pick($last, 'content', 'text') : $last,
             'last_message_at' => self::pick($c, 'lastMessageAt', 'last_message_at', 'lastMessage.sentAt', 'last_message.sent_at', 'updatedAt', 'updated_at'),
