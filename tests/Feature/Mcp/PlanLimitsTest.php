@@ -140,12 +140,13 @@ describe('Free plan through a real API key', function () {
         $key = planKey($this, $user);
         $ledger = WalletTransaction::query()->count();
 
-        $price = bearer($this, $key)->getJson("/api/v1/social-posts/{$post->ulid}/send-preview")
+        $preview = bearer($this, $key)->getJson("/api/v1/social-posts/{$post->ulid}/send-preview")
             ->assertOk()
             ->assertJsonPath('data.credits.can_afford', false)
-            ->json('data.credits.price');
+            ->json('data');
+        $price = $preview['credits']['price'];
 
-        bearer($this, $key)->postJson("/api/v1/social-posts/{$post->ulid}/send")
+        bearer($this, $key)->postJson("/api/v1/social-posts/{$post->ulid}/send", ['confirm_token' => $preview['confirm_token']])
             ->assertUnprocessable()
             ->assertJsonPath('code', 'insufficient_credits')
             ->assertJsonPath('needed', $price)
@@ -166,7 +167,10 @@ describe('Free plan through a real API key', function () {
         $post = planDraft($user);
         $resets = Credits::cycleEnds($user);
 
-        bearer($this, planKey($this, $user))->postJson("/api/v1/social-posts/{$post->ulid}/send")
+        $key = planKey($this, $user);
+        $token = bearer($this, $key)->getJson("/api/v1/social-posts/{$post->ulid}/send-preview")->json('data.confirm_token');
+
+        bearer($this, $key)->postJson("/api/v1/social-posts/{$post->ulid}/send", ['confirm_token' => $token])
             ->assertUnprocessable()
             ->assertJsonPath('code', 'quota_exceeded')
             ->assertJsonPath('resets_at', $resets->toIso8601String())
@@ -182,13 +186,14 @@ describe('Free plan through a real API key', function () {
         $post = planDraft($user, ['instagram', 'x', 'linkedin']);
         $key = planKey($this, $user);
 
-        $price = bearer($this, $key)->getJson("/api/v1/social-posts/{$post->ulid}/send-preview")
+        $preview = bearer($this, $key)->getJson("/api/v1/social-posts/{$post->ulid}/send-preview")
             ->assertJsonPath('data.credits.can_afford', true)
-            ->json('data.credits.price');
+            ->json('data');
+        $price = $preview['credits']['price'];
         $before = Credits::total($user);
         $lastId = (int) WalletTransaction::query()->max('id');
 
-        bearer($this, $key)->postJson("/api/v1/social-posts/{$post->ulid}/send")->assertOk();
+        bearer($this, $key)->postJson("/api/v1/social-posts/{$post->ulid}/send", ['confirm_token' => $preview['confirm_token']])->assertOk();
 
         $debited = -1 * (int) WalletTransaction::query()->where('id', '>', $lastId)->where('user_id', $user->id)->sum('amount');
         expect($price)->toBeGreaterThan(0)

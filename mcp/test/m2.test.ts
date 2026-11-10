@@ -285,8 +285,8 @@ describe('plan and Credit limits are passed on verbatim', () => {
 
   it('insufficient_credits → needed vs available and the top-up link', async () => {
     const msg = 'Not enough Credits: this send needs 600 and 1 are available (0 monthly + 1 top-up). Top up: https://creatif.space/credits';
-    const res = await call('publish_post', { post_id: POST, confirm: true }, {
-      [`POST /social-posts/${POST}/send`]: () => ({
+    const { confirmed: res } = await twoStep('publish_post', { post_id: POST }, {
+      [SEND_ROUTE]: () => ({
         status: 422,
         body: { message: msg, code: 'insufficient_credits', needed: 600, available: 1, monthly_balance: 0, topup_balance: 1, topup_url: 'https://creatif.space/credits', resets_at: 'r', errors: { caption: [msg] } },
       }),
@@ -301,8 +301,8 @@ describe('plan and Credit limits are passed on verbatim', () => {
 
   it('quota_exceeded → the reset date', async () => {
     const msg = "This month's Credits on the Free plan are used up — they reset on 1 Dec 2026. This send needs 300 Credits. Top up now: https://creatif.space/credits";
-    const res = await call('schedule_post', { post_id: POST, scheduled_at: FUTURE, confirm: true }, {
-      [`POST /social-posts/${POST}/send`]: () => ({
+    const { confirmed: res } = await twoStep('schedule_post', { post_id: POST, scheduled_at: FUTURE }, {
+      [SEND_ROUTE]: () => ({
         status: 422,
         body: { message: msg, code: 'quota_exceeded', needed: 300, available: 0, resets_at: '2026-12-01T00:00:00+00:00', topup_url: 'https://creatif.space/credits' },
       }),
