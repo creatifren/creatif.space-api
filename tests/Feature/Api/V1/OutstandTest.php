@@ -212,7 +212,8 @@ describe('connecting', function () {
     });
 
     // Prod 10 Nov 01:28 UTC: a 656-char Instagram CDN avatar → MySQL 1406
-    // on varchar(255). On the MySQL CI leg this insert is the real check.
+    // on varchar(255); the column is TEXT now. On the MySQL CI leg this
+    // insert is the real check.
     it('connects an account whose avatar URL or name is longer than its column', function () {
         Log::spy();
         $user = User::factory()->create();
@@ -223,15 +224,18 @@ describe('connecting', function () {
                 'profile_picture_url' => $avatar, 'tenant_id' => $user->ulid, 'isActive' => 1],
             ['id' => 'Th1', 'network' => 'threads', 'username' => 'rani',
                 'profile_picture_url' => 'javascript:alert(1)', 'tenant_id' => $user->ulid, 'isActive' => 1],
+            ['id' => 'Li1', 'network' => 'linkedin', 'username' => 'andi',
+                'profile_picture_url' => 'https://media.licdn.com/'.str_repeat('b', 2100), 'tenant_id' => $user->ulid, 'isActive' => 1],
             ['id' => str_repeat('x', 65), 'network' => 'tiktok', 'username' => 'toolong',
                 'tenant_id' => $user->ulid, 'isActive' => 1],
-        ], 'count' => 3, 'total' => 3])]);
+        ], 'count' => 4, 'total' => 4])]);
 
         $this->actingAs($user)->postJson('/api/v1/social-accounts/sync')->assertOk();
 
         $ig = $user->socialAccounts()->where('provider_account_id', 'Ig1')->first();
         expect($ig->status->value)->toBe('connected')
-            ->and($ig->profile_photo_url)->toBeNull()
+            ->and($ig->profile_photo_url)->toBe($avatar)
+            ->and($user->socialAccounts()->where('provider_account_id', 'Li1')->value('profile_photo_url'))->toBeNull()
             ->and($ig->username)->toBe(str_repeat('r', 255))
             ->and($user->socialAccounts()->where('provider_account_id', 'Th1')->value('profile_photo_url'))->toBeNull()
             ->and($user->socialAccounts()->where('platform', 'tiktok')->exists())->toBeFalse();

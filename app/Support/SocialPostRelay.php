@@ -280,9 +280,9 @@ class SocialPostRelay
                 ? [
                     'status' => SocialPostTargetStatus::Published,
                     'fail_reason' => null,
-                    'platform_url' => $data['platform_data']['url']
+                    'platform_url' => ProviderFields::url($data['platform_data']['url']
                         ?? $data['details']['url']
-                        ?? null,
+                        ?? null),
                     'provider_result_id' => $data['id'] ?? null,
                 ]
                 : [
