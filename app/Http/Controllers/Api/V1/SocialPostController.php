@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Api\V1;
 
+use App\Contracts\SocialProvider;
 use App\Enums\ActivityAction;
 use App\Enums\SocialPostApproval;
 use App\Enums\SocialPostStatus;
@@ -10,8 +11,9 @@ use App\Exceptions\AccountReconnectRequired;
 use App\Http\Controllers\Controller;
 use App\Http\Resources\SocialPostResource;
 use App\Models\Activity;
+use App\Models\File;
 use App\Models\SocialPost;
-use App\Contracts\SocialProvider;
+use App\Models\User;
 use App\Support\Credits;
 use App\Support\PlanQuota;
 use App\Support\ProductEvents;
@@ -38,6 +40,13 @@ class SocialPostController extends Controller
     {
         $validated = $request->validate([
             'status' => ['sometimes', Rule::enum(SocialPostStatus::class)],
+            // One channel's posts (a connected account's ulid).
+            'account_id' => ['sometimes', 'string', 'max:26'],
+            // A window on the post's slot — or, with no slot, when it was made.
+            'from' => ['sometimes', 'date'],
+            'to' => ['sometimes', 'date', 'after_or_equal:from'],
+            // The newest N; absent = all, as the Feed has always had it.
+            'limit' => ['sometimes', 'integer', 'min:1', 'max:100'],
         ]);
 
         // A post whose slot passed still reading Scheduled means a result
@@ -47,6 +56,20 @@ class SocialPostController extends Controller
         return SocialPostResource::collection(
             $request->user()->socialPosts()
                 ->when($validated['status'] ?? null, fn ($q, $status) => $q->where('status', $status))
+                ->when($validated['account_id'] ?? null, fn ($q, $id) => $q->whereHas(
+                    'targets.account',
+                    fn ($a) => $a->where('ulid', $id),
+                ))
+                ->when($validated['from'] ?? null, fn ($q, $from) => $q->whereRaw(
+                    'COALESCE(scheduled_at, created_at) >= ?',
+                    [Carbon::parse($from)],
+                ))
+                ->when($validated['to'] ?? null, fn ($q, $to) => $q->whereRaw(
+                    'COALESCE(scheduled_at, created_at) <= ?',
+                    // A bare date means the whole of that day.
+                    [strlen($to) <= 10 ? Carbon::parse($to)->endOfDay() : Carbon::parse($to)],
+                ))
+                ->when($validated['limit'] ?? null, fn ($q, $limit) => $q->limit($limit))
                 // Threads ride along: the Feed shows every post's conversation
                 // at once, so one request beats one per card.
                 ->with(['targets.account', 'comments.replies', 'user:id,name'])
@@ -69,6 +92,16 @@ class SocialPostController extends Controller
     }
 
     /**
+     * One post, with its destinations and conversation.
+     */
+    public function show(Request $request, SocialPost $socialPost): SocialPostResource
+    {
+        Gate::allowIf(fn ($user) => $socialPost->user_id === $user->id);
+
+        return new SocialPostResource($socialPost->load(['targets.account', 'comments.replies', 'user:id,name']));
+    }
+
+    /**
      * Create (and optionally schedule) a post. The ownership check on
      * account_ids is the tenant boundary: only the user's own Connected
      * accounts resolve to provider ids, and nothing is sent otherwise.
@@ -88,6 +121,9 @@ class SocialPostController extends Controller
             'media.*.url' => ['required', 'url:https'],
             // A video's cover, handed to the platforms that take one.
             'media.*.thumbnail_url' => ['sometimes', 'nullable', 'url:https'],
+            // Library files by id, instead of (or as well as) media URLs.
+            'file_ids' => ['sometimes', 'array', 'max:10'],
+            'file_ids.*' => ['string', 'max:26'],
             'scheduled_at' => ['sometimes', 'nullable', 'date', 'after:now'],
             // Off when absent. `awaiting` waits for the editor's own yes,
             // `client` for a client on an approval link; either holds the
@@ -125,6 +161,13 @@ class SocialPostController extends Controller
         }
 
         $captions = $validated['captions'] ?? [];
+
+        if (isset($validated['file_ids'])) {
+            $validated['media'] = [...($validated['media'] ?? []), ...$this->mediaFromFiles($user, $validated['file_ids'])];
+            if (count($validated['media']) > 10) {
+                throw ValidationException::withMessages(['file_ids' => 'A post takes at most 10 media items.']);
+            }
+        }
 
         // Monthly Credits first, then Top-up, each destination at its price
         // (X more with a link), checked before anything reaches the
@@ -473,5 +516,32 @@ class SocialPostController extends Controller
         });
 
         return response()->json(null, 204);
+    }
+
+    /**
+     * Ready files from the workspace's library, as the media entries the
+     * composer would have sent, in the order asked for.
+     *
+     * @param  list<string>  $ids
+     * @return list<array{url: string}>
+     */
+    private function mediaFromFiles(User $user, array $ids): array
+    {
+        $ids = array_values(array_unique($ids));
+        $files = File::query()
+            ->where('user_id', Workspace::owner($user)->id)
+            ->where('status', File::STATUS_READY)
+            ->whereIn('ulid', $ids)
+            ->get()
+            ->keyBy('ulid');
+
+        $missing = array_values(array_diff($ids, $files->keys()->all()));
+        if ($missing !== []) {
+            throw ValidationException::withMessages([
+                'file_ids' => 'Not in your file library (or still uploading): '.implode(', ', $missing).'.',
+            ]);
+        }
+
+        return array_map(fn (string $id) => ['url' => $files[$id]->url()], $ids);
     }
 }

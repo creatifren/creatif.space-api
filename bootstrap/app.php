@@ -6,6 +6,7 @@ use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
 use Illuminate\Foundation\Configuration\Middleware;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Route;
 
 return Application::configure(basePath: dirname(__DIR__))
     ->withRouting(
@@ -13,6 +14,9 @@ return Application::configure(basePath: dirname(__DIR__))
         api: __DIR__.'/../routes/api.php',
         commands: __DIR__.'/../routes/console.php',
         health: '/up',
+        then: function (): void {
+            Route::middleware('api')->group(base_path('routes/oauth.php'));
+        },
     )
     ->withMiddleware(function (Middleware $middleware): void {
         $middleware->statefulApi();
@@ -23,9 +27,18 @@ return Application::configure(basePath: dirname(__DIR__))
 
         // No Blade login page here — guests belong on the Next.js frontend.
         // JSON requests still get a clean 401 via shouldRenderJsonWhen below.
-        $middleware->redirectGuestsTo(
-            fn () => config('app.frontend_url').'/login',
-        );
+        // An OAuth authorize request is remembered so the login can hand the
+        // person back to the consent screen (the frontend sends them to
+        // /oauth/resume afterwards).
+        $middleware->redirectGuestsTo(function (Request $request) {
+            if ($request->is('oauth/authorize') && $request->isMethod('GET') && $request->hasSession()) {
+                $request->session()->put('oauth.intended', $request->fullUrl());
+
+                return config('app.frontend_url').'/login?next='.urlencode('/oauth/resume');
+            }
+
+            return config('app.frontend_url').'/login';
+        });
     })
     ->withExceptions(function (Exceptions $exceptions): void {
         $exceptions->shouldRenderJsonWhen(

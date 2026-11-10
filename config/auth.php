@@ -42,6 +42,13 @@ return [
             'driver' => 'session',
             'provider' => 'users',
         ],
+
+        // Bearer tokens for MCP: OAuth access tokens (Passport) and personal
+        // API keys. See App\Mcp\McpTokenResolver; fenced by EnforceTokenScope.
+        'mcp' => [
+            'driver' => 'mcp-token',
+            'provider' => 'users',
+        ],
     ],
 
     /*
