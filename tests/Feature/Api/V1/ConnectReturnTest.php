@@ -159,8 +159,11 @@ describe('GET /social-accounts/connect-status', function () {
             ->assertJsonPath('data.network', 'instagram');
     });
 
-    it('is null before any connect, and needs a signed-in user', function () {
+    it('is null before any connect', function () {
         $this->actingAs(User::factory()->create())->getJson('/api/v1/social-accounts/connect-status')->assertOk()->assertJsonPath('data', null);
+    });
+
+    it('needs a signed-in user', function () {
         $this->getJson('/api/v1/social-accounts/connect-status')->assertUnauthorized();
     });
 });
