@@ -30,6 +30,27 @@ class InboxStore
      * account can sit under two of our users (one Disconnected): the
      * connected one wins.
      */
+    /**
+     * The connected row for the same network account (same platform and
+     * network_unique_id), when this one is not — a reconnect leaves the old
+     * row behind under a different provider account id.
+     */
+    public static function liveTwin(SocialAccount $account): ?SocialAccount
+    {
+        if ($account->network_unique_id === null) {
+            return null;
+        }
+
+        return SocialAccount::query()
+            ->where('provider', $account->provider)
+            ->where('platform', $account->platform)
+            ->where('network_unique_id', $account->network_unique_id)
+            ->whereKeyNot($account->id)
+            ->where('status', SocialAccountStatus::Connected)
+            ->orderByDesc('id')
+            ->first();
+    }
+
     public static function account(string $provider, string $providerAccountId): ?SocialAccount
     {
         if ($providerAccountId === '') {
@@ -212,7 +233,7 @@ class InboxStore
     public static function upsertComment(SocialAccount $account, array $c, string $network): ?SocialComment
     {
         $id = (string) ($c['id'] ?? '');
-        if ($id === '' || self::isOwn($account, $c)) {
+        if ($id === '' || self::isOwnComment($account, $c)) {
             return null;
         }
 
@@ -257,7 +278,7 @@ class InboxStore
     /**
      * @param  array<string, mixed>  $c
      */
-    private static function isOwn(SocialAccount $account, array $c): bool
+    public static function isOwnComment(SocialAccount $account, array $c): bool
     {
         if (Cache::has(self::OWN_COMMENT_KEY.$c['id'])) {
             return true;

@@ -24,6 +24,13 @@ class SocialCommentResource extends JsonResource
                 'username' => $this->account->username,
             ],
             'post_id' => $this->post?->ulid,
+            // Where the comment lives. A post made through us links to its
+            // published URL; one made outside Creatif Space (no post_id) is
+            // derived where the platform allows it (Facebook post ids are
+            // URL-able) and otherwise falls back to the account's profile —
+            // an Instagram media id does not map to a permalink.
+            'post_url' => $this->postUrl(),
+            'outside_post' => $this->social_post_id === null,
             'provider_post_id' => $this->provider_post_id,
             'platform_post_id' => $this->platform_post_id,
             'comment_id' => $this->comment_id,
@@ -43,5 +50,25 @@ class SocialCommentResource extends JsonResource
             'can_private_reply' => $until !== null && $until->isFuture(),
             'private_reply_conversation_id' => $this->privateReplyConversation?->ulid,
         ];
+    }
+
+    private function postUrl(): ?string
+    {
+        if ($this->post !== null) {
+            $url = $this->post->targets()
+                ->where('social_account_id', $this->social_account_id)
+                ->value('platform_url');
+            if (is_string($url) && $url !== '') {
+                return $url;
+            }
+        }
+
+        $username = ltrim((string) $this->account->username, '@');
+
+        return match ($this->network) {
+            'facebook' => $this->platform_post_id !== null ? 'https://www.facebook.com/'.rawurlencode($this->platform_post_id) : null,
+            'instagram' => $username !== '' ? 'https://www.instagram.com/'.rawurlencode($username).'/' : null,
+            default => null,
+        };
     }
 }

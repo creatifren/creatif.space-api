@@ -45,7 +45,7 @@ class SocialWebhookController extends Controller
         if (! $this->provider->verifyWebhook($request)) {
             // Logged: a wrong or missing signing secret drops every event
             // silently otherwise (comments and DMs never arrive).
-            Log::warning('webhook.signature_rejected', [
+            Log::channel('webhooks')->warning('webhook.signature_rejected', [
                 'provider' => $provider,
                 'event' => is_string($request->input('event')) ? $request->input('event') : $request->input('event_type'),
             ]);
@@ -56,7 +56,7 @@ class SocialWebhookController extends Controller
         foreach ($this->provider->webhookEvents($request) as $event) {
             // Which events arrive, never their content: the first thing to
             // check when an Engage item is missing.
-            Log::info('webhook.event', [
+            Log::channel('webhooks')->info('webhook.event', [
                 'provider' => $provider,
                 'type' => $event['type'],
                 'account' => $event['data']['account_id'] ?? $event['data']['social_account_id'] ?? null,
@@ -246,9 +246,11 @@ class SocialWebhookController extends Controller
         }
 
         DB::transaction(function () use ($event): void {
-            if (isset($event['id']) && ! DB::table('webhook_events')->insertOrIgnore([
+            $eventId = isset($event['id']) ? substr($event['id'], 0, 64) : null;
+
+            if ($eventId !== null && ! DB::table('webhook_events')->insertOrIgnore([
                 'source' => $this->provider->name(),
-                'event_id' => substr($event['id'], 0, 64),
+                'event_id' => $eventId,
                 'type' => substr('inbox.'.$event['type'], 0, 64),
                 'payload' => json_encode($event['data'], JSON_THROW_ON_ERROR),
                 'created_at' => now(),
@@ -257,28 +259,47 @@ class SocialWebhookController extends Controller
                 return;
             }
 
-            match ($event['type']) {
+            $outcome = match ($event['type']) {
                 'conversation' => $this->startConversation($event['data']),
                 'message' => $this->recordMessage($event['data']),
                 'message.read' => $this->readMessages($event['data']),
                 'comment' => $this->recordComment($event['data']),
-                default => null,
+                default => 'ignored',
             };
+
+            // What became of it, next to the receipt: answerable in prod
+            // from the database, whatever the log level.
+            if ($eventId !== null) {
+                DB::table('webhook_events')
+                    ->where('source', $this->provider->name())
+                    ->where('event_id', $eventId)
+                    ->update(['outcome' => substr($outcome, 0, 48)]);
+            }
+
+            Log::channel('webhooks')->info('inbox.outcome', [
+                'provider' => $this->provider->name(),
+                'type' => $event['type'],
+                'outcome' => $outcome,
+            ]);
         });
     }
 
     /**
      * @param  array<string, mixed>  $data
      */
-    private function startConversation(array $data): void
+    private function startConversation(array $data): string
     {
         $account = InboxStore::account($this->provider->name(), (string) ($data['social_account_id'] ?? ''));
 
         if ($account !== null) {
             InboxStore::upsertConversation($account, $data);
-        } else {
-            InboxStore::resolveConversation($this->provider, (string) ($data['id'] ?? ''), $data['network'] ?? null);
+
+            return 'filed';
         }
+
+        return InboxStore::resolveConversation($this->provider, (string) ($data['id'] ?? ''), $data['network'] ?? null) === null
+            ? 'dropped:unknown_conversation'
+            : 'filed';
     }
 
     /**
@@ -288,12 +309,12 @@ class SocialWebhookController extends Controller
      *
      * @param  array<string, mixed>  $data
      */
-    private function recordMessage(array $data): void
+    private function recordMessage(array $data): string
     {
         $conversation = InboxStore::resolveConversation($this->provider, (string) ($data['conversation_id'] ?? ''), $data['network'] ?? null);
 
         if ($conversation === null) {
-            return;
+            return 'dropped:unknown_conversation';
         }
 
         if (($data['contact_id'] ?? null) !== null && $conversation->contact_id === null) {
@@ -307,21 +328,27 @@ class SocialWebhookController extends Controller
             $conversation->account()->whereNull('messages_scope_at')->update(['messages_scope_at' => now()]);
             InboxNotifier::message($conversation->user, $conversation->ulid);
         }
+
+        return 'filed';
     }
 
     /**
      * @param  array<string, mixed>  $data
      */
-    private function readMessages(array $data): void
+    private function readMessages(array $data): string
     {
         $conversation = SocialConversation::query()
             ->where('provider', $this->provider->name())
             ->where('provider_conversation_id', (string) ($data['conversation_id'] ?? ''))
             ->first();
 
-        if ($conversation !== null) {
-            InboxStore::markSeen($conversation, $data['read_at'] ?? null);
+        if ($conversation === null) {
+            return 'dropped:unknown_conversation';
         }
+
+        InboxStore::markSeen($conversation, $data['read_at'] ?? null);
+
+        return 'filed';
     }
 
     /**
@@ -330,24 +357,42 @@ class SocialWebhookController extends Controller
      *
      * @param  array<string, mixed>  $data
      */
-    private function recordComment(array $data): void
+    private function recordComment(array $data): string
     {
         $account = InboxStore::account($this->provider->name(), (string) ($data['account_id'] ?? ''));
 
-        if ($account === null || ! $account->supportsComments()) {
-            Log::warning('inbox.comment_dropped', [
-                'provider' => $this->provider->name(),
-                'account' => $data['account_id'] ?? null,
-                'reason' => $account === null ? 'unknown_account' : 'comments_unsupported',
-            ]);
-
-            return;
+        // The provider account id can belong to a row left disconnected by a
+        // reconnect; the comment belongs where that Instagram/Facebook
+        // account is connected now.
+        if ($account !== null && ! $account->isUsable()) {
+            $account = InboxStore::liveTwin($account) ?? $account;
         }
 
+        $reason = match (true) {
+            $account === null => 'unknown_account',
+            ! $account->supportsComments() => 'comments_unsupported',
+            (string) ($data['id'] ?? '') === '' => 'no_comment_id',
+            InboxStore::isOwnComment($account, $data) => 'own_comment',
+            default => null,
+        };
+
+        if ($reason !== null) {
+            Log::channel('webhooks')->warning('inbox.comment_dropped', [
+                'provider' => $this->provider->name(),
+                'account' => $data['account_id'] ?? null,
+                'reason' => $reason,
+            ]);
+
+            return 'dropped:'.$reason;
+        }
+
+        /** @var SocialAccount $account */
         $comment = InboxStore::upsertComment($account, $data, (string) ($data['network'] ?? ''));
 
         if ($comment !== null && $comment->wasRecentlyCreated) {
             InboxNotifier::comment($account->user);
         }
+
+        return $comment === null ? 'dropped:not_filed' : 'filed';
     }
 }

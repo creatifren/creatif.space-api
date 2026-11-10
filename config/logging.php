@@ -58,6 +58,17 @@ return [
             'ignore_exceptions' => false,
         ],
 
+        // Webhook deliveries (which events arrive, what became of them —
+        // never content). Its own file and level so a prod LOG_LEVEL of
+        // warning/error, which drops `info`, does not hide them.
+        'webhooks' => [
+            'driver' => 'daily',
+            'path' => storage_path('logs/webhooks.log'),
+            'level' => env('WEBHOOK_LOG_LEVEL', 'info'),
+            'days' => 14,
+            'replace_placeholders' => true,
+        ],
+
         'single' => [
             'driver' => 'single',
             'path' => storage_path('logs/laravel.log'),
