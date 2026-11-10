@@ -4,6 +4,7 @@ namespace App\Support;
 
 use App\Contracts\SocialProvider;
 use App\Enums\SocialAccountStatus;
+use App\Enums\SocialPlatform;
 use App\Models\SocialAccount;
 use App\Models\SocialComment;
 use App\Models\SocialConversation;
@@ -25,11 +26,86 @@ class InboxStore
     /** Our own public replies, remembered so their comment.received is skipped. */
     public const OWN_COMMENT_KEY = 'inbox-own-comment:';
 
+    /** How long a provider account's webhook reference id is remembered. */
+    private const REMOTE_ACCOUNT_TTL_HOURS = 24;
+
     /**
-     * The local account for a provider account id. The same platform
-     * account can sit under two of our users (one Disconnected): the
-     * connected one wins.
+     * The account an inbox event names, resolved as far as is safe:
+     *
+     *  1. our row for that provider account id — or, when that row was left
+     *     disconnected by a reconnect, its connected twin (network_unique_id);
+     *  2. an Outstand account we never stored (an older connect of the same
+     *     IG/FB account, purged here): asked for at the provider, then
+     *     matched to the ONE connected row on the same platform with the
+     *     same network_webhook_reference_id — the id Meta's webhooks carry.
+     *     Never across platforms; none or several candidates → null.
+     *
+     * @return array{0: SocialAccount|null, 1: string|null} the account and how
+     *                                                      it was matched ('webhook_ref' for 2.)
      */
+    public static function resolveAccount(SocialProvider $provider, string $providerAccountId, ?string $network = null): array
+    {
+        $account = self::account($provider->name(), $providerAccountId);
+
+        if ($account !== null) {
+            if (! $account->isUsable()) {
+                $account = self::liveTwin($account) ?? $account;
+            }
+
+            return [$account, null];
+        }
+
+        if ($providerAccountId === '') {
+            return [null, null];
+        }
+
+        $remote = self::remoteAccount($provider, $providerAccountId);
+        $ref = is_string($remote['network_webhook_reference_id'] ?? null) ? $remote['network_webhook_reference_id'] : null;
+        $platform = SocialPlatform::tryFrom((string) ($remote['platform'] ?? $network ?? ''));
+
+        if ($ref === null || $ref === '' || $platform === null) {
+            return [null, null];
+        }
+
+        $candidates = SocialAccount::query()
+            ->where('provider', $provider->name())
+            ->where('platform', $platform)
+            ->where('network_webhook_reference_id', $ref)
+            ->where('status', SocialAccountStatus::Connected)
+            ->limit(2)
+            ->get();
+
+        return $candidates->count() === 1 ? [$candidates->first(), 'webhook_ref'] : [null, null];
+    }
+
+    /**
+     * A provider account as the provider describes it, remembered for a day
+     * (one lookup per unknown account, not per webhook). A failed lookup is
+     * not remembered.
+     *
+     * @return array<string, mixed>|null
+     */
+    private static function remoteAccount(SocialProvider $provider, string $providerAccountId): ?array
+    {
+        $key = 'provider-account:'.$provider->name().':'.$providerAccountId;
+        $cached = Cache::get($key);
+        if (is_array($cached)) {
+            return $cached;
+        }
+
+        try {
+            $remote = $provider->account($providerAccountId);
+        } catch (Throwable) {
+            return null;
+        }
+
+        if (is_array($remote)) {
+            Cache::put($key, $remote, now()->addHours(self::REMOTE_ACCOUNT_TTL_HOURS));
+        }
+
+        return $remote;
+    }
+
     /**
      * The connected row for the same network account (same platform and
      * network_unique_id), when this one is not — a reconnect leaves the old
@@ -51,6 +127,11 @@ class InboxStore
             ->first();
     }
 
+    /**
+     * The local account for a provider account id. The same platform
+     * account can sit under two of our users (one Disconnected): the
+     * connected one wins.
+     */
     public static function account(string $provider, string $providerAccountId): ?SocialAccount
     {
         if ($providerAccountId === '') {
@@ -92,7 +173,7 @@ class InboxStore
             return null;
         }
 
-        $account = $remote === null ? null : self::account($provider->name(), (string) ($remote['social_account_id'] ?? ''));
+        $account = $remote === null ? null : self::resolveAccount($provider, (string) ($remote['social_account_id'] ?? ''), $network)[0];
 
         return $account === null ? null : self::upsertConversation($account, $remote + ['network' => $network ?? 'instagram']);
     }

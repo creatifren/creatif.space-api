@@ -242,7 +242,10 @@ class SocialAccountController extends Controller
                     $user->socialAccounts()
                         ->where('provider', $provider->name())
                         ->where('provider_account_id', $fields['provider_account_id'])
-                        ->update(['network_unique_id' => $fields['network_unique_id']]);
+                        ->update(array_filter([
+                            'network_unique_id' => $fields['network_unique_id'],
+                            'network_webhook_reference_id' => $fields['network_webhook_reference_id'],
+                        ], fn ($v) => $v !== null));
 
                     continue;
                 }
@@ -266,6 +269,7 @@ class SocialAccountController extends Controller
                 'username' => $fields['username'],
                 'profile_photo_url' => $fields['profile_photo_url'],
                 'network_unique_id' => $fields['network_unique_id'],
+                'network_webhook_reference_id' => $fields['network_webhook_reference_id'],
                 'status' => $status,
                 'connected_at' => self::connectedAt($account, $existing, $status),
             ]);

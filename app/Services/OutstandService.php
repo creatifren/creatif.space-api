@@ -887,6 +887,10 @@ class OutstandService implements SocialProvider
             // are the same account connected twice.
             'network_unique_id' => is_scalar($a['network_unique_id'] ?? null) && (string) $a['network_unique_id'] !== ''
                 ? (string) $a['network_unique_id'] : null,
+            // The id Meta uses for this IG/FB account in its webhooks; shared
+            // by every Outstand account (old or new) that holds it.
+            'network_webhook_reference_id' => is_scalar($a['network_webhook_reference_id'] ?? null) && (string) $a['network_webhook_reference_id'] !== ''
+                ? (string) $a['network_webhook_reference_id'] : null,
             // When the relay first held this grant: a reconnect is a new one.
             'connected_at' => $a['createdAt'] ?? null,
         ];
