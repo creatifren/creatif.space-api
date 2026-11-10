@@ -404,6 +404,21 @@ final class Credits
             ->count();
     }
 
+    /**
+     * Sends paid for this cycle (one per destination), by any wallet —
+     * a returned send hands its charge back and stops counting.
+     */
+    public static function sendsThisCycle(User $user): int
+    {
+        $owner = self::owner($user);
+
+        return SocialPostTarget::query()
+            ->whereNotNull('paid_with')
+            ->where('charged_at', '>=', self::cycleSince($owner))
+            ->whereHas('post', fn ($q) => $q->whereIn('user_id', Workspace::memberIds($owner)))
+            ->count();
+    }
+
     /** @deprecated the allowance became Monthly Credits; same cycle. */
     public static function allowanceSince(User $owner): CarbonImmutable
     {

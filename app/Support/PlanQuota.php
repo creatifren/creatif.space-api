@@ -3,10 +3,10 @@
 namespace App\Support;
 
 use App\Enums\SpaceStatus;
+use App\Exceptions\PlanFeatureRequired;
 use App\Models\File;
 use App\Models\FileVersion;
 use App\Models\User;
-use Illuminate\Validation\ValidationException;
 
 /**
  * Plan limits, read from the plans table. No number lives here: a user's
@@ -171,14 +171,12 @@ class PlanQuota
      * request starts — links already sent keep working through a downgrade,
      * and approving your own post is open to every plan.
      *
-     * @throws ValidationException
+     * @throws PlanFeatureRequired
      */
     public static function requireClientApprovals(User $user, string $field = 'approval'): void
     {
         if (! Workspace::owner($user)->plan()->feature('client_approvals')) {
-            throw ValidationException::withMessages([
-                $field => 'Client approvals are part of Pro and Max.',
-            ]);
+            throw PlanFeatureRequired::clientApprovals($user, $field);
         }
     }
 

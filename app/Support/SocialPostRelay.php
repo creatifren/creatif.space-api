@@ -7,6 +7,7 @@ use App\Enums\SocialPostApproval;
 use App\Enums\SocialPostStatus;
 use App\Enums\SocialPostTargetStatus;
 use App\Exceptions\AccountReconnectRequired;
+use App\Exceptions\NotEnoughCredits;
 use App\Models\SocialAccount;
 use App\Models\SocialPost;
 use App\Models\SocialPostTarget;
@@ -115,10 +116,8 @@ class SocialPostRelay
         // leave a post live on the platform that was never paid for.
         $need = Credits::sendPrice($post->user, self::destinations($post));
         if (Credits::balance($post->user) < $need) {
-            throw ValidationException::withMessages([
-                'caption' => "This needs {$need} Credits and the balance has ".Credits::balance($post->user)
-                    .' — top up, then try again.',
-            ]);
+            // What Top-up must cover plus what Monthly does: the full price.
+            throw NotEnoughCredits::for($post->user, $need + Credits::monthlyBalance($post->user));
         }
 
         // Paid before it reaches the provider, under the owner's lock, so a
