@@ -145,6 +145,10 @@ return [
 
     'resend' => [
         'key' => env('RESEND_API_KEY'),
+        // Confirmed waitlist sign-ups land in these segments; empty = confirm still works, logged.
+        'waitlist_segments' => [
+            'mcp' => env('RESEND_WAITLIST_MCP_SEGMENT', ''),
+        ],
     ],
 
     'ses' => [

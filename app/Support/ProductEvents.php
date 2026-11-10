@@ -68,6 +68,19 @@ final class ProductEvents
         return $out;
     }
 
+    /**
+     * A waitlist sign-up was confirmed. No account and no raw address: the
+     * distinct_id is the address's sha256.
+     *
+     * @param  array<string, string>  $utm
+     */
+    public static function waitlistJoined(string $email, string $list, array $utm = []): void
+    {
+        $extra = array_filter(array_intersect_key($utm, array_flip(self::UTM)), fn (string $v) => $v !== '');
+
+        self::analytics()->capture(hash('sha256', strtolower($email)), 'waitlist_joined', ['list' => $list] + $extra);
+    }
+
     /** A plan key as sent: the enum's value. */
     public static function key(PlanKey|string|null $plan): ?string
     {
