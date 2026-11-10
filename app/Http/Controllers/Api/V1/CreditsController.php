@@ -2,9 +2,13 @@
 
 namespace App\Http\Controllers\Api\V1;
 
+use App\Exceptions\NotEnoughCredits;
+use App\Exceptions\PlanFeatureRequired;
 use App\Http\Controllers\Controller;
+use App\Http\Middleware\CapTokenSends;
 use App\Models\CreditPurchase;
 use App\Models\SocialPost;
+use App\Models\User;
 use App\Models\WalletTransaction;
 use App\Services\CreemService;
 use App\Support\Credits;
@@ -67,7 +71,58 @@ class CreditsController extends Controller
             ],
             'packs' => self::PACKS,
             'top_up' => ['min' => Credits::TOP_UP_MIN, 'max' => Credits::TOP_UP_MAX],
+            'limits' => self::limits($user),
         ]]);
+    }
+
+    /**
+     * The plan's limits and what is used of them, all read from the plans
+     * table (no number lives here) — the MCP server's get_credits answer.
+     *
+     * @return array<string, mixed>
+     */
+    public static function limits(User $user): array
+    {
+        $owner = Workspace::owner($user);
+        $plan = $owner->plan();
+        $accountsLimit = $plan->quota('social_accounts');
+
+        return [
+            'plan' => ['key' => $plan->key->value, 'name' => $plan->name],
+            // What the plan lists per month. Credits are what a send is
+            // actually checked against; this is the plan's reference count.
+            'monthly_posts' => [
+                'limit' => PlanQuota::socialPostsLimit($user),
+                'used' => Credits::sendsThisCycle($user),
+                'resets_at' => Credits::cycleEnds($owner)->toIso8601String(),
+            ],
+            'connected_accounts' => [
+                'limit' => $accountsLimit,
+                'used' => $owner->socialAccounts()->usable()->count(),
+            ],
+            'features' => [
+                'approval_links' => $plan->feature('client_approvals'),
+                'analytics' => $plan->feature('full_analytics'),
+                'delivery_history' => $plan->feature('delivery_history'),
+                'branding_removed' => $plan->feature('branding_removed'),
+            ],
+            'credits' => [
+                'monthly' => Credits::monthlyBalance($user),
+                'monthly_amount' => Credits::monthlyAmount($owner),
+                'topup' => Credits::balance($user),
+                'total' => Credits::total($user),
+                'resets_at' => Credits::cycleEnds($owner)->toIso8601String(),
+            ],
+            'price_per_send' => [
+                'default' => Credits::perSend(),
+                'by_platform' => Credits::perSendByPlatform(),
+            ],
+            'mcp_daily_sends' => CapTokenSends::status($user),
+            'urls' => [
+                'billing' => PlanFeatureRequired::billingUrl(),
+                'top_up' => NotEnoughCredits::topUpUrl(),
+            ],
+        ];
     }
 
     /**

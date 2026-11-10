@@ -203,21 +203,29 @@ describe('draft_post', () => {
 });
 
 describe('get_credits', () => {
-  it('maps GET /credits', async () => {
+  it('returns the plan limits from GET /credits', async () => {
+    const limits = {
+      plan: { key: 'free', name: 'Free' },
+      monthly_posts: { limit: 10, used: 2, resets_at: '2026-12-01T00:00:00+00:00' },
+      connected_accounts: { limit: 3, used: 1 },
+      features: { approval_links: false, analytics: false, delivery_history: false, branding_removed: false },
+      credits: { monthly: 2400, monthly_amount: 3000, topup: 0, total: 2400, resets_at: '2026-12-01T00:00:00+00:00' },
+      price_per_send: { default: 300, by_platform: { x: 300, x_link: 2000 } },
+      mcp_daily_sends: { cap: 20, used: 3, remaining: 17 },
+      urls: { billing: 'https://creatif.space/settings?section=subscription', top_up: 'https://creatif.space/credits' },
+    };
     const res = await call('get_credits', {}, {
-      'GET /credits': () => ({
-        body: {
-          data: {
-            plan: 'pro', balance: 5, monthly_balance: 100, monthly_resets_at: '2026-12-01T00:00:00Z', monthly_amount: 300,
-            topup_balance: 5, total: 105, committed: 10,
-            rate: { per_send: 1, per_send_by_platform: { x: 2 }, per_dollar: 100 },
-          },
-        },
-      }),
+      'GET /credits': () => ({ body: { data: { plan: 'free', committed: 300, limits, rate: {} } } }),
     });
     expect(payload(res)).toEqual({
-      plan: 'pro', total: 105, monthly_balance: 100, monthly_amount: 300, monthly_resets_at: '2026-12-01T00:00:00Z',
-      topup_balance: 5, committed: 10, per_send: 1, per_send_by_platform: { x: 2 },
+      plan: limits.plan,
+      credits: { ...limits.credits, committed: 300 },
+      price_per_send: limits.price_per_send,
+      monthly_posts: limits.monthly_posts,
+      connected_accounts: limits.connected_accounts,
+      features: limits.features,
+      mcp_daily_sends: limits.mcp_daily_sends,
+      urls: limits.urls,
     });
   });
 

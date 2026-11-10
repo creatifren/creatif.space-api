@@ -239,3 +239,63 @@ describe('publish_post', () => {
     expect(payload(res).error.code).toBe('scope_missing');
   });
 });
+
+describe('plan and Credit limits are passed on verbatim', () => {
+  const TRIAL = 'Client approval links are on Pro and Max. Start the 7-day Pro trial: https://creatif.space/settings?section=subscription';
+
+  it('402 plan_required → plan_required with the API sentence as the message', async () => {
+    const res = await call('create_approval_link', { post_ids: [POST] }, {
+      'POST /social-approval-links': () => ({
+        status: 402,
+        body: { message: TRIAL, code: 'plan_required', feature: 'client_approvals', billing_url: 'https://creatif.space/settings?section=subscription' },
+      }),
+    });
+    expect(payload(res).error).toMatchObject({
+      code: 'plan_required',
+      message: TRIAL,
+      hint: expect.stringMatching(/as it is/),
+      details: { feature: 'client_approvals', billing_url: 'https://creatif.space/settings?section=subscription' },
+    });
+  });
+
+  it('insufficient_credits → needed vs available and the top-up link', async () => {
+    const msg = 'Not enough Credits: this send needs 600 and 1 are available (0 monthly + 1 top-up). Top up: https://creatif.space/credits';
+    const res = await call('publish_post', { post_id: POST, confirm: true }, {
+      [`POST /social-posts/${POST}/send`]: () => ({
+        status: 422,
+        body: { message: msg, code: 'insufficient_credits', needed: 600, available: 1, monthly_balance: 0, topup_balance: 1, topup_url: 'https://creatif.space/credits', resets_at: 'r', errors: { caption: [msg] } },
+      }),
+    });
+    expect(payload(res).error).toMatchObject({
+      code: 'insufficient_credits',
+      message: msg,
+      details: { needed: 600, available: 1, topup_url: 'https://creatif.space/credits' },
+    });
+    expect(payload(res).error.hint).toMatch(/Nothing was charged/);
+  });
+
+  it('quota_exceeded → the reset date', async () => {
+    const msg = "This month's Credits on the Free plan are used up — they reset on 1 Dec 2026. This send needs 300 Credits. Top up now: https://creatif.space/credits";
+    const res = await call('schedule_post', { post_id: POST, scheduled_at: FUTURE, confirm: true }, {
+      [`POST /social-posts/${POST}/send`]: () => ({
+        status: 422,
+        body: { message: msg, code: 'quota_exceeded', needed: 300, available: 0, resets_at: '2026-12-01T00:00:00+00:00', topup_url: 'https://creatif.space/credits' },
+      }),
+    });
+    expect(payload(res).error).toMatchObject({
+      code: 'quota_exceeded',
+      message: msg,
+      details: { resets_at: '2026-12-01T00:00:00+00:00', needed: 300, available: 0 },
+    });
+  });
+
+  it('tool descriptions state the plan and Credit rules', async () => {
+    app = await startApp();
+    const { tools } = await (await app.connect(TOKEN_FULL)).listTools();
+    const d = (n: string) => tools.find((t) => t.name === n)!.description!;
+    expect(d('create_approval_link')).toMatch(/Pro and Max/);
+    expect(d('publish_post')).toMatch(/insufficient_credits or quota_exceeded/);
+    expect(d('schedule_post')).toMatch(/Monthly Credits first/);
+    expect(d('get_credits')).toMatch(/Free included/);
+  });
+});

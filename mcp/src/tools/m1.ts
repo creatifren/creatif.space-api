@@ -117,7 +117,7 @@ export const draftPost = defineTool({
   name: 'draft_post',
   title: 'Draft a post',
   description:
-    'Saves a DRAFT post in creatif.space for the given channels. Nothing is published or scheduled and no Credits are spent; the user reviews and sends it from creatif.space. ' +
+    'Saves a DRAFT post in creatif.space for the given channels. Nothing is published or scheduled and no Credits are spent (on every plan, Free included); the user reviews and sends it from creatif.space, or you schedule/publish it with the user’s explicit agreement. ' +
     'Attach media by library file ids (from list_files) and/or public https media URLs (up to 10 in all). ' +
     'captions_by_channel optionally overrides the caption for specific channels, e.g. a shorter one for X.',
   scope: 'draft',
@@ -165,24 +165,27 @@ export const draftPost = defineTool({
 
 export const getCredits = defineTool({
   name: 'get_credits',
-  title: 'Get Credit balance',
+  title: 'Get plan, limits and Credits',
   description:
-    'Gets the workspace’s creatif.space plan and Credit balance: Monthly Credits (and when they reset), Top-up Credits, the total, what is committed to scheduled posts, and the Credit price per send by platform.',
+    'Gets the workspace’s creatif.space plan and its limits, all as set on the plan: plan name; this month’s posts vs the plan’s monthly figure; connected channels used vs allowed; ' +
+    'features (approval links, analytics); Credits (Monthly, when they reset, Top-up, total, committed to scheduled posts); the Credit price per send by platform; ' +
+    'and how many sends connected apps have left today (cap 20/day). Every plan, Free included, can use this server: sending spends Credits, and approval links need Pro or Max. ' +
+    'Call this before scheduling or publishing when the user asks what they can afford.',
   scope: 'read',
   input: {},
   annotations: READ_ONLY,
   run: async (_args, { v1 }) => {
-    const { data } = await v1.get<{ data: Record<string, unknown> & { rate?: Record<string, unknown> } }>('/credits');
+    const { data } = await v1.get<{ data: Record<string, unknown> & { limits?: Record<string, unknown> } }>('/credits');
+    const limits = data.limits ?? {};
     return {
-      plan: data.plan,
-      total: data.total,
-      monthly_balance: data.monthly_balance,
-      monthly_amount: data.monthly_amount,
-      monthly_resets_at: data.monthly_resets_at,
-      topup_balance: data.topup_balance,
-      committed: data.committed,
-      per_send: data.rate?.per_send,
-      per_send_by_platform: data.rate?.per_send_by_platform,
+      plan: limits.plan ?? { key: data.plan },
+      credits: { ...(limits.credits as object | undefined), committed: data.committed },
+      price_per_send: limits.price_per_send,
+      monthly_posts: limits.monthly_posts,
+      connected_accounts: limits.connected_accounts,
+      features: limits.features,
+      mcp_daily_sends: limits.mcp_daily_sends,
+      urls: limits.urls,
     };
   },
 });

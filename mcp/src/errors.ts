@@ -11,6 +11,7 @@ export type ErrorCode =
   | 'rate_limited'
   | 'daily_cap_reached'
   | 'insufficient_credits'
+  | 'quota_exceeded'
   | 'upstream_unavailable';
 
 /** An error a tool returns to the model: a machine code plus what to do next. */
@@ -37,6 +38,9 @@ export class ToolError extends Error {
 }
 
 const PLAN_MESSAGE = /part of (Pro|Max)|upgrade/i;
+
+const pick = (body: Record<string, unknown>, keys: string[]): Record<string, unknown> =>
+  Object.fromEntries(keys.filter((k) => body[k] !== undefined).map((k) => [k, body[k]]));
 
 /** V1 answers → specific, actionable tool errors. */
 export function toToolError(e: unknown, notFoundWhat = 'That item'): ToolError {
@@ -67,8 +71,30 @@ export function toToolError(e: unknown, notFoundWhat = 'That item'): ToolError {
       { accounts: body.accounts },
     );
   }
+  // The API writes these messages to be passed on as they stand.
   if (code === 'plan_required' || e.status === 402 || (e.status === 422 && PLAN_MESSAGE.test(message))) {
-    return new ToolError('plan_required', message, 'This needs a higher creatif.space plan (Settings → Subscription). Tell the user; do not retry.');
+    return new ToolError(
+      'plan_required',
+      message,
+      'Tell the user this message as it is (it includes the upgrade link). Do not retry.',
+      pick(body, ['feature', 'billing_url']),
+    );
+  }
+  if (code === 'insufficient_credits') {
+    return new ToolError(
+      'insufficient_credits',
+      message,
+      'Tell the user this message as it is (needed vs available, and the top-up link). Nothing was charged. Retry only after they top up, or send to fewer channels.',
+      pick(body, ['needed', 'available', 'monthly_balance', 'topup_balance', 'topup_url', 'resets_at']),
+    );
+  }
+  if (code === 'quota_exceeded') {
+    return new ToolError(
+      'quota_exceeded',
+      message,
+      'Tell the user this message as it is: this month’s Credits are used up until resets_at; they can top up (link included) or wait. Nothing was charged. Do not retry before one of those.',
+      pick(body, ['needed', 'available', 'resets_at', 'topup_url']),
+    );
   }
   if (code === 'daily_send_cap') {
     return new ToolError(
@@ -81,6 +107,7 @@ export function toToolError(e: unknown, notFoundWhat = 'That item'): ToolError {
   if (code === 'draft_only' || code === 'not_available') {
     return new ToolError('forbidden', message, 'This action is not open to connected apps; the user can do it in creatif.space.');
   }
+  // Older API answers carried no code.
   if (e.status === 422 && /Credits/.test(message) && /top up|balance/i.test(message)) {
     return new ToolError('insufficient_credits', message, 'Tell the user to top up Credits in creatif.space (Settings → Credits) or send to fewer channels.');
   }

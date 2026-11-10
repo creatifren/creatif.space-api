@@ -63,7 +63,7 @@ export const createApprovalLink = defineTool({
   title: 'Create a client approval link',
   description:
     'Creates a creatif.space approval link for one or more posts (drafts, or posts already held for approval) and returns its URL for the user to share with their client. ' +
-    'The posts are held — nothing is published until the client approves. Pro and Max plans only (plan_required otherwise). ' +
+    'The posts are held — nothing is published until the client approves. Pro and Max plans only: on Free it returns plan_required with a message to pass on to the user as it is (it has the trial/upgrade link). ' +
     'The link is not sent anywhere by this tool; hand the URL to the user.',
   scope: 'approve',
   input: {
@@ -181,7 +181,8 @@ export const schedulePost = defineTool({
   title: 'Schedule a draft',
   description:
     'Schedules a DRAFT to publish at a future time on its channels. Two steps: call with confirm false (default) to get a preview — channels and Credit cost; ' +
-    'show it to the user, and only after they explicitly agree call again with confirm: true. Credits are charged when it is scheduled. Connected apps can send at most 20 posts a day.',
+    'show it to the user, and only after they explicitly agree call again with confirm: true. Credits are charged when it is scheduled (Monthly Credits first, then Top-up; on every plan). ' +
+    'If the Credits do not cover it you get insufficient_credits or quota_exceeded with a message to pass on as it is — nothing is charged. Connected apps can send at most 20 posts a day.',
   scope: 'publish',
   input: {
     post_id: ulid('Draft post'),
@@ -209,7 +210,8 @@ export const publishPost = defineTool({
   title: 'Publish a draft now',
   description:
     'Publishes a DRAFT now on its channels — this goes public and cannot be undone. Two steps: call with confirm false (default) to get a preview — channels and Credit cost; ' +
-    'show it to the user, and only after they explicitly agree call again with confirm: true. Credits are charged. Connected apps can send at most 20 posts a day.',
+    'show it to the user, and only after they explicitly agree call again with confirm: true. Credits are charged (Monthly Credits first, then Top-up; on every plan). ' +
+    'If the Credits do not cover it you get insufficient_credits or quota_exceeded with a message to pass on as it is — nothing is charged. Connected apps can send at most 20 posts a day.',
   scope: 'publish',
   input: {
     post_id: ulid('Draft post'),
