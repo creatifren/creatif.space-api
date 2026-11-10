@@ -2,8 +2,8 @@
   "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
   "name": "io.github.creatifren/creatif-space",
   "title": "Creatif Space",
-  "description": "Plan and draft client social posts from your AI chat. Approvals and publishing rolling out.",
-  "version": "1.0.0",
+  "description": "Draft client social posts, send approval links and publish, all from your AI chat.",
+  "version": "1.0.1",
   "websiteUrl": "https://creatif.space/mcp",
   "remotes": [
     {
