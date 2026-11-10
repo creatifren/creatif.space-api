@@ -490,7 +490,8 @@ it('does not send a post twice when Approve all is pressed twice', function () {
     $link = linkFor($a);
 
     $this->postJson("/api/v1/a/{$link->token}/approve-all", ['name' => 'Andi', 'post_ids' => [$a->ulid]])->assertOk();
-    $this->postJson("/api/v1/a/{$link->token}/approve-all", ['name' => 'Andi', 'post_ids' => [$a->ulid]])->assertUnprocessable();
+    // Again: answered with where it stands (idempotent), never sent twice.
+    $this->postJson("/api/v1/a/{$link->token}/approve-all", ['name' => 'Andi', 'post_ids' => [$a->ulid]])->assertOk();
 
     Http::assertSentCount(1);
 });

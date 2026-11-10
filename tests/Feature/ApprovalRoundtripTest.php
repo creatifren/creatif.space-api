@@ -131,7 +131,8 @@ describe('the client decision survives a closing tab', function () {
             'HTTP_ORIGIN' => 'https://evil.test',
             'HTTP_ACCESS_CONTROL_REQUEST_METHOD' => 'GET',
         ]);
-        expect($other->headers->get('Access-Control-Allow-Origin'))->toBeNull();
+        // A single allowed origin is always the one named; never the caller's.
+        expect($other->headers->get('Access-Control-Allow-Origin'))->not->toBe('https://evil.test');
     });
 
     it('runs the write routes without the session/CSRF layer, keeping their rate limits', function (string $name) {

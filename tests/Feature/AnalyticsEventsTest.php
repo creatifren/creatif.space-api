@@ -462,7 +462,8 @@ describe('approval links', function () {
         $this->travel(3)->hours();
 
         $this->postJson("/api/v1/a/{$link->token}/posts/{$a->ulid}/decision", ['name' => 'Andi', 'decision' => 'approve'])->assertOk();
-        $this->postJson("/api/v1/a/{$link->token}/posts/{$a->ulid}/decision", ['name' => 'Andi', 'decision' => 'approve'])->assertUnprocessable();
+        // The same yes again is answered, not refused — and fires nothing.
+        $this->postJson("/api/v1/a/{$link->token}/posts/{$a->ulid}/decision", ['name' => 'Andi', 'decision' => 'approve'])->assertOk();
         $this->postJson("/api/v1/a/{$link->token}/posts/{$b->ulid}/decision", ['name' => 'Andi', 'decision' => 'revise', 'reason' => 'Darker'])->assertOk();
         $this->postJson("/api/v1/a/{$link->token}/posts/{$a->ulid}/retract", ['name' => 'Andi'])->assertOk();
 
@@ -483,7 +484,8 @@ describe('approval links', function () {
         $link->posts()->attach([$a->id, $b->id]);
 
         $this->postJson("/api/v1/a/{$link->token}/approve-all", ['name' => 'Andi', 'post_ids' => [$a->ulid, $b->ulid]])->assertOk();
-        $this->postJson("/api/v1/a/{$link->token}/approve-all", ['name' => 'Andi', 'post_ids' => [$a->ulid, $b->ulid]])->assertUnprocessable();
+        // Approve-all again: answered (idempotent), no second event.
+        $this->postJson("/api/v1/a/{$link->token}/approve-all", ['name' => 'Andi', 'post_ids' => [$a->ulid, $b->ulid]])->assertOk();
 
         ae()->assertCapturedTimes('approval_decision_made', 2, fn ($p) => $p['decision'] === 'approved');
     });
