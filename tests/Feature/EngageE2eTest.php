@@ -9,8 +9,9 @@ use App\Models\User;
 use App\Support\SocialProviders;
 use App\Support\Workspace;
 use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Http;
-use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Queue;
 
 /*
  * Engage e2e on IG @creatif_space (10 Nov): DMs worked but the sender read
@@ -45,6 +46,24 @@ function e2eAccount(): SocialAccount
         'messages_scope_at' => now(),
         'inbox_synced_at' => now(),
     ]);
+}
+
+/**
+ * The `webhooks` channel into a temp file, with the app's main level at
+ * `error` as in prod — what lands here survives that.
+ */
+function e2eWebhookLog(): string
+{
+    $path = tempnam(sys_get_temp_dir(), 'webhooks').'.log';
+    config([
+        'logging.channels.webhooks' => ['driver' => 'single', 'path' => $path, 'level' => 'info'],
+        'logging.channels.single.level' => 'error',
+        'logging.channels.stack.channels' => ['single'],
+    ]);
+    app('log')->forgetChannel('webhooks');
+    touch($path);
+
+    return $path;
 }
 
 function e2eHook($test, string $event, array $data, string $secret = 'whsec_out')
@@ -141,32 +160,126 @@ describe('(B) comments on posts published outside Creatif Space', function () {
         expect(SocialComment::sole()->author_username)->toBe('Rizal M');
     });
 
-    it('says in the log when a comment cannot be matched, instead of dropping it silently', function () {
-        Log::spy();
+    it('says in the webhook log when a comment cannot be matched, instead of dropping it silently', function () {
+        $log = e2eWebhookLog();
 
         e2eHook($this, 'comment.received', ['accountId' => 'not_ours', 'commentId' => 'c1', 'network' => 'instagram'])->assertOk();
 
-        Log::shouldHaveReceived('warning')->withArgs(fn ($msg, $ctx) => $msg === 'inbox.comment_dropped'
-            && $ctx === ['provider' => 'outstand', 'account' => 'not_ours', 'reason' => 'unknown_account']);
-        expect(SocialComment::count())->toBe(0);
+        expect(file_get_contents($log))->toContain('inbox.comment_dropped')->toContain('"reason":"unknown_account"')
+            ->and(SocialComment::count())->toBe(0);
     });
 
-    it('logs each event type that arrives, without content', function () {
+    it('logs each event type that arrives, without content, even when prod LOG_LEVEL drops info', function () {
         e2eAccount();
-        Log::spy();
+        $log = e2eWebhookLog();
 
         e2eHook($this, 'comment.received', ['accountId' => 'beUgT', 'commentId' => 'c2', 'text' => 'secret words', 'network' => 'instagram'])->assertOk();
 
-        Log::shouldHaveReceived('info')->withArgs(fn ($msg, $ctx) => $msg === 'webhook.event'
-            && $ctx === ['provider' => 'outstand', 'type' => 'comment', 'account' => 'beUgT']);
+        expect(file_get_contents($log))
+            ->toContain('webhook.event {"provider":"outstand","type":"comment","account":"beUgT"}')
+            ->toContain('inbox.outcome {"provider":"outstand","type":"comment","outcome":"filed"}')
+            ->not->toContain('secret words');
     });
 
     it('logs a signature it refuses — a wrong secret otherwise drops every comment unseen', function () {
-        Log::spy();
+        $log = e2eWebhookLog();
 
         e2eHook($this, 'comment.received', ['accountId' => 'beUgT', 'commentId' => 'c3'], 'wrong_secret')->assertForbidden();
 
-        Log::shouldHaveReceived('warning')->withArgs(fn ($msg, $ctx) => $msg === 'webhook.signature_rejected'
-            && $ctx === ['provider' => 'outstand', 'event' => 'comment.received']);
+        expect(file_get_contents($log))->toContain('webhook.signature_rejected {"provider":"outstand","event":"comment.received"}');
     });
+});
+
+describe('(QA 11 Nov) a stored comment event becomes a visible comment', function () {
+    it('records the outcome next to the receipt and lists the comment with a link', function () {
+        $account = e2eAccount();
+
+        e2eHook($this, 'comment.received', [
+            'network' => 'instagram', 'accountId' => 'beUgT', 'postId' => null, 'platformPostId' => '18050000000000000',
+            'commentId' => '17990000000000002', 'authorId' => '1784555', 'authorUsername' => 'rizal.dev', 'text' => 'Halo',
+        ])->assertOk();
+
+        expect(DB::table('webhook_events')->where('type', 'inbox.comment')->value('outcome'))->toBe('filed');
+
+        $this->actingAs($account->user)->getJson('/api/v1/inbox/comments')
+            ->assertOk()
+            ->assertJsonCount(1, 'data')
+            ->assertJsonPath('data.0.post_id', null)
+            ->assertJsonPath('data.0.outside_post', true)
+            ->assertJsonPath('data.0.platform_post_id', '18050000000000000')
+            ->assertJsonPath('data.0.post_url', 'https://www.instagram.com/creatif_space/')
+            ->assertJsonPath('data.0.author.username', 'rizal.dev');
+    });
+
+    it('links a Facebook comment on an outside post to the post itself', function () {
+        $account = SocialAccount::factory()->for(User::factory()->create())->create([
+            'platform' => 'facebook', 'provider' => 'outstand', 'provider_account_id' => 'fbAcc', 'username' => 'creatif',
+        ]);
+
+        e2eHook($this, 'comment.received', [
+            'network' => 'facebook', 'accountId' => 'fbAcc', 'postId' => null, 'platformPostId' => '1234_5678',
+            'commentId' => 'fbc1', 'authorName' => 'Rizal', 'text' => 'Hi',
+        ])->assertOk();
+
+        $this->actingAs($account->user)->getJson('/api/v1/inbox/comments')
+            ->assertJsonPath('data.0.post_url', 'https://www.facebook.com/1234_5678');
+    });
+
+    it('names why a comment was not filed', function (array $data, string $outcome) {
+        e2eAccount();
+
+        e2eHook($this, 'comment.received', $data + ['network' => 'instagram', 'text' => 'x'])->assertOk();
+
+        expect(DB::table('webhook_events')->where('type', 'inbox.comment')->value('outcome'))->toBe($outcome)
+            ->and(SocialComment::count())->toBe(0);
+    })->with([
+        'unknown account' => [['accountId' => 'not_ours', 'commentId' => 'c1'], 'dropped:unknown_account'],
+        'the account itself' => [['accountId' => 'beUgT', 'commentId' => 'c2', 'authorUsername' => 'creatif_space'], 'dropped:own_comment'],
+        'no comment id' => [['accountId' => 'beUgT'], 'dropped:no_comment_id'],
+    ]);
+
+    it('files a comment sent with the alternative field names', function () {
+        e2eAccount();
+
+        e2eHook($this, 'comment.received', [
+            'network' => 'instagram', 'socialAccountId' => 'beUgT', 'platformCommentId' => 'c9', 'mediaId' => 'm1', 'authorUsername' => 'fan', 'text' => 'Hi',
+        ])->assertOk();
+
+        expect(SocialComment::sole())->comment_id->toBe('c9')->platform_post_id->toBe('m1');
+    });
+});
+
+describe('(QA 11 Nov) opening Engage refreshes', function () {
+    it('re-syncs an account last synced more than 10 minutes ago, not one synced just now', function () {
+        Queue::fake();
+        $account = e2eAccount();
+        $account->forceFill(['inbox_synced_at' => now()->subMinutes(20)])->save();
+        $fresh = SocialAccount::factory()->for($account->user)->create([
+            'platform' => 'instagram', 'provider' => 'outstand', 'provider_account_id' => 'fresh', 'inbox_synced_at' => now()->subMinutes(2),
+        ]);
+
+        $this->actingAs($account->user)->getJson('/api/v1/inbox/conversations')->assertOk();
+
+        Queue::assertPushed(SyncInbox::class, fn ($job) => $job->accountId === $account->id);
+        Queue::assertNotPushed(SyncInbox::class, fn ($job) => $job->accountId === $fresh->id);
+    });
+
+    it('is on the hourly schedule', function () {
+        $this->artisan('schedule:list')->expectsOutputToContain('SyncInboxes')->assertSuccessful();
+    });
+});
+
+it('files a comment for a reconnected account on the live row, not the one left disconnected', function () {
+    $old = SocialAccount::factory()->for(User::factory()->create())->create([
+        'platform' => 'instagram', 'provider' => 'outstand', 'provider_account_id' => 'oldAcc',
+        'network_unique_id' => '28161365190200706', 'status' => 'disconnected',
+    ]);
+    $live = e2eAccount();
+    $live->forceFill(['network_unique_id' => '28161365190200706'])->save();
+
+    e2eHook($this, 'comment.received', [
+        'network' => 'instagram', 'accountId' => 'oldAcc', 'commentId' => 'c_twin', 'authorUsername' => 'fan', 'text' => 'Hi',
+    ])->assertOk();
+
+    expect(SocialComment::sole())->social_account_id->toBe($live->id)->user_id->toBe($live->user_id);
 });

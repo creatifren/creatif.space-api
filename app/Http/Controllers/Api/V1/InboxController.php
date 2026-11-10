@@ -33,6 +33,9 @@ use Throwable;
  */
 class InboxController extends Controller
 {
+    /** Opening Engage re-syncs an account last synced longer ago than this. */
+    public const REFRESH_AFTER_MINUTES = 10;
+
     /** Messages per page of a thread. */
     private const MESSAGES = 50;
 
@@ -262,8 +265,9 @@ class InboxController extends Controller
     }
 
     /**
-     * The first time an Inbox is opened, each of its accounts backfills
-     * (queued; the hourly sync keeps it going after that).
+     * Opening the Inbox backfills each account that never synced and
+     * refreshes each one last synced more than REFRESH_AFTER_MINUTES ago
+     * (queued; the hourly sync keeps it going between opens).
      */
     public static function firstSync(User $user): void
     {
@@ -272,7 +276,12 @@ class InboxController extends Controller
             ->where('provider', 'outstand')
             ->usable()
             ->whereIn('platform', [SocialPlatform::Instagram, SocialPlatform::Facebook])
-            ->whereNull('inbox_synced_at')
+            // Never synced, or not in the last few minutes: opening Engage
+            // refreshes it (names, threads, comments) instead of waiting for
+            // the hourly run. SyncInbox is unique per account for 15 min, so
+            // repeated opens queue one job, not a storm.
+            ->where(fn ($q) => $q->whereNull('inbox_synced_at')
+                ->orWhere('inbox_synced_at', '<', now()->subMinutes(self::REFRESH_AFTER_MINUTES)))
             ->pluck('id')
             ->each(fn (int $id) => SyncInbox::dispatch($id));
     }

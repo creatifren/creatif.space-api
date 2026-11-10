@@ -538,17 +538,20 @@ class OutstandService implements SocialProvider
                 'conversation_id' => $conversation,
                 'read_at' => $d['readAt'] ?? $d['sentAt'] ?? null,
             ]],
+            // Documented keys first; the variants cover Outstand's other
+            // payloads (socialAccountId, platformCommentId), so a renamed
+            // field cannot drop a comment silently again.
             'comment.received' => ['type' => 'comment', 'data' => [
-                'id' => (string) ($d['commentId'] ?? ''),
-                'account_id' => (string) ($d['accountId'] ?? ''),
-                'post_id' => $d['postId'] ?? null,
-                'platform_post_id' => $d['platformPostId'] ?? null,
-                'parent_comment_id' => $d['parentCommentId'] ?? null,
-                'author_id' => $d['authorId'] ?? null,
-                'author_username' => $d['authorUsername'] ?? $d['authorName'] ?? null,
-                'text' => $d['text'] ?? null,
+                'id' => (string) (self::pick($d, 'commentId', 'platformCommentId', 'comment_id') ?? ''),
+                'account_id' => (string) (self::pick($d, 'accountId', 'socialAccountId', 'social_account_id', 'account.id') ?? ''),
+                'post_id' => self::pick($d, 'postId', 'post_id'),
+                'platform_post_id' => self::pick($d, 'platformPostId', 'platform_post_id', 'mediaId'),
+                'parent_comment_id' => self::pick($d, 'parentCommentId', 'parent_comment_id'),
+                'author_id' => self::pick($d, 'authorId', 'author_id', 'from.id'),
+                'author_username' => self::pick($d, 'authorUsername', 'author_username', 'from.username', 'authorName'),
+                'text' => self::pick($d, 'text', 'content', 'message'),
                 'network' => (string) ($d['network'] ?? ''),
-                'created_at' => $d['createdAt'] ?? null,
+                'created_at' => self::pick($d, 'createdAt', 'created_at', 'timestamp'),
             ]],
             default => null,
         };
