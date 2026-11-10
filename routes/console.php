@@ -12,6 +12,7 @@ use App\Jobs\PurgeTrashedFiles;
 use App\Jobs\ReleaseCommissions;
 use App\Jobs\RenewCredits;
 use App\Jobs\RenewMonthlyCredits;
+use App\Jobs\RetryRateLimitedPublishes;
 use App\Jobs\SyncInboxes;
 use Illuminate\Foundation\Inspiring;
 use Illuminate\Support\Facades\Artisan;
@@ -100,3 +101,9 @@ Schedule::job(new BackfillFileChecksums)->dailyAt('01:55');
  * account's job backs off on its own when Outstand rate-limits.
  */
 Schedule::job(new SyncInboxes)->hourly();
+
+/*
+ * Destinations a platform rate-limited wait with a retry_at instead of
+ * failing on the spot; every minute, the ones whose wait is over go again.
+ */
+Schedule::job(new RetryRateLimitedPublishes)->everyMinute()->withoutOverlapping();

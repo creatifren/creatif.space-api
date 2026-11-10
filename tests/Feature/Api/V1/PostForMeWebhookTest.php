@@ -105,10 +105,12 @@ describe('the postforme webhook', function () {
 
         expect($target->fresh())
             ->status->value->toBe('failed')
-            ->fail_reason->toBe('Video is 2:41 and X allows 2:20.')
+            // No pattern fits: the platform's own words are the reason.
+            ->fail_reason->toBe('Instagram refused it: Video is 2:41 and X allows 2:20.')
+            ->provider_error->toBe('Video is 2:41 and X allows 2:20.')
             ->and($post->fresh())
             ->status->value->toBe('failed')
-            ->fail_reason->toBe('Video is 2:41 and X allows 2:20.');
+            ->fail_reason->toBe('Instagram refused it: Video is 2:41 and X allows 2:20.');
 
         // Redelivery lands on the same stable state.
         postforme_webhook($this, $payload)->assertOk();

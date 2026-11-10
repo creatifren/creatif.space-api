@@ -10,6 +10,7 @@ use App\Http\Controllers\Controller;
 use App\Models\SocialAccount;
 use App\Models\SocialConversation;
 use App\Models\SocialPost;
+use App\Models\SocialPostTarget;
 use App\Models\User;
 use App\Support\InboxNotifier;
 use App\Support\InboxStore;
@@ -168,10 +169,17 @@ class SocialWebhookController extends Controller
      */
     private function recordResult(array $data): void
     {
+        $postId = (string) ($data['post_id'] ?? '');
         $post = SocialPost::query()
             ->where('provider', $this->provider->name())
-            ->where('provider_post_id', (string) ($data['post_id'] ?? ''))
-            ->first();
+            ->where('provider_post_id', $postId)
+            ->first()
+            // A rate-limited destination retried as a post of its own.
+            ?? ($postId === '' ? null : SocialPostTarget::query()
+                ->where('retry_provider_post_id', $postId)
+                ->first()?->post()
+                ->where('provider', $this->provider->name())
+                ->first());
 
         // The post's own target, not any row with the id: the same platform
         // account can sit under two of our users (one Disconnected).

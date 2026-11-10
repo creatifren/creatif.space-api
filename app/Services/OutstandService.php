@@ -265,6 +265,24 @@ class OutstandService implements SocialProvider
         return $new['id'];
     }
 
+    /**
+     * GET /pinterest/accounts/{id}/boards → {data: [{id, name, …}]}.
+     *
+     * @return list<array{id: string, name: string}>
+     *
+     * @throws ConnectionException
+     */
+    public function pinterestBoards(string $accountId): array
+    {
+        $response = $this->client()->get('/pinterest/accounts/'.rawurlencode($accountId).'/boards');
+        $response->throw();
+
+        return array_values(array_filter(array_map(fn ($b) => [
+            'id' => (string) ($b['id'] ?? ''),
+            'name' => (string) ($b['name'] ?? ''),
+        ], (array) $response->json('data', [])), fn ($b) => $b['id'] !== ''));
+    }
+
     /** @throws ConnectionException */
     public function deletePost(string $postId): void
     {
@@ -731,6 +749,16 @@ class OutstandService implements SocialProvider
 
             if (isset($config['caption'])) {
                 $networks[$platform]['content'] = (string) $config['caption'];
+            }
+
+            // A Pin needs its board (Outstand: pinterest.board_id, required);
+            // title and link are optional.
+            if ($platform === 'pinterest') {
+                foreach (['board_id' => 'board_id', 'title' => 'title', 'link' => 'link'] as $ours => $theirs) {
+                    if (is_string($config[$ours] ?? null) && $config[$ours] !== '') {
+                        $networks['pinterest'][$theirs] = $config[$ours];
+                    }
+                }
             }
 
             $placement = $config['placement'] ?? null;

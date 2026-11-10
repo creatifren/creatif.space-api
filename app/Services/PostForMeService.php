@@ -384,4 +384,10 @@ class PostForMeService implements SocialProvider
     {
         throw InboxUnsupported::for('Post for Me', 'replying to comments');
     }
+
+    /** Legacy relay: boards are not listed through it. */
+    public function pinterestBoards(string $accountId): array
+    {
+        return [];
+    }
 }
