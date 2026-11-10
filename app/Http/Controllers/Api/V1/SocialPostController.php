@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Api\V1;
 
+use App\Casts\UtcDateTime;
 use App\Contracts\SocialProvider;
 use App\Enums\ActivityAction;
 use App\Enums\SocialPostApproval;
@@ -56,17 +57,19 @@ class SocialPostController extends Controller
         // webhook went missing; ask before answering.
         $relay->reconcile($request->user());
 
-        $from = isset($validated['from']) ? Carbon::parse($validated['from']) : null;
-        $to = isset($validated['to']) ? Carbon::parse($validated['to']) : null;
+        $from = isset($validated['from']) ? self::instant($validated['from']) : null;
+        $to = isset($validated['to']) ? self::instant($validated['to']) : null;
 
         return SocialPostResource::collection(
             $request->user()->socialPosts()
                 ->when($validated['status'] ?? null, fn ($q, $status) => $q->where('status', $status))
+                // scheduled_at holds UTC, created_at app-timezone wall time:
+                // each is compared in its own zone.
                 ->when($from, fn ($q, $from) => $q->where(fn ($w) => $w
-                    ->where('scheduled_at', '>=', $from)
+                    ->where('scheduled_at', '>=', UtcDateTime::bind($from))
                     ->orWhere(fn ($u) => $u->whereNull('scheduled_at')->where('created_at', '>=', $from))))
                 ->when($to, fn ($q, $to) => $q->where(fn ($w) => $w
-                    ->where('scheduled_at', '<=', $to)
+                    ->where('scheduled_at', '<=', UtcDateTime::bind($to))
                     ->orWhere(fn ($u) => $u->whereNull('scheduled_at')->where('created_at', '<=', $to))))
                 ->when($validated['account_id'] ?? null, fn ($q, $account) => $q->whereHas(
                     'targets.account',
@@ -209,7 +212,7 @@ class SocialPostController extends Controller
             ]);
         }
         $scheduledAt = isset($validated['scheduled_at'])
-            ? Carbon::parse($validated['scheduled_at'])
+            ? self::instant($validated['scheduled_at'])
             : null;
 
         // The post's public ulid doubles as the provider external_id, so a
@@ -366,7 +369,7 @@ class SocialPostController extends Controller
 
         $caption = $validated['caption'] ?? $socialPost->caption;
         $scheduledAt = isset($validated['scheduled_at'])
-            ? Carbon::parse($validated['scheduled_at'])
+            ? self::instant($validated['scheduled_at'])
             : $socialPost->scheduled_at;
 
         // Provider first: the row only changes once the plan really moved.
@@ -414,7 +417,7 @@ class SocialPostController extends Controller
             ->whereIn('ulid', [$validated['a'], $validated['b']])
             ->where('status', SocialPostStatus::Scheduled)
             ->whereNotNull('scheduled_at')
-            ->where('scheduled_at', '>', now())
+            ->where('scheduled_at', '>', UtcDateTime::bind(now()))
             ->get()
             ->keyBy('ulid');
 
@@ -581,7 +584,7 @@ class SocialPostController extends Controller
         // The relay charges as it sends, and refuses before the provider if
         // the balance is short; a held draft costs nothing yet.
         $socialPost->update([
-            'scheduled_at' => isset($validated['scheduled_at']) ? Carbon::parse($validated['scheduled_at']) : null,
+            'scheduled_at' => isset($validated['scheduled_at']) ? self::instant($validated['scheduled_at']) : null,
             'approval' => isset($validated['approval']) ? SocialPostApproval::from($validated['approval']) : null,
         ]);
 
@@ -770,6 +773,16 @@ class SocialPostController extends Controller
         $last = array_pop($names);
 
         return $names === [] ? (string) $last : implode(', ', $names).' and '.$last;
+    }
+
+    /**
+     * A client's time ("…Z", "+05:00", or none = app time) as the instant it
+     * names, in the app timezone — the zone created_at is compared in.
+     * scheduled_at's cast stores it as UTC; UtcDateTime::bind() for queries.
+     */
+    private static function instant(string $value): Carbon
+    {
+        return Carbon::parse($value)->setTimezone((string) config('app.timezone'));
     }
 
     /**

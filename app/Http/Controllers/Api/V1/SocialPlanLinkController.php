@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Api\V1;
 
+use App\Casts\UtcDateTime;
 use App\Enums\SocialPostStatus;
 use App\Http\Controllers\Controller;
 use App\Models\SocialPlanLink;
@@ -91,13 +92,18 @@ class SocialPlanLinkController extends Controller
         $posts = $link->user->socialPosts()
             ->where('status', '!=', SocialPostStatus::Cancelled->value)
             // A send-now post has no schedule; it sits on the day it was made.
-            ->whereRaw('COALESCE(scheduled_at, created_at) BETWEEN ? AND ?', [$link->starts_at, $link->ends_at])
+            // scheduled_at holds UTC, created_at app-timezone wall time.
+            ->where(fn ($q) => $q
+                ->whereBetween('scheduled_at', [UtcDateTime::bind($link->starts_at), UtcDateTime::bind($link->ends_at)])
+                ->orWhere(fn ($u) => $u->whereNull('scheduled_at')->whereBetween('created_at', [$link->starts_at, $link->ends_at])))
             ->where(fn ($q) => $q->whereNotNull('scheduled_at')->orWhere('status', '!=', SocialPostStatus::Draft->value))
             ->when($ids !== null, fn ($q) => $q->whereHas('targets', fn ($t) => $t->whereIn('social_account_id', $ids)))
             ->with('targets.account')
-            ->orderByRaw('COALESCE(scheduled_at, created_at)')
             ->limit(500)
-            ->get();
+            ->get()
+            // In time order across both columns' zones (instants, not strings).
+            ->sortBy(fn (SocialPost $p) => ($p->scheduled_at ?? $p->created_at)->getTimestamp())
+            ->values();
 
         $accounts = $link->user->socialAccounts()
             ->when($ids !== null, fn ($q) => $q->whereIn('id', $ids))
