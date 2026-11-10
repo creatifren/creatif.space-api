@@ -14,6 +14,7 @@ use App\Models\User;
 use App\Support\InboxNotifier;
 use App\Support\InboxStore;
 use App\Support\ProductEvents;
+use App\Support\ProviderFields;
 use App\Support\SocialPostRelay;
 use App\Support\SocialProviders;
 use Illuminate\Http\JsonResponse;
@@ -72,11 +73,12 @@ class SocialWebhookController extends Controller
     {
         $user = User::query()->where('ulid', (string) ($data['external_id'] ?? ''))->first();
         $platform = SocialPlatform::tryFrom((string) ($data['platform'] ?? ''));
-        $providerId = (string) ($data['id'] ?? '');
+        $fields = ProviderFields::account($data);
 
-        if ($user === null || $platform === null || $providerId === '') {
+        if ($user === null || $platform === null || $fields === null) {
             return;
         }
+        $providerId = $fields['provider_account_id'];
 
         $row = $user->socialAccounts()->updateOrCreate(
             [
@@ -85,8 +87,8 @@ class SocialWebhookController extends Controller
                 'provider_account_id' => $providerId,
             ],
             [
-                'username' => $data['username'] ?? null,
-                'profile_photo_url' => $data['profile_photo_url'] ?? null,
+                'username' => $fields['username'],
+                'profile_photo_url' => $fields['profile_photo_url'],
                 'status' => ($data['status'] ?? 'connected') === 'connected'
                     ? SocialAccountStatus::Connected
                     : SocialAccountStatus::Disconnected,

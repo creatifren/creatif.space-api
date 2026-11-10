@@ -16,6 +16,7 @@ use App\Services\OutstandService;
 use App\Support\Credits;
 use App\Support\PlanQuota;
 use App\Support\ProductEvents;
+use App\Support\ProviderFields;
 use App\Support\SocialPostRelay;
 use App\Support\SocialProviders;
 use App\Support\Workspace;
@@ -164,12 +165,13 @@ class SocialAccountController extends Controller
 
         foreach ($remote as $account) {
             $platform = SocialPlatform::tryFrom((string) ($account['platform'] ?? ''));
-            $providerId = (string) ($account['id'] ?? '');
+            $fields = ProviderFields::account($account);
 
-            if ($platform === null || $providerId === '') {
+            if ($platform === null || $fields === null) {
                 continue;
             }
 
+            $providerId = $fields['provider_account_id'];
             $seen[] = $providerId;
 
             $row = $user->socialAccounts()->updateOrCreate(
@@ -179,8 +181,8 @@ class SocialAccountController extends Controller
                     'provider_account_id' => $providerId,
                 ],
                 [
-                    'username' => $account['username'] ?? null,
-                    'profile_photo_url' => $account['profile_photo_url'] ?? null,
+                    'username' => $fields['username'],
+                    'profile_photo_url' => $fields['profile_photo_url'],
                     'status' => ($account['status'] ?? 'connected') === 'connected'
                         ? SocialAccountStatus::Connected
                         : SocialAccountStatus::Disconnected,
