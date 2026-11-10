@@ -21,6 +21,7 @@ use App\Support\SocialProviders;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 
 /**
  * A relay calls this on account and post events — one route per relay,
@@ -42,10 +43,25 @@ class SocialWebhookController extends Controller
         $this->provider = $providers->named($provider);
 
         if (! $this->provider->verifyWebhook($request)) {
+            // Logged: a wrong or missing signing secret drops every event
+            // silently otherwise (comments and DMs never arrive).
+            Log::warning('webhook.signature_rejected', [
+                'provider' => $provider,
+                'event' => is_string($request->input('event')) ? $request->input('event') : $request->input('event_type'),
+            ]);
+
             return response()->json(['message' => 'Invalid signature.'], 403);
         }
 
         foreach ($this->provider->webhookEvents($request) as $event) {
+            // Which events arrive, never their content: the first thing to
+            // check when an Engage item is missing.
+            Log::info('webhook.event', [
+                'provider' => $provider,
+                'type' => $event['type'],
+                'account' => $event['data']['account_id'] ?? $event['data']['social_account_id'] ?? null,
+            ]);
+
             if (in_array($event['type'], self::INBOX, true)) {
                 $this->inbox($event);
 
@@ -319,6 +335,12 @@ class SocialWebhookController extends Controller
         $account = InboxStore::account($this->provider->name(), (string) ($data['account_id'] ?? ''));
 
         if ($account === null || ! $account->supportsComments()) {
+            Log::warning('inbox.comment_dropped', [
+                'provider' => $this->provider->name(),
+                'account' => $data['account_id'] ?? null,
+                'reason' => $account === null ? 'unknown_account' : 'comments_unsupported',
+            ]);
+
             return;
         }
 
