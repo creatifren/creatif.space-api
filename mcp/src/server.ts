@@ -10,6 +10,7 @@ import { registerTool } from './tools/define.js';
 import { m1Tools } from './tools/m1.js';
 import { m2Tools } from './tools/m2.js';
 import { V1Client } from './v1.js';
+import { DEFAULT_GLAMA_CLAIM } from './config.js';
 
 export const SERVER_INFO = { name: 'creatif.space', version: '0.2.0' };
 
@@ -26,6 +27,8 @@ export interface AppDeps {
   introspector: Introspector;
   analytics: Analytics;
   rateLimiter?: TokenRateLimiter;
+  /** Defaults to DEFAULT_GLAMA_CLAIM. */
+  glamaClaim?: string;
   fetchImpl?: FetchLike;
 }
 
@@ -45,6 +48,17 @@ export function createApp(deps: AppDeps) {
 
   app.get('/health', (_req, res) => {
     res.json({ ok: true, name: SERVER_INFO.name, version: SERVER_INFO.version });
+  });
+
+  // Glama's connector claim. Public, no auth, no redirect; registered before
+  // the MCP/auth handlers. Express answers HEAD from this GET route too.
+  const glama = JSON.stringify({
+    $schema: 'https://glama.ai/mcp/schemas/connector.json',
+    claim: deps.glamaClaim ?? DEFAULT_GLAMA_CLAIM,
+  });
+  app.get('/mcp/.well-known/glama.json', (_req, res) => {
+    res.setHeader('Access-Control-Allow-Origin', '*');
+    res.type('application/json').send(glama);
   });
 
   const metadata = protectedResourceMetadata(deps.resourceUrl, deps.authorizationServer);

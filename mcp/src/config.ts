@@ -13,11 +13,16 @@ export interface Config {
   authMode: AuthMode;
   posthogKey: string | null;
   posthogHost: string;
+  /** Glama connector-ownership claim; public, published permanently. */
+  glamaClaim: string;
   /** Introspection results are reused this long. */
   introspectionTtlMs: number;
   /** Calls per token per minute. */
   rateLimitPerMinute: number;
 }
+
+/** Not a secret: Glama reads it from a public URL to verify we own the connector. */
+export const DEFAULT_GLAMA_CLAIM = 'glama_claim_U8l5ipmr_QunqGhWyIg0VXQeWfhkoEky';
 
 const trimSlash = (s: string): string => s.replace(/\/+$/, '');
 
@@ -45,6 +50,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
     authMode,
     posthogKey: env.POSTHOG_KEY ? env.POSTHOG_KEY : null,
     posthogHost: trimSlash(env.POSTHOG_HOST ?? 'https://us.i.posthog.com'),
+    glamaClaim: env.GLAMA_CLAIM || DEFAULT_GLAMA_CLAIM,
     introspectionTtlMs: 60_000,
     rateLimitPerMinute: 60,
   };

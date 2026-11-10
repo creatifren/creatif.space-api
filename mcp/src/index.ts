@@ -16,6 +16,7 @@ const app = createApp({
   introspector: new CachedIntrospector(inner, config.introspectionTtlMs),
   analytics: analyticsFrom(config.posthogKey, config.posthogHost),
   rateLimiter: new TokenRateLimiter(config.rateLimitPerMinute),
+  glamaClaim: config.glamaClaim,
 });
 
 const server = app.listen(config.port, config.host, () => {
