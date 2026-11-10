@@ -267,7 +267,6 @@ describe('V1 additions for MCP', function () {
                 'draft' => true,
             ])
             ->assertUnprocessable()
-            ->assertJsonValidationErrors(['file_ids'])
-            ->assertJsonFragment(['Not in your file library (or still uploading): '.$foreign->ulid.'.']);
+            ->assertJsonValidationErrors(['file_ids']);
     });
 });

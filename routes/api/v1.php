@@ -226,10 +226,10 @@ Route::middleware(['auth:sanctum,mcp', EnforceTokenScope::class])->group(functio
 
     // Social — posts relayed to the platforms
     Route::get('/social-posts', [SocialPostController::class, 'index'])->name('api.v1.social-posts.index');
-    Route::get('/social-posts/{socialPost}', [SocialPostController::class, 'show'])->name('api.v1.social-posts.show');
     Route::post('/social-posts', [SocialPostController::class, 'store'])
         ->middleware('throttle:30,1')
         ->name('api.v1.social-posts.store');
+    Route::get('/social-posts/{socialPost}', [SocialPostController::class, 'show'])->name('api.v1.social-posts.show');
     Route::patch('/social-posts/{socialPost}', [SocialPostController::class, 'update'])
         ->middleware('throttle:30,1')
         ->name('api.v1.social-posts.update');
