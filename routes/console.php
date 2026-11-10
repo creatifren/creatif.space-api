@@ -4,6 +4,7 @@ use App\Jobs\AggregateSpaceStats;
 use App\Jobs\BackfillFileChecksums;
 use App\Jobs\ExpireSubscriptions;
 use App\Jobs\PruneActivityLog;
+use App\Jobs\PruneMcpAuditLogs;
 use App\Jobs\PruneSpaceArchives;
 use App\Jobs\PruneSpaceEvents;
 use App\Jobs\PruneStaleUploads;
@@ -52,6 +53,9 @@ Schedule::job(new PruneSpaceEvents)->dailyAt('02:40');
 
 // The activity ledger keeps the same 90 days as the events above.
 Schedule::job(new PruneActivityLog)->dailyAt('02:45');
+
+// MCP audit logs: mcp.audit_retention_days (90), as the privacy page says.
+Schedule::job(new PruneMcpAuditLogs)->dailyAt('02:50');
 
 /*
  * Commission that has finished its holding period becomes a balance. Runs

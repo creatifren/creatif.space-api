@@ -15,6 +15,7 @@ use Illuminate\Database\Eloquent\Relations\HasOne;
 use Illuminate\Database\Eloquent\SoftDeletes;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
+use Illuminate\Support\Facades\DB;
 use Laravel\Sanctum\HasApiTokens;
 use Spatie\Permission\Traits\HasRoles;
 
@@ -273,6 +274,26 @@ class User extends Authenticatable implements FilamentUser
     {
         static::creating(function (self $user): void {
             $user->ulid ??= (string) str()->ulid();
+        });
+
+        // Account deletion (soft or hard) takes every way into the account
+        // and its MCP trail with it: API keys (Sanctum), OAuth access /
+        // refresh tokens and auth codes (Passport), OAuth clients the user
+        // owns, and MCP audit logs. None of these tables cascades from a
+        // soft delete, and the token tables have no foreign key at all.
+        static::deleting(function (self $user): void {
+            $user->tokens()->delete();
+
+            $accessTokens = DB::table('oauth_access_tokens')->where('user_id', $user->id)->pluck('id');
+            DB::table('oauth_refresh_tokens')->whereIn('access_token_id', $accessTokens)->delete();
+            DB::table('oauth_access_tokens')->whereIn('id', $accessTokens)->delete();
+            DB::table('oauth_auth_codes')->where('user_id', $user->id)->delete();
+            DB::table('oauth_clients')
+                ->whereIn('owner_type', [self::class, $user->getMorphClass()])
+                ->where('owner_id', $user->id)
+                ->delete();
+
+            McpAuditLog::query()->where('user_id', $user->id)->delete();
         });
     }
 

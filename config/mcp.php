@@ -35,6 +35,9 @@ return [
     // Requests per minute, per token (OAuth access token or API key).
     'rate_limit_per_minute' => (int) env('MCP_RATE_LIMIT_PER_MINUTE', 120),
 
+    // MCP audit log rows are deleted after this many days (privacy page).
+    'audit_retention_days' => (int) env('MCP_AUDIT_RETENTION_DAYS', 90),
+
     // Personal API keys.
     'api_keys' => [
         'max_active' => 10,
