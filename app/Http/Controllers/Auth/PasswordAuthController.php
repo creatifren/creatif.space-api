@@ -194,6 +194,11 @@ class PasswordAuthController extends Controller
         return response()->json(['message' => 'If that address has an account, a link is on its way.']);
     }
 
+    private const RESET_FAILED = 'This password reset link is invalid or has expired.';
+
+    /** A bcrypt hash of nothing in particular, for timing parity. */
+    private const DUMMY_HASH = '$2y$12$iLDYF.xO2cu7rwzJcFMjdeqhvW3SZIp4KD20W3wFbZZAkHEnOcRJm';
+
     public function reset(Request $request): JsonResponse
     {
         $request->validate([
@@ -219,7 +224,15 @@ class PasswordAuthController extends Controller
         );
 
         if ($status !== Password::PasswordReset) {
-            throw ValidationException::withMessages(['email' => __($status)]);
+            // An unknown address returns before any token is checked: spend
+            // the same hash work, so the answer's timing says nothing either.
+            if ($status === Password::InvalidUser) {
+                Hash::check((string) $request->input('token'), self::DUMMY_HASH);
+            }
+
+            // One answer for an unknown address, a wrong token and an expired
+            // one: never "we can't find a user with that email address".
+            throw ValidationException::withMessages(['email' => self::RESET_FAILED]);
         }
 
         return response()->json(['message' => 'Password saved — sign in with it now.']);

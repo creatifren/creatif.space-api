@@ -36,7 +36,7 @@ class MetadataController extends Controller
             'token_endpoint_auth_methods_supported' => ['none', 'client_secret_post', 'client_secret_basic'],
             'revocation_endpoint_auth_methods_supported' => ['none', 'client_secret_post', 'client_secret_basic'],
 
-            'service_documentation' => rtrim((string) config('app.frontend_url'), '/').'/settings/api-keys',
+            'service_documentation' => 'https://creatif.space/docs/mcp',
         ]);
     }
 

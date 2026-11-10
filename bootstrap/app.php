@@ -6,6 +6,7 @@ use App\Services\ErrorTracking;
 use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
 use Illuminate\Foundation\Configuration\Middleware;
+use Illuminate\Http\Exceptions\ThrottleRequestsException;
 use Illuminate\Http\Middleware\TrustProxies;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
@@ -15,9 +16,14 @@ return Application::configure(basePath: dirname(__DIR__))
         web: __DIR__.'/../routes/web.php',
         api: __DIR__.'/../routes/api.php',
         commands: __DIR__.'/../routes/console.php',
-        health: '/up',
         then: function (): void {
             Route::middleware('api')->group(base_path('routes/oauth.php'));
+
+            // Liveness, as cheap as a request can be: no middleware group, so
+            // no session read/write, cookies or view render (Laravel's own
+            // `health:` route runs the whole `web` stack — a DB session row
+            // per probe with SESSION_DRIVER=database).
+            Route::get('/up', fn () => response()->json(['status' => 'ok']))->name('health');
         },
     )
     ->withMiddleware(function (Middleware $middleware): void {
@@ -50,6 +56,21 @@ return Application::configure(basePath: dirname(__DIR__))
         $exceptions->shouldRenderJsonWhen(
             fn (Request $request) => $request->is('api/*') || $request->expectsJson(),
         );
+
+        // A throttled request says how long to wait, in words a person reads,
+        // not Laravel's raw "Too Many Attempts.". JSON callers only; the
+        // Retry-After header is kept.
+        $exceptions->render(function (ThrottleRequestsException $e, Request $request) {
+            if (! ($request->is('api/*') || $request->is('auth/*') || $request->expectsJson())) {
+                return null;
+            }
+            $seconds = max(1, (int) ($e->getHeaders()['Retry-After'] ?? 60));
+
+            return response()->json([
+                'message' => "Too many attempts. Try again in {$seconds} seconds.",
+                'retry_after' => $seconds,
+            ], 429, $e->getHeaders());
+        });
 
         // To PostHog error tracking as well as laravel.log (the callback
         // returns nothing, so the default logging still runs).
