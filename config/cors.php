@@ -28,7 +28,11 @@ return [
 
     'exposed_headers' => [],
 
-    'max_age' => 0,
+    // Browsers may reuse a preflight answer for 2 h (Chrome caps it there),
+    // so the approval page's decision is one round trip, not two, when a
+    // client approves and closes the tab. It only caches what is allowed
+    // above; it widens no origin, method or header, here or elsewhere.
+    'max_age' => 7200,
 
     'supports_credentials' => true,
 

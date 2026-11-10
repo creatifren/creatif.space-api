@@ -73,6 +73,12 @@ class PublicApprovalController extends Controller
 
         $socialPost = $link->posts()->where('ulid', $post)->firstOrFail();
 
+        // The same decision again (a retry, a beacon after the fetch, a
+        // double tap) is answered with where the post stands, not refused.
+        if ($this->sameDecision($socialPost, $validated)) {
+            return $this->current($socialPost);
+        }
+
         if ($socialPost->status !== SocialPostStatus::Scheduled
             || ! in_array($socialPost->approval, [SocialPostApproval::Client, SocialPostApproval::Revision], true)) {
             return response()->json(['message' => 'This post has already been decided.'], 422);
@@ -81,7 +87,10 @@ class PublicApprovalController extends Controller
         if ($validated['decision'] === 'approve') {
             $outcome = $this->approveFor($link, $socialPost, $validated['name'], $relay);
             if ($outcome === false) {
-                return response()->json(['message' => 'This post has already been decided.'], 422);
+                // Someone else's request won the race: the same yes is fine.
+                return $this->sameDecision($socialPost->refresh(), $validated)
+                    ? $this->current($socialPost)
+                    : response()->json(['message' => 'This post has already been decided.'], 422);
             }
             if (is_string($outcome)) {
                 return response()->json(['message' => $outcome], 422);
@@ -107,7 +116,34 @@ class PublicApprovalController extends Controller
             ProductEvents::approvalDecision($link, $socialPost, 'changes_requested');
         }
 
-        return response()->json(['data' => $this->postArray($socialPost->fresh(['targets.account', 'comments.replies']))]);
+        return $this->current($socialPost);
+    }
+
+    /**
+     * Is this the decision the post already carries? Approve: it was
+     * approved (and may have gone out since). Changes: it is waiting for
+     * changes and the client's latest word on it is this same reason.
+     *
+     * @param  array<string, mixed>  $validated
+     */
+    private function sameDecision(SocialPost $post, array $validated): bool
+    {
+        if ($validated['decision'] === 'approve') {
+            return $post->approval === SocialPostApproval::Approved;
+        }
+
+        if ($post->approval !== SocialPostApproval::Revision) {
+            return false;
+        }
+
+        $last = $post->comments()->whereNull('parent_id')->where('role', 'APPROVER')->latest('id')->first();
+
+        return $last !== null && trim((string) $last->body) === trim((string) ($validated['reason'] ?? ''));
+    }
+
+    private function current(SocialPost $post): JsonResponse
+    {
+        return response()->json(['data' => $this->postArray($post->fresh(['targets.account', 'comments.replies']))]);
     }
 
     /**
@@ -146,6 +182,18 @@ class PublicApprovalController extends Controller
             ->get();
 
         if ($eligible->isEmpty()) {
+            // Approve-all again, once everything it named is approved: the
+            // same answer as the first time, nothing sent twice.
+            $named = $link->posts()->whereIn('ulid', array_unique($validated['post_ids']))->get();
+            if ($named->isNotEmpty() && $named->every(fn (SocialPost $p) => $p->approval === SocialPostApproval::Approved)) {
+                $posts = $link->posts()->with(['targets.account', 'comments.replies'])->orderBy('scheduled_at')->get();
+
+                return response()->json(['data' => [
+                    'posts' => $posts->map(fn (SocialPost $p) => $this->postArray($p))->all(),
+                    'results' => $named->map(fn (SocialPost $p) => ['id' => $p->ulid, 'approved' => true, 'message' => null])->values()->all(),
+                ]]);
+            }
+
             return response()->json(['message' => 'These posts have already been decided.'], 422);
         }
 
