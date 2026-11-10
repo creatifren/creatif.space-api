@@ -13,6 +13,7 @@ use App\Notifications\SocialPostDecided;
 use App\Support\Credits;
 use App\Support\ProductEvents;
 use App\Support\SocialPostRelay;
+use App\Support\Workspace;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Validation\ValidationException;
@@ -45,6 +46,9 @@ class PublicApprovalController extends Controller
             'editor' => $link->user->name,
             'title' => $link->title,
             'expires_at' => $link->expires_at?->toIso8601String(),
+            // The owner's plan, as public Spaces read it: the page hides its
+            // footer slogan when branding is removed.
+            'branding_removed' => Workspace::owner($link->user)->plan()->feature('branding_removed'),
             'posts' => $posts->map(fn (SocialPost $p) => $this->postArray($p))->all(),
         ]]);
     }
