@@ -15,16 +15,27 @@ it('keeps the slogan exactly as Rizal wrote it', function () {
     expect(config('app.slogan'))->toBe(SLOGAN);
 });
 
-it('puts the slogan under the © in the HTML mail footer, header stays the brand', function () {
+it('renders the slogan as styled live text under the brand in the HTML header', function () {
     config(['app.name' => 'Creatif Space', 'app.marketing_url' => 'https://creatif.space']);
     $mail = (new WaitlistOnTheList('https://creatif.space/mcp?ref=x'))->toMail(new AnonymousNotifiable);
-    $html = html_entity_decode((string) $mail->render(), ENT_QUOTES | ENT_HTML5);
+    $html = (string) $mail->render();
 
-    $copyright = strpos($html, '© '.date('Y'));
-    expect($copyright)->not->toBeFalse()
-        ->and(strpos($html, SLOGAN, (int) $copyright))->not->toBeFalse()
-        ->and(substr_count($html, SLOGAN))->toBe(1)
-        ->and($html)->toMatch('/<a[^>]*href="https:\/\/creatif\.space"[^>]*>\s*'.'Creatif Space'.'\s*<\/a>/');
+    // The header: brand link, then the slogan block, before the body.
+    $header = substr($html, (int) strpos($html, 'class="header"'), (int) strpos($html, 'Email Body') - (int) strpos($html, 'class="header"'));
+    expect($header)->toMatch('/<a[^>]*href="https:\/\/creatif\.space"[^>]*>\s*Creatif Space\s*<\/a>/')
+        ->and(strpos($header, 'Creatif Space'))->toBeLessThan(strpos($header, 'class="slogan"'))
+        ->and(html_entity_decode(trim(strip_tags(substr($header, (int) strpos($header, 'class="slogan"') - 5))), ENT_QUOTES | ENT_HTML5))->toBe(SLOGAN);
+
+    preg_match('/<div class="slogan" style="([^"]*)">(.*?)<\/div>/s', $html, $m);
+    expect($m[1])->toContain("font-family: 'Lora', Georgia, serif")
+        ->and($m[1])->toContain('font-weight: 600')
+        ->and($m[1])->toContain('color: #0F172A')
+        ->and($m[1])->toContain('text-align: center')
+        ->and($m[2])->toMatch('/<span style="[^"]*background-color: #FF9F43;[^"]*color: #0F172A;[^"]*padding: 0 4px;[^"]*border-radius: 4px;[^"]*">published<\/span>/');
+
+    // Live text, not an image; and only once (not repeated in the HTML footer).
+    expect($html)->not->toContain('<img')
+        ->and(substr_count(html_entity_decode(strip_tags($html), ENT_QUOTES | ENT_HTML5), SLOGAN))->toBe(1);
 });
 
 it('puts the slogan under the © in the text mail footer', function () {
