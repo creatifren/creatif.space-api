@@ -41,6 +41,12 @@ function draftFor(User $user, array $platforms = ['instagram']): SocialPost
     return $post;
 }
 
+/** The confirm_token the send preview hands out for this post. */
+function previewToken($test, User $user, SocialPost $post): string
+{
+    return $test->actingAs($user)->getJson("/api/v1/social-posts/{$post->ulid}/send-preview")->json('data.confirm_token');
+}
+
 describe('GET /social-posts/{post}/send-preview', function () {
     it('prices every destination and says whether the wallet covers it', function () {
         $user = User::factory()->create();
@@ -95,12 +101,12 @@ describe('daily send cap for bearer-token callers', function () {
 
         $first = draftFor($user);
         $this->actingAs($user)->withToken('cs_live_test')
-            ->postJson("/api/v1/social-posts/{$first->ulid}/send")
+            ->postJson("/api/v1/social-posts/{$first->ulid}/send", ['confirm_token' => previewToken($this, $user, $first)])
             ->assertOk();
 
         $second = draftFor($user);
         $this->actingAs($user)->withToken('cs_live_test')
-            ->postJson("/api/v1/social-posts/{$second->ulid}/send")
+            ->postJson("/api/v1/social-posts/{$second->ulid}/send", ['confirm_token' => previewToken($this, $user, $second)])
             ->assertStatus(429)
             ->assertJsonPath('code', 'daily_send_cap');
 
@@ -124,8 +130,9 @@ describe('daily send cap for bearer-token callers', function () {
         $post = draftFor($user);
 
         $this->actingAs($user)->withToken('cs_live_test')
-            ->postJson("/api/v1/social-posts/{$post->ulid}/send")
-            ->assertUnprocessable();
+            ->postJson("/api/v1/social-posts/{$post->ulid}/send", ['confirm_token' => previewToken($this, $user, $post)])
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors('caption'); // the Credits refusal, not a missing token
         $this->actingAs($user)->withToken('cs_live_test')
             ->postJson("/api/v1/social-posts/{$post->ulid}/send", ['approval' => 'awaiting'])
             ->assertOk();

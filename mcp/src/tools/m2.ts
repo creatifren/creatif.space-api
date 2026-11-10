@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { ToolError } from '../errors.js';
+import { V1Error } from '../v1.js';
 import { defineTool, type ToolContext } from './define.js';
 import { shapePost, type V1Post } from './shape.js';
 
@@ -19,10 +20,58 @@ interface SendPreview {
   targets: { channel_id: string; platform: string; username: string | null; usable: boolean; credits: number }[];
   credits: { price: number; from_topup: number; monthly_balance: number; topup_balance: number; can_afford: boolean };
   daily_cap: { cap: number; used: number; remaining: number };
+  /** Signed by the API: user + post + destinations + Credit price, 10 minutes. */
+  confirm_token?: string;
+  confirm_expires_at?: string;
 }
 
-async function preview(v1: ToolContext['v1'], postId: string): Promise<SendPreview> {
-  const { data } = await v1.get<{ data: SendPreview }>(`/social-posts/${encodeURIComponent(postId)}/send-preview`);
+/**
+ * The confirm_token of the last preview shown for a post, kept here so
+ * confirm: true sends exactly what was previewed — the model never handles
+ * the token. Keyed by user and post; gone after a send or at expiry. No
+ * remembered preview means the user has not seen one: preview again, never
+ * send.
+ */
+export class PreviewTokens {
+  private readonly tokens = new Map<string, { token: string; expiresAt: number }>();
+
+  constructor(private readonly now: () => number = Date.now) {}
+
+  remember(user: string, postId: string, p: SendPreview): void {
+    if (!p.confirm_token) return;
+    const expiresAt = p.confirm_expires_at ? Date.parse(p.confirm_expires_at) : this.now() + 10 * 60_000;
+    this.tokens.set(`${user}:${postId}`, { token: p.confirm_token, expiresAt });
+    this.sweep();
+  }
+
+  take(user: string, postId: string): string | undefined {
+    const key = `${user}:${postId}`;
+    const hit = this.tokens.get(key);
+    if (!hit || hit.expiresAt <= this.now()) {
+      this.tokens.delete(key);
+      return undefined;
+    }
+    return hit.token;
+  }
+
+  forget(user: string, postId: string): void {
+    this.tokens.delete(`${user}:${postId}`);
+  }
+
+  clear(): void {
+    this.tokens.clear();
+  }
+
+  private sweep(): void {
+    const now = this.now();
+    for (const [k, v] of this.tokens) if (v.expiresAt <= now) this.tokens.delete(k);
+  }
+}
+
+export const previewTokens = new PreviewTokens();
+
+async function preview(ctx: ToolContext, postId: string): Promise<SendPreview> {
+  const { data } = await ctx.v1.get<{ data: SendPreview }>(`/social-posts/${encodeURIComponent(postId)}/send-preview`);
   if (!data.sendable) {
     throw new ToolError(
       'invalid_input',
@@ -30,8 +79,49 @@ async function preview(v1: ToolContext['v1'], postId: string): Promise<SendPrevi
       'Use list_posts with status "draft" to find drafts, or draft_post to make one.',
     );
   }
+  previewTokens.remember(ctx.auth.extra.userUlid, postId, data);
   return data;
 }
+
+/**
+ * The confirmed send: with the remembered preview's token, or not at all.
+ * No preview on record (never shown, expired, already used) → a fresh
+ * preview to show the user. A preview the API calls stale → the new one,
+ * as a preview_stale error: nothing was sent.
+ */
+async function confirmedSend(
+  ctx: ToolContext,
+  postId: string,
+  action: 'publish' | 'schedule',
+  body: Record<string, unknown>,
+  scheduledAt?: string,
+): Promise<{ data: V1Post } | (ReturnType<typeof previewResult> & { note: string })> {
+  const user = ctx.auth.extra.userUlid;
+  const token = previewTokens.take(user, postId);
+  if (!token) {
+    const fresh = previewResult(await preview(ctx, postId), action, scheduledAt);
+    return { ...fresh, note: 'No current preview of this post had been shown (or it expired after 10 minutes), so nothing was sent. Show the user this preview first.' };
+  }
+  try {
+    const res = await ctx.v1.post<{ data: V1Post }>(`/social-posts/${encodeURIComponent(postId)}/send`, { ...body, confirm_token: token });
+    previewTokens.forget(user, postId);
+    return res;
+  } catch (e) {
+    if (e instanceof V1Error && e.status === 409 && e.body?.code === 'preview_stale') {
+      previewTokens.forget(user, postId);
+      const fresh = previewResult(await preview(ctx, postId), action, scheduledAt);
+      throw new ToolError(
+        'preview_stale',
+        'Nothing was sent: the post’s channels or Credit cost changed since the preview (or 10 minutes passed).',
+        'Show the user the new preview in details.preview. Only if they agree again, call again with confirm: true.',
+        { preview: fresh },
+      );
+    }
+    throw e;
+  }
+}
+
+const isSent = (r: object): r is { data: V1Post } => 'data' in r;
 
 function previewResult(p: SendPreview, action: 'publish' | 'schedule', scheduledAt?: string) {
   const blocked: string[] = [];
@@ -142,8 +232,8 @@ export const updatePost = defineTool({
   name: 'update_post',
   title: 'Update a post',
   description:
-    'Changes a post that has not gone out: its caption, its scheduled time, or its labels. Works on drafts and on posts held for approval with the "draft" permission; ' +
-    'changing a post already queued to publish also needs the "publish" permission. Published posts cannot be changed.',
+    'Changes a draft or a post still waiting for approval: its caption, its scheduled time, or its labels. ' +
+    'Posts already queued to publish, published or otherwise done cannot be changed from here (not_editable) — the user edits those in creatif.space.',
   scope: 'draft',
   input: {
     post_id: ulid('Post'),
@@ -153,18 +243,19 @@ export const updatePost = defineTool({
   },
   annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false },
   notFound: 'That post',
-  run: async (args, { v1, auth }) => {
+  run: async (args, { v1 }) => {
     if (args.caption === undefined && args.scheduled_at === undefined && args.labels === undefined) {
       throw new ToolError('invalid_input', 'Nothing to change.', 'Pass caption, scheduled_at and/or labels.');
     }
+    // The API decides what may change (drafts and posts waiting for approval
+    // only, through a token); this only says so before trying.
     const { data: current } = await v1.get<{ data: V1Post }>(`/social-posts/${encodeURIComponent(args.post_id)}`);
-    const queued = current.status === 'scheduled' && current.approval === null;
-    if (queued && !auth.scopes.includes('publish') && (args.caption !== undefined || args.scheduled_at !== undefined)) {
+    const editable = current.status === 'draft' || (current.status === 'scheduled' && current.approval !== null && current.approval !== 'approved');
+    if (!editable) {
       throw new ToolError(
-        'scope_missing',
-        'This post is already queued to publish; changing it needs the "publish" permission.',
-        'Reconnect the creatif.space connector and allow "publish", or ask the user to edit it in creatif.space.',
-        { required: 'publish', granted: auth.scopes },
+        'not_editable',
+        `Only drafts and posts waiting for approval can be changed from here; this post is "${current.status}"${current.approval === 'approved' ? ' (approved)' : ''}.`,
+        'Tell the user to change it in creatif.space.',
       );
     }
     const { data } = await v1.patch<{ data: V1Post }>(`/social-posts/${encodeURIComponent(args.post_id)}`, {
@@ -181,7 +272,7 @@ export const schedulePost = defineTool({
   title: 'Schedule a draft',
   description:
     'Schedules a DRAFT to publish at a future time on its channels. Two steps: call with confirm false (default) to get a preview — channels and Credit cost; ' +
-    'show it to the user, and only after they explicitly agree call again with confirm: true. Credits are charged when it is scheduled (Monthly Credits first, then Top-up; on every plan). ' +
+    'show it to the user, and only after they explicitly agree call again with confirm: true. The confirm sends exactly what that preview showed (it carries the preview’s signed confirm_token, valid 10 minutes); if the channels or cost changed, nothing is sent and you get preview_stale with the new preview. Credits are charged when it is scheduled (Monthly Credits first, then Top-up; on every plan). ' +
     'If the Credits do not cover it you get insufficient_credits or quota_exceeded with a message to pass on as it is — nothing is charged. Connected apps can send at most 20 posts a day.',
   scope: 'publish',
   input: {
@@ -191,17 +282,16 @@ export const schedulePost = defineTool({
   },
   annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: true },
   notFound: 'That post',
-  run: async (args, { v1 }) => {
+  run: async (args, ctx) => {
     if (Date.parse(args.scheduled_at) <= Date.now()) {
       throw new ToolError('invalid_input', 'scheduled_at must be in the future.', 'Use publish_post to send now, or pick a later time.');
     }
     if (!args.confirm) {
-      return previewResult(await preview(v1, args.post_id), 'schedule', args.scheduled_at);
+      return previewResult(await preview(ctx, args.post_id), 'schedule', args.scheduled_at);
     }
-    const { data } = await v1.post<{ data: V1Post }>(`/social-posts/${encodeURIComponent(args.post_id)}/send`, {
-      scheduled_at: args.scheduled_at,
-    });
-    return { post: shapePost(data), note: 'Scheduled. It will publish at scheduled_at on the listed channels.' };
+    const res = await confirmedSend(ctx, args.post_id, 'schedule', { scheduled_at: args.scheduled_at }, args.scheduled_at);
+    if (!isSent(res)) return res;
+    return { post: shapePost(res.data), note: 'Scheduled. It will publish at scheduled_at on the listed channels.' };
   },
 });
 
@@ -210,7 +300,7 @@ export const publishPost = defineTool({
   title: 'Publish a draft now',
   description:
     'Publishes a DRAFT now on its channels — this goes public and cannot be undone. Two steps: call with confirm false (default) to get a preview — channels and Credit cost; ' +
-    'show it to the user, and only after they explicitly agree call again with confirm: true. Credits are charged (Monthly Credits first, then Top-up; on every plan). ' +
+    'show it to the user, and only after they explicitly agree call again with confirm: true. The confirm sends exactly what that preview showed (it carries the preview’s signed confirm_token, valid 10 minutes); if the channels or cost changed, nothing is sent and you get preview_stale with the new preview. Credits are charged (Monthly Credits first, then Top-up; on every plan). ' +
     'If the Credits do not cover it you get insufficient_credits or quota_exceeded with a message to pass on as it is — nothing is charged. Connected apps can send at most 20 posts a day.',
   scope: 'publish',
   input: {
@@ -219,12 +309,13 @@ export const publishPost = defineTool({
   },
   annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: false, openWorldHint: true },
   notFound: 'That post',
-  run: async (args, { v1 }) => {
+  run: async (args, ctx) => {
     if (!args.confirm) {
-      return previewResult(await preview(v1, args.post_id), 'publish');
+      return previewResult(await preview(ctx, args.post_id), 'publish');
     }
-    const { data } = await v1.post<{ data: V1Post }>(`/social-posts/${encodeURIComponent(args.post_id)}/send`, {});
-    return { post: shapePost(data), note: 'Sent to the channels. Check get_post for each channel’s delivery status and link.' };
+    const res = await confirmedSend(ctx, args.post_id, 'publish', {});
+    if (!isSent(res)) return res;
+    return { post: shapePost(res.data), note: 'Sent to the channels. Check get_post for each channel’s delivery status and link.' };
   },
 });
 
