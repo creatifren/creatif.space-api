@@ -1,6 +1,7 @@
 <?php
 
 use App\Models\User;
+use Illuminate\Hashing\HashManager;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Password;
@@ -55,11 +56,24 @@ describe('F1 reset-password never says whether the address exists', function () 
     });
 
     it('spends hash work on an unknown address too (no early return)', function () {
-        Hash::partialMock()->shouldReceive('check')->atLeast()->once()->passthru();
+        // The real hasher, counting check() calls.
+        $hasher = new class(app()) extends HashManager
+        {
+            public int $checks = 0;
+
+            public function check($value, $hashedValue, array $options = [])
+            {
+                $this->checks++;
+
+                return parent::check($value, $hashedValue, $options);
+            }
+        };
+        Hash::swap($hasher);
 
         $this->postJson('/auth/reset-password', ['token' => 'whatever', 'email' => 'nobody@example.test', 'password' => 'new-horse-battery'])
             ->assertStatus(422)
             ->assertJsonPath('errors.email.0', RESET_FAILED);
+        expect($hasher->checks)->toBeGreaterThan(0);
     });
 
     it('keeps forgot-password generic', function () {
