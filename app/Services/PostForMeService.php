@@ -390,4 +390,10 @@ class PostForMeService implements SocialProvider
     {
         return [];
     }
+
+    /** Not read from this relay: accounts on it are legacy. */
+    public function followersCount(string $accountId): ?int
+    {
+        return null;
+    }
 }

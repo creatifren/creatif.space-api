@@ -32,6 +32,9 @@ class SocialAccountResource extends JsonResource
             'connected_at' => $this->connected_at,
             'messaging_enabled' => $this->messagingEnabled(),
             'needs_reconnect_for_messages' => $this->needsReconnectForMessages(),
+            // Cached, refreshed in the background at most every 6 h; null
+            // when the network does not report it (or not fetched yet).
+            'followers_count' => $this->followers_count,
         ];
     }
 }

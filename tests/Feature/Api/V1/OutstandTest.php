@@ -331,7 +331,8 @@ describe('connecting', function () {
 
         $this->actingAs($user)->getJson('/api/v1/social-accounts')->assertOk()->assertJsonCount(1, 'data');
         $this->actingAs($user)->getJson('/api/v1/social-accounts')->assertOk();
-        Http::assertSentCount(1);
+        // The account list once (the follower-count refresh is a separate, queued call).
+        expect(Http::recorded(fn ($r) => ! str_contains($r->url(), '/metrics')))->toHaveCount(1);
 
         // A provider that is down never takes the list with it.
         Http::fake(['api.outstand.test/*' => Http::response('', 503)]);
