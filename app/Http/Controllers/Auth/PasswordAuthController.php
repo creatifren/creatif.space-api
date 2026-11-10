@@ -58,6 +58,10 @@ class PasswordAuthController extends Controller
             'utm_source' => ['nullable', 'string', 'max:100'],
             'utm_medium' => ['nullable', 'string', 'max:100'],
             'utm_campaign' => ['nullable', 'string', 'max:100'],
+            'utm_term' => ['nullable', 'string', 'max:100'],
+            'utm_content' => ['nullable', 'string', 'max:100'],
+            // `entry` is read by ProductEvents::entryFrom: an invalid one is
+            // dropped, never a 422 that would block the signup.
         ]);
         $email = Str::lower($data['email']);
         $next = SafePath::of($data['next'] ?? null);
@@ -89,7 +93,10 @@ class PasswordAuthController extends Controller
                 $user->sendEmailVerificationNotification();
 
                 // Queued after commit: a signup the mail failure rolls back never happened.
-                ProductEvents::signedUp($user, 'email', ['ref' => $data['ref'] ?? null] + ProductEvents::utmFrom($request));
+                ProductEvents::signedUp($user, 'email', [
+                    'ref' => $data['ref'] ?? null,
+                    'entry' => ProductEvents::entryFrom($request),
+                ] + ProductEvents::utmFrom($request));
             });
         }
 

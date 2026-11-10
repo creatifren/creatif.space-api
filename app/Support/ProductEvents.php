@@ -23,7 +23,10 @@ use Illuminate\Support\Facades\Cache;
 final class ProductEvents
 {
     /** The UTM keys a signup carries, when it has them. */
-    public const UTM = ['utm_source', 'utm_medium', 'utm_campaign'];
+    public const UTM = ['utm_source', 'utm_medium', 'utm_campaign', 'utm_term', 'utm_content'];
+
+    /** Which page or button a signup started from: a slug, never a referral code. */
+    public const ENTRY_PATTERN = '/^[a-z0-9-]{1,40}$/';
 
     private static function analytics(): Analytics
     {
@@ -33,7 +36,7 @@ final class ProductEvents
     /**
      * A user row was created.
      *
-     * @param  array<string, string|null>  $attribution  ref and utm_* — only the present ones are sent
+     * @param  array<string, string|null>  $attribution  ref, utm_* and entry — only the present ones are sent
      */
     public static function signedUp(User $user, string $method, array $attribution = []): void
     {
@@ -41,6 +44,13 @@ final class ProductEvents
             array_intersect_key($attribution, array_flip(['ref', ...self::UTM])),
             fn ($v) => is_string($v) && $v !== '',
         );
+
+        // Analytics only: entry is never looked up as a referral code.
+        $entry = self::entry($attribution['entry'] ?? null);
+        if ($entry !== null) {
+            $extra['entry'] = $entry;
+            $extra['$set_once'] = ['initial_entry' => $entry];
+        }
 
         self::analytics()->capture($user->ulid, 'user_signed_up', ['method' => $method, 'plan' => 'free'] + $extra);
         self::analytics()->set($user->ulid, [
@@ -69,6 +79,18 @@ final class ProductEvents
         return $out;
     }
 
+    /** A valid entry slug, or null: anything else is dropped, not rejected. */
+    public static function entry(mixed $value): ?string
+    {
+        return is_string($value) && preg_match(self::ENTRY_PATTERN, $value) === 1 ? $value : null;
+    }
+
+    /** The entry slug from a request's query/body, or null. */
+    public static function entryFrom(Request $request): ?string
+    {
+        return self::entry($request->input('entry'));
+    }
+
     /**
      * A waitlist sign-up was confirmed. No account and no raw address: the
      * distinct_id is the address's sha256.
@@ -77,8 +99,7 @@ final class ProductEvents
      */
     public static function waitlistJoined(string $email, string $list, bool $referred, bool $refCodePresent, array $utm = []): void
     {
-        $keys = [...self::UTM, 'utm_term', 'utm_content'];
-        $extra = array_filter(array_intersect_key($utm, array_flip($keys)), fn (string $v) => $v !== '');
+        $extra = array_filter(array_intersect_key($utm, array_flip(self::UTM)), fn (string $v) => $v !== '');
 
         self::analytics()->capture(hash('sha256', strtolower($email)), 'waitlist_joined', [
             'list' => $list,
