@@ -33,6 +33,13 @@ it('renders the slogan as styled live text under the brand in the HTML header', 
         ->and($m[1])->toContain('text-align: center')
         ->and($m[2])->toMatch('/<span style="[^"]*background-color: #FF9F43;[^"]*color: #0F172A;[^"]*padding: 0 4px;[^"]*border-radius: 4px;[^"]*">published<\/span>/');
 
+    // The span carries its own font: the theme inlines its sans stack on
+    // every element, and the last font-family declaration is what renders.
+    preg_match('/<span style="([^"]*)">published<\/span>/', $m[2], $span);
+    preg_match_all('/font-family:\s*([^;]+);/', $span[1], $families);
+    expect(trim((string) end($families[1])))->toBe("'Lora', Georgia, serif")
+        ->and($span[1])->toContain('font-weight: 600');
+
     // Live text, not an image; and only once (not repeated in the HTML footer).
     expect($html)->not->toContain('<img')
         ->and(substr_count(html_entity_decode(strip_tags($html), ENT_QUOTES | ENT_HTML5), SLOGAN))->toBe(1);

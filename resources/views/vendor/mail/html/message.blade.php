@@ -7,7 +7,7 @@
 <a href="{{ config('app.marketing_url') }}" style="display: inline-block;">
 {{ config('app.name') }}
 </a>
-<div class="slogan" style="margin: 8px 0 0; padding: 0; text-align: center; font-family: 'Lora', Georgia, serif; font-size: 16px; font-weight: 600; line-height: 1.5; color: #0F172A;">{{ \Illuminate\Support\Str::before($slogan, 'published') }}<span style="background-color: #FF9F43; color: #0F172A; padding: 0 4px; border-radius: 4px;">published</span>{{ \Illuminate\Support\Str::after($slogan, 'published') }}</div>
+<div class="slogan" style="margin: 8px 0 0; padding: 0; text-align: center; font-family: 'Lora', Georgia, serif; font-size: 16px; font-weight: 600; line-height: 1.5; color: #0F172A;">{{ \Illuminate\Support\Str::before($slogan, 'published') }}<span style="font-family: 'Lora', Georgia, serif; font-weight: 600; background-color: #FF9F43; color: #0F172A; padding: 0 4px; border-radius: 4px;">published</span>{{ \Illuminate\Support\Str::after($slogan, 'published') }}</div>
 </td>
 </tr>
 </x-slot:header>
