@@ -426,7 +426,8 @@ class SocialAccountController extends Controller
         $reported = $remote['connected_at'] ?? null;
         if (is_string($reported) && $reported !== '') {
             try {
-                return CarbonImmutable::parse($reported)->utc();
+                // Stored in the app's timezone, as every datetime column is.
+                return CarbonImmutable::parse($reported)->setTimezone(config('app.timezone'));
             } catch (Throwable) {
                 // Unreadable: fall through to our own record.
             }
