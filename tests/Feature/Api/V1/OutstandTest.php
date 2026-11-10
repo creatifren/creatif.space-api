@@ -211,6 +211,34 @@ describe('connecting', function () {
         Http::assertSent(fn (HttpRequest $r) => str_contains($r->url(), 'tenantId='.$user->ulid));
     });
 
+    // Prod 10 Nov 01:28 UTC: a 656-char Instagram CDN avatar → MySQL 1406
+    // on varchar(255). On the MySQL CI leg this insert is the real check.
+    it('connects an account whose avatar URL or name is longer than its column', function () {
+        Log::spy();
+        $user = User::factory()->create();
+        $avatar = 'https://scontent-iad3-1.cdninstagram.com/v/t51.2885-19/'.str_repeat('a', 600).'.jpg?_nc_ht=x';
+        expect(strlen($avatar))->toBeGreaterThan(255);
+        Http::fake(['api.outstand.test/*' => Http::response(['success' => true, 'data' => [
+            ['id' => 'Ig1', 'network' => 'instagram', 'username' => str_repeat('r', 300),
+                'profile_picture_url' => $avatar, 'tenant_id' => $user->ulid, 'isActive' => 1],
+            ['id' => 'Th1', 'network' => 'threads', 'username' => 'rani',
+                'profile_picture_url' => 'javascript:alert(1)', 'tenant_id' => $user->ulid, 'isActive' => 1],
+            ['id' => str_repeat('x', 65), 'network' => 'tiktok', 'username' => 'toolong',
+                'tenant_id' => $user->ulid, 'isActive' => 1],
+        ], 'count' => 3, 'total' => 3])]);
+
+        $this->actingAs($user)->postJson('/api/v1/social-accounts/sync')->assertOk();
+
+        $ig = $user->socialAccounts()->where('provider_account_id', 'Ig1')->first();
+        expect($ig->status->value)->toBe('connected')
+            ->and($ig->profile_photo_url)->toBeNull()
+            ->and($ig->username)->toBe(str_repeat('r', 255))
+            ->and($user->socialAccounts()->where('provider_account_id', 'Th1')->value('profile_photo_url'))->toBeNull()
+            ->and($user->socialAccounts()->where('platform', 'tiktok')->exists())->toBeFalse();
+        Log::shouldHaveReceived('warning')->withArgs(fn ($m, $c) => $m === 'social.provider_id_too_long'
+            && $c['field'] === 'social_accounts.provider_account_id' && $c['length'] === 65)->once();
+    });
+
     it('lands a plain return on the connect page', function () {
         $this->get('/api/v1/webhooks/outstand?state='.urlencode(OutstandService::seal('u1')).'&success=true&account_id=Kx7vQ')
             ->assertRedirect('https://app.test/social/connect?social=connected&success=true');
