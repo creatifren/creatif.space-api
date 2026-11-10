@@ -69,6 +69,30 @@ final class ProductEvents
         return $out;
     }
 
+    /**
+     * A waitlist sign-up was confirmed. No account and no raw address: the
+     * distinct_id is the address's sha256.
+     *
+     * @param  array<string, string>  $utm
+     */
+    public static function waitlistJoined(string $email, string $list, bool $referred, bool $refCodePresent, array $utm = []): void
+    {
+        $keys = [...self::UTM, 'utm_term', 'utm_content'];
+        $extra = array_filter(array_intersect_key($utm, array_flip($keys)), fn (string $v) => $v !== '');
+
+        self::analytics()->capture(hash('sha256', strtolower($email)), 'waitlist_joined', [
+            'list' => $list,
+            'referred' => $referred,
+            'ref_code_present' => $refCodePresent,
+        ] + $extra);
+    }
+
+    /** A waitlist referrer reached the priority batch. Same hashed id as waitlist_joined. */
+    public static function waitlistPriorityReached(string $email, int $referrals): void
+    {
+        self::analytics()->capture(hash('sha256', strtolower($email)), 'waitlist_priority_reached', ['list' => 'mcp', 'referral_count' => $referrals]);
+    }
+
     /** A plan key as sent: the enum's value. */
     public static function key(PlanKey|string|null $plan): ?string
     {

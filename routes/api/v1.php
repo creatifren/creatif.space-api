@@ -33,7 +33,9 @@ use App\Http\Controllers\Api\V1\StorageController;
 use App\Http\Controllers\Api\V1\SubscriptionController;
 use App\Http\Controllers\Api\V1\TeamController;
 use App\Http\Controllers\Api\V1\TourController;
+use App\Http\Controllers\Api\V1\WaitlistController;
 use App\Http\Middleware\EnsureInboxEnabled;
+use App\Http\Middleware\PublicSiteOrigin;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
 
@@ -74,6 +76,18 @@ Route::post('/webhooks/outstand', SocialWebhookController::class)
 Route::get('/webhooks/outstand', [OutstandConnectController::class, 'return'])
     ->middleware('throttle:30,1')
     ->name('api.v1.webhooks.outstand.return');
+
+// Public waitlists (double opt-in). The form posts from creatif.space only;
+// the confirm link is opened from the email.
+Route::post('/waitlist', [WaitlistController::class, 'join'])
+    ->middleware([PublicSiteOrigin::class, 'throttle:5,1'])
+    ->name('api.v1.waitlist.join');
+Route::get('/waitlist/confirm', [WaitlistController::class, 'confirm'])
+    ->middleware('throttle:30,1')
+    ->name('api.v1.waitlist.confirm');
+Route::get('/waitlist/status', [WaitlistController::class, 'status'])
+    ->middleware('throttle:30,1')
+    ->name('api.v1.waitlist.status');
 
 Route::get('/handles/availability', [HandleController::class, 'availability'])
     ->middleware('throttle:30,1')
