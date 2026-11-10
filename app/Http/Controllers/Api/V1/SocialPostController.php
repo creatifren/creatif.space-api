@@ -10,7 +10,9 @@ use App\Exceptions\AccountReconnectRequired;
 use App\Http\Controllers\Controller;
 use App\Http\Resources\SocialPostResource;
 use App\Models\Activity;
+use App\Models\File;
 use App\Models\SocialPost;
+use App\Models\User;
 use App\Contracts\SocialProvider;
 use App\Support\Credits;
 use App\Support\PlanQuota;
@@ -38,15 +40,36 @@ class SocialPostController extends Controller
     {
         $validated = $request->validate([
             'status' => ['sometimes', Rule::enum(SocialPostStatus::class)],
+            // Narrowing for API clients (the MCP server): a window on the
+            // post's slot — or, with no slot, when it was made — one
+            // channel, and a cap. All optional; the app sends none of them.
+            'from' => ['sometimes', 'date'],
+            'to' => ['sometimes', 'date'],
+            'account_id' => ['sometimes', 'string', 'max:26'],
+            'limit' => ['sometimes', 'integer', 'min:1', 'max:100'],
         ]);
 
         // A post whose slot passed still reading Scheduled means a result
         // webhook went missing; ask before answering.
         $relay->reconcile($request->user());
 
+        $from = isset($validated['from']) ? Carbon::parse($validated['from']) : null;
+        $to = isset($validated['to']) ? Carbon::parse($validated['to']) : null;
+
         return SocialPostResource::collection(
             $request->user()->socialPosts()
                 ->when($validated['status'] ?? null, fn ($q, $status) => $q->where('status', $status))
+                ->when($from, fn ($q, $from) => $q->where(fn ($w) => $w
+                    ->where('scheduled_at', '>=', $from)
+                    ->orWhere(fn ($u) => $u->whereNull('scheduled_at')->where('created_at', '>=', $from))))
+                ->when($to, fn ($q, $to) => $q->where(fn ($w) => $w
+                    ->where('scheduled_at', '<=', $to)
+                    ->orWhere(fn ($u) => $u->whereNull('scheduled_at')->where('created_at', '<=', $to))))
+                ->when($validated['account_id'] ?? null, fn ($q, $account) => $q->whereHas(
+                    'targets.account',
+                    fn ($a) => $a->where('ulid', $account),
+                ))
+                ->when($validated['limit'] ?? null, fn ($q, $limit) => $q->limit((int) $limit))
                 // Threads ride along: the Feed shows every post's conversation
                 // at once, so one request beats one per card.
                 ->with(['targets.account', 'comments.replies', 'user:id,name'])
@@ -69,6 +92,17 @@ class SocialPostController extends Controller
     }
 
     /**
+     * One post, with its destinations and its review thread — what the
+     * list returns per row, for a caller that holds only the id.
+     */
+    public function show(Request $request, SocialPost $socialPost): SocialPostResource
+    {
+        Gate::allowIf(fn ($user) => $socialPost->user_id === $user->id);
+
+        return new SocialPostResource($socialPost->load(['targets.account', 'comments.replies', 'user:id,name']));
+    }
+
+    /**
      * Create (and optionally schedule) a post. The ownership check on
      * account_ids is the tenant boundary: only the user's own Connected
      * accounts resolve to provider ids, and nothing is sent otherwise.
@@ -88,6 +122,10 @@ class SocialPostController extends Controller
             'media.*.url' => ['required', 'url:https'],
             // A video's cover, handed to the platforms that take one.
             'media.*.thumbnail_url' => ['sometimes', 'nullable', 'url:https'],
+            // Library files by id (API clients): resolved here to the same
+            // signed URLs the composer sends, after any `media`.
+            'file_ids' => ['sometimes', 'array', 'max:10'],
+            'file_ids.*' => ['string', 'max:26', 'distinct'],
             'scheduled_at' => ['sometimes', 'nullable', 'date', 'after:now'],
             // Off when absent. `awaiting` waits for the editor's own yes,
             // `client` for a client on an approval link; either holds the
@@ -104,6 +142,15 @@ class SocialPostController extends Controller
         ]);
 
         $user = $request->user();
+
+        if (isset($validated['file_ids']) && $validated['file_ids'] !== []) {
+            $validated['media'] = [...($validated['media'] ?? []), ...$this->libraryMedia($user, $validated['file_ids'])];
+
+            if (count($validated['media']) > 10) {
+                throw ValidationException::withMessages(['file_ids' => 'A post takes up to 10 media items.']);
+            }
+        }
+
         $approval = isset($validated['approval']) ? SocialPostApproval::from($validated['approval']) : null;
         if ($approval === SocialPostApproval::Client) {
             PlanQuota::requireClientApprovals($user);
@@ -473,5 +520,27 @@ class SocialPostController extends Controller
         });
 
         return response()->json(null, 204);
+    }
+
+    /**
+     * Library files as media entries: ready files of this workspace only.
+     *
+     * @param  list<string>  $ids
+     * @return list<array{url: string}>
+     */
+    private function libraryMedia(User $user, array $ids): array
+    {
+        $files = File::query()
+            ->whereIn('ulid', $ids)
+            ->where('user_id', Workspace::owner($user)->id)
+            ->where('status', File::STATUS_READY)
+            ->get()
+            ->keyBy('ulid');
+
+        if ($files->count() !== count($ids)) {
+            throw ValidationException::withMessages(['file_ids' => 'One or more files are not ready files in your library.']);
+        }
+
+        return array_map(fn (string $id) => ['url' => $files[$id]->url()], $ids);
     }
 }
