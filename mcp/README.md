@@ -45,7 +45,7 @@ Rate limit: 60 requests / minute / token (429 + `Retry-After`).
 | `get_credits` | read | `GET /credits` |
 | `create_approval_link` (post_ids, title, client_name, expires_in_hours) — Pro/Max | approve | `POST /social-approval-links` (drafts accepted) |
 | `check_approval_status` (post_id \| link_id) | read | `GET /social-posts/{id}` or `GET /social-approval-links/{id}` |
-| `update_post` (caption, scheduled_at, labels) | draft (+ publish if already queued) | `PATCH /social-posts/{id}` |
+| `update_post` (caption, scheduled_at, labels) | draft (drafts and posts waiting for approval only) | `PATCH /social-posts/{id}` |
 | `schedule_post` (post_id, scheduled_at, confirm) | publish | preview `GET /social-posts/{id}/send-preview`; `confirm: true` → `POST /social-posts/{id}/send` |
 | `publish_post` (post_id, confirm) | publish | same, sends now |
 
@@ -54,10 +54,27 @@ Rate limit: 60 requests / minute / token (429 + `Retry-After`).
 token are capped at **20 per user per UTC day**, enforced in Laravel
 (`CapTokenSends`, 429 `daily_send_cap`); the app's cookie session is never capped.
 
+**confirm_token.** The send preview returns a `confirm_token` signed by the API
+(HMAC with the app key; bound to user + post + target ids + Credit price; valid
+10 minutes). A send from a bearer token (MCP guard or API key) must bring it
+back: none → 422 `confirm_token_required`; mismatched, expired or forged → 409
+`preview_stale`. Holding a draft for approval and the app's cookie session need
+none. This server keeps the token of the last preview per user + post in memory
+and sends it on `confirm: true` — the model never sees it. No preview on record
+(never shown, expired, already used, server restarted) → a fresh preview and
+nothing sent; a 409 → tool error `preview_stale` with the new preview in
+`details.preview`.
+
+**Approval and edits are the API's rules.** A draft that needs its client's
+approval (or whose client asked for changes) is never sent or scheduled, from
+the app or a token (409 `approval_required`); it can only be held for the
+client again. A token cannot drop the editor's own approval step either. A
+token can only edit drafts and posts waiting for approval (409 `not_editable`).
+
 Errors come back as tool results with `isError: true` and
 `{error: {code, message, hint, details?}}`; codes: `reconnect_required`,
 `scope_missing`, `plan_required`, `not_found`, `invalid_input`, `unauthorized`,
-`forbidden`, `rate_limited`, `daily_cap_reached`, `insufficient_credits`,
+`forbidden`, `rate_limited`, `daily_cap_reached`, `insufficient_credits`, `preview_stale`, `not_editable`, `approval_required`,
 `upstream_unavailable`.
 
 Each call emits PostHog `mcp_tool_called` `{tool, client_name, ok, ms}` (plus

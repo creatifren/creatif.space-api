@@ -71,9 +71,34 @@ it('previews with read, but sends only with publish', function () {
         ->assertJsonPath('error', 'insufficient_scope');
     expect($post->fresh()->status->value)->toBe('draft');
 
-    bearer($this, $publishKey)->postJson("/api/v1/social-posts/{$post->ulid}/send")->assertOk();
+    $token = bearer($this, $publishKey)->getJson("/api/v1/social-posts/{$post->ulid}/send-preview")->json('data.confirm_token');
+    bearer($this, $publishKey)->postJson("/api/v1/social-posts/{$post->ulid}/send", ['confirm_token' => $token])->assertOk();
     expect($post->fresh()->status->value)->not->toBe('draft')
         ->and(CapTokenSends::status($user)['used'])->toBe(1);
+});
+
+it('sends from a real API key only with a current preview\'s confirm_token', function () {
+    $user = User::factory()->create();
+    Credits::grant($user, 30_000, 'Test');
+    $post = m2Draft($user);
+    $key = m2Key($this, $user, ['read', 'publish']);
+
+    bearer($this, $key)->postJson("/api/v1/social-posts/{$post->ulid}/send")
+        ->assertUnprocessable()
+        ->assertJsonPath('code', 'confirm_token_required');
+
+    $token = bearer($this, $key)->getJson("/api/v1/social-posts/{$post->ulid}/send-preview")->json('data.confirm_token');
+    $post->targets()->create([
+        'social_account_id' => SocialAccount::factory()->for($user)->create(['platform' => 'facebook'])->id,
+        'status' => 'pending',
+    ]);
+    bearer($this, $key)->postJson("/api/v1/social-posts/{$post->ulid}/send", ['confirm_token' => $token])
+        ->assertStatus(409)
+        ->assertJsonPath('code', 'preview_stale');
+
+    expect($post->fresh()->status->value)->toBe('draft')
+        ->and(CapTokenSends::status($user)['used'])->toBe(0);
+    Http::assertNothingSent();
 });
 
 it('caps an API key at 20 sends a day', function () {

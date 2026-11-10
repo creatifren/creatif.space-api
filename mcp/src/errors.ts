@@ -11,6 +11,9 @@ export type ErrorCode =
   | 'rate_limited'
   | 'daily_cap_reached'
   | 'insufficient_credits'
+  | 'preview_stale'
+  | 'not_editable'
+  | 'approval_required'
   | 'upstream_unavailable';
 
 /** An error a tool returns to the model: a machine code plus what to do next. */
@@ -83,6 +86,16 @@ export function toToolError(e: unknown, notFoundWhat = 'That item'): ToolError {
   }
   if (e.status === 422 && /Credits/.test(message) && /top up|balance/i.test(message)) {
     return new ToolError('insufficient_credits', message, 'Tell the user to top up Credits in creatif.space (Settings → Credits) or send to fewer channels.');
+  }
+  if (code === 'not_editable') {
+    return new ToolError('not_editable', message, 'Only drafts and posts waiting for approval can be changed from here. Tell the user to change it in creatif.space.');
+  }
+  if (code === 'approval_required') {
+    return new ToolError(
+      'approval_required',
+      message,
+      'This post needs approval before it can go out. Use create_approval_link / check_approval_status; do not try to send it another way.',
+    );
   }
   if (code === 'scope_missing' || code === 'insufficient_scope') {
     return new ToolError('scope_missing', message, 'Reconnect the creatif.space connector and grant the missing permission.');

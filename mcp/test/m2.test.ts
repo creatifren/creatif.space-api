@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import { post } from './fixtures.js';
+import { previewTokens } from '../src/tools/m2.js';
 import { payload, startApp, TOKEN_ALL, TOKEN_FULL, TOKEN_READ } from './helpers.js';
 
 const IG = '01JACCTACCTACCTACCTACCTIG1';
@@ -11,6 +12,7 @@ let app: Awaited<ReturnType<typeof startApp>> | undefined;
 afterEach(async () => {
   await app?.close();
   app = undefined;
+  previewTokens.clear();
 });
 
 const call = async (name: string, args: Record<string, unknown> = {}, routes = {}, token = TOKEN_FULL) => {
@@ -28,9 +30,23 @@ const previewBody = (extra: Record<string, unknown> = {}) => ({
     targets: [{ channel_id: IG, platform: 'instagram', username: 'studio', usable: true, credits: 15 }],
     credits: { price: 15, from_topup: 0, monthly_balance: 300, topup_balance: 0, can_afford: true },
     daily_cap: { cap: 20, used: 3, remaining: 17 },
+    confirm_token: 'tok1.sig',
+    confirm_expires_at: new Date(Date.now() + 600_000).toISOString(),
     ...extra,
   },
 });
+
+const PREVIEW_ROUTE = `GET /social-posts/${POST}/send-preview`;
+const SEND_ROUTE = `POST /social-posts/${POST}/send`;
+
+/** Preview (confirm false), then confirm: true — in one app, as a client would. */
+const twoStep = async (name: string, args: Record<string, unknown>, routes: Record<string, unknown>, token = TOKEN_FULL) => {
+  app = await startApp({ routes: { [PREVIEW_ROUTE]: () => ({ body: previewBody() }), ...routes } as never });
+  const client = await app.connect(token);
+  const shown = await client.callTool({ name, arguments: args });
+  const confirmed = await client.callTool({ name, arguments: { ...args, confirm: true } });
+  return { shown, confirmed, client };
+};
 
 const sent = (body: unknown) => ({ body: { data: post(POST, { status: 'scheduled', ...(body as object) }) } });
 
@@ -128,12 +144,20 @@ describe('update_post', () => {
     expect(payload(res).post.caption).toBe('New');
   });
 
-  it('needs publish to change a post already queued to go out', async () => {
+  it('refuses a post already queued to go out, before calling PATCH', async () => {
     const res = await call('update_post', { post_id: POST, scheduled_at: FUTURE }, {
       [`GET /social-posts/${POST}`]: () => ({ body: { data: post(POST, { status: 'scheduled', approval: null }) } }),
-    }, TOKEN_ALL);
-    expect(payload(res).error).toMatchObject({ code: 'scope_missing', details: { required: 'publish' } });
+    });
+    expect(payload(res).error.code).toBe('not_editable');
     expect(app!.v1.calls.map((c) => c.method)).toEqual(['GET']);
+  });
+
+  it('maps the API refusal (409 not_editable) too', async () => {
+    const res = await call('update_post', { post_id: POST, caption: 'x' }, {
+      [`GET /social-posts/${POST}`]: () => ({ body: { data: post(POST, { status: 'draft' }) } }),
+      [`PATCH /social-posts/${POST}`]: () => ({ status: 409, body: { message: 'Connected apps can only change drafts…', code: 'not_editable' } }),
+    });
+    expect(payload(res).error.code).toBe('not_editable');
   });
 
   it('refuses an empty change', async () => {
@@ -160,12 +184,13 @@ describe('schedule_post', () => {
     expect(app!.v1.calls.map((c) => `${c.method} ${c.path}`)).toEqual([`GET /social-posts/${POST}/send-preview`]);
   });
 
-  it('with confirm: true sends with scheduled_at', async () => {
-    const res = await call('schedule_post', { post_id: POST, scheduled_at: FUTURE, confirm: true }, {
-      [`POST /social-posts/${POST}/send`]: ({ body }: { body: unknown }) => sent({ scheduled_at: (body as { scheduled_at: string }).scheduled_at }),
+  it('with confirm: true sends with scheduled_at and the preview’s confirm_token', async () => {
+    const { confirmed } = await twoStep('schedule_post', { post_id: POST, scheduled_at: FUTURE }, {
+      [SEND_ROUTE]: ({ body }: { body: unknown }) => sent({ scheduled_at: (body as { scheduled_at: string }).scheduled_at }),
     });
-    expect(app!.v1.calls[0]).toMatchObject({ method: 'POST', path: `/social-posts/${POST}/send`, body: { scheduled_at: FUTURE } });
-    expect(payload(res).post.status).toBe('scheduled');
+    expect(app!.v1.calls.map((c) => `${c.method} ${c.path}`)).toEqual([PREVIEW_ROUTE, SEND_ROUTE]);
+    expect(app!.v1.calls[1]!.body).toEqual({ scheduled_at: FUTURE, confirm_token: 'tok1.sig' });
+    expect(payload(confirmed).post.status).toBe('scheduled');
   });
 
   it('refuses a past time before calling V1', async () => {
@@ -204,17 +229,17 @@ describe('publish_post', () => {
     expect(payload(res).error).toMatchObject({ code: 'invalid_input' });
   });
 
-  it('with confirm: true sends now (no scheduled_at)', async () => {
-    const res = await call('publish_post', { post_id: POST, confirm: true }, {
-      [`POST /social-posts/${POST}/send`]: () => sent({ status: 'published', scheduled_at: null }),
+  it('with confirm: true sends now with the preview’s confirm_token (no scheduled_at)', async () => {
+    const { confirmed } = await twoStep('publish_post', { post_id: POST }, {
+      [SEND_ROUTE]: () => sent({ status: 'published', scheduled_at: null }),
     });
-    expect(app!.v1.calls[0]).toMatchObject({ method: 'POST', body: {} });
-    expect(payload(res).post.status).toBe('published');
+    expect(app!.v1.calls[1]).toMatchObject({ method: 'POST', path: `/social-posts/${POST}/send`, body: { confirm_token: 'tok1.sig' } });
+    expect(payload(confirmed).post.status).toBe('published');
   });
 
   it('maps the daily cap to daily_cap_reached', async () => {
-    const res = await call('publish_post', { post_id: POST, confirm: true }, {
-      [`POST /social-posts/${POST}/send`]: () => ({
+    const { confirmed: res } = await twoStep('publish_post', { post_id: POST }, {
+      [SEND_ROUTE]: () => ({
         status: 429,
         body: { message: 'Connected apps can send 20 posts a day.', code: 'daily_send_cap', cap: 20, resets_at: 'z' },
       }),
@@ -223,8 +248,8 @@ describe('publish_post', () => {
   });
 
   it('maps a short balance to insufficient_credits', async () => {
-    const res = await call('publish_post', { post_id: POST, confirm: true }, {
-      [`POST /social-posts/${POST}/send`]: () => ({
+    const { confirmed: res } = await twoStep('publish_post', { post_id: POST }, {
+      [SEND_ROUTE]: () => ({
         status: 422,
         body: { message: "This needs 15 Credits past this month's and the balance has 0 — top up, or send to fewer accounts." },
       }),
@@ -233,9 +258,81 @@ describe('publish_post', () => {
   });
 
   it('maps the API token fence (403 insufficient_scope) to scope_missing', async () => {
-    const res = await call('publish_post', { post_id: POST, confirm: true }, {
-      [`POST /social-posts/${POST}/send`]: () => ({ status: 403, body: { message: 'This needs the "publish" permission.', error: 'insufficient_scope' } }),
+    const { confirmed: res } = await twoStep('publish_post', { post_id: POST }, {
+      [SEND_ROUTE]: () => ({ status: 403, body: { message: 'This needs the "publish" permission.', error: 'insufficient_scope' } }),
     });
     expect(payload(res).error.code).toBe('scope_missing');
+  });
+});
+
+describe('confirm_token (two-step flow)', () => {
+  it('never hands the token to the model', async () => {
+    const res = await call('publish_post', { post_id: POST }, { [PREVIEW_ROUTE]: () => ({ body: previewBody() }) });
+    expect(JSON.stringify(payload(res))).not.toContain('tok1.sig');
+  });
+
+  it('confirm: true with no preview shown sends nothing and returns a preview', async () => {
+    const res = await call('publish_post', { post_id: POST, confirm: true }, {
+      [PREVIEW_ROUTE]: () => ({ body: previewBody() }),
+      [SEND_ROUTE]: () => sent({}),
+    });
+    const out = payload(res);
+    expect(res.isError).toBeFalsy();
+    expect(out).toMatchObject({ confirmation_required: true, action: 'publish', credit_cost: 15 });
+    expect(out.note).toMatch(/nothing was sent/);
+    expect(app!.v1.calls.map((c) => `${c.method} ${c.path}`)).toEqual([PREVIEW_ROUTE]);
+  });
+
+  it('a stale preview (409) sends nothing, returns the new preview, and the next confirm uses the new token', async () => {
+    let previews = 0;
+    let sends = 0;
+    const { confirmed, client } = await twoStep('publish_post', { post_id: POST }, {
+      [PREVIEW_ROUTE]: () => ({ body: previewBody({ confirm_token: `tok${++previews}.sig`, credits: { price: previews * 15, from_topup: 0, monthly_balance: 300, topup_balance: 0, can_afford: true } }) }),
+      [SEND_ROUTE]: () => (++sends === 1
+        ? { status: 409, body: { message: 'The preview is out of date.', code: 'preview_stale' } }
+        : sent({ status: 'published' })),
+    });
+    const err = payload(confirmed).error;
+    expect(confirmed.isError).toBe(true);
+    expect(err.code).toBe('preview_stale');
+    expect(err.details.preview).toMatchObject({ confirmation_required: true, credit_cost: 30 });
+
+    const again = await client.callTool({ name: 'publish_post', arguments: { post_id: POST, confirm: true } });
+    expect(payload(again).post.status).toBe('published');
+    const bodies = app!.v1.calls.filter((c) => c.method === 'POST').map((c) => c.body);
+    expect(bodies).toEqual([{ confirm_token: 'tok1.sig' }, { confirm_token: 'tok2.sig' }]);
+  });
+
+  it('an expired preview is not used: confirm previews again', async () => {
+    await twoStep('publish_post', { post_id: POST }, {
+      [PREVIEW_ROUTE]: () => ({ body: previewBody({ confirm_expires_at: new Date(Date.now() - 1000).toISOString() }) }),
+      [SEND_ROUTE]: () => sent({}),
+    });
+    expect(app!.v1.calls.some((c) => c.method === 'POST')).toBe(false);
+  });
+
+  it('a token is used once: a second confirm previews again', async () => {
+    const { client } = await twoStep('publish_post', { post_id: POST }, { [SEND_ROUTE]: () => sent({ status: 'published' }) });
+    await client.callTool({ name: 'publish_post', arguments: { post_id: POST, confirm: true } });
+    expect(app!.v1.calls.filter((c) => c.method === 'POST')).toHaveLength(1);
+  });
+
+  it('is kept per user: another user’s preview does not confirm', async () => {
+    app = await startApp({ routes: { [PREVIEW_ROUTE]: () => ({ body: previewBody() }), [SEND_ROUTE]: () => sent({}) } as never });
+    const a = await app.connect(TOKEN_FULL);
+    await a.callTool({ name: 'publish_post', arguments: { post_id: POST } });
+    const b = await app.connect('stub:01JOTHEROTHEROTHEROTHEROTH:read,draft,approve,publish:Claude');
+    const res = await b.callTool({ name: 'publish_post', arguments: { post_id: POST, confirm: true } });
+    expect(payload(res).confirmation_required).toBe(true);
+    expect(app!.v1.calls.some((c) => c.method === 'POST')).toBe(false);
+  });
+});
+
+describe('approval enforced by the API', () => {
+  it('maps 409 approval_required on a confirmed send', async () => {
+    const { confirmed } = await twoStep('publish_post', { post_id: POST }, {
+      [SEND_ROUTE]: () => ({ status: 409, body: { message: 'This draft needs its client’s approval.', code: 'approval_required' } }),
+    });
+    expect(payload(confirmed).error.code).toBe('approval_required');
   });
 });
