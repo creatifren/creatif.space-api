@@ -45,6 +45,11 @@ class GoogleAuthController extends Controller
         if ($utm !== []) {
             $request->session()->put('signup_utm', $utm);
         }
+        // Which page or button they came from (analytics only, never a referral).
+        $entry = ProductEvents::entryFrom($request);
+        if ($entry !== null) {
+            $request->session()->put('signup_entry', $entry);
+        }
 
         $next = $request->query('next');
 
@@ -102,7 +107,11 @@ class GoogleAuthController extends Controller
             }
 
             $utm = request()->session()->pull('signup_utm');
-            ProductEvents::signedUp($user, 'google', ['ref' => is_string($code) ? $code : null] + (is_array($utm) ? $utm : []));
+            $entry = request()->session()->pull('signup_entry');
+            ProductEvents::signedUp($user, 'google', [
+                'ref' => is_string($code) ? $code : null,
+                'entry' => is_string($entry) ? $entry : null,
+            ] + (is_array($utm) ? $utm : []));
         } elseif ($user->google_id === null) {
             // Existing account (e.g. staff) signing in with Google for the first time.
             $user->forceFill(['google_id' => $googleUser->getId()])->save();

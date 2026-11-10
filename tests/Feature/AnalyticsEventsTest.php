@@ -7,9 +7,11 @@
  */
 
 use App\Jobs\SendAnalytics;
+use App\Models\Affiliate;
 use App\Models\CreditPurchase;
 use App\Models\Invoice;
 use App\Models\Plan;
+use App\Models\Referral;
 use App\Models\SocialAccount;
 use App\Models\SocialApprovalLink;
 use App\Models\SocialComment;
@@ -233,6 +235,88 @@ describe('user_signed_up', function () {
         expect($m['distinct_id'])->toBe($user->ulid)
             ->and($m['properties']['method'])->toBe('google')
             ->and(ae()->setFor($user->ulid)[0]['is_internal'])->toBeFalse();
+    });
+});
+
+/** Socialite answers the Google callback with a new user. */
+function aeGoogleCallback(): void
+{
+    $google = (new GoogleUser)->map(['id' => 'g-entry', 'name' => 'Rani', 'email' => 'rani@example.com', 'avatar' => null]);
+    $driver = Mockery::mock(GoogleProvider::class);
+    $driver->shouldReceive('user')->andReturn($google);
+    Socialite::shouldReceive('driver')->with('google')->andReturn($driver);
+}
+
+describe('user_signed_up entry and utm_term/utm_content', function () {
+    it('sends entry, initial_entry ($set_once) and the full UTM set for an email signup', function () {
+        $this->postJson('/auth/register', [
+            'email' => 'andi@example.com', 'password' => 'long-enough-1',
+            'utm_source' => 'google', 'utm_medium' => 'cpc', 'utm_campaign' => 'launch',
+            'utm_term' => 'client approval', 'utm_content' => 'ad-b',
+            'entry' => 'pricing-hero',
+        ])->assertStatus(202);
+
+        $m = ae()->assertCapturedWithKeys('user_signed_up', [
+            'method', 'plan', 'utm_source', 'utm_medium', 'utm_campaign', 'utm_term', 'utm_content', 'entry', '$set_once',
+        ]);
+        expect($m['properties'])->toMatchArray([
+            'utm_term' => 'client approval',
+            'utm_content' => 'ad-b',
+            'entry' => 'pricing-hero',
+            '$set_once' => ['initial_entry' => 'pricing-hero'],
+        ]);
+    });
+
+    it('carries entry and utm_term/utm_content through the Google redirect', function () {
+        $this->get('/auth/google/redirect?utm_term=approval&utm_content=hero-cta&entry=mcp-page')
+            ->assertSessionHas('signup_utm', ['utm_term' => 'approval', 'utm_content' => 'hero-cta'])
+            ->assertSessionHas('signup_entry', 'mcp-page');
+
+        aeGoogleCallback();
+        $this->get('/auth/google/callback?code=abc')->assertRedirect();
+
+        $m = ae()->assertCapturedWithKeys('user_signed_up', ['method', 'plan', 'utm_term', 'utm_content', 'entry', '$set_once']);
+        expect($m['properties'])->toMatchArray([
+            'method' => 'google',
+            'entry' => 'mcp-page',
+            '$set_once' => ['initial_entry' => 'mcp-page'],
+        ]);
+    });
+
+    it('drops an invalid entry without blocking the signup', function (mixed $entry) {
+        $this->postJson('/auth/register', [
+            'email' => 'andi@example.com', 'password' => 'long-enough-1', 'entry' => $entry,
+        ])->assertStatus(202);
+
+        ae()->assertCapturedWithKeys('user_signed_up', ['method', 'plan']);
+    })->with([
+        'uppercase' => 'Pricing',
+        'space' => 'pricing hero',
+        'too long' => str_repeat('a', 41),
+        'path' => '../admin',
+        'empty' => '',
+        'array' => [['a']],
+    ]);
+
+    it('drops an invalid entry on the Google redirect', function () {
+        $this->get('/auth/google/redirect?entry='.urlencode('Pricing Hero'))->assertSessionMissing('signup_entry');
+
+        aeGoogleCallback();
+        $this->get('/auth/google/callback?code=abc')->assertRedirect();
+
+        ae()->assertCapturedWithKeys('user_signed_up', ['method', 'plan']);
+    });
+
+    it('never treats entry as a referral code', function () {
+        Affiliate::factory()->approved()->create(['code' => 'rani10']);
+
+        $this->postJson('/auth/register', [
+            'email' => 'andi@example.com', 'password' => 'long-enough-1', 'entry' => 'rani10',
+        ])->assertStatus(202);
+        $this->get('/auth/google/redirect?entry=rani10')->assertSessionMissing('referral_code');
+
+        expect(Referral::query()->count())->toBe(0)
+            ->and(ae()->captured('user_signed_up')[0]['properties'])->not->toHaveKey('ref');
     });
 });
 
