@@ -9,7 +9,7 @@ import {
 import { loadConfig } from '../src/config.js';
 import { ORIGIN, RESOURCE, startApp, TOKEN_ALL } from './helpers.js';
 
-const META = `resource_metadata="${ORIGIN}/.well-known/oauth-protected-resource"`;
+const META = `resource_metadata="${ORIGIN}/.well-known/oauth-protected-resource/mcp"`;
 
 let app: Awaited<ReturnType<typeof startApp>> | undefined;
 afterEach(async () => {
@@ -178,6 +178,13 @@ describe('CachedIntrospector', () => {
 });
 
 describe('config', () => {
+  it('defaults the resource to the exact connector URL', () => {
+    expect(loadConfig({ MCP_INTROSPECT_SECRET: 'x' }).resourceUrl).toBe('https://mcp.creatif.space/mcp');
+    expect(loadConfig({ MCP_INTROSPECT_SECRET: 'x', MCP_RESOURCE_URL: 'https://mcp.creatif.space/mcp/' }).resourceUrl).toBe(
+      'https://mcp.creatif.space/mcp',
+    );
+  });
+
   it('defaults to real auth and requires the introspection secret', () => {
     expect(() => loadConfig({})).toThrow(/MCP_INTROSPECT_SECRET/);
     expect(loadConfig({ MCP_INTROSPECT_SECRET: 'x' })).toMatchObject({ authMode: 'real', port: 3010 });

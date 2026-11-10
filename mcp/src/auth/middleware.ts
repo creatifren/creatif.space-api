@@ -17,9 +17,11 @@ export const metadataPath = '/.well-known/oauth-protected-resource';
 export const SCOPES = ['read', 'draft', 'approve', 'publish'] as const;
 
 /**
- * Where the metadata lives for a resource URL. `root` is the form the
- * WWW-Authenticate header advertises; `pathForm` is RFC 9728 §3.1's
- * insertion of the resource path (…/oauth-protected-resource/mcp).
+ * Where the metadata lives for a resource URL, always built from its ORIGIN
+ * (never resourceUrl + path, which breaks once the resource has a path).
+ * `pathForm` is RFC 9728 §3.1's insertion of the resource path
+ * (…/oauth-protected-resource/mcp) and is what the 401 challenge
+ * advertises; `root` is served too, for clients that only try the root.
  */
 export function metadataUrls(resourceUrl: string) {
   const url = new URL(resourceUrl);
@@ -44,7 +46,7 @@ export function protectedResourceMetadata(resourceUrl: string, authorizationServ
 }
 
 function challenge(res: Response, resourceUrl: string, error?: string, description?: string) {
-  const parts = [`resource_metadata="${metadataUrls(resourceUrl).root}"`];
+  const parts = [`resource_metadata="${metadataUrls(resourceUrl).pathForm}"`];
   if (error) parts.push(`error="${error}"`);
   if (description) parts.push(`error_description="${description}"`);
   res.setHeader('WWW-Authenticate', `Bearer ${parts.join(', ')}`);

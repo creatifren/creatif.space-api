@@ -18,7 +18,7 @@ No business logic lives here.
 | `GET /.well-known/oauth-protected-resource/mcp` | the same document at the RFC 9728 path form |
 
 No / invalid token → `401` with
-`WWW-Authenticate: Bearer resource_metadata="https://mcp.creatif.space/.well-known/oauth-protected-resource"`.
+`WWW-Authenticate: Bearer resource_metadata="https://mcp.creatif.space/.well-known/oauth-protected-resource/mcp"` (RFC 9728 path form, built from the origin; the root well-known serves the same document).
 
 ## Auth
 
@@ -90,6 +90,7 @@ MCP_AUTH_MODE=stub npm start   # local only
 
 1. Server has **Node 22 LTS** (`node -v` → v22.x) and nginx; DNS `mcp.creatif.space` → this host; TLS cert issued (`certbot --nginx -d mcp.creatif.space`).
 2. API side first: the OAuth PR is deployed and its migrations ran; Laravel `.env` has `MCP_INTROSPECT_SECRET` and `MCP_RESOURCE_URL=https://mcp.creatif.space/mcp`.
+   **`MCP_RESOURCE_URL` must be exactly `https://mcp.creatif.space/mcp` on BOTH sides** (Laravel `.env` and `/etc/creatif-mcp.env`) — not the bare origin.
 3. `/etc/creatif-mcp.env` (mode 600, owner root) with these **names**:
    `PORT`, `HOST`, `V1_API_URL`, `MCP_RESOURCE_URL`, `MCP_AUTHORIZATION_SERVER`,
    `MCP_INTROSPECT_SECRET` (same value as Laravel's), `MCP_AUTH_MODE` (`real`, or leave unset),
@@ -99,7 +100,7 @@ MCP_AUTH_MODE=stub npm start   # local only
 6. Install the nginx vhost below, `nginx -t && systemctl reload nginx`.
 7. Smoke:
    - `curl -s https://mcp.creatif.space/health` → `{"ok":true,...}`
-   - `curl -si -X POST https://mcp.creatif.space/mcp | grep -i www-authenticate` → `Bearer resource_metadata="https://mcp.creatif.space/.well-known/oauth-protected-resource"`
+   - `curl -si -X POST https://mcp.creatif.space/mcp | grep -i www-authenticate` → `Bearer resource_metadata="https://mcp.creatif.space/.well-known/oauth-protected-resource/mcp"`
    - `curl -s https://mcp.creatif.space/.well-known/oauth-protected-resource/mcp` → `"resource":"https://mcp.creatif.space/mcp"`
    - `journalctl -u creatif-mcp -n 20` shows `listening on http://127.0.0.1:3010 (auth: real)`
 8. In Claude: Settings → Connectors → Add custom connector → `https://mcp.creatif.space/mcp`, sign in, run `list_channels`.

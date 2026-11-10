@@ -25,7 +25,7 @@ describe('Claude-style OAuth discovery from a 401 (RFC 9728)', () => {
     // 2. It reads resource_metadata out of the challenge.
     const header = first.headers.get('www-authenticate')!;
     const metadataUrl = /resource_metadata="([^"]+)"/.exec(header)![1]!;
-    expect(metadataUrl).toBe(`${ORIGIN}/.well-known/oauth-protected-resource`);
+    expect(metadataUrl).toBe(`${ORIGIN}/.well-known/oauth-protected-resource/mcp`);
 
     // 3. The metadata names this exact connector URL as the resource, and the AS.
     const meta = await (await fetch(local(app.base, metadataUrl))).json();
@@ -35,16 +35,33 @@ describe('Claude-style OAuth discovery from a 401 (RFC 9728)', () => {
     expect(meta.scopes_supported).toEqual(['read', 'draft', 'approve', 'publish']);
   });
 
-  it('a client that skips the header finds the same document at the RFC 9728 path form', async () => {
+  it('builds the challenge from the origin, whatever path the resource has', async () => {
+    const { metadataUrls } = await import('../src/auth/middleware.js');
+    expect(metadataUrls('https://mcp.creatif.space/mcp')).toMatchObject({
+      root: 'https://mcp.creatif.space/.well-known/oauth-protected-resource',
+      pathForm: 'https://mcp.creatif.space/.well-known/oauth-protected-resource/mcp',
+    });
+    // A bare origin still works: both forms collapse to the root.
+    expect(metadataUrls('https://mcp.creatif.space')).toMatchObject({
+      root: 'https://mcp.creatif.space/.well-known/oauth-protected-resource',
+      pathForm: 'https://mcp.creatif.space/.well-known/oauth-protected-resource',
+    });
+    // Never resourceUrl + metadataPath (the bug found at deploy).
+    expect(metadataUrls('https://mcp.creatif.space/mcp').pathForm).not.toContain('/mcp/.well-known');
+  });
+
+  it('a client that ignores the header finds the same document at the root well-known', async () => {
     app = await startApp();
     const connector = new URL(RESOURCE);
     const pathForm = `${connector.origin}/.well-known/oauth-protected-resource${connector.pathname}`;
     expect(pathForm).toBe('https://mcp.creatif.space/.well-known/oauth-protected-resource/mcp');
 
-    const res = await fetch(local(app.base, pathForm));
+    const res = await fetch(`${app.base}/.well-known/oauth-protected-resource`);
     expect(res.status).toBe(200);
     expect(res.headers.get('access-control-allow-origin')).toBe('*');
-    const root = await (await fetch(`${app.base}/.well-known/oauth-protected-resource`)).json();
-    expect(await res.json()).toEqual(root);
+    const atPath = await (await fetch(local(app.base, pathForm))).json();
+    const atRoot = await res.json();
+    expect(atRoot).toEqual(atPath);
+    expect(atRoot.resource).toBe('https://mcp.creatif.space/mcp');
   });
 });
