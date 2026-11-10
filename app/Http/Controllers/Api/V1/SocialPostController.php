@@ -15,6 +15,7 @@ use App\Http\Resources\SocialPostResource;
 use App\Models\Activity;
 use App\Models\File;
 use App\Models\SocialPost;
+use App\Models\SocialPostComment;
 use App\Models\User;
 use App\Support\Credits;
 use App\Support\PlanQuota;
@@ -332,6 +333,10 @@ class SocialPostController extends Controller
         $validated = $request->validate([
             'caption' => ['sometimes', 'string', 'max:63206'],
             'scheduled_at' => ['sometimes', 'date', 'after:now'],
+            // Replaces the post's media (the composer's list, as on create).
+            'media' => ['sometimes', 'array', 'max:10'],
+            'media.*.url' => ['required', 'url:https'],
+            'media.*.thumbnail_url' => ['sometimes', 'nullable', 'url:https'],
             // Labels are ours alone — never sent to the provider.
             'labels' => ['sometimes', 'nullable', 'array', 'max:10'],
             'labels.*' => ['string', 'max:40'],
@@ -372,6 +377,14 @@ class SocialPostController extends Controller
             ? self::instant($validated['scheduled_at'])
             : $socialPost->scheduled_at;
 
+        $media = array_key_exists('media', $validated) ? array_values($validated['media']) : $socialPost->media;
+        $edited = $caption !== $socialPost->caption
+            || $media !== $socialPost->media
+            || ($scheduledAt?->getTimestamp() !== $socialPost->scheduled_at?->getTimestamp());
+        $wasRevision = $socialPost->approval === SocialPostApproval::Revision;
+        // The provider body is built from the row: it carries the new media.
+        $socialPost->media = $media;
+
         // Provider first: the row only changes once the plan really moved.
         if ($socialPost->provider_post_id !== null) {
             SocialPostRelay::ensureUsable($socialPost);
@@ -384,6 +397,12 @@ class SocialPostController extends Controller
         $from = $socialPost->scheduled_at;
         $socialPost->update(['caption' => $caption, 'scheduled_at' => $scheduledAt]
             + (array_key_exists('labels', $validated) ? ['labels' => $validated['labels']] : []));
+
+        // Changes were asked for and the owner made them: the client is
+        // asked again, on the same link, and the thread says why.
+        if ($wasRevision && $edited) {
+            $this->askClientAgain($request->user(), $socialPost);
+        }
 
         // The move's record: who moved which post, from when to when. A
         // caption-only edit is not a move and leaves no line.
@@ -400,6 +419,33 @@ class SocialPostController extends Controller
 
         return new SocialPostResource($socialPost->load('targets.account'));
     }
+
+    /**
+     * A post the client sent back ("revision") was edited: it waits for the
+     * client again (`client` — what the approval link decides on), with a
+     * line in its thread both sides read and one on the owner's Activity.
+     */
+    private function askClientAgain(User $user, SocialPost $post): void
+    {
+        DB::transaction(function () use ($user, $post) {
+            $post->update([
+                'approval' => SocialPostApproval::Client,
+                'approval_by' => null,
+                'approval_at' => null,
+            ]);
+            SocialPostComment::create([
+                'social_post_id' => $post->id,
+                'user_id' => $user->id,
+                'author_name' => $user->name,
+                'role' => 'EDITOR',
+                'body' => self::EDITED_AFTER_REVISION,
+            ]);
+        });
+
+        Activity::log($user, ActivityAction::PostRevise, self::EDITED_AFTER_REVISION, 'social_post', $post->ulid);
+    }
+
+    public const EDITED_AFTER_REVISION = 'Edited after changes requested';
 
     /**
      * Trade two posts' slots — Grid's drag. One request so it is one act:

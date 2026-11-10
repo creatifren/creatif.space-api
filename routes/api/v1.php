@@ -39,12 +39,14 @@ use App\Http\Controllers\Api\V1\TeamController;
 use App\Http\Controllers\Api\V1\TourController;
 use App\Http\Controllers\Api\V1\WaitlistController;
 use App\Http\Controllers\OAuth\IntrospectionController;
+use App\Http\Middleware\AcceptBeaconJson;
 use App\Http\Middleware\CapTokenSends;
 use App\Http\Middleware\EnforceTokenScope;
 use App\Http\Middleware\EnsureInboxEnabled;
 use App\Http\Middleware\MarketingSiteOrigin;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
+use Laravel\Sanctum\Http\Middleware\EnsureFrontendRequestsAreStateful;
 
 // Public
 
@@ -126,19 +128,28 @@ Route::post('/profiles/{handle}/spaces/{slug}/unlock', [PublicSpaceController::c
 Route::get('/a/{token}', [PublicApprovalController::class, 'show'])
     ->middleware('throttle:60,1')
     ->name('api.v1.approval-links.show');
-Route::post('/a/{token}/posts/{post}/decision', [PublicApprovalController::class, 'decide'])
-    ->middleware('throttle:30,1')
-    ->name('api.v1.approval-links.decide');
-Route::post('/a/{token}/posts/{post}/retract', [PublicApprovalController::class, 'retract'])
-    ->middleware('throttle:30,1')
-    ->name('api.v1.approval-links.retract');
-Route::post('/a/{token}/posts/{post}/comments', [PublicApprovalController::class, 'comment'])
-    ->middleware('throttle:30,1')
-    ->name('api.v1.approval-links.comment');
-// Group approval (RF-043): every post the client was shown, in one request.
-Route::post('/a/{token}/approve-all', [PublicApprovalController::class, 'approveAll'])
-    ->middleware('throttle:10,1')
-    ->name('api.v1.approval-links.approve-all');
+
+// Its writes. The token is the whole credential, so they run without the
+// stateful-SPA layer: no session, no cookie login, no CSRF — nothing a
+// cross-site request could ride on. That also lets the page send a
+// decision with navigator.sendBeacon (text/plain JSON) as the tab closes.
+Route::withoutMiddleware([EnsureFrontendRequestsAreStateful::class])
+    ->middleware(AcceptBeaconJson::class)
+    ->group(function () {
+        Route::post('/a/{token}/posts/{post}/decision', [PublicApprovalController::class, 'decide'])
+            ->middleware('throttle:30,1')
+            ->name('api.v1.approval-links.decide');
+        Route::post('/a/{token}/posts/{post}/retract', [PublicApprovalController::class, 'retract'])
+            ->middleware('throttle:30,1')
+            ->name('api.v1.approval-links.retract');
+        Route::post('/a/{token}/posts/{post}/comments', [PublicApprovalController::class, 'comment'])
+            ->middleware('throttle:30,1')
+            ->name('api.v1.approval-links.comment');
+        // Group approval (RF-043): every post the client was shown, in one request.
+        Route::post('/a/{token}/approve-all', [PublicApprovalController::class, 'approveAll'])
+            ->middleware('throttle:10,1')
+            ->name('api.v1.approval-links.approve-all');
+    });
 
 // Content Plan share link — read-only, the token is the credential.
 Route::get('/plan/{token}', [SocialPlanLinkController::class, 'show'])
