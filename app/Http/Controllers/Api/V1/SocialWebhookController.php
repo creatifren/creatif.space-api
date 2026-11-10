@@ -8,12 +8,10 @@ use App\Enums\SocialPlatform;
 use App\Enums\SocialPostStatus;
 use App\Http\Controllers\Controller;
 use App\Models\SocialAccount;
-use App\Models\SocialConversation;
 use App\Models\SocialPost;
 use App\Models\SocialPostTarget;
 use App\Models\User;
-use App\Support\InboxNotifier;
-use App\Support\InboxStore;
+use App\Support\InboxEvents;
 use App\Support\ProductEvents;
 use App\Support\ProviderFields;
 use App\Support\SocialPostRelay;
@@ -106,6 +104,10 @@ class SocialWebhookController extends Controller
             [
                 'username' => $fields['username'],
                 'profile_photo_url' => $fields['profile_photo_url'],
+            ] + array_filter([
+                'network_unique_id' => $fields['network_unique_id'],
+                'network_webhook_reference_id' => $fields['network_webhook_reference_id'],
+            ], fn ($v) => $v !== null) + [
                 'status' => ($data['status'] ?? 'connected') === 'connected'
                     ? SocialAccountStatus::Connected
                     : SocialAccountStatus::Disconnected,
@@ -259,13 +261,7 @@ class SocialWebhookController extends Controller
                 return;
             }
 
-            $outcome = match ($event['type']) {
-                'conversation' => $this->startConversation($event['data']),
-                'message' => $this->recordMessage($event['data']),
-                'message.read' => $this->readMessages($event['data']),
-                'comment' => $this->recordComment($event['data']),
-                default => 'ignored',
-            };
+            $outcome = (new InboxEvents($this->provider))->apply($event['type'], $event['data']);
 
             // What became of it, next to the receipt: answerable in prod
             // from the database, whatever the log level.
@@ -282,117 +278,5 @@ class SocialWebhookController extends Controller
                 'outcome' => $outcome,
             ]);
         });
-    }
-
-    /**
-     * @param  array<string, mixed>  $data
-     */
-    private function startConversation(array $data): string
-    {
-        $account = InboxStore::account($this->provider->name(), (string) ($data['social_account_id'] ?? ''));
-
-        if ($account !== null) {
-            InboxStore::upsertConversation($account, $data);
-
-            return 'filed';
-        }
-
-        return InboxStore::resolveConversation($this->provider, (string) ($data['id'] ?? ''), $data['network'] ?? null) === null
-            ? 'dropped:unknown_conversation'
-            : 'filed';
-    }
-
-    /**
-     * A DM in or out, or the outcome of one of ours. message.received
-     * names no account — the thread does, so an unknown thread is looked
-     * up at the provider. A new inbound message rings the owner's bell.
-     *
-     * @param  array<string, mixed>  $data
-     */
-    private function recordMessage(array $data): string
-    {
-        $conversation = InboxStore::resolveConversation($this->provider, (string) ($data['conversation_id'] ?? ''), $data['network'] ?? null);
-
-        if ($conversation === null) {
-            return 'dropped:unknown_conversation';
-        }
-
-        if (($data['contact_id'] ?? null) !== null && $conversation->contact_id === null) {
-            $conversation->contact_id = (string) $data['contact_id'];
-        }
-
-        [, $inbound] = InboxStore::upsertMessage($conversation, $data, countUnread: true);
-
-        if ($inbound) {
-            // A DM arriving proves the account's grant includes messages.
-            $conversation->account()->whereNull('messages_scope_at')->update(['messages_scope_at' => now()]);
-            InboxNotifier::message($conversation->user, $conversation->ulid);
-        }
-
-        return 'filed';
-    }
-
-    /**
-     * @param  array<string, mixed>  $data
-     */
-    private function readMessages(array $data): string
-    {
-        $conversation = SocialConversation::query()
-            ->where('provider', $this->provider->name())
-            ->where('provider_conversation_id', (string) ($data['conversation_id'] ?? ''))
-            ->first();
-
-        if ($conversation === null) {
-            return 'dropped:unknown_conversation';
-        }
-
-        InboxStore::markSeen($conversation, $data['read_at'] ?? null);
-
-        return 'filed';
-    }
-
-    /**
-     * A comment on one of the account's posts. Our own replies come back
-     * through here too and are dropped by InboxStore.
-     *
-     * @param  array<string, mixed>  $data
-     */
-    private function recordComment(array $data): string
-    {
-        $account = InboxStore::account($this->provider->name(), (string) ($data['account_id'] ?? ''));
-
-        // The provider account id can belong to a row left disconnected by a
-        // reconnect; the comment belongs where that Instagram/Facebook
-        // account is connected now.
-        if ($account !== null && ! $account->isUsable()) {
-            $account = InboxStore::liveTwin($account) ?? $account;
-        }
-
-        $reason = match (true) {
-            $account === null => 'unknown_account',
-            ! $account->supportsComments() => 'comments_unsupported',
-            (string) ($data['id'] ?? '') === '' => 'no_comment_id',
-            InboxStore::isOwnComment($account, $data) => 'own_comment',
-            default => null,
-        };
-
-        if ($reason !== null) {
-            Log::channel('webhooks')->warning('inbox.comment_dropped', [
-                'provider' => $this->provider->name(),
-                'account' => $data['account_id'] ?? null,
-                'reason' => $reason,
-            ]);
-
-            return 'dropped:'.$reason;
-        }
-
-        /** @var SocialAccount $account */
-        $comment = InboxStore::upsertComment($account, $data, (string) ($data['network'] ?? ''));
-
-        if ($comment !== null && $comment->wasRecentlyCreated) {
-            InboxNotifier::comment($account->user);
-        }
-
-        return $comment === null ? 'dropped:not_filed' : 'filed';
     }
 }

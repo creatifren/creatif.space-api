@@ -53,7 +53,7 @@ final class ProviderFields
      * when its id does not fit provider_account_id (64).
      *
      * @param  array<string, mixed>  $account
-     * @return array{provider_account_id: string, username: string|null, profile_photo_url: string|null, network_unique_id: string|null}|null
+     * @return array{provider_account_id: string, username: string|null, profile_photo_url: string|null, network_unique_id: string|null, network_webhook_reference_id: string|null}|null
      */
     public static function account(array $account): ?array
     {
@@ -67,6 +67,7 @@ final class ProviderFields
             'username' => self::text($account['username'] ?? null),
             'profile_photo_url' => self::url($account['profile_photo_url'] ?? null),
             'network_unique_id' => self::text($account['network_unique_id'] ?? null, 191),
+            'network_webhook_reference_id' => self::text($account['network_webhook_reference_id'] ?? null, 64),
         ];
     }
 }

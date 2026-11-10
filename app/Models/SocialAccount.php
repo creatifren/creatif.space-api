@@ -29,6 +29,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
  * @property CarbonImmutable|null $connected_at
  * @property int|null $followers_count
  * @property string|null $network_unique_id
+ * @property string|null $network_webhook_reference_id Meta's id for the account in webhooks (shared by every Outstand account holding it)
  * @property CarbonImmutable|null $followers_synced_at
  * @property CarbonImmutable|null $messages_scope_at
  * @property CarbonImmutable|null $inbox_synced_at
@@ -52,6 +53,7 @@ class SocialAccount extends Model
         'followers_count',
         'followers_synced_at',
         'network_unique_id',
+        'network_webhook_reference_id',
     ];
 
     /**
