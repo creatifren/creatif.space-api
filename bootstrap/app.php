@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Middleware\ThrottlePerRoute;
+use App\Services\ErrorTracking;
 use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
 use Illuminate\Foundation\Configuration\Middleware;
@@ -30,4 +31,10 @@ return Application::configure(basePath: dirname(__DIR__))
         $exceptions->shouldRenderJsonWhen(
             fn (Request $request) => $request->is('api/*') || $request->expectsJson(),
         );
+
+        // To PostHog error tracking as well as laravel.log (the callback
+        // returns nothing, so the default logging still runs).
+        $exceptions->report(function (Throwable $e): void {
+            ErrorTracking::report($e);
+        });
     })->create();
