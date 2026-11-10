@@ -8,6 +8,7 @@ use App\Enums\SocialPostStatus;
 use App\Enums\SocialPostTargetStatus;
 use App\Exceptions\AccountReconnectRequired;
 use App\Http\Controllers\Controller;
+use App\Http\Middleware\CapTokenSends;
 use App\Http\Resources\SocialPostResource;
 use App\Models\Activity;
 use App\Models\File;
@@ -420,6 +421,53 @@ class SocialPostController extends Controller
         }
 
         return response()->json(null, 204);
+    }
+
+    /**
+     * What sending this draft would do, without doing it: each destination
+     * and its Credit price, the total, and whether the wallet covers it.
+     * API clients show this before asking the user to confirm a send.
+     */
+    public function sendPreview(Request $request, SocialPost $socialPost): JsonResponse
+    {
+        Gate::allowIf(fn ($user) => $socialPost->user_id === $user->id);
+
+        $user = $request->user();
+        $socialPost->load('targets.account');
+
+        $targets = $socialPost->targets->map(function ($target) use ($socialPost) {
+            $caption = $target->configuration['caption'] ?? $socialPost->caption;
+
+            return [
+                'channel_id' => $target->account->ulid,
+                'platform' => $target->account->platform,
+                'username' => $target->account->username,
+                'usable' => $target->account->isUsable(),
+                'credits' => Credits::perSend($target->account->platform, $caption),
+                'destination' => [$target->account->platform, $caption],
+            ];
+        });
+
+        $destinations = $targets->pluck('destination')->all();
+        $price = (int) $targets->sum('credits');
+        $past = Credits::sendPrice($user, $destinations);
+
+        return response()->json(['data' => [
+            'post_id' => $socialPost->ulid,
+            'sendable' => $socialPost->status === SocialPostStatus::Draft,
+            'status' => $socialPost->status,
+            'scheduled_at' => $socialPost->scheduled_at?->toIso8601String(),
+            'targets' => $targets->map(fn ($t) => array_diff_key($t, ['destination' => true]))->values()->all(),
+            'credits' => [
+                'price' => $price,
+                // What the send takes from Top-up once Monthly Credits are used.
+                'from_topup' => $past,
+                'monthly_balance' => Credits::monthlyBalance($user),
+                'topup_balance' => Credits::balance($user),
+                'can_afford' => PlanQuota::canPostSocial($user, $destinations),
+            ],
+            'daily_cap' => CapTokenSends::status($user),
+        ]]);
     }
 
     /**

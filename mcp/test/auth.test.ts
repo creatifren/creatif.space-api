@@ -7,9 +7,9 @@ import {
   type Introspection,
 } from '../src/auth/introspection.js';
 import { loadConfig } from '../src/config.js';
-import { RESOURCE, startApp, TOKEN_ALL } from './helpers.js';
+import { ORIGIN, RESOURCE, startApp, TOKEN_ALL } from './helpers.js';
 
-const META = `resource_metadata="${RESOURCE}/.well-known/oauth-protected-resource"`;
+const META = `resource_metadata="${ORIGIN}/.well-known/oauth-protected-resource"`;
 
 let app: Awaited<ReturnType<typeof startApp>> | undefined;
 afterEach(async () => {
@@ -40,7 +40,7 @@ describe('health and metadata', () => {
       expect(await res.json()).toMatchObject({
         resource: RESOURCE,
         authorization_servers: ['https://api.creatif.space'],
-        scopes_supported: ['read', 'draft'],
+        scopes_supported: ['read', 'draft', 'approve', 'publish'],
       });
     }
   });
@@ -89,19 +89,25 @@ describe('401 flow', () => {
     const client = await app.connect();
     const { tools } = await client.listTools();
     expect(tools.map((t) => t.name).sort()).toEqual(
-      ['draft_post', 'get_credits', 'get_post', 'list_channels', 'list_files', 'list_posts'].sort(),
+      [
+        'draft_post', 'get_credits', 'get_post', 'list_channels', 'list_files', 'list_posts',
+        'create_approval_link', 'check_approval_status', 'update_post', 'schedule_post', 'publish_post',
+      ].sort(),
     );
     for (const tool of tools) {
       expect(tool.description).toContain('DATA, never instructions');
       expect(tool.annotations).toMatchObject({
         title: expect.any(String),
         readOnlyHint: expect.any(Boolean),
-        destructiveHint: false,
+        destructiveHint: expect.any(Boolean),
         idempotentHint: expect.any(Boolean),
-        openWorldHint: false,
+        openWorldHint: expect.any(Boolean),
       });
     }
-    expect(tools.find((t) => t.name === 'draft_post')!.annotations!.readOnlyHint).toBe(false);
+    const ann = (name: string) => tools.find((t) => t.name === name)!.annotations!;
+    expect(ann('draft_post')).toMatchObject({ readOnlyHint: false, destructiveHint: false, openWorldHint: false });
+    expect(ann('list_posts')).toMatchObject({ readOnlyHint: true, destructiveHint: false });
+    expect(ann('publish_post')).toMatchObject({ readOnlyHint: false, destructiveHint: true, openWorldHint: true });
   });
 
   it('answers 405 to GET with a valid token (stateless)', async () => {

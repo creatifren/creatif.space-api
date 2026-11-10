@@ -8,10 +8,12 @@ import { TokenRateLimiter } from '../src/rateLimit.js';
 import { createApp } from '../src/server.js';
 
 export const V1 = 'https://api.test/api/v1';
-export const RESOURCE = 'https://mcp.creatif.space';
+export const RESOURCE = 'https://mcp.creatif.space/mcp';
+export const ORIGIN = 'https://mcp.creatif.space';
 export const USER = '01JUSERUSERUSERUSERUSERUSE';
 export const TOKEN_ALL = `stub:${USER}:read,draft:Claude`;
 export const TOKEN_READ = `stub:${USER}:read:Claude`;
+export const TOKEN_FULL = `stub:${USER}:read,draft,approve,publish:Claude`;
 
 export interface V1Call {
   method: string;
@@ -19,6 +21,7 @@ export interface V1Call {
   query: Record<string, string>;
   body: unknown;
   auth: string | null;
+  headers: Headers;
 }
 
 type Handler = (call: V1Call) => { status?: number; body?: unknown } | Promise<{ status?: number; body?: unknown }>;
@@ -36,6 +39,7 @@ export function mockV1(routes: Record<string, Handler>) {
       query: Object.fromEntries(url.searchParams),
       body: init?.body ? JSON.parse(String(init.body)) : undefined,
       auth: headers.get('authorization'),
+      headers,
     };
     calls.push(call);
     const handler = routes[`${call.method} ${path}`];

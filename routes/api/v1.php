@@ -34,6 +34,7 @@ use App\Http\Controllers\Api\V1\SubscriptionController;
 use App\Http\Controllers\Api\V1\TeamController;
 use App\Http\Controllers\Api\V1\TourController;
 use App\Http\Controllers\Api\V1\WaitlistController;
+use App\Http\Middleware\CapTokenSends;
 use App\Http\Middleware\EnsureInboxEnabled;
 use App\Http\Middleware\PublicSiteOrigin;
 use Illuminate\Http\Request;
@@ -209,8 +210,10 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::post('/social-posts/swap', [SocialPostController::class, 'swap'])
         ->middleware('throttle:30,1')
         ->name('api.v1.social-posts.swap');
+    Route::get('/social-posts/{socialPost}/send-preview', [SocialPostController::class, 'sendPreview'])
+        ->name('api.v1.social-posts.send-preview');
     Route::post('/social-posts/{socialPost}/send', [SocialPostController::class, 'send'])
-        ->middleware('throttle:30,1')
+        ->middleware(['throttle:30,1', CapTokenSends::class])
         ->name('api.v1.social-posts.send');
     Route::delete('/social-posts/{socialPost}/draft', [SocialPostController::class, 'discard'])
         ->name('api.v1.social-posts.discard');
