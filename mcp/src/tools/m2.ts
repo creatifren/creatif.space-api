@@ -232,8 +232,8 @@ export const updatePost = defineTool({
   name: 'update_post',
   title: 'Update a post',
   description:
-    'Changes a post that has not gone out: its caption, its scheduled time, or its labels. Works on drafts and on posts held for approval with the "draft" permission; ' +
-    'changing a post already queued to publish also needs the "publish" permission. Published posts cannot be changed.',
+    'Changes a draft or a post still waiting for approval: its caption, its scheduled time, or its labels. ' +
+    'Posts already queued to publish, published or otherwise done cannot be changed from here (not_editable) — the user edits those in creatif.space.',
   scope: 'draft',
   input: {
     post_id: ulid('Post'),
@@ -243,18 +243,19 @@ export const updatePost = defineTool({
   },
   annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false },
   notFound: 'That post',
-  run: async (args, { v1, auth }) => {
+  run: async (args, { v1 }) => {
     if (args.caption === undefined && args.scheduled_at === undefined && args.labels === undefined) {
       throw new ToolError('invalid_input', 'Nothing to change.', 'Pass caption, scheduled_at and/or labels.');
     }
+    // The API decides what may change (drafts and posts waiting for approval
+    // only, through a token); this only says so before trying.
     const { data: current } = await v1.get<{ data: V1Post }>(`/social-posts/${encodeURIComponent(args.post_id)}`);
-    const queued = current.status === 'scheduled' && current.approval === null;
-    if (queued && !auth.scopes.includes('publish') && (args.caption !== undefined || args.scheduled_at !== undefined)) {
+    const editable = current.status === 'draft' || (current.status === 'scheduled' && current.approval !== null && current.approval !== 'approved');
+    if (!editable) {
       throw new ToolError(
-        'scope_missing',
-        'This post is already queued to publish; changing it needs the "publish" permission.',
-        'Reconnect the creatif.space connector and allow "publish", or ask the user to edit it in creatif.space.',
-        { required: 'publish', granted: auth.scopes },
+        'not_editable',
+        `Only drafts and posts waiting for approval can be changed from here; this post is "${current.status}"${current.approval === 'approved' ? ' (approved)' : ''}.`,
+        'Tell the user to change it in creatif.space.',
       );
     }
     const { data } = await v1.patch<{ data: V1Post }>(`/social-posts/${encodeURIComponent(args.post_id)}`, {

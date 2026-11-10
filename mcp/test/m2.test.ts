@@ -144,12 +144,20 @@ describe('update_post', () => {
     expect(payload(res).post.caption).toBe('New');
   });
 
-  it('needs publish to change a post already queued to go out', async () => {
+  it('refuses a post already queued to go out, before calling PATCH', async () => {
     const res = await call('update_post', { post_id: POST, scheduled_at: FUTURE }, {
       [`GET /social-posts/${POST}`]: () => ({ body: { data: post(POST, { status: 'scheduled', approval: null }) } }),
-    }, TOKEN_ALL);
-    expect(payload(res).error).toMatchObject({ code: 'scope_missing', details: { required: 'publish' } });
+    });
+    expect(payload(res).error.code).toBe('not_editable');
     expect(app!.v1.calls.map((c) => c.method)).toEqual(['GET']);
+  });
+
+  it('maps the API refusal (409 not_editable) too', async () => {
+    const res = await call('update_post', { post_id: POST, caption: 'x' }, {
+      [`GET /social-posts/${POST}`]: () => ({ body: { data: post(POST, { status: 'draft' }) } }),
+      [`PATCH /social-posts/${POST}`]: () => ({ status: 409, body: { message: 'Connected apps can only change drafts…', code: 'not_editable' } }),
+    });
+    expect(payload(res).error.code).toBe('not_editable');
   });
 
   it('refuses an empty change', async () => {
@@ -317,5 +325,14 @@ describe('confirm_token (two-step flow)', () => {
     const res = await b.callTool({ name: 'publish_post', arguments: { post_id: POST, confirm: true } });
     expect(payload(res).confirmation_required).toBe(true);
     expect(app!.v1.calls.some((c) => c.method === 'POST')).toBe(false);
+  });
+});
+
+describe('approval enforced by the API', () => {
+  it('maps 409 approval_required on a confirmed send', async () => {
+    const { confirmed } = await twoStep('publish_post', { post_id: POST }, {
+      [SEND_ROUTE]: () => ({ status: 409, body: { message: 'This draft needs its client’s approval.', code: 'approval_required' } }),
+    });
+    expect(payload(confirmed).error.code).toBe('approval_required');
   });
 });

@@ -316,6 +316,18 @@ class SocialPostController extends Controller
             'labels.*' => ['string', 'max:40'],
         ]);
 
+        // Through a connected app or API key, only a draft or a post still
+        // waiting for approval changes: nothing already at the provider, on
+        // its way out, or history. The app keeps its own rules below.
+        if (SendConfirmation::viaToken($request)
+            && ! ($socialPost->status === SocialPostStatus::Draft
+                || ($socialPost->status === SocialPostStatus::Scheduled && $socialPost->held()))) {
+            return response()->json([
+                'message' => 'Connected apps can only change drafts and posts still waiting for approval. Edit this one in creatif.space.',
+                'code' => 'not_editable',
+            ], 409);
+        }
+
         // Labels alone are our own filing: any post, any status, no provider.
         if (array_keys($validated) === ['labels']) {
             $socialPost->update(['labels' => $validated['labels']]);
@@ -493,6 +505,24 @@ class SocialPostController extends Controller
 
         if ($socialPost->status !== SocialPostStatus::Draft) {
             return response()->json(['message' => 'Only a draft can be sent from here.'], 422);
+        }
+
+        // Approval is kept, whoever sends: a draft that needs its client's
+        // yes (or whose client asked for changes) can only be held for the
+        // client again — never sent, scheduled, or quietly downgraded to
+        // the editor's own approval. A connected app cannot drop the
+        // editor's own approval step either; the editor in the app can.
+        $asked = $validated['approval'] ?? null;
+        $needsClient = in_array($socialPost->approval, [SocialPostApproval::Client, SocialPostApproval::Revision], true);
+        $needsEditor = $socialPost->approval === SocialPostApproval::Awaiting;
+        if (($needsClient && $asked !== SocialPostApproval::Client->value)
+            || ($needsEditor && $asked === null && SendConfirmation::viaToken($request))) {
+            return response()->json([
+                'message' => $needsClient
+                    ? 'This draft needs its client\'s approval before it can be sent or scheduled. Share it on an approval link.'
+                    : 'This draft is waiting for approval. Approve it in creatif.space, or send it for client approval.',
+                'code' => 'approval_required',
+            ], 409);
         }
 
         // A connected app or API key sends only what the user saw in the
