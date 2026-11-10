@@ -29,6 +29,12 @@ return [
     'env' => env('APP_ENV', 'production'),
 
     /*
+    | The deployed commit, sent with error reports. Falls back to the
+    | checkout's .git/HEAD when unset.
+    */
+    'release' => env('APP_RELEASE', env('GIT_SHA')),
+
+    /*
     |--------------------------------------------------------------------------
     | Application Debug Mode
     |--------------------------------------------------------------------------

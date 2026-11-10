@@ -19,7 +19,7 @@ class AnalyticsFake extends Analytics
         return true;
     }
 
-    protected function dispatch(array $message): void
+    protected function dispatch(array $message, bool $afterCommit = true): void
     {
         $this->sent[] = $message;
     }

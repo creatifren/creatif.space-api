@@ -46,6 +46,18 @@ class Analytics
     }
 
     /**
+     * A server-side \$exception for PostHog error tracking. Unlike capture()
+     * it is not held until a transaction commits: the transaction that
+     * failed is usually the one being rolled back.
+     *
+     * @param  array<string, mixed>  $properties
+     */
+    public function captureException(string $distinctId, array $properties): void
+    {
+        $this->dispatch(['type' => 'capture', 'distinct_id' => $distinctId, 'event' => '$exception', 'properties' => $properties], afterCommit: false);
+    }
+
+    /**
      * Person properties ($set).
      *
      * @param  array<string, mixed>  $properties
@@ -83,14 +95,19 @@ class Analytics
     /**
      * @param  array{type: string, distinct_id: string, event?: string, properties: array<string, mixed>}  $message
      */
-    protected function dispatch(array $message): void
+    protected function dispatch(array $message, bool $afterCommit = true): void
     {
         if (! $this->enabled() || $message['distinct_id'] === '') {
             return;
         }
 
         try {
-            SendAnalytics::dispatch($message + ['timestamp' => now()->toIso8601String()])->afterCommit();
+            $job = SendAnalytics::dispatch($message + ['timestamp' => now()->toIso8601String()]);
+            if ($afterCommit) {
+                $job->afterCommit();
+            }
+            // PendingDispatch sends on destruct: do it here, inside the try.
+            unset($job);
         } catch (Throwable $e) {
             // A queue that is down must not take the request with it.
             Log::warning('analytics.dispatch_failed', ['event' => $message['event'] ?? '$set', 'error' => $e->getMessage()]);
