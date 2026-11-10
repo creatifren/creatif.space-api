@@ -80,7 +80,7 @@ class WaitlistController extends Controller
 
     public function confirm(Request $request): RedirectResponse
     {
-        $page = rtrim((string) config('app.public_url'), '/').'/mcp?';
+        $page = rtrim((string) config('app.marketing_url'), '/').'/mcp?';
         $entry = Waitlist::read($request->query('token'));
 
         if ($entry === null) {
