@@ -48,6 +48,10 @@ class SocialPostResource extends JsonResource
                     ],
                     'status' => $target->status,
                     'fail_reason' => $target->fail_reason,
+                    // PublishFailure reason code (needs_video, missing_board, …).
+                    'fail_code' => $target->fail_code,
+                    // Waiting out a platform limit: still pending, retried then.
+                    'retry_at' => $target->retry_at?->toIso8601String(),
                     'platform_url' => $target->platform_url,
                 ],
             )->all()),

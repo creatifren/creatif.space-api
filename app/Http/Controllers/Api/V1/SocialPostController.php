@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Api\V1;
 
+use App\Contracts\SocialProvider;
 use App\Enums\ActivityAction;
 use App\Enums\SocialPostApproval;
 use App\Enums\SocialPostStatus;
@@ -14,10 +15,10 @@ use App\Models\Activity;
 use App\Models\File;
 use App\Models\SocialPost;
 use App\Models\User;
-use App\Contracts\SocialProvider;
 use App\Support\Credits;
 use App\Support\PlanQuota;
 use App\Support\ProductEvents;
+use App\Support\PublishPreflight;
 use App\Support\SendConfirmation;
 use App\Support\SocialPostRelay;
 use App\Support\SocialProviders;
@@ -120,6 +121,13 @@ class SocialPostController extends Controller
             // Per-account caption override: { <account ulid>: "text" }.
             'captions' => ['sometimes', 'array'],
             'captions.*' => ['string', 'max:63206'],
+            // Per-account network options: { <account ulid>: {board_id, title, link} }
+            // — Pinterest's board (required there), Pin title and link.
+            'options' => ['sometimes', 'array'],
+            'options.*' => ['array'],
+            'options.*.board_id' => ['sometimes', 'string', 'max:64'],
+            'options.*.title' => ['sometimes', 'string', 'max:100'],
+            'options.*.link' => ['sometimes', 'url:https,http', 'max:2000'],
             'media' => ['sometimes', 'array', 'max:10'],
             'media.*.url' => ['required', 'url:https'],
             // A video's cover, handed to the platforms that take one.
@@ -174,11 +182,23 @@ class SocialPostController extends Controller
         }
 
         $captions = $validated['captions'] ?? [];
+        $options = array_map(
+            fn ($o) => array_intersect_key((array) $o, array_flip(['board_id', 'title', 'link'])),
+            $validated['options'] ?? [],
+        );
 
         // Monthly Credits first, then Top-up, each destination at its price
         // (X more with a link), checked before anything reaches the
         // provider. Held posts and drafts are checked when they are approved
         // or sent — holding one costs nothing.
+        // Anything that will go out (now, at its slot, or once approved) is
+        // checked against each network's needs before it is paid for. A
+        // draft is only saved; it is checked when it is sent.
+        if (! $draft) {
+            $options = app(SocialPostRelay::class)->withPinterestBoards($accounts, $options);
+            PublishPreflight::check($accounts, $validated['caption'], $captions, $validated['media'] ?? null, $options);
+        }
+
         $destinations = $accounts->map(fn ($a) => [$a->platform, $captions[$a->ulid] ?? $validated['caption']])->all();
         if ($sendsNow && ! PlanQuota::canPostSocial($user, $destinations)) {
             $need = Credits::sendPrice($user, $destinations);
@@ -201,7 +221,7 @@ class SocialPostController extends Controller
             ->map(fn ($a) => SocialPostRelay::configuration(
                 $a->provider_account_id,
                 $a->platform->value,
-                isset($captions[$a->ulid]) ? ['caption' => $captions[$a->ulid]] : null,
+                self::ownConfiguration($a->ulid, $captions, $options),
                 $type,
             ))
             ->filter()
@@ -230,7 +250,7 @@ class SocialPostController extends Controller
         // balance — or a teammate spending the same wallet a moment earlier —
         // refuses here, before anything can go live unpaid. A held post or a
         // draft is only recorded; approving or sending it reaches the provider.
-        $post = DB::transaction(function () use ($user, $ulid, $validated, $accounts, $captions, $scheduledAt, $approval, $draft, $type, $sendsNow) {
+        $post = DB::transaction(function () use ($user, $ulid, $validated, $accounts, $captions, $options, $scheduledAt, $approval, $draft, $type, $sendsNow) {
             $post = $user->socialPosts()->create([
                 'ulid' => $ulid,
                 'caption' => $validated['caption'],
@@ -245,9 +265,7 @@ class SocialPostController extends Controller
             foreach ($accounts as $account) {
                 $post->targets()->create([
                     'social_account_id' => $account->id,
-                    'configuration' => isset($captions[$account->ulid])
-                        ? ['caption' => $captions[$account->ulid]]
-                        : null,
+                    'configuration' => self::ownConfiguration($account->ulid, $captions, $options),
                     'status' => SocialPostTargetStatus::Pending,
                 ]);
             }
@@ -463,6 +481,16 @@ class SocialPostController extends Controller
 
         $destinations = $targets->pluck('destination')->all();
         $price = (int) $targets->sum('credits');
+
+        // What a network would refuse, as preflight will say it at send time.
+        $problems = PublishPreflight::problems(
+            $socialPost->targets->pluck('account'),
+            (string) $socialPost->caption,
+            $socialPost->targets->filter(fn ($t) => isset($t->configuration['caption']))
+                ->mapWithKeys(fn ($t) => [$t->account->ulid => (string) $t->configuration['caption']])->all(),
+            $socialPost->media,
+            $socialPost->targets->mapWithKeys(fn ($t) => [$t->account->ulid => (array) ($t->configuration ?? [])])->all(),
+        );
         $past = Credits::sendPrice($user, $destinations);
 
         return response()->json(['data' => [
@@ -471,6 +499,9 @@ class SocialPostController extends Controller
             'status' => $socialPost->status,
             'scheduled_at' => $socialPost->scheduled_at?->toIso8601String(),
             'targets' => $targets->map(fn ($t) => array_diff_key($t, ['destination' => true]))->values()->all(),
+            // Empty when every network will take it. A Pinterest board that
+            // the account's only board would fill is filled at send time.
+            'problems' => $problems,
             'credits' => [
                 'price' => $price,
                 // What the send takes from Top-up once Monthly Credits are used.
@@ -646,5 +677,23 @@ class SocialPostController extends Controller
         }
 
         return array_map(fn (string $id) => ['url' => $files[$id]->url()], $ids);
+    }
+
+    /**
+     * One account's stored configuration: its caption override and network
+     * options, or null when it has neither.
+     *
+     * @param  array<string, string>  $captions
+     * @param  array<string, array<string, mixed>>  $options
+     * @return array<string, mixed>|null
+     */
+    private static function ownConfiguration(string $ulid, array $captions, array $options): ?array
+    {
+        $config = array_filter(
+            (isset($captions[$ulid]) ? ['caption' => $captions[$ulid]] : []) + ($options[$ulid] ?? []),
+            fn ($v) => $v !== null && $v !== '',
+        );
+
+        return $config === [] ? null : $config;
     }
 }

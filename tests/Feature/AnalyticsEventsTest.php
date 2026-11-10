@@ -322,7 +322,7 @@ describe('post_created', function () {
         $user = aePaidUser();
         $ig = SocialAccount::factory()->for($user)->create(['platform' => 'instagram']);
 
-        $this->actingAs($user)->postJson('/api/v1/social-posts', ['caption' => 'Hi', 'account_ids' => [$ig->ulid]])->assertServerError();
+        $this->actingAs($user)->postJson('/api/v1/social-posts', ['caption' => 'Hi', 'media' => [['url' => 'https://cdn.example.test/photo.jpg']], 'account_ids' => [$ig->ulid]])->assertServerError();
 
         ae()->assertNotCaptured('post_created');
     });
@@ -479,8 +479,11 @@ describe('publishing results', function () {
         aeOutstandHook($payload)->assertOk();
         aeOutstandHook($payload)->assertOk();
 
-        $m = ae()->assertCapturedWithKeys('post_publish_failed', ['post_id', 'network', 'error_code', 'source']);
-        expect($m['properties'])->toBe(['post_id' => $post->ulid, 'network' => 'instagram', 'error_code' => 'auth', 'source' => 'webhook'])
+        $m = ae()->assertCapturedWithKeys('post_publish_failed', ['post_id', 'network', 'error_code', 'reason_code', 'attempts', 'provider', 'source']);
+        expect($m['properties'])->toBe([
+            'post_id' => $post->ulid, 'network' => 'instagram', 'error_code' => 'auth', 'reason_code' => 'auth',
+            'attempts' => 1, 'provider' => 'outstand', 'source' => 'webhook',
+        ])
             ->and(json_encode(ae()->sent))->not->toContain('@studio');
         ae()->assertNotCaptured('post_published');
     });

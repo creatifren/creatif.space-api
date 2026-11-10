@@ -37,7 +37,7 @@ describe('creating posts', function () {
         $ig = SocialAccount::factory()->for($user)->create(['platform' => 'instagram']);
 
         $this->actingAs($user)
-            ->postJson('/api/v1/social-posts', ['caption' => 'Hi', 'account_ids' => [$ig->ulid]])
+            ->postJson('/api/v1/social-posts', ['caption' => 'Hi', 'media' => [['url' => 'https://cdn.example.test/photo.jpg']], 'account_ids' => [$ig->ulid]])
             ->assertServerError();
 
         expect(SocialPost::query()->count())->toBe(0)
@@ -126,6 +126,7 @@ describe('creating posts', function () {
             ->postJson('/api/v1/social-posts', [
                 'caption' => 'Now.',
                 'account_ids' => [$account->ulid],
+                'media' => [['url' => 'https://cdn.example.test/photo.jpg']],
             ])
             ->assertCreated()
             ->assertJsonPath('data.status', 'published');
@@ -193,7 +194,7 @@ describe('credits', function () {
         $account = SocialAccount::factory()->for($user)->create();
 
         $this->actingAs($user)
-            ->postJson('/api/v1/social-posts', ['caption' => 'Broke.', 'account_ids' => [$account->ulid]])
+            ->postJson('/api/v1/social-posts', ['caption' => 'Broke.', 'media' => [['url' => 'https://cdn.example.test/photo.jpg']], 'account_ids' => [$account->ulid]])
             ->assertUnprocessable()
             ->assertJsonValidationErrors('caption');
 
@@ -209,7 +210,7 @@ describe('credits', function () {
         $b = SocialAccount::factory()->for($user)->create();
 
         $this->actingAs($user)
-            ->postJson('/api/v1/social-posts', ['caption' => 'Two.', 'account_ids' => [$a->ulid, $b->ulid]])
+            ->postJson('/api/v1/social-posts', ['caption' => 'Two.', 'media' => [['url' => 'https://cdn.example.test/photo.jpg']], 'account_ids' => [$a->ulid, $b->ulid]])
             ->assertCreated();
         expect(Credits::balance($user))->toBe(2400);
 
@@ -231,7 +232,7 @@ describe('credits', function () {
 
         $id = $this->actingAs($user)
             ->postJson('/api/v1/social-posts', [
-                'caption' => 'Later.', 'account_ids' => [$account->ulid],
+                'caption' => 'Later.', 'account_ids' => [$account->ulid], 'media' => [['url' => 'https://cdn.example.test/photo.jpg']],
                 'scheduled_at' => now()->addDay()->toIso8601String(),
             ])->json('data.id');
         expect(Credits::balance($user))->toBe(29_700);
@@ -247,7 +248,7 @@ describe('credits', function () {
 
         foreach ([['approval' => 'awaiting'], ['draft' => true]] as $extra) {
             $this->actingAs($user)
-                ->postJson('/api/v1/social-posts', ['caption' => 'Free to hold.', 'account_ids' => [$account->ulid]] + $extra)
+                ->postJson('/api/v1/social-posts', ['caption' => 'Free to hold.', 'media' => [['url' => 'https://cdn.example.test/photo.jpg']], 'account_ids' => [$account->ulid]] + $extra)
                 ->assertCreated();
         }
 
@@ -409,7 +410,7 @@ describe('drafts', function () {
         $account = SocialAccount::factory()->for($user)->create();
 
         $id = $this->actingAs($user)
-            ->postJson('/api/v1/social-posts', ['caption' => 'Later.', 'account_ids' => [$account->ulid], 'draft' => true])
+            ->postJson('/api/v1/social-posts', ['caption' => 'Later.', 'media' => [['url' => 'https://cdn.example.test/photo.jpg']], 'account_ids' => [$account->ulid], 'draft' => true])
             ->assertCreated()
             ->assertJsonPath('data.status', 'draft')
             ->json('data.id');

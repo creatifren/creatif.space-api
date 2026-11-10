@@ -247,4 +247,14 @@ interface SocialProvider
      * @throws ConnectionException
      */
     public function replyToComment(string $postId, string $commentId, string $content, string $accountUsername): array;
+
+    /**
+     * A Pinterest account's boards — a Pin needs one. Empty where the relay
+     * cannot list them.
+     *
+     * @return list<array{id: string, name: string}>
+     *
+     * @throws ConnectionException
+     */
+    public function pinterestBoards(string $accountId): array;
 }

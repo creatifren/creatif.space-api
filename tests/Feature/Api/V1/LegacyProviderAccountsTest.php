@@ -169,7 +169,7 @@ describe('sending', function () {
         $ok = currentRow($user);
 
         $this->actingAs($user)
-            ->postJson('/api/v1/social-posts', ['caption' => 'Hi', 'account_ids' => [$ok->ulid]])
+            ->postJson('/api/v1/social-posts', ['caption' => 'Hi', 'media' => [['url' => 'https://cdn.example.test/photo.jpg']], 'account_ids' => [$ok->ulid]])
             ->assertCreated();
     });
 
@@ -344,7 +344,7 @@ describe('reconnecting', function () {
 
         // And the new row posts.
         $this->actingAs($user)
-            ->postJson('/api/v1/social-posts', ['caption' => 'Back', 'account_ids' => [$new->ulid]])
+            ->postJson('/api/v1/social-posts', ['caption' => 'Back', 'media' => [['url' => 'https://cdn.example.test/photo.jpg']], 'account_ids' => [$new->ulid]])
             ->assertCreated();
     });
 });

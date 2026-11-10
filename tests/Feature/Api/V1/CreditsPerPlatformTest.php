@@ -46,6 +46,7 @@ it('charges X its own price and gives back exactly what was paid', function () {
         ->postJson('/api/v1/social-posts', [
             'caption' => 'Both.',
             'account_ids' => [$ig->ulid, $x->ulid],
+            'media' => [['url' => 'https://cdn.example.test/photo.jpg']],
             'scheduled_at' => now()->addDay()->toIso8601String(),
         ])
         ->assertCreated();

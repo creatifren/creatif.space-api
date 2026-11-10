@@ -444,7 +444,7 @@ describe('posting', function () {
         $ig = outstandAccount($user);
 
         $this->actingAs($user)
-            ->postJson('/api/v1/social-posts', ['caption' => 'Hi', 'account_ids' => [$ig->ulid]])
+            ->postJson('/api/v1/social-posts', ['caption' => 'Hi', 'media' => [['url' => 'https://cdn.example.test/photo.jpg']], 'account_ids' => [$ig->ulid]])
             ->assertServerError();
 
         expect(SocialPost::query()->count())->toBe(0)
@@ -584,7 +584,10 @@ describe('the outstand webhook', function () {
         outstandHook($this, $payload)->assertOk();
 
         expect($post->fresh()->status->value)->toBe('failed')
-            ->and($post->targets()->first()->fail_reason)->toBe('Access token has expired')
+            // A reason a person can act on; the platform's words stay server-side.
+            ->and($post->targets()->first()->fail_reason)->toBe('Instagram needs you to reconnect this account in Creatif Space → Channels.')
+            ->and($post->targets()->first()->fail_code)->toBe('auth')
+            ->and($post->targets()->first()->provider_error)->toBe('Access token has expired')
             ->and(Credits::balance($user))->toBe(30_000);
     });
 

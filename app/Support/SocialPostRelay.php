@@ -8,6 +8,7 @@ use App\Enums\SocialPostStatus;
 use App\Enums\SocialPostTargetStatus;
 use App\Exceptions\AccountReconnectRequired;
 use App\Exceptions\NotEnoughCredits;
+use App\Exceptions\PublishPreflightFailed;
 use App\Models\SocialAccount;
 use App\Models\SocialPost;
 use App\Models\SocialPostTarget;
@@ -112,6 +113,9 @@ class SocialPostRelay
         // this one: named, before anything is charged.
         self::ensureUsable($post);
 
+        // What a network would refuse is named now, not after the charge.
+        $this->preflight($post);
+
         // Refuse before the provider, not after: a short balance must not
         // leave a post live on the platform that was never paid for.
         $need = Credits::sendPrice($post->user, self::destinations($post));
@@ -139,6 +143,67 @@ class SocialPostRelay
                 ? SocialPostStatus::Published
                 : SocialPostStatus::Scheduled,
         ]);
+    }
+
+    /**
+     * Check a stored post against each network's requirements, filling a
+     * Pinterest board in first where the account has exactly one.
+     *
+     * @throws PublishPreflightFailed
+     */
+    public function preflight(SocialPost $post): void
+    {
+        $targets = $post->targets()->with('account')->orderBy('id')->get();
+        $accounts = $targets->pluck('account')->filter();
+
+        $options = [];
+        $captions = [];
+        foreach ($targets as $t) {
+            $options[$t->account->ulid] = (array) ($t->configuration ?? []);
+            if (isset($t->configuration['caption'])) {
+                $captions[$t->account->ulid] = (string) $t->configuration['caption'];
+            }
+        }
+
+        $resolved = $this->withPinterestBoards($accounts, $options);
+        foreach ($targets as $t) {
+            $board = $resolved[$t->account->ulid]['board_id'] ?? null;
+            if ($board !== null && ($options[$t->account->ulid]['board_id'] ?? null) !== $board) {
+                $t->update(['configuration' => [...(array) ($t->configuration ?? []), 'board_id' => $board]]);
+            }
+        }
+
+        PublishPreflight::check($accounts, (string) $post->caption, $captions, $post->media, $resolved);
+    }
+
+    /**
+     * A Pinterest account with no board chosen gets its only board, when it
+     * has exactly one. With several, the person picks (preflight says so);
+     * a relay that cannot list boards leaves it to preflight too.
+     *
+     * @param  iterable<SocialAccount>  $accounts
+     * @param  array<string, array<string, mixed>>  $options  by account ulid
+     * @return array<string, array<string, mixed>>
+     */
+    public function withPinterestBoards(iterable $accounts, array $options): array
+    {
+        foreach ($accounts as $account) {
+            if ($account->platform !== SocialPlatform::Pinterest || ! empty($options[$account->ulid]['board_id'])) {
+                continue;
+            }
+
+            try {
+                $boards = $this->providers->named((string) $account->provider)->pinterestBoards($account->provider_account_id);
+            } catch (Throwable) {
+                continue;
+            }
+
+            if (count($boards) === 1) {
+                $options[$account->ulid] = [...($options[$account->ulid] ?? []), 'board_id' => $boards[0]['id']];
+            }
+        }
+
+        return $options;
     }
 
     /**
@@ -269,42 +334,169 @@ class SocialPostRelay
             return;
         }
 
-        DB::transaction(function () use ($post, $target, $data, $source): void {
+        DB::transaction(function () use ($post, $account, $target, $data, $source): void {
             $target = SocialPostTarget::query()->whereKey($target->id)->lockForUpdate()->firstOrFail();
-            $before = $target->status;
-            $success = (bool) ($data['success'] ?? false);
 
-            // The vendor refused it: nothing left our hands, so its publish
-            // comes back — once, on the first failed result for this target.
-            if (! $success && $target->status === SocialPostTargetStatus::Pending) {
-                Credits::returnSend($post, [$target], 'Not charged · '.Str::limit(
-                    is_string($data['error'] ?? null) ? $data['error'] : 'the platform refused it', 120,
-                ));
+            // Once a destination was retried, only the retry's result speaks
+            // for it: a redelivered result of the earlier attempt is history.
+            $resultPost = (string) ($data['post_id'] ?? '');
+            if ($target->retry_provider_post_id !== null && $resultPost !== '' && $resultPost !== $target->retry_provider_post_id) {
+                return;
             }
 
-            $target->update($success
-                ? [
+            $before = $target->status;
+            $success = (bool) ($data['success'] ?? false);
+            $raw = self::rawError($data['error'] ?? null);
+            $network = $account->platform->value;
+
+            if ($success) {
+                $target->update([
                     'status' => SocialPostTargetStatus::Published,
                     'fail_reason' => null,
+                    'fail_code' => null,
+                    'retry_at' => null,
                     'platform_url' => ProviderFields::url($data['platform_data']['url']
                         ?? $data['details']['url']
                         ?? null),
                     'provider_result_id' => $data['id'] ?? null,
-                ]
-                : [
+                ]);
+            } else {
+                $failure = PublishFailure::classify($raw, $network);
+
+                // A limit, not a verdict: try again later instead of failing.
+                // Still Pending, still paid for, no failure event yet.
+                if ($before === SocialPostTargetStatus::Pending && self::willRetry($post, $target, $failure['reason_code'])) {
+                    $target->update([
+                        'fail_code' => $failure['reason_code'],
+                        'provider_error' => $raw,
+                        'retry_at' => self::retryAt($failure['reason_code'], $target->attempts, $raw),
+                        'provider_result_id' => $data['id'] ?? null,
+                    ]);
+
+                    return;
+                }
+
+                // The vendor refused it: nothing left our hands, so its publish
+                // comes back — once, on the first failed result for this target.
+                if ($before === SocialPostTargetStatus::Pending) {
+                    Credits::returnSend($post, [$target], 'Not charged · '.Str::limit($failure['reason'], 120));
+                }
+
+                $target->update([
                     'status' => SocialPostTargetStatus::Failed,
-                    'fail_reason' => is_string($data['error'] ?? null)
-                        ? $data['error']
-                        : json_encode($data['error'] ?? 'Unknown error'),
+                    'fail_reason' => $failure['reason'],
+                    'fail_code' => $failure['reason_code'],
+                    'provider_error' => $raw,
+                    'retry_at' => null,
                     'provider_result_id' => $data['id'] ?? null,
                 ]);
+            }
 
             $post->recomputeFromTargets();
 
             if (self::countsAsNews($post, $target, $data)) {
-                ProductEvents::publishResult($post, $target, $before, is_string($data['error'] ?? null) ? $data['error'] : null, $source);
+                ProductEvents::publishResult($post, $target, $before, $raw, $source);
             }
         });
+    }
+
+    /** Most retries a destination gets after its first attempt. */
+    public const MAX_RETRIES = 3;
+
+    /** Minutes to wait before retry n (0-based), by reason. */
+    private const BACKOFF = [
+        'rate_limited' => [2, 10, 30],
+        'platform_unavailable' => [2, 10, 30],
+        'quota_exceeded' => [60, 180, 360],
+    ];
+
+    /**
+     * Retries are for the current relay only: a result of a legacy relay
+     * cannot be re-sent through it.
+     */
+    private static function willRetry(SocialPost $post, SocialPostTarget $target, string $reasonCode): bool
+    {
+        return PublishFailure::retryable($reasonCode)
+            && $target->attempts < self::MAX_RETRIES
+            && $post->provider === (string) config('services.social.provider');
+    }
+
+    /**
+     * Backoff by attempt, or the platform's own retryAt when it names one
+     * (YouTube's shared quota: "[youtube_upload_error:daily_limit_reached;
+     * retryAt=2026-10-07T07:00:00.000Z]") — whichever is later.
+     */
+    public static function retryAt(string $reasonCode, int $attempts, ?string $raw): CarbonImmutable
+    {
+        $steps = self::BACKOFF[$reasonCode] ?? self::BACKOFF['rate_limited'];
+        $at = CarbonImmutable::now()->addMinutes($steps[min($attempts, count($steps) - 1)]);
+
+        if ($raw !== null && preg_match('/retryAt=([0-9T:\.\-]+Z)/', $raw, $m) === 1) {
+            try {
+                // In the app's zone: a datetime column stores wall-clock time.
+                $named = CarbonImmutable::parse($m[1])->setTimezone((string) config('app.timezone'));
+                if ($named->greaterThan($at) && $named->lessThan(CarbonImmutable::now()->addDays(2))) {
+                    $at = $named;
+                }
+            } catch (Throwable) {
+                // Unparseable: the backoff stands.
+            }
+        }
+
+        return $at;
+    }
+
+    private static function rawError(mixed $error): ?string
+    {
+        return match (true) {
+            is_string($error) && $error !== '' => $error,
+            $error === null || $error === '' => null,
+            default => (string) json_encode($error),
+        };
+    }
+
+    /**
+     * Send one destination again on its own — a rate-limited one whose
+     * wait is over. A new provider post with just this account; its result
+     * arrives like any other and is matched by retry_provider_post_id.
+     *
+     * @throws Throwable when the provider refuses the create
+     */
+    public function retryTarget(SocialPostTarget $target): void
+    {
+        $post = $target->post()->with('user')->firstOrFail();
+        $account = $target->account()->firstOrFail();
+
+        if (! $account->isUsable()) {
+            self::applyResult($post, $account, [
+                'success' => false,
+                'error' => 'Account needs to reconnect',
+                'post_id' => $target->retry_provider_post_id,
+            ], 'job');
+
+            return;
+        }
+
+        $payload = $this->payload($post);
+        $payload['social_accounts'] = [$account->provider_account_id];
+        $payload['external_id'] = $post->ulid.'-r'.$target->id.'-'.($target->attempts + 1);
+        if (isset($payload['account_configurations'])) {
+            $payload['account_configurations'] = array_values(array_filter(
+                $payload['account_configurations'],
+                fn ($c) => ($c['social_account_id'] ?? null) === $account->provider_account_id,
+            ));
+            if ($payload['account_configurations'] === []) {
+                unset($payload['account_configurations']);
+            }
+        }
+
+        $remote = $this->providers->for($post)->createPost($payload);
+
+        $target->update([
+            'attempts' => $target->attempts + 1,
+            'retry_at' => null,
+            'retry_provider_post_id' => (string) $remote['id'],
+        ]);
     }
 
     /**
@@ -358,14 +550,22 @@ class SocialPostRelay
         // Each relay is asked about its own posts; one being down leaves
         // the other's to settle.
         foreach ($overdue->groupBy('provider') as $provider => $posts) {
+            // A destination being retried has its own provider post.
+            $byProviderId = $posts->keyBy('provider_post_id');
+            foreach ($posts as $p) {
+                foreach ($p->targets as $t) {
+                    if ($t->retry_provider_post_id !== null && $t->status === SocialPostTargetStatus::Pending) {
+                        $byProviderId->put($t->retry_provider_post_id, $p);
+                    }
+                }
+            }
+
             try {
                 $results = $this->providers->named((string) $provider)
-                    ->resultsFor($posts->pluck('provider_post_id')->values()->all());
+                    ->resultsFor($byProviderId->keys()->map(fn ($k) => (string) $k)->values()->all());
             } catch (Throwable) {
                 continue;
             }
-
-            $byProviderId = $posts->keyBy('provider_post_id');
 
             foreach ($results as $result) {
                 $post = $byProviderId->get((string) ($result['post_id'] ?? ''));

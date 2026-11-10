@@ -55,6 +55,7 @@ it('holds a post that needs approval and sends nothing', function () {
         ->postJson('/api/v1/social-posts', [
             'caption' => 'Wait for me.',
             'account_ids' => [$account->ulid],
+            'media' => [['url' => 'https://cdn.example.test/photo.jpg']],
             'approval' => 'awaiting',
         ])
         ->assertCreated()

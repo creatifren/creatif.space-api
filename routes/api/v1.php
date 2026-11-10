@@ -19,6 +19,7 @@ use App\Http\Controllers\Api\V1\MeController;
 use App\Http\Controllers\Api\V1\MyProfileController;
 use App\Http\Controllers\Api\V1\NotificationController;
 use App\Http\Controllers\Api\V1\OutstandConnectController;
+use App\Http\Controllers\Api\V1\PinterestBoardController;
 use App\Http\Controllers\Api\V1\ProfileFontController;
 use App\Http\Controllers\Api\V1\PublicApprovalController;
 use App\Http\Controllers\Api\V1\PublicProfileController;
@@ -223,6 +224,9 @@ Route::middleware(['auth:sanctum,mcp', EnforceTokenScope::class])->group(functio
     Route::get('/social-accounts/{socialAccount}/feed', [SocialFeedController::class, 'show'])
         ->middleware('throttle:60,1')
         ->name('api.v1.social-accounts.feed');
+    Route::get('/social-accounts/{socialAccount}/pinterest-boards', PinterestBoardController::class)
+        ->middleware('throttle:30,1')
+        ->name('api.v1.social-accounts.pinterest-boards');
     Route::delete('/social-accounts/{socialAccount}', [SocialAccountController::class, 'destroy'])->name('api.v1.social-accounts.destroy');
 
     // Social — posts relayed to the platforms

@@ -242,10 +242,15 @@ final class ProductEvents
             return;
         }
 
+        $failure = PublishFailure::classify($error, $network);
+
         self::analytics()->capture($post->user->ulid, 'post_publish_failed', [
             'post_id' => $post->ulid,
             'network' => $network,
-            'error_code' => self::errorCode($error),
+            'error_code' => $failure['error_code'],
+            'reason_code' => $failure['reason_code'],
+            'attempts' => (int) $target->attempts + 1,
+            'provider' => $post->provider,
             'source' => $source,
         ]);
     }
@@ -256,22 +261,7 @@ final class ProductEvents
      */
     public static function errorCode(?string $error): string
     {
-        $e = strtolower((string) $error);
-
-        return match (true) {
-            $e === '' => 'unknown',
-            str_contains($e, 'rate') || str_contains($e, 'too many') || str_contains($e, 'limit reached') => 'rate_limited',
-            str_contains($e, 'token') || str_contains($e, 'expired') || str_contains($e, 'unauthori')
-                || str_contains($e, 'permission') || str_contains($e, 'reconnect') || str_contains($e, 'auth') => 'auth',
-            str_contains($e, 'duplicate') => 'duplicate',
-            str_contains($e, 'media') || str_contains($e, 'video') || str_contains($e, 'image')
-                || str_contains($e, 'aspect') || str_contains($e, 'format') || str_contains($e, 'file') => 'media',
-            str_contains($e, 'caption') || str_contains($e, 'character') || str_contains($e, 'length')
-                || str_contains($e, 'too long') || str_contains($e, 'text') => 'content',
-            str_contains($e, 'timeout') || str_contains($e, 'timed out') || str_contains($e, 'unavailable')
-                || str_contains($e, 'server error') => 'platform_unavailable',
-            default => 'other',
-        };
+        return PublishFailure::classify($error)['error_code'];
     }
 
     /**
