@@ -196,7 +196,7 @@ class OutstandConnectController extends Controller
         if ($ids !== [] && $heldElsewhere === count(array_unique($ids))) {
             Log::info('social.connect_return', $log + ['outcome' => 'already_connected_elsewhere']);
 
-            return self::failed($network, 'already_connected_elsewhere');
+            return self::failed($network, 'already_connected_elsewhere', self::claimable($remote, $network));
         }
 
         $accounts->syncFor($user, $outstand, $remote);
@@ -229,7 +229,7 @@ class OutstandConnectController extends Controller
      * Never `social=connected` (that reads as a success to older code):
      * `social=failed`, alongside `isSuccess=false` and the message.
      */
-    private static function failed(?string $network, string $reason): string
+    private static function failed(?string $network, string $reason, ?string $accountId = null): string
     {
         return self::page([
             'social' => 'failed',
@@ -239,7 +239,36 @@ class OutstandConnectController extends Controller
             'connect' => 'failed',
             'network' => $network,
             'reason' => $reason,
+            // "Move it here": what POST /social-accounts/claim takes. The
+            // provider's own id for the account this user just signed in to
+            // — never another user's id or email; the claim proves ownership
+            // with a fresh sign-in, so naming it decides nothing.
+            'account_id' => $reason === 'already_connected_elsewhere' ? $accountId : null,
         ]);
+    }
+
+    /**
+     * The account to offer for "Move it here": the one on the network being
+     * connected (else the first), by the provider's id.
+     *
+     * @param  array<int, array<string, mixed>>  $remote
+     */
+    private static function claimable(array $remote, ?string $network): ?string
+    {
+        $pick = null;
+        foreach ($remote as $account) {
+            $id = (string) ($account['id'] ?? '');
+            if ($id === '') {
+                continue;
+            }
+            $pick ??= $id;
+            $platform = (string) ($account['network'] ?? $account['platform'] ?? '');
+            if ($network !== null && $platform === $network) {
+                return $id;
+            }
+        }
+
+        return $pick;
     }
 
     /** The network being connected: sealed with the state, else as Outstand names it. */

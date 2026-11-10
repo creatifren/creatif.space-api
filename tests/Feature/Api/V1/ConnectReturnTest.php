@@ -226,3 +226,48 @@ it('keeps success unchanged: social=connected, connect=success', function () {
     $this->get(returnUrl(OutstandService::seal($user->ulid, 'instagram')))
         ->assertRedirect('https://app.test/social/connect?social=connected&count=1&connect=success&network=instagram');
 });
+
+describe('already_connected_elsewhere carries what "Move it here" needs', function () {
+    it('names the network account to claim by the provider\'s id, never the other user', function (string $network) {
+        $other = User::factory()->create(['email' => 'owner@example.com']);
+        SocialAccount::factory()->for($other)->create(['platform' => $network, 'provider' => 'outstand', 'provider_account_id' => 'acc_'.$network]);
+        $user = User::factory()->create();
+        Http::fake(['api.outstand.test/v1/social-accounts*' => Http::response(['success' => true, 'data' => [
+            ['id' => 'acc_'.$network, 'network' => $network, 'username' => 'studio', 'tenant_id' => $user->ulid, 'isActive' => 1],
+        ], 'count' => 1, 'total' => 1])]);
+
+        $response = $this->get(returnUrl(OutstandService::seal($user->ulid, $network)));
+        $q = connectReturn($response);
+        $location = (string) $response->headers->get('Location');
+
+        expect($q)->toMatchArray([
+            'connect' => 'failed', 'reason' => 'already_connected_elsewhere', 'code' => 'already_connected_elsewhere',
+            'network' => $network, 'account_id' => 'acc_'.$network, 'social' => 'failed',
+        ])->and($location)->not->toContain($other->ulid)
+            ->and($location)->not->toContain(urlencode('owner@example.com'))
+            ->and($location)->not->toContain('owner@example.com');
+    })->with(OAUTH_NETWORKS);
+
+    it('offers the account on the network being connected when several are held elsewhere', function () {
+        $other = User::factory()->create();
+        foreach (['facebook' => 'acc_fb', 'instagram' => 'acc_ig'] as $platform => $id) {
+            SocialAccount::factory()->for($other)->create(['platform' => $platform, 'provider' => 'outstand', 'provider_account_id' => $id]);
+        }
+        $user = User::factory()->create();
+        Http::fake(['api.outstand.test/v1/social-accounts*' => Http::response(['success' => true, 'data' => [
+            ['id' => 'acc_fb', 'network' => 'facebook', 'username' => 'a', 'tenant_id' => $user->ulid, 'isActive' => 1],
+            ['id' => 'acc_ig', 'network' => 'instagram', 'username' => 'b', 'tenant_id' => $user->ulid, 'isActive' => 1],
+        ], 'count' => 2, 'total' => 2])]);
+
+        expect(connectReturn($this->get(returnUrl(OutstandService::seal($user->ulid, 'instagram')))))
+            ->toMatchArray(['reason' => 'already_connected_elsewhere', 'account_id' => 'acc_ig']);
+    });
+
+    it('sends no account_id on any other failure', function () {
+        Http::fake();
+        $user = User::factory()->create();
+
+        expect(connectReturn($this->get(returnUrl(OutstandService::seal($user->ulid, 'instagram'), ['error' => 'access_denied']))))
+            ->not->toHaveKey('account_id');
+    });
+});

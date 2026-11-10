@@ -312,10 +312,13 @@ describe('connecting', function () {
             'connect' => 'failed', 'reason' => 'already_connected_elsewhere',
         ]);
 
-        $this->get('/api/v1/webhooks/outstand?state='.urlencode(OutstandService::seal($user->ulid)))->assertRedirect($elsewhere);
+        // The claimable account rides along for "Move it here": the
+        // provider's id, never the other user's ulid or email.
+        $this->get('/api/v1/webhooks/outstand?state='.urlencode(OutstandService::seal($user->ulid)))
+            ->assertRedirect($elsewhere.'&account_id=k7gqh');
         expect($user->socialAccounts()->count())->toBe(0);
 
-        // Or when Outstand says so itself.
+        // Or when Outstand says so itself (no account is named then).
         $this->get('/api/v1/webhooks/outstand?state='.urlencode(OutstandService::seal($user->ulid))
             .'&error='.urlencode('Account is already connected to another tenant'))->assertRedirect($elsewhere);
     });
