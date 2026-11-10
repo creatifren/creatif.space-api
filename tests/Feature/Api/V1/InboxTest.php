@@ -622,9 +622,10 @@ describe('summary and settings', function () {
 
         Http::fake([INBOX_API.'/social-networks/instagram/auth-url' => Http::response(['data' => ['auth_url' => 'https://outstand.test/o']])]);
         $this->postJson('/api/v1/social-accounts/auth-url', ['platform' => 'instagram'])->assertOk();
-        Http::assertSent(fn (HttpRequest $r) => $r['scopes'] === [
-            'instagram_business_basic', 'instagram_business_content_publish', 'instagram_business_manage_messages',
-        ]);
+        // A comma-separated string, as Outstand's schema has it: an array is
+        // refused with a 400 (the 9 Nov prod failure).
+        Http::assertSent(fn (HttpRequest $r) => $r['scopes']
+            === 'instagram_business_basic,instagram_business_content_publish,instagram_business_manage_messages');
 
         Http::fake([INBOX_API.'/social-accounts*' => Http::response(['data' => [
             ['id' => 'acc_old', 'network' => 'instagram', 'username' => 'studio', 'tenant_id' => $user->ulid, 'isActive' => 1],
