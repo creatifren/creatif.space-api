@@ -129,6 +129,17 @@ describe('the scope fence', function () {
         $this->actingAs(User::factory()->create(), 'web')->getJson('/api/v1/spaces')->assertOk();
     });
 
+    it('never needs Passport\'s key for guests, cookies or API keys', function () {
+        config(['passport.public_key' => 'not-a-key', 'passport.private_key' => 'not-a-key']);
+        $user = User::factory()->create();
+        $key = apiKeyFor($this, $user, ['read']);
+
+        $this->getJson('/api/v1/me')->assertUnauthorized();
+        bearer($this, $key)->getJson('/api/v1/me')->assertOk();
+        // A JWT cannot be checked without the key: refused, not a 500.
+        bearer($this, 'eyJ0eXAiOiJKV1QifQ.eyJqdGkiOiJ4In0.sig')->getJson('/api/v1/me')->assertUnauthorized();
+    });
+
     it('answers 401 for an unknown bearer', function () {
         bearer($this, 'cs_live_'.str_repeat('a', 48))->getJson('/api/v1/me')->assertUnauthorized();
         bearer($this, 'not-a-token')->getJson('/api/v1/me')->assertUnauthorized();

@@ -6,11 +6,13 @@ use App\Enums\UserStatus;
 use App\Models\User;
 use GuzzleHttp\Psr7\ServerRequest;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Log;
 use Laravel\Passport\Client;
 use Laravel\Passport\Token;
 use Laravel\Sanctum\PersonalAccessToken;
 use League\OAuth2\Server\Exception\OAuthServerException;
 use League\OAuth2\Server\ResourceServer;
+use LogicException;
 
 /**
  * Turns a bearer token into a TokenContext, or null.
@@ -26,7 +28,15 @@ use League\OAuth2\Server\ResourceServer;
  */
 class McpTokenResolver
 {
-    public function __construct(private readonly ResourceServer $server) {}
+    /**
+     * The resource server is resolved only for a JWT: building it reads
+     * Passport's key, and requests without a bearer (or with an API key)
+     * must never depend on that key being present.
+     */
+    private function server(): ResourceServer
+    {
+        return app(ResourceServer::class);
+    }
 
     public function fromRequest(Request $request): ?TokenContext
     {
@@ -89,8 +99,15 @@ class McpTokenResolver
 
         try {
             // Signature, expiry, not-before and the revoked flag.
-            $psr = $this->server->validateAuthenticatedRequest($psr);
+            $psr = $this->server()->validateAuthenticatedRequest($psr);
         } catch (OAuthServerException) {
+            return null;
+        } catch (LogicException $e) {
+            // Passport's key missing or unreadable: a deploy problem, not the
+            // caller's. Logged, not report()ed — error tracking asks the
+            // guard for the user, which would land back here.
+            Log::error('mcp.passport_key_unusable', ['error' => $e->getMessage()]);
+
             return null;
         }
 
