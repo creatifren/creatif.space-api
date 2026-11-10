@@ -154,6 +154,30 @@ function confirmedUrl(string $email): string
     return 'https://creatif.space/mcp?waitlist=confirmed&code='.Waitlist::refCode($email);
 }
 
+it('takes first-touch UTMs nested (marketing form), top-level as a fallback, into the link and PostHog', function () {
+    $store = fakeResend();
+    joinWaitlist($this, [
+        'email' => 'u@example.com',
+        'utm' => ['source' => 'x', 'medium' => 'social', 'campaign' => 'mcp-launch', 'term' => null, 'content' => 'hero'],
+        'utm_source' => 'ignored-when-nested', 'utm_term' => 'fallback-term',
+    ])->assertStatus(202);
+    $token = urldecode(Str::after(confirmUrlFor('u@example.com'), 'token='));
+
+    expect(Waitlist::read($token)['utm'])->toBe([
+        'utm_source' => 'x', 'utm_medium' => 'social', 'utm_campaign' => 'mcp-launch',
+        'utm_term' => 'fallback-term', 'utm_content' => 'hero',
+    ]);
+
+    $this->get('/api/v1/waitlist/confirm?token='.urlencode($token))->assertRedirect(confirmedUrl('u@example.com'));
+    expect($this->analytics->captured('waitlist_joined')[0]['properties'])->toMatchArray([
+        'utm_source' => 'x', 'utm_medium' => 'social', 'utm_campaign' => 'mcp-launch', 'utm_term' => 'fallback-term', 'utm_content' => 'hero',
+    ]);
+
+    joinWaitlist($this, ['email' => 'v@example.com', 'utm' => ['source' => str_repeat('a', 101)]])->assertUnprocessable();
+    joinWaitlist($this, ['email' => 'v@example.com', 'utm' => ['medium' => ['nested']]])->assertUnprocessable();
+    joinWaitlist($this, ['email' => 'v@example.com', 'utm' => 'not-an-object'])->assertUnprocessable();
+});
+
 it('carries a valid ref from the form into the confirm link', function () {
     joinWaitlist($this, ['email' => 'b@example.com', 'ref' => 'AbCd_12-'])->assertStatus(202);
     $token = Str::after(confirmUrlFor('b@example.com'), 'token=');

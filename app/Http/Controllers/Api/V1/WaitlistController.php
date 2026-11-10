@@ -24,6 +24,29 @@ class WaitlistController extends Controller
     /** Confirmation emails per address per day. */
     private const PER_EMAIL_DAY = 3;
 
+    private const UTM_KEYS = ['source', 'medium', 'campaign', 'term', 'content'];
+
+    /**
+     * utm_* by key: the nested `utm` object first, top-level utm_* where it
+     * has none.
+     *
+     * @param  array<string, mixed>  $validated
+     * @return array<string, string>
+     */
+    private static function utm(array $validated): array
+    {
+        $nested = is_array($validated['utm'] ?? null) ? $validated['utm'] : [];
+        $out = [];
+        foreach (self::UTM_KEYS as $k) {
+            $value = $nested[$k] ?? $validated["utm_{$k}"] ?? null;
+            if (is_string($value) && trim($value) !== '') {
+                $out["utm_{$k}"] = trim($value);
+            }
+        }
+
+        return $out;
+    }
+
     public function join(Request $request): JsonResponse
     {
         // The honeypot: a field people never see. Filled → a bot; say nothing.
@@ -35,12 +58,19 @@ class WaitlistController extends Controller
             'email' => ['required', 'string', 'email:rfc', 'max:254'],
             'list' => ['required', 'string', Rule::in(Waitlist::LISTS)],
             'ref' => ['nullable', 'string', 'regex:'.Waitlist::REF_PATTERN],
+            // First-touch UTMs: the marketing form sends them nested
+            // (utm.source …); top-level utm_* stays as a fallback.
+            'utm' => ['nullable', 'array'],
+            ...collect(self::UTM_KEYS)->flatMap(fn (string $k) => [
+                "utm.{$k}" => ['nullable', 'string', 'max:100'],
+                "utm_{$k}" => ['nullable', 'string', 'max:100'],
+            ])->all(),
         ]);
         $email = Str::lower(trim($validated['email']));
 
         if (RateLimiter::attempt('waitlist-email:'.sha1($email), self::PER_EMAIL_DAY, fn () => true, 86400)) {
             $url = route('api.v1.waitlist.confirm', [
-                'token' => Waitlist::token($email, $validated['list'], ProductEvents::utmFrom($request), $validated['ref'] ?? null),
+                'token' => Waitlist::token($email, $validated['list'], self::utm($validated), $validated['ref'] ?? null),
             ]);
             Notification::route('mail', $email)->notify(new WaitlistConfirm($url));
         }

@@ -77,7 +77,8 @@ final class ProductEvents
      */
     public static function waitlistJoined(string $email, string $list, bool $referred, bool $refCodePresent, array $utm = []): void
     {
-        $extra = array_filter(array_intersect_key($utm, array_flip(self::UTM)), fn (string $v) => $v !== '');
+        $keys = [...self::UTM, 'utm_term', 'utm_content'];
+        $extra = array_filter(array_intersect_key($utm, array_flip($keys)), fn (string $v) => $v !== '');
 
         self::analytics()->capture(hash('sha256', strtolower($email)), 'waitlist_joined', [
             'list' => $list,
