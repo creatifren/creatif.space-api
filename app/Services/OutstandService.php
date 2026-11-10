@@ -860,6 +860,64 @@ class OutstandService implements SocialProvider
         return array_filter((array) ($row['metrics'] ?? []), fn ($v) => $v !== null);
     }
 
+    /**
+     * GET /social-accounts/{id}/metrics → followers_count. Every network is
+     * mapped into that one field (YouTube subscribers included); where the
+     * unified field is null, the raw insight is read when it is there
+     * (Threads reports it only as a followers_count insight). A failed
+     * call throws: the caller keeps the last count.
+     *
+     * @throws ConnectionException
+     * @throws RequestException
+     */
+    public function followersCount(string $accountId): ?int
+    {
+        $response = $this->client(retry: false)->timeout(10)
+            ->get('/social-accounts/'.rawurlencode($accountId).'/metrics');
+
+        if ($response->status() === 404) {
+            return null;
+        }
+        $response->throw();
+
+        return self::followersFrom((array) $response->json());
+    }
+
+    /**
+     * @param  array<string, mixed>  $body
+     */
+    public static function followersFrom(array $body): ?int
+    {
+        $m = (array) ($body['data'] ?? $body['metrics'] ?? []);
+        $p = (array) ($m['platform_specific'] ?? []);
+
+        $candidates = [
+            $m['followers_count'] ?? null,
+            $p['followers_count'] ?? null,
+            $p['follower_count'] ?? null,
+            $p['fan_count'] ?? null,
+            $p['subscriberCount'] ?? null,
+            $p['statistics']['subscriberCount'] ?? null,
+        ];
+        foreach ((array) ($p['data'] ?? []) as $insight) {
+            if (is_array($insight) && ($insight['name'] ?? null) === 'followers_count') {
+                $candidates[] = $insight['total_value']['value'] ?? null;
+            }
+        }
+
+        foreach ($candidates as $value) {
+            // YouTube sends counts as numeric strings.
+            if ((is_int($value) || (is_string($value) && ctype_digit($value))) && (int) $value >= 0) {
+                return (int) $value;
+            }
+            if (is_float($value) && $value >= 0) {
+                return (int) $value;
+            }
+        }
+
+        return null;
+    }
+
     /** Outstand wants a filename with an extension for each file. */
     private static function filename(string $url, int $i): string
     {

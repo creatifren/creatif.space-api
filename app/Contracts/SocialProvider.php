@@ -173,6 +173,14 @@ interface SocialProvider
     public function supportsInbox(): bool;
 
     /**
+     * The account's follower (YouTube: subscriber) count, or null when the
+     * network or relay does not report one.
+     *
+     * @throws ConnectionException
+     */
+    public function followersCount(string $accountId): ?int;
+
+    /**
      * DM threads on an account, newest first.
      *
      * @return array{data: list<array<string, mixed>>, cursor: string|null}

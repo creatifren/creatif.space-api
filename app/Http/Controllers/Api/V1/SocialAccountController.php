@@ -9,6 +9,7 @@ use App\Enums\SocialPostStatus;
 use App\Enums\SocialPostTargetStatus;
 use App\Http\Controllers\Controller;
 use App\Http\Resources\SocialAccountResource;
+use App\Jobs\RefreshFollowerCount;
 use App\Models\SocialAccount;
 use App\Models\SocialPost;
 use App\Models\User;
@@ -55,6 +56,9 @@ class SocialAccountController extends Controller
                 Log::warning('social.self_heal_failed', ['user' => $user->ulid, 'error' => $e->getMessage()]);
             }
         }
+
+        // Follower counts refresh in the background; this answers with the cached ones.
+        RefreshFollowerCount::queueStale($user);
 
         return SocialAccountResource::collection(
             $request->user()->socialAccounts()
@@ -251,6 +255,9 @@ class SocialAccountController extends Controller
         if ($lost->isNotEmpty()) {
             ProductEvents::channelsCount($user);
         }
+
+        // A new or reconnected account gets its follower count in the background.
+        RefreshFollowerCount::queueStale($user);
     }
 
     /**

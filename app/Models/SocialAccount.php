@@ -27,6 +27,8 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
  * @property string|null $profile_photo_url
  * @property SocialAccountStatus $status
  * @property CarbonImmutable|null $connected_at
+ * @property int|null $followers_count
+ * @property CarbonImmutable|null $followers_synced_at
  * @property CarbonImmutable|null $messages_scope_at
  * @property CarbonImmutable|null $inbox_synced_at
  */
@@ -46,6 +48,8 @@ class SocialAccount extends Model
         'connected_at',
         'messages_scope_at',
         'inbox_synced_at',
+        'followers_count',
+        'followers_synced_at',
     ];
 
     /**
@@ -61,6 +65,8 @@ class SocialAccount extends Model
             'connected_at' => 'datetime',
             'messages_scope_at' => 'datetime',
             'inbox_synced_at' => 'datetime',
+            'followers_count' => 'integer',
+            'followers_synced_at' => 'datetime',
         ];
     }
 
