@@ -76,6 +76,11 @@ return [
     // from frontend_url; in dev both are the app.
     'public_url' => env('PUBLIC_URL', env('FRONTEND_URL', 'http://localhost:3000')),
 
+    // The marketing site (creatif.space): the MCP waitlist form posts from
+    // it, and its confirm / share links land on it. Separate from
+    // public_url, which Space, gate and download links use.
+    'marketing_url' => env('MARKETING_URL', 'https://creatif.space'),
+
     /*
     |--------------------------------------------------------------------------
     | Application Timezone

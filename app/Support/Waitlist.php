@@ -189,7 +189,7 @@ final class Waitlist
 
     public static function shareUrl(string $code): string
     {
-        return rtrim((string) config('app.public_url'), '/').'/mcp?ref='.$code;
+        return rtrim((string) config('app.marketing_url'), '/').'/mcp?ref='.$code;
     }
 
     /** The referrer's address when this referral may count, else null. */
