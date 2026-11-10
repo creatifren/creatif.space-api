@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Api\V1;
 
 use App\Enums\SocialAccountStatus;
+use App\Enums\SocialPlatform;
 use App\Http\Controllers\Controller;
 use App\Models\SocialAccount;
 use App\Models\User;
@@ -30,26 +31,117 @@ class OutstandConnectController extends Controller
     /** Outstand keeps a pending session 30 minutes. */
     private const PENDING_MINUTES = 30;
 
+    /**
+     * Every way back from a connect lands on the app's connect screen,
+     * never on a JSON page or a 500. Alongside the older params the app
+     * reads (`social`, `isSuccess`, `error`, `code`), each answer carries
+     * `connect` (success|pending|failed), `network` and, on failure,
+     * `reason` (one of FAILURE_REASONS).
+     */
     public function return(Request $request, OutstandService $outstand, SocialAccountController $accounts): RedirectResponse
     {
-        $page = config('app.frontend_url').'/social/connect?';
-        $tenant = OutstandService::unseal($request->string('state')->toString());
-        $session = $request->string('session')->toString();
-        $user = $tenant !== null ? User::query()->where('ulid', $tenant)->first() : null;
+        $state = $request->string('state')->toString();
 
-        if ($tenant === null || $user === null) {
-            return redirect($page.http_build_query([
-                'social' => 'connected', 'isSuccess' => 'false', 'error' => 'The sign-in expired. Try connecting again.',
-            ]));
+        // A refresh, or the back button, re-opening this URL: the state was
+        // spent, so answer as the first time did.
+        $again = OutstandService::spent($state);
+        if ($again !== null) {
+            return redirect($again);
         }
+
+        $sealed = OutstandService::sealed($state);
+        $network = self::network($sealed['network'] ?? null, $request);
+
+        if ($sealed === null) {
+            // Forged, mangled, or past our state's life. A well-formed one we
+            // no longer hold is almost always an old tab: say "expired".
+            $reason = OutstandService::wellFormed($state) ? 'expired' : 'invalid_state';
+            Log::info('social.connect_return', ['tenant' => null, 'platform' => $network, 'outcome' => $reason]);
+
+            return redirect(self::failed($network, $reason));
+        }
+
+        $tenant = $sealed['tenant'];
+        $user = User::query()->where('ulid', $tenant)->first();
+        if ($user === null) {
+            return redirect(self::failed($network, 'invalid_state'));
+        }
+
+        try {
+            $target = $this->settle($request, $outstand, $accounts, $user, $tenant, $network);
+        } catch (Throwable $e) {
+            Log::warning('social.connect_return', ['tenant' => $tenant, 'platform' => $network, 'outcome' => 'exception', 'error' => $e->getMessage()]);
+            $target = self::failed($network, 'error');
+        }
+
+        $parts = [];
+        parse_str((string) parse_url($target, PHP_URL_QUERY), $parts);
+        OutstandService::finishAttempt(
+            $tenant,
+            is_string($parts['connect'] ?? null) ? $parts['connect'] : 'failed',
+            is_string($parts['reason'] ?? null) ? $parts['reason'] : null,
+            $network,
+        );
+        OutstandService::spend($state, $target);
+
+        return redirect($target);
+    }
+
+    /**
+     * The reasons a connect can fail, as the app reads them in `reason`.
+     *
+     * @var list<string>
+     */
+    public const FAILURE_REASONS = [
+        'expired',                     // our state or Outstand's 30-minute session ran out (or an old tab)
+        'cancelled',                   // the user backed out on the network's screen
+        'denied',                      // the user (or the network) refused the permissions
+        'error',                       // the network or Outstand failed; nothing connected
+        'invalid_state',               // a forged or mangled return
+        'no_account',                  // the sign-in finished but brought no account back
+        'already_connected_elsewhere', // that account belongs to another Creatif Space workspace
+        'unconfirmed',                 // we could not check with Outstand; Channels re-syncs later
+    ];
+
+    /** What each reason tells the user (the older `error` param). */
+    private const MESSAGES = [
+        'expired' => 'The sign-in expired. Try connecting again.',
+        'cancelled' => 'The sign-in was cancelled. Try connecting again when you are ready.',
+        'denied' => 'The permissions were not granted, so nothing was connected. Try again and allow access.',
+        'error' => 'The network could not finish the sign-in. Try connecting again.',
+        'invalid_state' => 'That sign-in link is not valid any more. Try connecting again.',
+        'no_account' => 'The sign-in finished, but no account came back from it. Try connecting again.',
+        'already_connected_elsewhere' => 'This account is already connected to another Creatif Space account',
+        'unconfirmed' => 'We couldn’t confirm the connection just now. Refresh Channels in a minute.',
+    ];
+
+    /** The app's connect screen, for whatever the return decided. */
+    private function settle(Request $request, OutstandService $outstand, SocialAccountController $accounts, User $user, string $tenant, ?string $network): string
+    {
+        $session = $request->string('session')->toString();
 
         $log = [
             'tenant' => $tenant,
-            'platform' => $request->string('network')->toString() ?: ($request->string('platform')->toString() ?: null),
+            'platform' => $network,
             'had_session' => $session !== '',
             'pending_status' => 'none',
             'accounts_found' => null,
         ];
+
+        // The network or Outstand said no. Checked first, so a refusal never
+        // syncs and reads as a success because the tenant had other accounts.
+        $outstandError = self::providerError($request);
+        if ($outstandError !== null && ! self::alreadyElsewhere($outstandError)) {
+            $reason = self::reasonFor($outstandError);
+            Log::info('social.connect_return', $log + ['outcome' => $reason, 'error' => mb_substr($outstandError, 0, 200)]);
+
+            return self::failed($network, $reason);
+        }
+        if ($outstandError !== null) {
+            Log::info('social.connect_return', $log + ['outcome' => 'already_connected_elsewhere']);
+
+            return self::failed($network, 'already_connected_elsewhere');
+        }
 
         // Facebook / LinkedIn / Google: a page picker, held as a pending session.
         if ($session !== '') {
@@ -62,41 +154,32 @@ class OutstandConnectController extends Controller
             }
 
             if ($pending !== null && $pending['pages'] !== []) {
-                $log['platform'] ??= $pending['network'];
+                $network ??= $pending['network'];
+                $log['platform'] = $network;
                 Log::info('social.connect_return', $log);
 
                 if (count($pending['pages']) === 1) {
                     $outstand->finalizeConnection($session, [$pending['pages'][0]['id']]);
 
-                    return redirect($page.http_build_query(['social' => 'connected']));
+                    return self::page(['social' => 'connected', 'connect' => 'success', 'network' => $network]);
                 }
 
                 Cache::put("outstand-pending:{$tenant}", $session, now()->addMinutes(self::PENDING_MINUTES));
 
-                return redirect($page.http_build_query(['social' => 'pending', 'network' => $pending['network']]));
+                return self::page(['social' => 'pending', 'network' => $pending['network'], 'connect' => 'pending']);
             }
         }
 
         // Everything else is connected by Outstand directly (Instagram,
         // Threads, X, TikTok …), or was already there: no pending session,
         // or one that 404s. What the tenant holds at Outstand is the answer.
-        $outstandError = $request->string('error')->toString();
-        if (self::alreadyElsewhere($outstandError)) {
-            Log::info('social.connect_return', $log + ['outcome' => 'already_connected_elsewhere']);
-
-            return $this->elsewhere($page);
-        }
-
         try {
             $remote = $outstand->accountsFor($tenant);
         } catch (Throwable $e) {
             Log::warning('social.connect_return', $log + ['outcome' => 'list_failed', 'error' => $e->getMessage()]);
 
             // Not lost: Channels re-syncs when it loads.
-            return redirect($page.http_build_query([
-                'social' => 'connected', 'isSuccess' => 'false',
-                'error' => 'We couldn’t confirm the connection just now. Refresh Channels in a minute.',
-            ]));
+            return self::failed($network, 'unconfirmed');
         }
         $log['accounts_found'] = count($remote);
 
@@ -113,7 +196,7 @@ class OutstandConnectController extends Controller
         if ($ids !== [] && $heldElsewhere === count(array_unique($ids))) {
             Log::info('social.connect_return', $log + ['outcome' => 'already_connected_elsewhere']);
 
-            return $this->elsewhere($page);
+            return self::failed($network, 'already_connected_elsewhere');
         }
 
         $accounts->syncFor($user, $outstand, $remote);
@@ -125,23 +208,89 @@ class OutstandConnectController extends Controller
         Log::info('social.connect_return', $log + ['outcome' => $connected > 0 ? 'synced' : 'nothing']);
 
         if ($connected === 0) {
-            return redirect($page.http_build_query([
-                'social' => 'connected', 'isSuccess' => 'false',
-                'error' => $outstandError !== ''
-                    ? mb_substr($outstandError, 0, 200)
-                    : 'The sign-in finished, but no account came back from it. Try connecting again.',
-            ]));
+            return self::failed($network, 'no_account');
         }
 
-        return redirect($page.http_build_query(['social' => 'connected', 'count' => $connected]));
+        return self::page(['social' => 'connected', 'count' => $connected, 'connect' => 'success', 'network' => $network]);
     }
 
-    private function elsewhere(string $page): RedirectResponse
+    /**
+     * The app's connect screen with these params (nulls dropped).
+     *
+     * @param  array<string, string|int|null>  $params
+     */
+    private static function page(array $params): string
     {
-        return redirect($page.http_build_query([
-            'social' => 'connected', 'isSuccess' => 'false', 'code' => 'already_connected_elsewhere',
-            'error' => 'This account is already connected to another Creatif Space account',
-        ]));
+        return config('app.frontend_url').'/social/connect?'.http_build_query(array_filter($params, fn ($v) => $v !== null));
+    }
+
+    /** A failed connect, in both the older params and connect/network/reason. */
+    private static function failed(?string $network, string $reason): string
+    {
+        return self::page([
+            'social' => 'connected',
+            'isSuccess' => 'false',
+            'code' => $reason === 'already_connected_elsewhere' ? $reason : null,
+            'error' => self::MESSAGES[$reason] ?? self::MESSAGES['error'],
+            'connect' => 'failed',
+            'network' => $network,
+            'reason' => $reason,
+        ]);
+    }
+
+    /** The network being connected: sealed with the state, else as Outstand names it. */
+    private static function network(?string $sealed, Request $request): ?string
+    {
+        foreach ([$sealed, $request->query('network'), $request->query('platform')] as $candidate) {
+            if (is_string($candidate) && SocialPlatform::tryFrom($candidate) !== null) {
+                return $candidate;
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * Outstand's (or the network's) error on the return, if any: `error`,
+     * `error_reason`, `error_code`, `error_description`, or
+     * `isSuccess=false` / `success=false` with no text.
+     */
+    private static function providerError(Request $request): ?string
+    {
+        $parts = [];
+        foreach (['error', 'error_reason', 'error_code', 'error_description'] as $key) {
+            $value = $request->query($key);
+            if (is_string($value) && trim($value) !== '') {
+                $parts[] = trim($value);
+            }
+        }
+        if ($parts !== []) {
+            return implode(' ', $parts);
+        }
+
+        foreach (['isSuccess', 'success'] as $key) {
+            $flag = $request->query($key);
+            if (is_string($flag) && in_array(strtolower($flag), ['false', '0'], true)) {
+                return 'unsuccessful';
+            }
+        }
+
+        return null;
+    }
+
+    /** A provider's error text, as one of FAILURE_REASONS. */
+    public static function reasonFor(string $error): string
+    {
+        $e = strtolower($error);
+
+        return match (true) {
+            str_contains($e, 'cancel') => 'cancelled',
+            str_contains($e, 'expired') || str_contains($e, 'timeout') || str_contains($e, 'timed out')
+                || str_contains($e, 'invalid state') || str_contains($e, 'invalid_state') || str_contains($e, 'session') => 'expired',
+            str_contains($e, 'denied') || str_contains($e, 'not authorized') || str_contains($e, 'unauthorized')
+                || str_contains($e, 'declined') || str_contains($e, 'permission') => 'denied',
+            default => 'error',
+        };
     }
 
     /** Outstand's own error on the return, when it names another tenant. */
@@ -151,6 +300,17 @@ class OutstandConnectController extends Controller
 
         return $e !== '' && str_contains($e, 'already')
             && (str_contains($e, 'tenant') || str_contains($e, 'another') || str_contains($e, 'linked') || str_contains($e, 'connected'));
+    }
+
+    /**
+     * The user's last connect, for the app to read when the user comes back
+     * to it — above all from an Outstand page we could not redirect away
+     * from (its 30-minute session ran out). `status` is pending | success |
+     * failed; a pending one past `expires_at` already reads failed/expired.
+     */
+    public function status(Request $request): JsonResponse
+    {
+        return response()->json(['data' => OutstandService::attempt($request->user()->ulid)]);
     }
 
     /** The pages waiting for this user to choose from, if any. */
