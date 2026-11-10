@@ -74,11 +74,21 @@ final class ProductEvents
      *
      * @param  array<string, string>  $utm
      */
-    public static function waitlistJoined(string $email, string $list, array $utm = []): void
+    public static function waitlistJoined(string $email, string $list, bool $referred, bool $refCodePresent, array $utm = []): void
     {
         $extra = array_filter(array_intersect_key($utm, array_flip(self::UTM)), fn (string $v) => $v !== '');
 
-        self::analytics()->capture(hash('sha256', strtolower($email)), 'waitlist_joined', ['list' => $list] + $extra);
+        self::analytics()->capture(hash('sha256', strtolower($email)), 'waitlist_joined', [
+            'list' => $list,
+            'referred' => $referred,
+            'ref_code_present' => $refCodePresent,
+        ] + $extra);
+    }
+
+    /** A waitlist referrer reached the priority batch. Same hashed id as waitlist_joined. */
+    public static function waitlistPriorityReached(string $email, int $referrals): void
+    {
+        self::analytics()->capture(hash('sha256', strtolower($email)), 'waitlist_priority_reached', ['list' => 'mcp', 'referral_count' => $referrals]);
     }
 
     /** A plan key as sent: the enum's value. */

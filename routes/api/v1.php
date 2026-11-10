@@ -85,6 +85,9 @@ Route::post('/waitlist', [WaitlistController::class, 'join'])
 Route::get('/waitlist/confirm', [WaitlistController::class, 'confirm'])
     ->middleware('throttle:30,1')
     ->name('api.v1.waitlist.confirm');
+Route::get('/waitlist/status', [WaitlistController::class, 'status'])
+    ->middleware('throttle:30,1')
+    ->name('api.v1.waitlist.status');
 
 Route::get('/handles/availability', [HandleController::class, 'availability'])
     ->middleware('throttle:30,1')

@@ -9,7 +9,6 @@ use App\Support\Waitlist;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Notification;
 use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Support\Str;
@@ -35,12 +34,13 @@ class WaitlistController extends Controller
         $validated = $request->validate([
             'email' => ['required', 'string', 'email:rfc', 'max:254'],
             'list' => ['required', 'string', Rule::in(Waitlist::LISTS)],
+            'ref' => ['nullable', 'string', 'regex:'.Waitlist::REF_PATTERN],
         ]);
         $email = Str::lower(trim($validated['email']));
 
         if (RateLimiter::attempt('waitlist-email:'.sha1($email), self::PER_EMAIL_DAY, fn () => true, 86400)) {
             $url = route('api.v1.waitlist.confirm', [
-                'token' => Waitlist::token($email, $validated['list'], ProductEvents::utmFrom($request)),
+                'token' => Waitlist::token($email, $validated['list'], ProductEvents::utmFrom($request), $validated['ref'] ?? null),
             ]);
             Notification::route('mail', $email)->notify(new WaitlistConfirm($url));
         }
@@ -50,22 +50,33 @@ class WaitlistController extends Controller
 
     public function confirm(Request $request): RedirectResponse
     {
-        $page = rtrim((string) config('app.public_url'), '/').'/mcp?waitlist=';
+        $page = rtrim((string) config('app.public_url'), '/').'/mcp?';
         $entry = Waitlist::read($request->query('token'));
 
         if ($entry === null) {
-            return redirect($page.'expired');
+            return redirect($page.http_build_query(['waitlist' => 'expired']));
         }
 
-        if (! Waitlist::subscribe($entry['email'], $entry['list'])) {
-            return redirect($page.'error');
+        $done = Waitlist::confirm($entry);
+        if ($done === null) {
+            return redirect($page.http_build_query(['waitlist' => 'error']));
         }
 
-        // Once per address and list, however often the link is clicked.
-        if (Cache::add('waitlist-joined:'.$entry['list'].':'.hash('sha256', $entry['email']), true)) {
-            ProductEvents::waitlistJoined($entry['email'], $entry['list'], $entry['utm']);
+        if ($done['first']) {
+            ProductEvents::waitlistJoined($entry['email'], $entry['list'], $done['referred'], $entry['ref'] !== null, $entry['utm']);
         }
 
-        return redirect($page.'confirmed');
+        return redirect($page.http_build_query(['waitlist' => 'confirmed', 'code' => $done['code']]));
+    }
+
+    /** Referral progress for the share box ("1 of 3 confirmed"). No PII. */
+    public function status(Request $request): JsonResponse
+    {
+        $code = $request->string('code')->toString();
+        $status = preg_match(Waitlist::REF_PATTERN, $code) ? Waitlist::status($code) : null;
+
+        return $status === null
+            ? response()->json(['message' => 'Unknown code.'], 404)
+            : response()->json($status + ['needed' => Waitlist::PRIORITY_AT]);
     }
 }
