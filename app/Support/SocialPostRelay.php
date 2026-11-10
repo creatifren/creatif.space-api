@@ -2,6 +2,7 @@
 
 namespace App\Support;
 
+use App\Casts\UtcDateTime;
 use App\Enums\SocialPlatform;
 use App\Enums\SocialPostApproval;
 use App\Enums\SocialPostStatus;
@@ -538,7 +539,7 @@ class SocialPostRelay
         $overdue = $user->socialPosts()
             ->where('status', SocialPostStatus::Scheduled)
             ->whereNotNull('provider_post_id')
-            ->where(fn ($q) => $q->whereNull('scheduled_at')->orWhere('scheduled_at', '<=', now()))
+            ->where(fn ($q) => $q->whereNull('scheduled_at')->orWhere('scheduled_at', '<=', UtcDateTime::bind(now())))
             ->with('targets.account')
             ->limit(50)
             ->get();

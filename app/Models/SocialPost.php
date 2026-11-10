@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Casts\UtcDateTime;
 use App\Enums\SocialPostApproval;
 use App\Enums\SocialPostStatus;
 use App\Enums\SocialPostTargetStatus;
@@ -66,7 +67,8 @@ class SocialPost extends Model
     {
         return [
             'media' => 'array',
-            'scheduled_at' => 'datetime',
+            // UTC wall time in the column, read as UTC (not Asia/Jakarta).
+            'scheduled_at' => UtcDateTime::class,
             'status' => SocialPostStatus::class,
             'raw_payload' => 'array',
             'approval' => SocialPostApproval::class,
