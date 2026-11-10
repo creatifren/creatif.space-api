@@ -612,8 +612,8 @@ class SocialPostController extends Controller
 
     /**
      * Cancel a scheduled post. The Credits taken for destinations that had
-     * not gone out come back. Anything past Scheduled is history, not a
-     * plan, and history cannot be cancelled.
+     * not gone out come back. A published post is deleted instead (see
+     * unpublish); anything else past Scheduled cannot be cancelled.
      */
     public function destroy(
         Request $request,
@@ -628,6 +628,10 @@ class SocialPostController extends Controller
             $socialPost->delete();
 
             return response()->json(null, 204);
+        }
+
+        if ($socialPost->status === SocialPostStatus::Published) {
+            return $this->unpublish($socialPost, $providers);
         }
 
         if ($socialPost->status !== SocialPostStatus::Scheduled) {
@@ -655,6 +659,117 @@ class SocialPostController extends Controller
         });
 
         return response()->json(null, 204);
+    }
+
+    /**
+     * Delete a published post: taken down on each network that allows it,
+     * and off our list either way. A network that cannot delete through
+     * the API (Instagram, Threads, TikTok) keeps it, and the answer says
+     * so by name, so the app can tell the person to delete it there.
+     * Nothing is refunded: it went out. If the relay cannot be reached,
+     * nothing changes and the post stays listed.
+     */
+    private function unpublish(SocialPost $post, SocialProviders $providers): JsonResponse
+    {
+        $results = [];
+        if ($post->provider_post_id !== null) {
+            try {
+                $results = $providers->for($post)->deletePublished($post->provider_post_id);
+            } catch (Throwable $e) {
+                report($e);
+
+                return response()->json([
+                    'message' => 'We could not reach the networks to delete it. Nothing changed; try again in a minute.',
+                ], 502);
+            }
+        }
+
+        $targets = $post->targets()
+            ->with('account')
+            ->where('status', SocialPostTargetStatus::Published)
+            ->get()
+            ->map(function ($target) use ($results) {
+                $account = $target->account;
+                $result = $results[$account->provider_account_id] ?? null;
+                $removed = $result['removed'] ?? false;
+                $network = self::networkName($account->platform->value);
+                $note = in_array($account->platform->value, self::CANNOT_DELETE, true)
+                    ? "Stays on {$network}: {$network} does not let apps delete posts. Delete it in {$network}."
+                    : "Stays on {$network}: we could not delete it there"
+                        .(($result['error'] ?? null) ? ' ('.$result['error'].')' : '')
+                        .". Delete it in {$network}.";
+
+                return [
+                    'account' => [
+                        'id' => $account->ulid,
+                        'platform' => $account->platform,
+                        'username' => $account->username,
+                    ],
+                    'removed' => $removed,
+                    'stays_on' => $removed ? null : $network,
+                    'platform_url' => $target->platform_url,
+                    'note' => $removed ? null : $note,
+                ];
+            })
+            ->values()
+            ->all();
+
+        $post->delete();
+
+        $gone = [];
+        $stays = [];
+        foreach ($targets as $t) {
+            $network = self::networkName($t['account']['platform']->value);
+            if ($t['removed']) {
+                $gone[$network] = $network;
+            } else {
+                $stays[$network] = $network;
+            }
+        }
+        $gone = array_values($gone);
+        $stays = array_values($stays);
+
+        $message = match (true) {
+            $stays === [] => 'Deleted'.($gone === [] ? '.' : ' from '.self::listed($gone).'.'),
+            $gone === [] => 'Removed from your list. It stays on '.self::listed($stays).' — delete it there.',
+            default => 'Deleted from '.self::listed($gone).'. It stays on '.self::listed($stays).' — delete it there.',
+        };
+
+        return response()->json([
+            'message' => $message,
+            'data' => [
+                'id' => $post->ulid,
+                'removed_from_list' => true,
+                'stays_on' => $stays,
+                'targets' => $targets,
+            ],
+        ]);
+    }
+
+    /** Networks whose API cannot delete a published post (Outstand's word). */
+    private const CANNOT_DELETE = ['instagram', 'threads', 'tiktok'];
+
+    private static function networkName(string $platform): string
+    {
+        return match ($platform) {
+            'x' => 'X',
+            'tiktok' => 'TikTok',
+            'linkedin' => 'LinkedIn',
+            'youtube' => 'YouTube',
+            default => ucfirst($platform),
+        };
+    }
+
+    /**
+     * "Instagram", "Instagram and Threads", "Facebook, X and Bluesky".
+     *
+     * @param  list<string>  $names
+     */
+    private static function listed(array $names): string
+    {
+        $last = array_pop($names);
+
+        return $names === [] ? (string) $last : implode(', ', $names).' and '.$last;
     }
 
     /**

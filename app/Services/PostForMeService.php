@@ -225,6 +225,15 @@ class PostForMeService implements SocialProvider
     }
 
     /**
+     * Post for Me cannot take a published post down: every destination
+     * stays where it is.
+     */
+    public function deletePublished(string $postId): array
+    {
+        return [];
+    }
+
+    /**
      * Every post on the account — ours and ones made outside — with its
      * metrics. Needs the account connected with the "feeds" permission.
      *

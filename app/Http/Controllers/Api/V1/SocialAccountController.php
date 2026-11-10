@@ -21,9 +21,11 @@ use App\Support\ProviderFields;
 use App\Support\SocialPostRelay;
 use App\Support\SocialProviders;
 use App\Support\Workspace;
+use Carbon\CarbonImmutable;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Gate;
@@ -60,12 +62,33 @@ class SocialAccountController extends Controller
         // Follower counts refresh in the background; this answers with the cached ones.
         RefreshFollowerCount::queueStale($user);
 
-        return SocialAccountResource::collection(
-            $request->user()->socialAccounts()
-                ->orderBy('platform')
-                ->orderBy('username')
-                ->get(),
-        );
+        return SocialAccountResource::collection(self::listed($request->user()));
+    }
+
+    /**
+     * Channels: one row per network account. A row left over from the same
+     * account connected twice (same platform and network id) is hidden
+     * while its twin is connected — published posts still point at it, so
+     * it is not deleted.
+     *
+     * @return Collection<int, SocialAccount>
+     */
+    private static function listed(User $user): Collection
+    {
+        $rows = $user->socialAccounts()->orderBy('platform')->orderBy('username')->get();
+
+        $live = $rows
+            ->filter(fn (SocialAccount $a) => $a->network_unique_id !== null && $a->status === SocialAccountStatus::Connected)
+            ->groupBy(fn (SocialAccount $a) => $a->platform->value.':'.$a->network_unique_id);
+
+        return $rows->reject(function (SocialAccount $a) use ($live) {
+            if ($a->network_unique_id === null) {
+                return false;
+            }
+            $twins = $live->get($a->platform->value.':'.$a->network_unique_id);
+
+            return $twins !== null && $twins->first()->id !== $a->id;
+        })->values();
     }
 
     /**
@@ -176,9 +199,7 @@ class SocialAccountController extends Controller
         $user = $request->user();
         $this->syncFor($user, $provider);
 
-        return SocialAccountResource::collection(
-            $user->socialAccounts()->orderBy('platform')->orderBy('username')->get(),
-        );
+        return SocialAccountResource::collection(self::listed($user));
     }
 
     /**
@@ -200,6 +221,11 @@ class SocialAccountController extends Controller
         $scopeMarker = OutstandService::MESSAGES_SCOPE_MARKER.$user->ulid;
         $askedForMessages = $provider->name() === 'outstand' && Cache::has($scopeMarker);
 
+        // The same network account connected twice (Outstand made two
+        // within 150 ms on one Pinterest sign-in) is one channel: the first
+        // the relay lists — its oldest — is kept, the rest are not ours.
+        $networkIds = [];
+
         foreach ($remote as $account) {
             $platform = SocialPlatform::tryFrom((string) ($account['platform'] ?? ''));
             $fields = ProviderFields::account($account);
@@ -208,24 +234,41 @@ class SocialAccountController extends Controller
                 continue;
             }
 
+            if ($fields['network_unique_id'] !== null) {
+                $networkKey = $platform->value.':'.$fields['network_unique_id'];
+                if (isset($networkIds[$networkKey])) {
+                    // A row we already hold for the twin learns whose twin it
+                    // is, so Channels can hide it once it is Disconnected below.
+                    $user->socialAccounts()
+                        ->where('provider', $provider->name())
+                        ->where('provider_account_id', $fields['provider_account_id'])
+                        ->update(['network_unique_id' => $fields['network_unique_id']]);
+
+                    continue;
+                }
+                $networkIds[$networkKey] = true;
+            }
+
             $providerId = $fields['provider_account_id'];
             $seen[] = $providerId;
 
-            $row = $user->socialAccounts()->updateOrCreate(
-                [
-                    'provider' => $provider->name(),
-                    'platform' => $platform,
-                    'provider_account_id' => $providerId,
-                ],
-                [
-                    'username' => $fields['username'],
-                    'profile_photo_url' => $fields['profile_photo_url'],
-                    'status' => ($account['status'] ?? 'connected') === 'connected'
-                        ? SocialAccountStatus::Connected
-                        : SocialAccountStatus::Disconnected,
-                    'connected_at' => now(),
-                ],
-            );
+            $status = ($account['status'] ?? 'connected') === 'connected'
+                ? SocialAccountStatus::Connected
+                : SocialAccountStatus::Disconnected;
+            $key = [
+                'provider' => $provider->name(),
+                'platform' => $platform,
+                'provider_account_id' => $providerId,
+            ];
+            $existing = $user->socialAccounts()->where($key)->first();
+
+            $row = $user->socialAccounts()->updateOrCreate($key, [
+                'username' => $fields['username'],
+                'profile_photo_url' => $fields['profile_photo_url'],
+                'network_unique_id' => $fields['network_unique_id'],
+                'status' => $status,
+                'connected_at' => self::connectedAt($account, $existing, $status),
+            ]);
 
             $this->recordMessagesScope($row, $account, $askedForMessages);
 
@@ -367,6 +410,35 @@ class SocialAccountController extends Controller
         if ($askedForMessages && $row->messages_scope_at === null) {
             $row->forceFill(['messages_scope_at' => now()])->save();
         }
+    }
+
+    /**
+     * When the account was connected — not when we last looked. The
+     * relay's own record of the grant wins (a reconnect is a new grant,
+     * so a new date); without one, the date we first saw it stays until
+     * it comes back from Disconnected. Re-stamping it on every sync made
+     * Channels read "Connected" on the day of the last self-heal.
+     *
+     * @param  array<string, mixed>  $remote
+     */
+    private static function connectedAt(array $remote, ?SocialAccount $existing, SocialAccountStatus $status): CarbonImmutable
+    {
+        $reported = $remote['connected_at'] ?? null;
+        if (is_string($reported) && $reported !== '') {
+            try {
+                return CarbonImmutable::parse($reported)->utc();
+            } catch (Throwable) {
+                // Unreadable: fall through to our own record.
+            }
+        }
+
+        $reconnected = $existing !== null
+            && $existing->status !== SocialAccountStatus::Connected
+            && $status === SocialAccountStatus::Connected;
+
+        return $existing?->connected_at !== null && ! $reconnected
+            ? $existing->connected_at
+            : CarbonImmutable::now();
     }
 
     /** Prefix of the one-off tag an account wears while it is being claimed. */

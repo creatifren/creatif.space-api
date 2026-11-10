@@ -3,6 +3,7 @@
 namespace App\Contracts;
 
 use Illuminate\Http\Client\ConnectionException;
+use Illuminate\Http\Client\RequestException;
 use Illuminate\Http\Request;
 
 /**
@@ -139,6 +140,18 @@ interface SocialProvider
      * @throws ConnectionException
      */
     public function deletePost(string $postId): void;
+
+    /**
+     * Take a published post down from the networks that allow it. Answers
+     * per destination (the relay's account id): removed, or why it stays.
+     * A destination missing from the answer was not taken down.
+     *
+     * @return array<string, array{removed: bool, error: string|null}>
+     *
+     * @throws ConnectionException
+     * @throws RequestException
+     */
+    public function deletePublished(string $postId): array;
 
     /**
      * Per-destination results for these posts, finished ones only.
