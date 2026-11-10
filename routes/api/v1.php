@@ -2,7 +2,9 @@
 
 use App\Http\Controllers\Api\V1\AffiliateController;
 use App\Http\Controllers\Api\V1\AnalyticsController;
+use App\Http\Controllers\Api\V1\ApiKeyController;
 use App\Http\Controllers\Api\V1\CaptionAssistController;
+use App\Http\Controllers\Api\V1\ConnectedAppController;
 use App\Http\Controllers\Api\V1\CreditsController;
 use App\Http\Controllers\Api\V1\CreemWebhookController;
 use App\Http\Controllers\Api\V1\DeliveryLogController;
@@ -12,6 +14,7 @@ use App\Http\Controllers\Api\V1\FolderController;
 use App\Http\Controllers\Api\V1\HandleController;
 use App\Http\Controllers\Api\V1\InboxCommentController;
 use App\Http\Controllers\Api\V1\InboxController;
+use App\Http\Controllers\Api\V1\McpActivityController;
 use App\Http\Controllers\Api\V1\MeController;
 use App\Http\Controllers\Api\V1\MyProfileController;
 use App\Http\Controllers\Api\V1\NotificationController;
@@ -34,12 +37,21 @@ use App\Http\Controllers\Api\V1\SubscriptionController;
 use App\Http\Controllers\Api\V1\TeamController;
 use App\Http\Controllers\Api\V1\TourController;
 use App\Http\Controllers\Api\V1\WaitlistController;
+use App\Http\Controllers\OAuth\IntrospectionController;
+use App\Http\Middleware\EnforceTokenScope;
 use App\Http\Middleware\EnsureInboxEnabled;
 use App\Http\Middleware\MarketingSiteOrigin;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
 
 // Public
+
+// The MCP server asks here whether a bearer token is live. The X-MCP-Secret
+// header is the authentication; the MCP server caches answers briefly.
+Route::post('/oauth/introspect', IntrospectionController::class)
+    ->middleware('throttle:600,1')
+    ->name('api.v1.oauth.introspect');
+
 Route::get('/plans', [SubscriptionController::class, 'plans'])->name('api.v1.plans');
 
 // Creem calls this, not a browser: no auth, no CSRF (api routes have
@@ -141,8 +153,26 @@ Route::post('/spaces/{space}/events', SpaceEventController::class)
     ->middleware('throttle:60,1')
     ->name('api.v1.spaces.events');
 
-// Authenticated (Sanctum SPA cookie)
+// Session only (Sanctum SPA cookie): a bearer token never manages tokens.
 Route::middleware('auth:sanctum')->group(function () {
+    // Settings → API keys (personal keys for MCP clients)
+    Route::get('/me/api-keys', [ApiKeyController::class, 'index'])->name('api.v1.me.api-keys.index');
+    Route::post('/me/api-keys', [ApiKeyController::class, 'store'])
+        ->middleware('throttle:10,1')
+        ->name('api.v1.me.api-keys.store');
+    Route::delete('/me/api-keys/{apiKey}', [ApiKeyController::class, 'destroy'])->name('api.v1.me.api-keys.destroy');
+
+    // Settings → Connected apps (OAuth clients the user authorized)
+    Route::get('/me/connected-apps', [ConnectedAppController::class, 'index'])->name('api.v1.me.connected-apps.index');
+    Route::delete('/me/connected-apps/{clientId}', [ConnectedAppController::class, 'destroy'])->name('api.v1.me.connected-apps.destroy');
+
+    // What connected apps and API keys did — never the content.
+    Route::get('/me/mcp-activity', McpActivityController::class)->name('api.v1.me.mcp-activity');
+});
+
+// Authenticated: Sanctum SPA cookie, or a bearer token (OAuth access token
+// or personal API key) — which EnforceTokenScope fences to config('mcp.routes').
+Route::middleware(['auth:sanctum,mcp', EnforceTokenScope::class])->group(function () {
     Route::get('/me', MeController::class)->name('api.v1.me');
     Route::post('/me/tour', TourController::class)->name('api.v1.me.tour');
     Route::post('/handles', [HandleController::class, 'claim'])

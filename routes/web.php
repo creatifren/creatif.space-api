@@ -3,8 +3,12 @@
 use App\Http\Controllers\Api\V1\ProfileFontController;
 use App\Http\Controllers\Auth\GoogleAuthController;
 use App\Http\Controllers\Auth\PasswordAuthController;
+use App\Http\Middleware\RequirePkce;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Route;
+use Laravel\Passport\Http\Controllers\ApproveAuthorizationController;
+use Laravel\Passport\Http\Controllers\AuthorizationController;
+use Laravel\Passport\Http\Controllers\DenyAuthorizationController;
 
 Route::get('/', fn () => redirect(config('app.frontend_url')));
 
@@ -35,3 +39,27 @@ Route::post('/auth/logout', function () {
 
     return response()->noContent();
 })->middleware('auth')->name('auth.logout');
+
+// OAuth 2.1 for MCP clients — the browser half: the consent screen and its
+// two buttons. Session-based, like the rest of web.php; a guest is sent to
+// the frontend's login and comes back through /oauth/resume.
+Route::get('/oauth/authorize', [AuthorizationController::class, 'authorize'])
+    ->middleware([RequirePkce::class, 'throttle:60,1'])
+    ->name('passport.authorizations.authorize');
+Route::middleware('auth')->group(function () {
+    Route::post('/oauth/authorize', [ApproveAuthorizationController::class, 'approve'])
+        ->name('passport.authorizations.approve');
+    Route::delete('/oauth/authorize', [DenyAuthorizationController::class, 'deny'])
+        ->name('passport.authorizations.deny');
+});
+
+// Back from the frontend's login to the authorize request that sent the
+// person there. Only ever an /oauth/authorize URL on this host.
+Route::get('/oauth/resume', function () {
+    $intended = (string) session()->pull('oauth.intended', '');
+    $prefix = url('/oauth/authorize').'?';
+
+    return Auth::guard('web')->check() && str_starts_with($intended, $prefix)
+        ? redirect()->to($intended)
+        : redirect(config('app.frontend_url'));
+})->name('oauth.resume');
