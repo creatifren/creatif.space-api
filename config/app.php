@@ -81,6 +81,13 @@ return [
     // public_url, which Space, gate and download links use.
     'marketing_url' => env('MARKETING_URL', 'https://creatif.space'),
 
+    /*
+    | Our app server, which calls /a/{token} and /plan/{token} on a visitor's
+    | behalf and says who they are in X-Forwarded-For. Comma-separated IPs or
+    | CIDRs; '*' and /0 are refused. Empty trusts no one.
+    */
+    'trusted_proxies' => env('TRUSTED_PROXIES', ''),
+
     // Rizal's slogan, verbatim: never paraphrase, never env-overridable.
     'slogan' => 'Get content approved & published faster.',
 
