@@ -71,7 +71,7 @@ class OutstandService implements SocialProvider
             return config('app.frontend_url').'/social/connect?social=connected';
         }
 
-        $redirect = route('api.v1.webhooks.outstand.return', ['state' => self::seal($externalId)]);
+        $redirect = route('api.v1.webhooks.outstand.return', ['state' => self::seal($externalId, $platform)]);
         // Outstand validates redirect_uri as an absolute URI: a relative or
         // non-http APP_URL would come back as a 400 for every connect.
         if (filter_var($redirect, FILTER_VALIDATE_URL) === false || ! preg_match('#^https?://#', $redirect)) {
@@ -105,6 +105,8 @@ class OutstandService implements SocialProvider
         if (! is_string($url) || $url === '') {
             throw new RuntimeException('Outstand returned no auth URL.');
         }
+
+        self::startAttempt($externalId, $platform);
 
         return $url;
     }
@@ -535,14 +537,24 @@ class OutstandService implements SocialProvider
             ->throw();
     }
 
-    /** Our tenant, sealed for the OAuth round trip. */
-    public static function seal(string $externalId): string
+    /**
+     * Outstand's own signed connect session lasts 30 minutes. Past it,
+     * Outstand's callback can no longer read our redirect_uri and shows its
+     * own page; its auth-url has no failure or cancel redirect to change
+     * that. The attempt kept below lets the app say "expired" itself.
+     */
+    public const SESSION_MINUTES = 30;
+
+    private const ATTEMPT_PREFIX = 'outstand-connect-attempt:';
+
+    /** Our tenant (and the network being connected), sealed for the OAuth round trip. */
+    public static function seal(string $externalId, ?string $network = null): string
     {
         // A short random key, not an encrypted blob: it rides inside
         // Outstand's redirect_uri, so it stays URL-safe and well under any
         // length limit. The tenant lives server-side for the state's life.
         $key = Str::random(40);
-        Cache::put(self::STATE_PREFIX.$key, $externalId, now()->addMinutes(self::STATE_MINUTES));
+        Cache::put(self::STATE_PREFIX.$key, ['tenant' => $externalId, 'network' => $network], now()->addMinutes(self::STATE_MINUTES));
 
         return $key;
     }
@@ -550,12 +562,104 @@ class OutstandService implements SocialProvider
     /** The tenant a returning browser carries, or null when forged or stale. */
     public static function unseal(?string $state): ?string
     {
-        if (! is_string($state) || ! preg_match('/^[A-Za-z0-9]{40}$/', $state)) {
+        return self::sealed($state)['tenant'] ?? null;
+    }
+
+    /**
+     * What a state was sealed with, or null when forged or stale.
+     *
+     * @return array{tenant: string, network: string|null}|null
+     */
+    public static function sealed(?string $state): ?array
+    {
+        if (! self::wellFormed($state)) {
             return null;
         }
-        $tenant = Cache::get(self::STATE_PREFIX.$state);
+        $value = Cache::get(self::STATE_PREFIX.$state);
 
-        return is_string($tenant) ? $tenant : null;
+        // A state sealed before the network rode along holds the bare tenant.
+        if (is_string($value)) {
+            return ['tenant' => $value, 'network' => null];
+        }
+        if (is_array($value) && is_string($value['tenant'] ?? null)) {
+            return ['tenant' => $value['tenant'], 'network' => is_string($value['network'] ?? null) ? $value['network'] : null];
+        }
+
+        return null;
+    }
+
+    /** Shaped like a state we issue (says nothing about whether it is live). */
+    public static function wellFormed(?string $state): bool
+    {
+        return is_string($state) && preg_match('/^[A-Za-z0-9]{40}$/', $state) === 1;
+    }
+
+    /** One state, one return: the answer is kept so a refresh lands in the same place. */
+    public static function spend(string $state, string $redirect): void
+    {
+        Cache::forget(self::STATE_PREFIX.$state);
+        Cache::put(self::STATE_PREFIX.'used:'.$state, $redirect, now()->addMinutes(self::STATE_MINUTES));
+    }
+
+    /** Where a state already spent sent the browser, if it was spent. */
+    public static function spent(?string $state): ?string
+    {
+        if (! self::wellFormed($state)) {
+            return null;
+        }
+        $redirect = Cache::get(self::STATE_PREFIX.'used:'.$state);
+
+        return is_string($redirect) ? $redirect : null;
+    }
+
+    /** A connect is under way for this tenant: which network, and until when. */
+    public static function startAttempt(string $externalId, string $network): void
+    {
+        Cache::put(self::ATTEMPT_PREFIX.$externalId, [
+            'network' => $network,
+            'status' => 'pending',
+            'reason' => null,
+            'started_at' => now()->toIso8601String(),
+            'expires_at' => now()->addMinutes(self::SESSION_MINUTES)->toIso8601String(),
+            'finished_at' => null,
+        ], now()->addDay());
+    }
+
+    /** How the tenant's last connect ended. */
+    public static function finishAttempt(string $externalId, string $status, ?string $reason = null, ?string $network = null): void
+    {
+        $attempt = Cache::get(self::ATTEMPT_PREFIX.$externalId);
+        $attempt = is_array($attempt) ? $attempt : ['network' => null, 'started_at' => null, 'expires_at' => null];
+
+        Cache::put(self::ATTEMPT_PREFIX.$externalId, [
+            ...$attempt,
+            'network' => $network ?? $attempt['network'],
+            'status' => $status,
+            'reason' => $reason,
+            'finished_at' => now()->toIso8601String(),
+        ], now()->addDay());
+    }
+
+    /**
+     * The tenant's last connect. One still pending past Outstand's session
+     * window reads as failed / expired: that browser is stranded on Outstand.
+     *
+     * @return array<string, mixed>|null
+     */
+    public static function attempt(string $externalId): ?array
+    {
+        $attempt = Cache::get(self::ATTEMPT_PREFIX.$externalId);
+        if (! is_array($attempt)) {
+            return null;
+        }
+
+        if (($attempt['status'] ?? null) === 'pending' && is_string($attempt['expires_at'] ?? null)
+            && now()->greaterThan($attempt['expires_at'])) {
+            $attempt['status'] = 'failed';
+            $attempt['reason'] = 'expired';
+        }
+
+        return $attempt;
     }
 
     /**

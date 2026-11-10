@@ -211,6 +211,10 @@ Route::middleware(['auth:sanctum,mcp', EnforceTokenScope::class])->group(functio
         ->middleware('throttle:10,1')
         ->name('api.v1.social-accounts.claim');
     // Outstand only: the pages a Facebook / LinkedIn / Google sign-in offers.
+    // The last connect's outcome, for an app that lost the browser to Outstand.
+    Route::get('/social-accounts/connect-status', [OutstandConnectController::class, 'status'])
+        ->middleware('throttle:60,1')
+        ->name('api.v1.social-accounts.connect-status');
     Route::get('/social-accounts/pending', [OutstandConnectController::class, 'pending'])
         ->middleware('throttle:30,1')
         ->name('api.v1.social-accounts.pending');

@@ -254,7 +254,7 @@ describe('connecting', function () {
         ]], 'count' => 1, 'total' => 1])]);
 
         $this->get('/api/v1/webhooks/outstand?state='.urlencode(OutstandService::seal($user->ulid)).'&success=true')
-            ->assertRedirect('https://app.test/social/connect?social=connected&count=1');
+            ->assertRedirect('https://app.test/social/connect?social=connected&count=1&connect=success');
 
         $row = $user->socialAccounts()->where('provider_account_id', 'k7gqh')->first();
         expect($row->provider)->toBe('outstand')
@@ -278,7 +278,7 @@ describe('connecting', function () {
         ]);
 
         $this->get('/api/v1/webhooks/outstand?state='.urlencode(OutstandService::seal($user->ulid)).'&session=gone')
-            ->assertRedirect('https://app.test/social/connect?social=connected&count=1');
+            ->assertRedirect('https://app.test/social/connect?social=connected&count=1&connect=success');
 
         expect($user->socialAccounts()->where('provider_account_id', 'k7gqh')->exists())->toBeTrue();
         Log::shouldHaveReceived('info')->withArgs(fn ($m, $c) => $m === 'social.connect_return'
@@ -293,6 +293,7 @@ describe('connecting', function () {
             ->assertRedirect('https://app.test/social/connect?'.http_build_query([
                 'social' => 'connected', 'isSuccess' => 'false',
                 'error' => 'The sign-in finished, but no account came back from it. Try connecting again.',
+                'connect' => 'failed', 'reason' => 'no_account',
             ]));
 
         expect($user->socialAccounts()->count())->toBe(0);
@@ -308,6 +309,7 @@ describe('connecting', function () {
         $elsewhere = 'https://app.test/social/connect?'.http_build_query([
             'social' => 'connected', 'isSuccess' => 'false', 'code' => 'already_connected_elsewhere',
             'error' => 'This account is already connected to another Creatif Space account',
+            'connect' => 'failed', 'reason' => 'already_connected_elsewhere',
         ]);
 
         $this->get('/api/v1/webhooks/outstand?state='.urlencode(OutstandService::seal($user->ulid)))->assertRedirect($elsewhere);
@@ -336,7 +338,11 @@ describe('connecting', function () {
 
     it('refuses a return without a good state', function () {
         $this->get('/api/v1/webhooks/outstand?state=forged&session=abc')
-            ->assertRedirect('https://app.test/social/connect?social=connected&isSuccess=false&error=The+sign-in+expired.+Try+connecting+again.');
+            ->assertRedirect('https://app.test/social/connect?'.http_build_query([
+                'social' => 'connected', 'isSuccess' => 'false',
+                'error' => 'That sign-in link is not valid any more. Try connecting again.',
+                'connect' => 'failed', 'reason' => 'invalid_state',
+            ]));
     });
 
     it('finalizes a pending sign-in that offers one page', function () {
@@ -348,7 +354,7 @@ describe('connecting', function () {
         ]);
 
         $this->get('/api/v1/webhooks/outstand?state='.urlencode(OutstandService::seal(User::factory()->create()->ulid)).'&session=sess1')
-            ->assertRedirect('https://app.test/social/connect?social=connected');
+            ->assertRedirect('https://app.test/social/connect?social=connected&connect=success&network=facebook');
 
         Http::assertSent(fn (HttpRequest $r) => str_ends_with($r->url(), '/finalize') && $r['selectedPageIds'] === ['pg1']);
     });
@@ -366,7 +372,7 @@ describe('connecting', function () {
         ]);
 
         $this->get('/api/v1/webhooks/outstand?state='.urlencode(OutstandService::seal($user->ulid)).'&session=sess2')
-            ->assertRedirect('https://app.test/social/connect?social=pending&network=linkedin');
+            ->assertRedirect('https://app.test/social/connect?social=pending&network=linkedin&connect=pending');
 
         $this->actingAs($user)->getJson('/api/v1/social-accounts/pending')
             ->assertOk()
