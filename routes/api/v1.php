@@ -73,7 +73,9 @@ Route::post('/webhooks/postforme', SocialWebhookController::class)
 // The provider's isSuccess/error params ride along — dropping them made a
 // refused connection look like nothing happened.
 Route::get('/webhooks/postforme', function (Request $request) {
-    $query = http_build_query(['social' => 'connected'] + $request->only(['isSuccess', 'error']));
+    // Never social=connected next to a failure: that reads as a success.
+    $failed = strtolower((string) $request->query('isSuccess')) === 'false' || $request->filled('error');
+    $query = http_build_query(['social' => $failed ? 'failed' : 'connected'] + $request->only(['isSuccess', 'error']));
 
     return redirect(config('app.frontend_url').'/social/connect?'.$query);
 })->name('api.v1.webhooks.postforme.return');
