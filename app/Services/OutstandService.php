@@ -3,19 +3,18 @@
 namespace App\Services;
 
 use App\Contracts\SocialProvider;
+use App\Exceptions\ProviderConnectRefused;
 use App\Exceptions\ProviderRateLimited;
 use App\Models\SocialAccount;
 use Carbon\CarbonImmutable;
-use Illuminate\Contracts\Encryption\DecryptException;
 use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Http\Client\PendingRequest;
 use Illuminate\Http\Client\RequestException;
 use Illuminate\Http\Client\Response;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Cache;
-use Illuminate\Support\Facades\Crypt;
 use Illuminate\Support\Facades\Http;
-use JsonException;
+use Illuminate\Support\Str;
 use RuntimeException;
 use Throwable;
 
@@ -31,6 +30,9 @@ class OutstandService implements SocialProvider
 {
     /** How long the OAuth `state` we round-trip stays good. */
     private const STATE_MINUTES = 60;
+
+    /** Cache key prefix: short return-state key → our tenant (user ulid). */
+    private const STATE_PREFIX = 'outstand-return:';
 
     /** The Instagram scope DMs need. */
     public const MESSAGES_SCOPE = 'instagram_business_manage_messages';
@@ -60,18 +62,25 @@ class OutstandService implements SocialProvider
     public function authUrl(string $platform, string $externalId, array $bluesky = []): string
     {
         if ($platform === 'bluesky') {
-            $this->client()->post('/social-accounts/bluesky', [
+            self::refusedIf4xx($platform, $this->client()->post('/social-accounts/bluesky', [
                 'handle' => $bluesky['handle'] ?? '',
                 'appPassword' => $bluesky['app_password'] ?? '',
                 'tenantId' => $externalId,
-            ])->throw();
+            ]))->throw();
 
             return config('app.frontend_url').'/social/connect?social=connected';
         }
 
+        $redirect = route('api.v1.webhooks.outstand.return', ['state' => self::seal($externalId)]);
+        // Outstand validates redirect_uri as an absolute URI: a relative or
+        // non-http APP_URL would come back as a 400 for every connect.
+        if (filter_var($redirect, FILTER_VALIDATE_URL) === false || ! preg_match('#^https?://#', $redirect)) {
+            throw new RuntimeException("Outstand redirect_uri is not an absolute URL ({$redirect}); check APP_URL.");
+        }
+
         $body = [
             'tenant_id' => $externalId,
-            'redirect_uri' => route('api.v1.webhooks.outstand.return', ['state' => self::seal($externalId)]),
+            'redirect_uri' => $redirect,
             // Always the account picker: a second connect otherwise reuses
             // the account the browser is signed in to (honoured by TikTok,
             // Facebook, Instagram, YouTube; ignored elsewhere).
@@ -79,15 +88,17 @@ class OutstandService implements SocialProvider
         ];
 
         // DMs need instagram_business_manage_messages. `scopes` REPLACES
-        // Outstand's defaults, so the whole default list goes with it.
+        // Outstand's defaults, so the whole default list goes with it. It is
+        // a comma-separated STRING in Outstand's schema: an array is refused
+        // with a 400 (prod, 9 Nov — no Instagram account could connect).
         if ($platform === 'instagram' && config('services.inbox.enabled')) {
-            $body['scopes'] = self::instagramScopes();
+            $body['scopes'] = implode(',', self::instagramScopes());
             Cache::put(self::MESSAGES_SCOPE_MARKER.$externalId, true, now()->addMinutes(self::STATE_MINUTES));
         }
 
         $response = $this->client()->post('/social-networks/'.rawurlencode($platform).'/auth-url', $body);
 
-        $response->throw();
+        self::refusedIf4xx($platform, $response)->throw();
 
         $url = $response->json('data.auth_url');
 
@@ -527,24 +538,24 @@ class OutstandService implements SocialProvider
     /** Our tenant, sealed for the OAuth round trip. */
     public static function seal(string $externalId): string
     {
-        return Crypt::encryptString(json_encode([
-            't' => $externalId,
-            'e' => now()->addMinutes(self::STATE_MINUTES)->timestamp,
-        ], JSON_THROW_ON_ERROR));
+        // A short random key, not an encrypted blob: it rides inside
+        // Outstand's redirect_uri, so it stays URL-safe and well under any
+        // length limit. The tenant lives server-side for the state's life.
+        $key = Str::random(40);
+        Cache::put(self::STATE_PREFIX.$key, $externalId, now()->addMinutes(self::STATE_MINUTES));
+
+        return $key;
     }
 
     /** The tenant a returning browser carries, or null when forged or stale. */
     public static function unseal(?string $state): ?string
     {
-        try {
-            $data = json_decode(Crypt::decryptString((string) $state), true, 512, JSON_THROW_ON_ERROR);
-        } catch (DecryptException|JsonException) {
+        if (! is_string($state) || ! preg_match('/^[A-Za-z0-9]{40}$/', $state)) {
             return null;
         }
+        $tenant = Cache::get(self::STATE_PREFIX.$state);
 
-        return is_array($data) && is_string($data['t'] ?? null) && (int) ($data['e'] ?? 0) >= now()->timestamp
-            ? $data['t']
-            : null;
+        return is_string($tenant) ? $tenant : null;
     }
 
     /**
@@ -723,6 +734,22 @@ class OutstandService implements SocialProvider
         $name = basename((string) parse_url($url, PHP_URL_PATH));
 
         return $name !== '' && str_contains($name, '.') ? $name : "media-{$i}.jpg";
+    }
+
+    /**
+     * A 4xx on a connect is Outstand's verdict on our request or our setup:
+     * logged with its body and turned into a clear 422 for the app. A 5xx
+     * still throws as before.
+     *
+     * @throws ProviderConnectRefused
+     */
+    private static function refusedIf4xx(string $platform, Response $response): Response
+    {
+        if ($response->clientError() && $response->status() !== 429) {
+            throw ProviderConnectRefused::from('outstand', $platform, $response);
+        }
+
+        return $response;
     }
 
     private function client(bool $retry = true): PendingRequest

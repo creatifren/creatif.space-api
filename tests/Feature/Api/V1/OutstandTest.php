@@ -10,6 +10,7 @@ use App\Support\Credits;
 use Illuminate\Http\Client\Request as HttpRequest;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Log;
 
 /*
  * Outstand as the relay: what we send it, what we make of what it sends.
@@ -82,6 +83,98 @@ describe('connecting', function () {
                 && str_starts_with($r['redirect_uri'], route('api.v1.webhooks.outstand.return'))
                 && OutstandService::unseal($q['state'] ?? null) === $user->ulid;
         });
+    });
+
+    it('sends a body Outstand\'s schema accepts: string scopes, a short URL-safe state, an absolute redirect_uri', function () {
+        config(['services.inbox.enabled' => true]);
+        Http::fake(['api.outstand.test/*' => Http::response(['success' => true, 'data' => ['auth_url' => 'https://www.outstand.so/x']])]);
+        $user = User::factory()->create();
+
+        $this->actingAs($user)->postJson('/api/v1/social-accounts/auth-url', ['platform' => 'instagram'])->assertOk();
+
+        Http::assertSent(function (HttpRequest $r) use ($user) {
+            parse_str((string) parse_url($r['redirect_uri'], PHP_URL_QUERY), $q);
+
+            return is_string($r['scopes']) && str_contains($r['scopes'], 'instagram_business_manage_messages')
+                && ! str_contains($r['scopes'], ' ')
+                && filter_var($r['redirect_uri'], FILTER_VALIDATE_URL) !== false
+                && str_starts_with($r['redirect_uri'], 'http')
+                && preg_match('/^[A-Za-z0-9]{40}$/', $q['state'] ?? '') === 1
+                && strlen($r['redirect_uri']) < 200
+                && OutstandService::unseal($q['state']) === $user->ulid;
+        });
+    });
+
+    it('forgets a return state after its hour', function () {
+        $state = OutstandService::seal('u1');
+        expect(OutstandService::unseal($state))->toBe('u1');
+
+        $this->travel(61)->minutes();
+
+        expect(OutstandService::unseal($state))->toBeNull()
+            ->and(OutstandService::unseal('../../etc'))->toBeNull();
+    });
+
+    it('logs the full Outstand body and platform on a schema 400, and answers the app clearly', function () {
+        Log::spy();
+        $echo = ['data' => ['tenant_id' => '01M4MWS19PWZFDW6TVBPFSP0K8', 'redirect_uri' => 'https://api.creatif.space/api/v1/webhooks/outstand?state=x', 'scopes' => ['a']],
+            'error' => 'Invalid payload', 'details' => ['scopes' => ['_errors' => ['Expected string, received array']]]];
+        Http::fake(['api.outstand.test/*' => Http::response($echo, 400)]);
+
+        $this->actingAs(User::factory()->create())
+            ->postJson('/api/v1/social-accounts/auth-url', ['platform' => 'instagram'])
+            ->assertStatus(422)
+            ->assertJsonPath('code', 'provider_connect_refused')
+            ->assertJsonPath('message', 'Instagram didn’t accept the connection request: Invalid payload');
+
+        Log::shouldHaveReceived('error')->withArgs(fn ($m, $c) => $m === 'social.connect_refused'
+            && $c['platform'] === 'instagram' && $c['status'] === 400
+            && $c['body'] === json_encode($echo))->once();
+    });
+
+    it('turns Outstand refusing the redirect (Quickstart project) into a clear 422, with the body logged', function () {
+        Log::spy();
+        Http::fake(['api.outstand.test/*' => Http::response(
+            ['success' => false, 'error' => 'Redirect URL Override is not allowed for Quickstart Projects'], 400,
+        )]);
+
+        $this->actingAs(User::factory()->create())
+            ->postJson('/api/v1/social-accounts/auth-url', ['platform' => 'instagram'])
+            ->assertStatus(422)
+            ->assertJsonPath('code', 'provider_misconfigured')
+            ->assertJsonPath('provider_status', 400)
+            ->assertJsonPath('message', 'Connecting Instagram isn’t available right now — our team has been alerted. Please try again later.');
+
+        Log::shouldHaveReceived('error')->withArgs(fn ($m, $c) => $m === 'social.connect_refused'
+            && $c['platform'] === 'instagram' && $c['status'] === 400 && $c['misconfigured'] === true
+            && str_contains($c['body'], 'not allowed for Quickstart Projects'))->once();
+    });
+
+    it('passes any other Outstand refusal on as provider_connect_refused', function () {
+        Http::fake(['api.outstand.test/*' => Http::response(['success' => false, 'error' => 'Invalid app password'], 400)]);
+
+        $this->actingAs(User::factory()->create())
+            ->postJson('/api/v1/social-accounts/auth-url', ['platform' => 'bluesky', 'handle' => 'rani.bsky.social', 'app_password' => 'nope'])
+            ->assertStatus(422)
+            ->assertJsonPath('code', 'provider_connect_refused')
+            ->assertJsonPath('message', 'Bluesky didn’t accept the connection request: Invalid app password');
+    });
+
+    it('treats a network missing at Outstand as misconfigured', function () {
+        Http::fake(['api.outstand.test/*' => Http::response(['success' => false, 'error' => 'Social network not configured'], 404)]);
+
+        $this->actingAs(User::factory()->create())
+            ->postJson('/api/v1/social-accounts/auth-url', ['platform' => 'tiktok'])
+            ->assertStatus(422)
+            ->assertJsonPath('code', 'provider_misconfigured');
+    });
+
+    it('still fails loudly on an Outstand outage', function () {
+        Http::fake(['api.outstand.test/*' => Http::response(['success' => false, 'error' => 'boom'], 503)]);
+
+        $this->actingAs(User::factory()->create())
+            ->postJson('/api/v1/social-accounts/auth-url', ['platform' => 'instagram'])
+            ->assertServerError();
     });
 
     it('connects Bluesky directly and points the browser at the connect page', function () {
