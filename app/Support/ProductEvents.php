@@ -12,6 +12,7 @@ use App\Models\SocialPostTarget;
 use App\Models\User;
 use App\Services\Analytics;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Cache;
 
 /**
  * The tracking plan's events, built in one place so every trigger sends
@@ -197,16 +198,27 @@ final class ProductEvents
 
     /**
      * One destination's outcome, called with the status it had before the
-     * result landed — a redelivered result finds it already there and
-     * sends nothing.
+     * result landed. Only a move out of Pending counts, and each outcome of
+     * a target is sent once ever: a marker per (target, outcome) in the
+     * cache (database store in prod; written in the caller's transaction,
+     * so a rolled-back result leaves none). A redelivered or replayed
+     * result sends nothing.
+     *
+     * @param  'webhook'|'reconcile'|'job'  $source
      */
-    public static function publishResult(SocialPost $post, SocialPostTarget $target, ?SocialPostTargetStatus $before, ?string $error): void
+    public static function publishResult(SocialPost $post, SocialPostTarget $target, ?SocialPostTargetStatus $before, ?string $error, string $source = 'job'): void
     {
+        if ($before !== SocialPostTargetStatus::Pending
+            || ! in_array($target->status, [SocialPostTargetStatus::Published, SocialPostTargetStatus::Failed], true)
+            || ! Cache::add('publish-event:'.$target->id.':'.$target->status->value, true)) {
+            return;
+        }
+
         $post->loadMissing('user');
         $target->loadMissing('account');
         $network = $target->account?->platform->value;
 
-        if ($target->status === SocialPostTargetStatus::Published && $before !== SocialPostTargetStatus::Published) {
+        if ($target->status === SocialPostTargetStatus::Published) {
             $firstEver = ! SocialPostTarget::query()
                 ->whereKeyNot($target->id)
                 ->where('status', SocialPostTargetStatus::Published)
@@ -223,18 +235,18 @@ final class ProductEvents
                     default => 'immediate',
                 },
                 'is_first_publish' => $firstEver,
+                'source' => $source,
             ]);
 
             return;
         }
 
-        if ($target->status === SocialPostTargetStatus::Failed && $before !== SocialPostTargetStatus::Failed) {
-            self::analytics()->capture($post->user->ulid, 'post_publish_failed', [
-                'post_id' => $post->ulid,
-                'network' => $network,
-                'error_code' => self::errorCode($error),
-            ]);
-        }
+        self::analytics()->capture($post->user->ulid, 'post_publish_failed', [
+            'post_id' => $post->ulid,
+            'network' => $network,
+            'error_code' => self::errorCode($error),
+            'source' => $source,
+        ]);
     }
 
     /**

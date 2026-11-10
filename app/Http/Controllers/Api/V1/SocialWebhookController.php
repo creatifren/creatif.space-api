@@ -183,7 +183,7 @@ class SocialWebhookController extends Controller
             return;
         }
 
-        SocialPostRelay::applyResult($post, $account, $data);
+        SocialPostRelay::applyResult($post, $account, $data, 'webhook');
     }
 
     /**

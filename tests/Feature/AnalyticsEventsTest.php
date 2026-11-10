@@ -21,6 +21,7 @@ use App\Services\Analytics;
 use App\Services\AnalyticsFake;
 use App\Support\Credits;
 use App\Support\ProductEvents;
+use App\Support\SocialPostRelay;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
@@ -406,6 +407,7 @@ describe('approval links', function () {
 
 describe('publishing results', function () {
     it('fires post_published once per destination, deduped across redeliveries', function () {
+        config(['services.social.provider' => 'postforme']);
         $user = aePaidUser();
         $ig = SocialAccount::factory()->for($user)->create(['platform' => 'instagram']);
         $tt = SocialAccount::factory()->for($user)->create(['platform' => 'tiktok']);
@@ -423,14 +425,15 @@ describe('publishing results', function () {
 
         ae()->assertCapturedTimes('post_published', 2);
         [$first, $second] = ae()->captured('post_published');
-        expect(array_keys($first['properties']))->toEqualCanonicalizing(['post_id', 'network', 'credits_charged', 'via', 'is_first_publish'])
+        expect(array_keys($first['properties']))->toEqualCanonicalizing(['post_id', 'network', 'credits_charged', 'via', 'is_first_publish', 'source'])
             ->and($first['distinct_id'])->toBe($user->ulid)
-            ->and($first['properties'])->toMatchArray(['post_id' => $post->ulid, 'network' => 'instagram', 'via' => 'scheduled', 'is_first_publish' => true])
+            ->and($first['properties'])->toMatchArray(['post_id' => $post->ulid, 'network' => 'instagram', 'via' => 'scheduled', 'is_first_publish' => true, 'source' => 'webhook'])
             ->and($first['properties']['credits_charged'])->toBeGreaterThan(0)
             ->and($second['properties'])->toMatchArray(['network' => 'tiktok', 'is_first_publish' => false]);
     });
 
     it('tells after_approval and immediate apart', function () {
+        config(['services.social.provider' => 'postforme']);
         $user = aePaidUser();
         $ig = SocialAccount::factory()->for($user)->create(['platform' => 'instagram']);
         $approved = SocialPost::factory()->for($user)->create(['provider_post_id' => 'p_appr', 'approval' => 'approved', 'scheduled_at' => null]);
@@ -476,10 +479,97 @@ describe('publishing results', function () {
         aeOutstandHook($payload)->assertOk();
         aeOutstandHook($payload)->assertOk();
 
-        $m = ae()->assertCapturedWithKeys('post_publish_failed', ['post_id', 'network', 'error_code']);
-        expect($m['properties'])->toBe(['post_id' => $post->ulid, 'network' => 'instagram', 'error_code' => 'auth'])
+        $m = ae()->assertCapturedWithKeys('post_publish_failed', ['post_id', 'network', 'error_code', 'source']);
+        expect($m['properties'])->toBe(['post_id' => $post->ulid, 'network' => 'instagram', 'error_code' => 'auth', 'source' => 'webhook'])
             ->and(json_encode(ae()->sent))->not->toContain('@studio');
         ae()->assertNotCaptured('post_published');
+    });
+
+    // Prod 10 Nov 02:05:12Z: 9 post_published + 3 post_publish_failed in one
+    // burst when the Post list's reconcile settled old Post for Me posts.
+    describe('stale results', function () {
+        beforeEach(function () {
+            config(['services.social.provider' => 'outstand']);
+        });
+
+        function aeOverdue(User $user, string $provider, string $postId): array
+        {
+            $account = SocialAccount::factory()->for($user)->create(['platform' => 'threads', 'provider' => $provider]);
+            $post = SocialPost::factory()->for($user)->create([
+                'provider' => $provider, 'provider_post_id' => $postId, 'status' => 'scheduled', 'scheduled_at' => now()->subHour(),
+            ]);
+            $post->targets()->create(['social_account_id' => $account->id]);
+
+            return [$post, $account];
+        }
+
+        function aeOutstandResult(string $postId, SocialAccount $account): void
+        {
+            Http::fake(['api.outstand.test/v1/posts/*' => Http::response(['post' => ['id' => $postId, 'socialAccounts' => [
+                ['id' => $account->provider_account_id, 'status' => 'published', 'platformPostUrl' => 'https://threads.net/x'],
+            ]]])]);
+        }
+
+        it('emits once on the first transition, from reconcile', function () {
+            $user = aePaidUser();
+            [$post, $account] = aeOverdue($user, 'outstand', 'o1');
+            aeOutstandResult('o1', $account);
+
+            $this->actingAs($user)->getJson('/api/v1/social-posts')->assertOk();
+
+            expect($post->targets()->first()->status->value)->toBe('published');
+            ae()->assertCapturedOnce('post_published', fn ($p) => $p['source'] === 'reconcile' && $p['network'] === 'threads');
+        });
+
+        it('emits nothing when reconcile finds the target already published', function () {
+            $user = aePaidUser();
+            [$post, $account] = aeOverdue($user, 'outstand', 'o2');
+            $post->targets()->update(['status' => 'published']);
+            aeOutstandResult('o2', $account);
+
+            $this->actingAs($user)->getJson('/api/v1/social-posts')->assertOk();
+
+            ae()->assertNotCaptured('post_published');
+        });
+
+        it('emits nothing for a replay, even when the row was reset to pending', function () {
+            $user = aePaidUser();
+            [$post, $account] = aeOverdue($user, 'outstand', 'o3');
+            $result = ['post_id' => 'o3', 'social_account_id' => $account->provider_account_id, 'success' => true];
+
+            SocialPostRelay::applyResult($post, $account, $result, 'webhook');
+            $post->targets()->update(['status' => 'pending']);
+            SocialPostRelay::applyResult($post->fresh(), $account, $result, 'reconcile');
+
+            ae()->assertCapturedOnce('post_published', fn ($p) => $p['source'] === 'webhook');
+        });
+
+        it('settles a legacy relay\'s post without an event', function () {
+            $user = aePaidUser();
+            [$post, $account] = aeOverdue($user, 'postforme', 'pfm_old');
+            Http::fake(['api.postforme.test/*' => Http::response(['data' => [
+                ['id' => 'r1', 'post_id' => 'pfm_old', 'social_account_id' => $account->provider_account_id, 'success' => true],
+            ]])]);
+
+            $this->actingAs($user)->getJson('/api/v1/social-posts')->assertOk();
+
+            expect($post->targets()->first()->status->value)->toBe('published');
+            ae()->assertNotCaptured('post_published');
+            ae()->assertNotCaptured('post_publish_failed');
+        });
+
+        it('emits nothing for a result stamped more than a day before the send', function () {
+            $user = aePaidUser();
+            [$post, $account] = aeOverdue($user, 'outstand', 'o4');
+
+            SocialPostRelay::applyResult($post, $account, [
+                'post_id' => 'o4', 'social_account_id' => $account->provider_account_id, 'success' => false,
+                'error' => 'old', 'created_at' => now()->subDays(3)->toIso8601String(),
+            ], 'webhook');
+
+            expect($post->targets()->first()->status->value)->toBe('failed');
+            ae()->assertNotCaptured('post_publish_failed');
+        });
     });
 
     it('maps platform errors to short codes', function (?string $text, string $code) {
