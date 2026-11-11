@@ -29,6 +29,8 @@ use Illuminate\Validation\ValidationException;
 
 class FileController extends Controller
 {
+    public const REFUSED_FORMAT = 'This format is not supported. Convert it to JPEG, PNG, WebP, GIF, SVG, PDF, MP4 or MOV and upload that instead.';
+
     /**
      * The Crefile browser: everything the user has uploaded or imported.
      *
@@ -206,6 +208,9 @@ class FileController extends Controller
             'mime_type' => ['required', 'string', 'in:'.implode(',', AcceptedUploads::MIMES)],
             'size_bytes' => ['required', 'integer', 'min:1'],
             'folder_id' => ['sometimes', 'nullable', 'string', 'max:26'],
+        ], [
+            // Says what to do, not only what is wrong (connected apps pass it on).
+            'mime_type.in' => self::REFUSED_FORMAT,
         ]);
 
         $user = Workspace::owner($request->user());

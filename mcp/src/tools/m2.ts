@@ -238,11 +238,17 @@ export const checkApprovalStatus = defineTool({
   },
 });
 
+/** The post's current media as the API takes it back: url, plus a video cover when there is one. */
+const keptMedia = (post: V1Post) =>
+  (post.media ?? []).map((m) => ({ url: m.url, ...(m.thumbnail_url ? { thumbnail_url: m.thumbnail_url } : {}) }));
+
 export const updatePost = defineTool({
   name: 'update_post',
   title: 'Update a post',
   description:
-    'Changes a draft or a post still waiting for approval: its caption, its scheduled time, or its labels. ' +
+    'Changes a draft or a post still waiting for approval: its caption, its scheduled time, its labels, or its media. ' +
+    'Media: file_ids REPLACES the post’s media with these library files (ids from list_files, or from confirm_media_upload for a new upload); add_file_ids keeps the current media and adds these after it (10 items at most). ' +
+    'Example: update_post { "post_id": "01JD…", "add_file_ids": ["01JE…"] }. A file that was not confirmed is refused with file_not_ready — call confirm_media_upload first. ' +
     'Posts already queued to publish, published or otherwise done cannot be changed from here (not_editable) — the user edits those in creatif.space.',
   scope: 'draft',
   input: {
@@ -250,12 +256,18 @@ export const updatePost = defineTool({
     caption: z.string().min(1).max(63206).optional(),
     scheduled_at: z.iso.datetime({ offset: true }).optional().describe('New time, ISO 8601, in the future'),
     labels: z.array(z.string().max(40)).max(10).optional().describe('Replaces the post’s labels'),
+    file_ids: z.array(ulid('File')).max(10).optional().describe('Replaces the post’s media with these library files ([] removes all media)'),
+    add_file_ids: z.array(ulid('File')).min(1).max(10).optional().describe('Adds these library files after the post’s current media'),
   },
   annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false },
   notFound: 'That post',
   run: async (args, { v1 }) => {
-    if (args.caption === undefined && args.scheduled_at === undefined && args.labels === undefined) {
-      throw new ToolError('invalid_input', 'Nothing to change.', 'Pass caption, scheduled_at and/or labels.');
+    if (args.file_ids !== undefined && args.add_file_ids !== undefined) {
+      throw new ToolError('invalid_input', 'Pass file_ids or add_file_ids, not both.', 'file_ids replaces the media; add_file_ids appends to it.');
+    }
+    const changesMedia = args.file_ids !== undefined || args.add_file_ids !== undefined;
+    if (args.caption === undefined && args.scheduled_at === undefined && args.labels === undefined && !changesMedia) {
+      throw new ToolError('invalid_input', 'Nothing to change.', 'Pass caption, scheduled_at, labels, file_ids and/or add_file_ids.');
     }
     // The API decides what may change (drafts and posts waiting for approval
     // only, through a token); this only says so before trying.
@@ -268,10 +280,19 @@ export const updatePost = defineTool({
         'Tell the user to change it in creatif.space.',
       );
     }
+    if (args.add_file_ids !== undefined && keptMedia(current).length + args.add_file_ids.length > 10) {
+      throw new ToolError(
+        'invalid_input',
+        `A post takes up to 10 media items; this one has ${keptMedia(current).length}.`,
+        'Add fewer files, or pass file_ids to replace the media instead.',
+      );
+    }
     const { data } = await v1.patch<{ data: V1Post }>(`/social-posts/${encodeURIComponent(args.post_id)}`, {
       ...(args.caption !== undefined ? { caption: args.caption } : {}),
       ...(args.scheduled_at !== undefined ? { scheduled_at: args.scheduled_at } : {}),
       ...(args.labels !== undefined ? { labels: args.labels } : {}),
+      ...(args.file_ids !== undefined ? { media: [], file_ids: args.file_ids } : {}),
+      ...(args.add_file_ids !== undefined ? { media: keptMedia(current), file_ids: args.add_file_ids } : {}),
     });
     return { post: shapePost(data) };
   },

@@ -185,13 +185,23 @@ describe('draft_post', () => {
   });
 
   it('maps a validation error to invalid_input with the fields', async () => {
+    const res = await call('draft_post', { caption: 'Hi', channel_ids: [IG] }, {
+      'POST /social-posts': () => ({
+        status: 422,
+        body: { message: 'One or more accounts are not connected accounts of yours.', errors: { account_ids: ['…'] } },
+      }),
+    });
+    expect(payload(res).error).toMatchObject({ code: 'invalid_input', details: { errors: { account_ids: ['…'] } } });
+  });
+
+  it('maps a file that is not ready to file_not_ready, pointing at confirm_media_upload', async () => {
     const res = await call('draft_post', { caption: 'Hi', channel_ids: [IG], file_ids: [FILE] }, {
       'POST /social-posts': () => ({
         status: 422,
         body: { message: 'One or more files are not ready files in your library.', errors: { file_ids: ['…'] } },
       }),
     });
-    expect(payload(res).error).toMatchObject({ code: 'invalid_input', details: { errors: { file_ids: ['…'] } } });
+    expect(payload(res).error).toMatchObject({ code: 'file_not_ready', details: { errors: { file_ids: ['…'] } }, hint: expect.stringContaining('confirm_media_upload') });
   });
 
   it('maps a plan gate to plan_required', async () => {

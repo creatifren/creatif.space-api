@@ -15,6 +15,12 @@ export type ErrorCode =
   | 'preview_stale'
   | 'not_editable'
   | 'approval_required'
+  | 'storage_full'
+  | 'file_too_large'
+  | 'unsupported_format'
+  | 'upload_limit'
+  | 'upload_incomplete'
+  | 'file_not_ready'
   | 'upstream_unavailable';
 
 /** An error a tool returns to the model: a machine code plus what to do next. */
@@ -65,6 +71,9 @@ export function toToolError(e: unknown, notFoundWhat = 'That item'): ToolError {
   // `code` from V1 controllers, `error` from the API's token fence.
   const code = typeof body.code === 'string' ? body.code : typeof body.error === 'string' ? body.error : undefined;
   const message = typeof body.message === 'string' ? body.message : e.message;
+
+  const media = mediaError(e.status, body, message);
+  if (media) return media;
 
   if (code === 'account_reconnect_required') {
     return new ToolError(
@@ -144,4 +153,73 @@ export function toToolError(e: unknown, notFoundWhat = 'That item'): ToolError {
     default:
       return new ToolError('upstream_unavailable', `creatif.space answered ${e.status}.`, 'Try again in a minute.');
   }
+}
+
+const str = (v: unknown): string | undefined => (typeof v === 'string' && v !== '' ? v : undefined);
+
+/**
+ * Media refusals (MediaRefused: `reason`, plus links) and the upload-related
+ * validation answers, each with the one next step that fixes it.
+ */
+function mediaError(status: number, body: Record<string, unknown>, message: string): ToolError | undefined {
+  const reason = str(body.reason);
+  const errors = (body.errors && typeof body.errors === 'object' ? body.errors : {}) as Record<string, unknown>;
+  const billing = str(body.billing_url);
+  const files = str(body.files_url);
+
+  if (reason === 'quota_exceeded' && (body.feature === 'media_quota' || body.feature === 'keep_quota')) {
+    const freeUp =
+      body.feature === 'media_quota'
+        ? `free up space by deleting files in creatif.space → Files${files ? ` (${files})` : ''} and then emptying the Trash (trashed files still count)`
+        : `free up Keep space in creatif.space → Files${files ? ` (${files})` : ''}: un-Keep files or delete them, or remove media from drafts and scheduled posts (their media counts too)`;
+    const upgrade =
+      body.next_step === 'contact_sales'
+        ? 'contact creatif.space for more storage'
+        : `upgrade to ${body.next_step === 'upgrade_max' ? 'Max' : 'Pro'}${billing ? `: ${billing}` : ' in creatif.space → Settings → Subscription'}`;
+    return new ToolError(
+      'storage_full',
+      message,
+      `Nothing was kept. Tell the user this message, and that they can ${freeUp}, or ${upgrade}. Do not retry until they have done one of those.`,
+      pick(body, ['feature', 'next_step', 'billing_url', 'files_url']),
+    );
+  }
+  if (reason === 'file_too_large') {
+    const cap = typeof body.max_bytes === 'number' ? ` (limit ${body.max_bytes} bytes)` : '';
+    return new ToolError(
+      'file_too_large',
+      message,
+      `Nothing was kept. Make the file smaller than the limit${cap} — compress it, lower the resolution or trim the video — then call request_media_upload again with the new size.` +
+        (billing ? ` Or the user can upgrade for a bigger limit: ${billing}` : ''),
+      pick(body, ['max_bytes', 'next_step', 'billing_url']),
+    );
+  }
+  if (reason === 'unsupported_format' || (status === 422 && errors.mime_type !== undefined)) {
+    const text = reason === 'unsupported_format' ? message : String((errors.mime_type as unknown[] | undefined)?.[0] ?? message);
+    return new ToolError(
+      'unsupported_format',
+      text,
+      'Convert the file to JPEG, PNG, WebP or GIF (images) or MP4 or MOV (video) — or PDF/SVG for the library — then start again with request_media_upload. ' +
+        'The mime you declare must match the real bytes; a refused upload was deleted and its file id cannot be used.',
+    );
+  }
+  if (reason === 'upload_limit') {
+    return new ToolError('upload_limit', message, 'Tell the user uploads are paused for today. Do not retry today; they can try again tomorrow.');
+  }
+  if (status === 422 && errors.file !== undefined) {
+    return new ToolError(
+      'upload_incomplete',
+      String((errors.file as unknown[])[0] ?? message),
+      'PUT the file bytes to upload_url (with the Content-Type header from request_media_upload) and wait for a 200 before calling confirm_media_upload. ' +
+        'If expires_at has passed, call request_media_upload again for a new URL.',
+    );
+  }
+  if (status === 422 && errors.file_ids !== undefined) {
+    return new ToolError(
+      'file_not_ready',
+      String((errors.file_ids as unknown[])[0] ?? message),
+      'Every file id must be a ready file in this workspace. For a file you uploaded with request_media_upload, call confirm_media_upload first and use the id it returns; otherwise take ids from list_files. Nothing was saved.',
+      { errors: body.errors },
+    );
+  }
+  return undefined;
 }
