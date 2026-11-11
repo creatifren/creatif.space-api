@@ -496,12 +496,12 @@ class FileController extends Controller
     public function restore(Request $request, string $ulid): JsonResponse
     {
         $user = Workspace::owner($request->user());
-        abort_unless(Workspace::canWrite($request->user()), 403);
-
+        // Found first: another workspace's id is 404 even for a viewer.
         $file = File::onlyTrashed()
             ->where('user_id', $user->id)
             ->where('ulid', $ulid)
             ->firstOrFail();
+        abort_unless(Workspace::canWrite($request->user()), 403);
 
         $file->restore();
         $file->forceFill(['purge_at' => null])->save();
@@ -518,12 +518,12 @@ class FileController extends Controller
     public function forceDestroy(Request $request, string $ulid): JsonResponse
     {
         $user = Workspace::owner($request->user());
-        abort_unless(Workspace::canWrite($request->user()), 403);
-
+        // Found first: another workspace's id is 404 even for a viewer.
         $file = File::onlyTrashed()
             ->where('user_id', $user->id)
             ->where('ulid', $ulid)
             ->firstOrFail();
+        abort_unless(Workspace::canWrite($request->user()), 403);
 
         Activity::log($user, ActivityAction::Purge, "Deleted {$file->name} for good", 'file', $file->ulid);
         static::purge($file);

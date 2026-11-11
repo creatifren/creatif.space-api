@@ -228,11 +228,11 @@ describe('social accounts', function () {
         Http::assertNotSent(fn ($r) => $r->method() === 'PATCH');
     });
 
-    it("forbids touching another user's account", function () {
+    it("hides another user's account (404, not 403)", function () {
         $account = SocialAccount::factory()->create();
 
         $this->actingAs(User::factory()->create())
             ->deleteJson("/api/v1/social-accounts/{$account->ulid}")
-            ->assertForbidden();
+            ->assertNotFound();
     });
 });

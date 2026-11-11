@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Models\Contracts\WorkspaceOwned;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Support\Facades\Storage;
@@ -27,7 +28,7 @@ use Illuminate\Support\Facades\Storage;
  * @property int|null $user_id
  * @property string|null $note
  */
-class FileVersion extends Model
+class FileVersion extends Model implements WorkspaceOwned
 {
     protected $fillable = [
         'ulid',
@@ -54,6 +55,14 @@ class FileVersion extends Model
         static::creating(function (self $version): void {
             $version->ulid ??= (string) str()->ulid();
         });
+    }
+
+    public function workspaceUserId(): ?int
+    {
+        // A version lives in its file's workspace (trashed files included).
+        $id = File::withTrashed()->whereKey($this->file_id)->value('user_id');
+
+        return $id === null ? null : (int) $id;
     }
 
     public function getRouteKeyName(): string

@@ -605,6 +605,6 @@ class SocialApprovalController extends Controller
     /** A team member sees the workspace's posts and links. */
     private static function mayRead(User $user, int $ownerId): bool
     {
-        return self::workspaceIds($user)->contains($ownerId);
+        return Workspace::contains($user, $ownerId);
     }
 }

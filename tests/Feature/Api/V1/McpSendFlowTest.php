@@ -88,7 +88,7 @@ describe('GET /social-posts/{post}/send-preview', function () {
         $post = draftFor(User::factory()->create());
         $this->actingAs(User::factory()->create())
             ->getJson("/api/v1/social-posts/{$post->ulid}/send-preview")
-            ->assertForbidden();
+            ->assertNotFound();
     });
 });
 

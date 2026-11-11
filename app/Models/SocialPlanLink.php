@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Models\Contracts\WorkspaceOwned;
 use Carbon\CarbonImmutable;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -24,7 +25,7 @@ use Illuminate\Support\Str;
  * @property CarbonImmutable|null $revoked_at
  * @property CarbonImmutable|null $created_at
  */
-class SocialPlanLink extends Model
+class SocialPlanLink extends Model implements WorkspaceOwned
 {
     protected $fillable = ['user_id', 'token', 'title', 'starts_at', 'ends_at', 'account_ids', 'sections', 'revoked_at'];
 
@@ -67,6 +68,11 @@ class SocialPlanLink extends Model
         }
 
         return static::query()->where('token_hash', self::hashToken($token))->first();
+    }
+
+    public function workspaceUserId(): ?int
+    {
+        return $this->user_id;
     }
 
     public function getRouteKeyName(): string
