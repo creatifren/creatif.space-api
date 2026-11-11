@@ -1,0 +1,335 @@
+{
+  "help_url": "https://creatif.space/social/connect",
+  "steps": {
+    "oauth": [
+      "Open Creatif Space and go to Channels.",
+      "Click Connect.",
+      "Pick {network}.",
+      "Sign in on {network}'s own page.",
+      "Allow access.",
+      "You're back in Channels with the account listed."
+    ],
+    "page_picker": [
+      "Open Creatif Space and go to Channels.",
+      "Click Connect.",
+      "Pick {network}.",
+      "Sign in on {network}'s own page.",
+      "Allow access.",
+      "If you manage more than one page, choose the pages to connect.",
+      "You're back in Channels with the account listed."
+    ],
+    "bluesky": [
+      "Open Creatif Space and go to Channels.",
+      "Click Connect.",
+      "Pick Bluesky.",
+      "Enter your Bluesky handle and an app password (Bluesky has no sign-in page to send you to).",
+      "You're back in Channels with the account listed."
+    ]
+  },
+  "common": {
+    "requirements": [
+      {
+        "text": "Room on your plan: Free connects up to 3 social accounts; Pro and Max add more.",
+        "evidence": [
+          "database/seeders/PlanSeeder.php:125",
+          "app/Http/Controllers/Api/V1/SocialAccountController.php:110",
+          "app/Http/Controllers/Api/V1/SocialAccountController.php:471"
+        ]
+      }
+    ],
+    "oauth_requirements": [
+      {
+        "text": "Finish the sign-in within 30 minutes of starting it.",
+        "evidence": [
+          "app/Services/OutstandService.php:616-622",
+          "app/Http/Controllers/Api/V1/OutstandConnectController.php:99"
+        ]
+      },
+      {
+        "text": "You'll be asked which account to use, so you can pick a different one from the one your browser is signed in to.",
+        "evidence": [
+          "app/Services/OutstandService.php:89-92"
+        ]
+      }
+    ],
+    "common_errors": [
+      {
+        "text": "\"Free connects up to 3 social accounts.\" Disconnect one or upgrade to Pro or Max.",
+        "evidence": [
+          "app/Http/Controllers/Api/V1/SocialAccountController.php:462-473"
+        ]
+      },
+      {
+        "text": "\"Connecting {network} isn't available right now — our team has been alerted.\" Try again later.",
+        "evidence": [
+          "app/Exceptions/ProviderConnectRefused.php:37-39",
+          "app/Exceptions/ProviderConnectRefused.php:56-61"
+        ]
+      },
+      {
+        "text": "Later, \"{network} needs you to reconnect this account in Creatif Space → Channels.\" The network's access expired; connect it again.",
+        "evidence": [
+          "app/Support/PublishFailure.php:120",
+          "app/Http/Controllers/Api/V1/SocialWebhookController.php:126-153",
+          "app/Exceptions/AccountReconnectRequired.php:24-27"
+        ]
+      }
+    ],
+    "oauth_common_errors": [
+      {
+        "text": "\"The permissions were not granted, so nothing was connected.\" Connect again and allow access.",
+        "evidence": [
+          "app/Http/Controllers/Api/V1/OutstandConnectController.php:101",
+          "app/Http/Controllers/Api/V1/OutstandConnectController.php:113"
+        ]
+      },
+      {
+        "text": "\"The sign-in expired.\" or \"That sign-in link is not valid any more.\" Start the connect again from Channels.",
+        "evidence": [
+          "app/Http/Controllers/Api/V1/OutstandConnectController.php:111",
+          "app/Http/Controllers/Api/V1/OutstandConnectController.php:115"
+        ]
+      },
+      {
+        "text": "\"The sign-in was cancelled.\" Connect again when you're ready.",
+        "evidence": [
+          "app/Http/Controllers/Api/V1/OutstandConnectController.php:112"
+        ]
+      },
+      {
+        "text": "\"This account is already connected to another Creatif Space account.\" The same account can be in only one workspace.",
+        "evidence": [
+          "app/Http/Controllers/Api/V1/OutstandConnectController.php:105",
+          "app/Http/Controllers/Api/V1/OutstandConnectController.php:117",
+          "app/Http/Controllers/Api/V1/OutstandConnectController.php:189-203"
+        ]
+      },
+      {
+        "text": "\"The sign-in finished, but no account came back from it.\" Connect again and pick the account on the network's page.",
+        "evidence": [
+          "app/Http/Controllers/Api/V1/OutstandConnectController.php:116",
+          "app/Http/Controllers/Api/V1/OutstandConnectController.php:213-215"
+        ]
+      },
+      {
+        "text": "\"We couldn't confirm the connection just now.\" Refresh Channels in a minute.",
+        "evidence": [
+          "app/Http/Controllers/Api/V1/OutstandConnectController.php:118",
+          "app/Http/Controllers/Api/V1/OutstandConnectController.php:179-186"
+        ]
+      }
+    ]
+  },
+  "networks": {
+    "instagram": {
+      "name": "Instagram",
+      "flow": "oauth",
+      "requirements": [
+        {
+          "text": "Allow every permission Instagram asks for, including messages: Engage for Instagram covers DMs and comments.",
+          "evidence": [
+            "app/Services/OutstandService.php:39-40",
+            "app/Services/OutstandService.php:95-102",
+            "config/services.php:113-117",
+            "app/Models/SocialAccount.php:140-151"
+          ]
+        },
+        {
+          "text": "Replies to a DM must go out within 24 hours of the person's last message.",
+          "evidence": [
+            "app/Models/SocialConversation.php:38-39",
+            "app/Http/Controllers/Api/V1/InboxController.php:147-153"
+          ]
+        }
+      ],
+      "common_errors": [
+        {
+          "text": "\"Reconnect this Instagram account to allow messages.\" The account was connected without the messages permission; connect it again and allow it.",
+          "evidence": [
+            "app/Models/SocialAccount.php:162-169",
+            "app/Http/Controllers/Api/V1/InboxController.php:139-145"
+          ]
+        },
+        {
+          "text": "\"Instagram only allows a reply within 24 hours of their last message.\" Wait for them to message again.",
+          "evidence": [
+            "app/Http/Controllers/Api/V1/InboxController.php:147-153"
+          ]
+        },
+        {
+          "text": "\"Instagram allows a private reply only within 7 days of the comment.\"",
+          "evidence": [
+            "app/Http/Controllers/Api/V1/InboxCommentController.php:114-119",
+            "app/Models/SocialComment.php:38"
+          ]
+        }
+      ]
+    },
+    "facebook": {
+      "name": "Facebook",
+      "flow": "page_picker",
+      "requirements": [
+        {
+          "text": "A Facebook Page to connect. After sign-in you choose the Page; each Page you choose counts as one account on your plan.",
+          "evidence": [
+            "app/Http/Controllers/Api/V1/OutstandConnectController.php:20-28",
+            "app/Http/Controllers/Api/V1/OutstandConnectController.php:149-173",
+            "app/Http/Controllers/Api/V1/OutstandConnectController.php:396-403"
+          ]
+        },
+        {
+          "text": "Engage for Facebook covers comments (not DMs).",
+          "evidence": [
+            "app/Models/SocialAccount.php:140-151"
+          ]
+        }
+      ],
+      "common_errors": [
+        {
+          "text": "\"That sign-in expired. Connect again.\" The Page choice waits 30 minutes.",
+          "evidence": [
+            "app/Http/Controllers/Api/V1/OutstandConnectController.php:31-32",
+            "app/Http/Controllers/Api/V1/OutstandConnectController.php:386"
+          ]
+        },
+        {
+          "text": "\"Your plan connects up to 3 social accounts. Choose fewer, or upgrade to add more.\"",
+          "evidence": [
+            "app/Http/Controllers/Api/V1/OutstandConnectController.php:396-403"
+          ]
+        },
+        {
+          "text": "\"Private replies are Instagram only.\"",
+          "evidence": [
+            "app/Http/Controllers/Api/V1/InboxCommentController.php:106-108"
+          ]
+        }
+      ]
+    },
+    "linkedin": {
+      "name": "LinkedIn",
+      "flow": "page_picker",
+      "requirements": [
+        {
+          "text": "After sign-in you choose which LinkedIn pages to connect; each one you choose counts as one account on your plan.",
+          "evidence": [
+            "app/Http/Controllers/Api/V1/OutstandConnectController.php:20-28",
+            "app/Http/Controllers/Api/V1/OutstandConnectController.php:149-173",
+            "app/Http/Controllers/Api/V1/OutstandConnectController.php:396-403"
+          ]
+        }
+      ],
+      "common_errors": [
+        {
+          "text": "\"That sign-in expired. Connect again.\" The page choice waits 30 minutes.",
+          "evidence": [
+            "app/Http/Controllers/Api/V1/OutstandConnectController.php:31-32",
+            "app/Http/Controllers/Api/V1/OutstandConnectController.php:386"
+          ]
+        },
+        {
+          "text": "\"Your plan connects up to 3 social accounts. Choose fewer, or upgrade to add more.\"",
+          "evidence": [
+            "app/Http/Controllers/Api/V1/OutstandConnectController.php:396-403"
+          ]
+        }
+      ]
+    },
+    "x": {
+      "name": "X",
+      "flow": "oauth",
+      "requirements": [],
+      "common_errors": []
+    },
+    "tiktok": {
+      "name": "TikTok",
+      "flow": "oauth",
+      "requirements": [],
+      "common_errors": [
+        {
+          "text": "Deleting a post in Creatif Space leaves it on TikTok: TikTok does not let apps delete posts.",
+          "evidence": [
+            "app/Http/Controllers/Api/V1/SocialPostController.php:816-817",
+            "app/Http/Controllers/Api/V1/SocialPostController.php:870"
+          ]
+        }
+      ]
+    },
+    "threads": {
+      "name": "Threads",
+      "flow": "oauth",
+      "requirements": [],
+      "common_errors": [
+        {
+          "text": "Deleting a post in Creatif Space leaves it on Threads: Threads does not let apps delete posts.",
+          "evidence": [
+            "app/Http/Controllers/Api/V1/SocialPostController.php:816-817",
+            "app/Http/Controllers/Api/V1/SocialPostController.php:870"
+          ]
+        }
+      ]
+    },
+    "youtube": {
+      "name": "YouTube",
+      "flow": "oauth",
+      "requirements": [],
+      "common_errors": []
+    },
+    "pinterest": {
+      "name": "Pinterest",
+      "flow": "oauth",
+      "requirements": [
+        {
+          "text": "Every Pin goes to a board, so you'll choose one of the account's boards when you post.",
+          "evidence": [
+            "app/Http/Controllers/Api/V1/PinterestBoardController.php:14-17",
+            "app/Support/PublishPreflight.php:91-93"
+          ]
+        }
+      ],
+      "common_errors": [
+        {
+          "text": "\"Pinterest needs a board for this Pin. Choose a board and send again.\"",
+          "evidence": [
+            "app/Support/PublishFailure.php:126"
+          ]
+        },
+        {
+          "text": "\"Pinterest did not answer. Try again in a moment.\" The board list could not be loaded.",
+          "evidence": [
+            "app/Http/Controllers/Api/V1/PinterestBoardController.php:30-31"
+          ]
+        }
+      ]
+    },
+    "bluesky": {
+      "name": "Bluesky",
+      "flow": "bluesky",
+      "requirements": [
+        {
+          "text": "Your Bluesky handle and an app password (not your main password). Bluesky has no sign-in page to send you to.",
+          "evidence": [
+            "app/Http/Controllers/Api/V1/SocialAccountController.php:103-105",
+            "app/Http/Controllers/Api/V1/SocialAccountController.php:115-117",
+            "app/Services/OutstandService.php:57-58"
+          ]
+        }
+      ],
+      "common_errors": [
+        {
+          "text": "\"Bluesky didn't accept the connection request\": usually a wrong handle or app password.",
+          "evidence": [
+            "app/Exceptions/ProviderConnectRefused.php:18-19",
+            "app/Exceptions/ProviderConnectRefused.php:62-66"
+          ]
+        },
+        {
+          "text": "\"This account cannot be claimed.\" A Bluesky account already in another workspace can't be moved here from Creatif Space.",
+          "evidence": [
+            "app/Http/Controllers/Api/V1/SocialAccountController.php:158-160"
+          ]
+        }
+      ]
+    }
+  }
+}

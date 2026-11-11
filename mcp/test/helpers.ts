@@ -2,7 +2,7 @@ import type { AddressInfo } from 'node:net';
 import type { Server } from 'node:http';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js';
-import type { Analytics, ToolCallEvent } from '../src/analytics.js';
+import type { Analytics, FreeAnalytics, FreeToolEvent, ToolCallEvent } from '../src/analytics.js';
 import { CachedIntrospector, StubIntrospector, type Introspector } from '../src/auth/introspection.js';
 import { TokenRateLimiter } from '../src/rateLimit.js';
 import { createApp } from '../src/server.js';
@@ -63,9 +63,12 @@ export async function startApp(opts: {
   routes?: Record<string, Handler>;
   introspector?: Introspector;
   rateLimit?: number;
+  freeRateLimit?: number;
 } = {}) {
   const v1 = mockV1(opts.routes ?? {});
   const rec = recordingAnalytics();
+  const freeEvents: FreeToolEvent[] = [];
+  const freeAnalytics: FreeAnalytics = { freeToolCalled: (e) => freeEvents.push(e) };
   const app = createApp({
     v1ApiUrl: V1,
     resourceUrl: RESOURCE,
@@ -74,6 +77,8 @@ export async function startApp(opts: {
     analytics: rec.analytics,
     rateLimiter: new TokenRateLimiter(opts.rateLimit ?? 60),
     fetchImpl: v1.fetchImpl,
+    freeAnalytics,
+    ...(opts.freeRateLimit ? { freeRateLimitPerMinute: opts.freeRateLimit } : {}),
   });
   const server: Server = await new Promise((resolve) => {
     const s = app.listen(0, '127.0.0.1', () => resolve(s));
@@ -91,12 +96,20 @@ export async function startApp(opts: {
     return client;
   };
 
+  /** An MCP client on /free with no Authorization header at all. */
+  const connectFree = async () => {
+    const client = new Client({ name: 'test', version: '1.0.0' });
+    await client.connect(new StreamableHTTPClientTransport(new URL(`${base}/free`)));
+    clients.push(client);
+    return client;
+  };
+
   const close = async () => {
     await Promise.all(clients.map((c) => c.close()));
     await new Promise<void>((r) => server.close(() => r()));
   };
 
-  return { base, v1, events: rec.events, connect, close };
+  return { base, v1, events: rec.events, freeEvents, connect, connectFree, close };
 }
 
 /** Parse a tool result's JSON text. */

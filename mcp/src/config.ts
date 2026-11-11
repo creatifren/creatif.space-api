@@ -24,6 +24,9 @@ export interface Config {
 /** Not a secret: Glama reads it from a public URL to verify we own the connector. */
 export const DEFAULT_GLAMA_CLAIM = 'glama_claim_U8l5ipmr_QunqGhWyIg0VXQeWfhkoEky';
 
+/** /free calls per IP per minute (no env var: a code default, like rateLimitPerMinute). */
+export const DEFAULT_FREE_RATE_LIMIT = 30;
+
 const trimSlash = (s: string): string => s.replace(/\/+$/, '');
 
 export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
