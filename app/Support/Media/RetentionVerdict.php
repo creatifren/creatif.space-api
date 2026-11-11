@@ -35,6 +35,9 @@ final readonly class RetentionVerdict
 
     public const FREE_UNATTACHED = 'free_unattached';
 
+    /** A kept file after a downgrade to Free: kept for 30 days, then goes. */
+    public const FREE_KEPT_GRACE = 'free_kept_grace';
+
     public function __construct(
         public string $rule,
         public ?CarbonImmutable $dueAt,

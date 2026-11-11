@@ -5,6 +5,7 @@ namespace App\Support\Media;
 use App\Enums\PlanKey;
 use App\Models\User;
 use App\Support\Workspace;
+use Carbon\CarbonImmutable;
 
 /**
  * The media tier of an account and the numbers that go with it, read from
@@ -34,6 +35,30 @@ final class MediaLimits
         }
 
         return $subscription->plan->key === PlanKey::Max ? self::MAX : self::PRO;
+    }
+
+    /**
+     * When the workspace's owner dropped from a paid plan to Free: the end
+     * of their last subscription's entitlement (grace, else period end;
+     * the last update when those are missing or still ahead, e.g. an
+     * early expiry). Null while paid, or for an account that never paid.
+     */
+    public static function downgradedAt(User $user): ?CarbonImmutable
+    {
+        $owner = Workspace::owner($user);
+        if ($owner->activeSubscription() !== null) {
+            return null;
+        }
+
+        $last = $owner->subscriptions()->latest('id')->first();
+        if ($last === null) {
+            return null;
+        }
+
+        $end = $last->grace_ends_at ?? $last->current_period_end;
+        $end = $end === null || $end->isFuture() ? $last->updated_at : $end;
+
+        return $end === null ? null : CarbonImmutable::instance($end);
     }
 
     public static function paid(User $user): bool

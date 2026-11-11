@@ -69,6 +69,13 @@ return [
         'free_unattached_hours' => 24,
         // A failed post is retryable for this long after its slot.
         'failed_retry_days' => 7,
+        // Downgrade to Free: kept files stay this long after the downgrade
+        // (/terms), with emails this many days before the first deletion.
+        'downgrade_keep_days' => 30,
+        'downgrade_notice_days' => [7, 1],
+        // report (default): the notice job logs whom it would email;
+        // send: it emails. Turn on together with retention delete mode.
+        'downgrade_notices' => env('MEDIA_DOWNGRADE_NOTICES', 'report'),
         // Users per chunk.
         'chunk' => 100,
     ],
