@@ -41,7 +41,7 @@ class EnforceTokenScope
             $needed === null => $this->deny(
                 403,
                 'not_available',
-                'This isn\'t available to connected apps or API keys yet. They can read channels, posts, files and Credits, and save drafts.',
+                'This isn\'t available to connected apps or API keys yet. They can read channels, posts, files and Credits, upload media and save drafts.',
             ),
             ! $context->can($needed) => $this->deny(
                 403,

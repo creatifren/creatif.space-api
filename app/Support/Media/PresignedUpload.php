@@ -47,6 +47,7 @@ final class PresignedUpload
             'ContentLength' => $bytes,
         ]);
 
-        return (string) $client->createPresignedRequest($command, $expires)->getUri();
+        // Signed at the app's clock (the SDK would read time() itself).
+        return (string) $client->createPresignedRequest($command, $expires, ['start_time' => now()])->getUri();
     }
 }

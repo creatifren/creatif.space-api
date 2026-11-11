@@ -21,7 +21,7 @@ return [
 
     'scopes' => [
         'read' => 'Read your channels, posts, files, Credits balance and Engage inbox (comments and DMs)',
-        'draft' => 'Save draft posts (never sends or schedules them)',
+        'draft' => 'Save draft posts and upload media to your library (never sends or schedules them)',
         'approve' => 'Create client approval links for your posts (Free: one client, posts up to 7 days ahead)',
         'publish' => 'Schedule and publish your drafts (at most 20 a day) and reply to comments and DMs, spending Credits',
     ],
@@ -72,6 +72,13 @@ return [
         'api.v1.social-posts.send' => 'publish',
         'api.v1.social-approval-links.store' => 'approve',
         'api.v1.social-approval-links.show' => 'read',
+
+        // Media (request_media_upload / confirm_media_upload): the same
+        // presign and complete as the app — limits, quota and the
+        // magic-byte check all stay in FileController.
+        'api.v1.files.presign' => 'draft',
+        'api.v1.files.complete' => 'draft',
+        'api.v1.files.show' => 'read',
 
         // Engage. Replying sends in the user's name (and may cost Credits):
         // `publish`, like a send. The MCP server previews before it replies.

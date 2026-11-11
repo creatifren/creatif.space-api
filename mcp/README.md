@@ -46,11 +46,23 @@ Rate limit: 60 requests / minute / token (429 + `Retry-After`).
 | `get_credits` | read | `GET /credits` |
 | `create_approval_link` (post_ids, **approver_email** (required — the client signs in with it to decide), title, client_name, expires_in_hours) — every plan; Free: one client (by approver_email), 7-day window, 10 queued | approve | `POST /social-approval-links` (drafts accepted) |
 | `check_approval_status` (post_id \| link_id) | read | `GET /social-posts/{id}` or `GET /social-approval-links/{id}` |
-| `update_post` (caption, scheduled_at, labels) | draft (drafts and posts waiting for approval only) | `PATCH /social-posts/{id}` |
+| `update_post` (caption, scheduled_at, labels, file_ids \| add_file_ids) | draft (drafts and posts waiting for approval only) | `PATCH /social-posts/{id}` |
 | `schedule_post` (post_id, scheduled_at, confirm) | publish | preview `GET /social-posts/{id}/send-preview`; `confirm: true` → `POST /social-posts/{id}/send` |
 | `publish_post` (post_id, confirm) | publish | same, sends now |
+| `request_media_upload` (filename, mime, size_bytes, folder_id) | draft | `POST /files/presign` → file_id + presigned PUT URL (15 min) |
+| `confirm_media_upload` (file_id) | draft | `POST /files/{id}/complete` (409 → `GET /files/{id}`: already ready is returned) |
 | `list_conversations` (type comment\|dm, channel_id, unread_only, since, limit, cursor) — Engage comments and DMs in one list, newest first | read | `GET /inbox/feed?type&account&unread&since&per_page&cursor` |
 | `reply_to_conversation` (conversation_id, text, confirm) — DM into the thread, or public reply under a comment | publish | preview `GET /inbox/feed/{id}`; `confirm: true` → `POST /inbox/feed/{id}/reply` |
+
+**Media upload.** `request_media_upload` → the client PUTs the exact bytes to
+the URL (Content-Type and Content-Length are signed) → `confirm_media_upload`
+→ the id goes in `draft_post` / `update_post` `file_ids`. Same presign and
+complete as the app, so every rule stays in Laravel: Free 1 GB total, Pro 25 GB
+/ Max 50 GB Keep quota, per-file caps, accepted formats, magic-byte check.
+Refusals come back as `storage_full` (free-up-space `files_url` + `billing_url`
+upgrade link), `file_too_large`, `unsupported_format`, `upload_limit`,
+`upload_incomplete` (confirm before the PUT), `file_not_ready` (an unconfirmed
+or foreign id in a post); another workspace's id is `not_found`.
 
 `schedule_post` / `publish_post` without `confirm: true` only return a preview
 (channels, Credit cost, sends left today, anything blocking). Sends from a bearer

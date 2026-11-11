@@ -10,7 +10,8 @@ use RuntimeException;
  * stable `reason` the app branches on:
  *
  * - 402 quota_exceeded (feature keep_quota | media_quota) with next_step
- *   upgrade_pro | upgrade_max | contact_sales
+ *   upgrade_pro | upgrade_max | contact_sales, plus files_url (free up
+ *   space) and, for an upgrade, billing_url
  * - 422 file_too_large (per-file cap), 422 unsupported_format (bytes are
  *   not an accepted format)
  * - 429 upload_limit — INTERNAL abuse limits; the message is generic on
@@ -35,7 +36,11 @@ class MediaRefused extends RuntimeException
 
     public static function quota(string $feature, string $nextStep, string $message): self
     {
-        return new self($message, 402, 'quota_exceeded', ['feature' => $feature, 'next_step' => $nextStep]);
+        return new self($message, 402, 'quota_exceeded', [
+            'feature' => $feature,
+            'next_step' => $nextStep,
+            ...self::links($nextStep),
+        ]);
     }
 
     /**
@@ -47,11 +52,29 @@ class MediaRefused extends RuntimeException
             ? 'This file is too large to upload.'
             : 'This file is larger than your plan allows for this kind of file ('.self::human($maxBytes).').';
 
+        $nextStep = $maxBytes === null ? null : $nextStep;
+
         return new self($message, 422, 'file_too_large', array_filter([
             'feature' => 'file_size',
             'max_bytes' => $maxBytes,
-            'next_step' => $maxBytes === null ? null : $nextStep,
+            'next_step' => $nextStep,
+            'billing_url' => $nextStep !== null && str_starts_with($nextStep, 'upgrade_') ? PlanFeatureRequired::billingUrl() : null,
         ], fn ($v) => $v !== null), 'size_bytes');
+    }
+
+    /**
+     * Where the person acts on a refusal: `files_url` to free up space, and
+     * `billing_url` when the next step is an upgrade. Connected apps (MCP)
+     * pass these on; the app has its own buttons and ignores them.
+     *
+     * @return array<string, string>
+     */
+    private static function links(string $nextStep): array
+    {
+        return [
+            'files_url' => rtrim((string) config('app.frontend_url'), '/').'/files',
+            ...(str_starts_with($nextStep, 'upgrade_') ? ['billing_url' => PlanFeatureRequired::billingUrl()] : []),
+        ];
     }
 
     public static function unsupportedFormat(): self
