@@ -6,6 +6,7 @@ use App\Exceptions\PlanFeatureRequired;
 use App\Http\Controllers\Controller;
 use App\Models\SocialAccount;
 use App\Models\SocialPost;
+use App\Support\Insight\PostMetrics;
 use App\Support\PlanQuota;
 use App\Support\SocialProviders;
 use App\Support\Workspace;
@@ -26,19 +27,6 @@ use Illuminate\Support\Facades\Cache;
  */
 class SocialFeedController extends Controller
 {
-    /**
-     * Each platform names its numbers differently; these are the six every
-     * screen can read, first match wins.
-     */
-    private const METRICS = [
-        'views' => ['views', 'view_count', 'video_views', 'media_views', 'impressions'],
-        'likes' => ['likes', 'like_count', 'reactions_total', 'favorites', 'engagement_likes'],
-        'comments' => ['comments', 'comment_count', 'replies'],
-        'shares' => ['shares', 'share_count', 'quotes'],
-        'saves' => ['saved', 'saves'],
-        'reach' => ['reach'],
-    ];
-
     public function show(Request $request, SocialAccount $socialAccount, SocialProviders $providers): JsonResponse
     {
         // A team member reads the workspace's feeds, as in the rest of Social.
@@ -87,33 +75,10 @@ class SocialFeedController extends Controller
                 'post_id' => isset($p['external_post_id'], $ours[$p['external_post_id']])
                     ? $p['external_post_id']
                     : $byProviderId->get((string) ($p['provider_post_id'] ?? '')),
-                'metrics' => $insight ? $this->metrics((array) ($p['metrics'] ?? [])) : null,
+                'metrics' => $insight ? PostMetrics::from((array) ($p['metrics'] ?? [])) : null,
             ], $feed['data']),
             'meta' => ['next_cursor' => $feed['cursor'], 'insight' => $locked],
         ]);
-    }
-
-    /**
-     * @param  array<string, mixed>  $raw
-     * @return array<string, int|null>
-     */
-    private function metrics(array $raw): array
-    {
-        // X nests its counts one level down.
-        $flat = $raw + (array) ($raw['public_metrics'] ?? []);
-        $out = [];
-
-        foreach (self::METRICS as $name => $keys) {
-            $out[$name] = null;
-            foreach ($keys as $k) {
-                if (isset($flat[$k]) && is_numeric($flat[$k])) {
-                    $out[$name] = (int) $flat[$k];
-                    break;
-                }
-            }
-        }
-
-        return $out;
     }
 
     /**

@@ -20,6 +20,7 @@ use App\Http\Controllers\Api\V1\HandleController;
 use App\Http\Controllers\Api\V1\HealthController;
 use App\Http\Controllers\Api\V1\InboxCommentController;
 use App\Http\Controllers\Api\V1\InboxController;
+use App\Http\Controllers\Api\V1\InsightExportController;
 use App\Http\Controllers\Api\V1\McpActivityController;
 use App\Http\Controllers\Api\V1\MeController;
 use App\Http\Controllers\Api\V1\MyProfileController;
@@ -486,6 +487,9 @@ Route::middleware(['auth:sanctum,mcp', EnforceTokenScope::class, EnsureNotPendin
     Route::get('/me/storage', StorageController::class)->name('api.v1.me.storage');
     Route::get('/me/storage/scan', [StorageController::class, 'scan'])->name('api.v1.me.storage.scan');
     Route::get('/me/analytics', AnalyticsController::class)->name('api.v1.me.analytics');
+    Route::get('/insight/export.csv', InsightExportController::class)
+        ->middleware('throttle:10,1')
+        ->name('api.v1.insight.export');
 
     // Proof of delivery. Deliberately not gated on a plan: "on every plan"
     // is what the screen promises, and evidence is not an upsell.
