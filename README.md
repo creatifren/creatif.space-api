@@ -28,6 +28,61 @@
 
     Missing service account → verify answers `503 google_unavailable`; missing RTDN audience/email → every push is `401`.
 
+## Google Play billing: real-time developer notifications (RTDN)
+
+Play tells us about renewals, cancellations, holds, refunds and voided purchases through **Pub/Sub push** to `POST /api/v1/webhooks/google-play`. Each push carries a Google-signed OIDC token. We check its audience and service-account email (`GooglePushToken`), then re-read the subscription from the Play Developer API and map it (`GooglePlayBilling`). Nothing secret lives in this repo: the values below are env on the server, and the API key is a file outside the repo.
+
+### Rizal-only setup (Play Console + Google Cloud)
+
+Use the Google Cloud project linked to the Play developer account (below: `<project>`).
+
+1. **Pub/Sub topic.** Cloud Console → Pub/Sub → Topics → *Create topic* `play-rtdn`. On the topic → *Permissions* → *Add principal* `google-play-developer-notifications@system.gserviceaccount.com` with role **Pub/Sub Publisher**. Play needs this to publish to the topic.
+2. **Play Console → Monetize with Play → Monetization setup → Real-time developer notifications.**
+   - *Topic name*: `projects/<project>/topics/play-rtdn`.
+   - Notifications: **subscriptions and voided purchases**.
+   - Save, then **Send test message** (step 6 checks it arrived).
+3. **Service account for the push token.** IAM → Service accounts → *Create* `play-rtdn-push` (no roles needed). Its email is `play-rtdn-push@<project>.iam.gserviceaccount.com`.
+4. **Push subscription.** Pub/Sub → Subscriptions → *Create subscription* on topic `play-rtdn`:
+   - Delivery type **Push**, endpoint `https://api.creatif.space/api/v1/webhooks/google-play`.
+   - **Enable authentication**: service account `play-rtdn-push@<project>.iam.gserviceaccount.com`.
+   - **Audience** = exactly the value you put in `GOOGLE_PLAY_RTDN_AUDIENCE`. Use the endpoint URL, `https://api.creatif.space/api/v1/webhooks/google-play`.
+   - Acknowledgement deadline 30 s; retry policy *exponential backoff*. Our webhook answers 2xx to everything it has authenticated, so Pub/Sub does not retry forever.
+5. **Play Developer API access** (the webhook re-reads each subscription; the app's verify call uses the same access).
+   - Create, or reuse, a service account for the API, e.g. `play-api@<project>.iam.gserviceaccount.com`, and download its JSON key **to the server only**.
+   - In Play Console → **Users and permissions** (older consoles: *Setup → API access → link the project / grant access*), invite that service account email with:
+     - **View financial data, orders, and cancellation survey responses**
+     - **Manage orders and subscriptions**
+6. **Server env** (production `.env`, never committed):
+
+   ```
+   GOOGLE_PLAY_PACKAGE_NAME=space.creatif.app
+   GOOGLE_PLAY_SERVICE_ACCOUNT_JSON=/path/on/server/play-api.json
+   GOOGLE_PLAY_RTDN_AUDIENCE=https://api.creatif.space/api/v1/webhooks/google-play
+   GOOGLE_PLAY_RTDN_SA_EMAIL=play-rtdn-push@<project>.iam.gserviceaccount.com
+   ```
+
+   Then check that Play's test message arrived. The log shows `google_play.rtdn {"outcome":"test"}`. A `google_play.rtdn_unauthorized` line means the audience or service-account email does not match step 4.
+
+Product ids default to `pro_monthly`, `pro_yearly`, `max_monthly` and `max_yearly` (`GOOGLE_PLAY_PRODUCT_*` overrides them).
+
+### Self-test (local / testing only)
+
+```
+php artisan play:rtdn-selftest
+```
+
+This sends a `testNotification` through the real webhook. It signs a Pub/Sub-style OIDC token with a throwaway key, and Google's JWKS, OAuth and androidpublisher answers are simulated; it never calls Google. It checks against your configured audience and push service account when they are set.
+
+```
+php artisan play:rtdn-selftest --user=<ulid or email> --type=canceled --state=CANCELED
+```
+
+This gives that local user a Play purchase, sends the notification and prints the mapped row: plan, status, period end, grace, auto-renew.
+- **`--type`**: `purchased`, `renewed`, `canceled`, `recovered`, `on_hold`, `in_grace`, `paused`, `revoked`, `expired`, `voided` or `test`.
+- **`--state`**: what Google answers, `ACTIVE`, `CANCELED`, `IN_GRACE_PERIOD`, `ON_HOLD`, `PAUSED` or `EXPIRED`.
+
+The command refuses to run when `APP_ENV` is production.
+
 ## About Laravel
 
 Laravel is a web application framework with expressive, elegant syntax. We believe development must be an enjoyable and creative experience to be truly fulfilling. Laravel takes the pain out of development by easing common tasks used in many web projects, such as:
