@@ -63,12 +63,14 @@ export function createApp(deps: AppDeps) {
   });
 
   // Glama's connector claim. Public, no auth, no redirect; registered before
-  // the MCP/auth handlers. Express answers HEAD from this GET route too.
+  // the MCP/auth handlers. Served at the origin's well-known (where Glama's
+  // checker looks) and under the connector path (the original location).
+  // Express answers HEAD from these GET routes too.
   const glama = JSON.stringify({
     $schema: 'https://glama.ai/mcp/schemas/connector.json',
     claim: deps.glamaClaim ?? DEFAULT_GLAMA_CLAIM,
   });
-  app.get('/mcp/.well-known/glama.json', (_req, res) => {
+  app.get(['/.well-known/glama.json', '/mcp/.well-known/glama.json'], (_req, res) => {
     res.setHeader('Access-Control-Allow-Origin', '*');
     res.type('application/json').send(glama);
   });

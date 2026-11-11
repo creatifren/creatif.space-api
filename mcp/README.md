@@ -14,7 +14,7 @@ No business logic lives here.
 | --- | --- |
 | `POST /mcp` (and `POST /`) | MCP JSON-RPC (bearer required) |
 | `GET /health` | Liveness, no auth |
-| `GET /mcp/.well-known/glama.json` | Glama connector claim, no auth (also HEAD) |
+| `GET /.well-known/glama.json` | Glama connector claim, no auth (also HEAD); same document at `GET /mcp/.well-known/glama.json` |
 | `GET /.well-known/oauth-protected-resource` | RFC 9728 metadata: `resource: "https://mcp.creatif.space/mcp"`, `authorization_servers: ["https://api.creatif.space"]` |
 | `GET /.well-known/oauth-protected-resource/mcp` | the same document at the RFC 9728 path form |
 | `POST /free` | **Creatif Space Free Tools** — a separate MCP server, **no auth**, 30 calls/min per IP |
@@ -153,7 +153,7 @@ registry workflow, which only publishes `mcp/server.json`.
 | `MCP_AUTH_MODE` | `real` | `stub` is for tests only, refused with `NODE_ENV=production` (tokens `stub:<user_ulid>:<scopes>`) |
 | `POSTHOG_KEY` | — | unset → no analytics |
 | `POSTHOG_HOST` | `https://us.i.posthog.com` | |
-| `GLAMA_CLAIM` | the published claim | served at `GET /mcp/.well-known/glama.json` (public, must stay published) |
+| `GLAMA_CLAIM` | the published claim | served at `GET /.well-known/glama.json` and `GET /mcp/.well-known/glama.json` (public, must stay published) |
 
 ## Develop
 
