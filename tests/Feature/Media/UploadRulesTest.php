@@ -98,8 +98,12 @@ describe('the presigned PUT', function () {
             return $q['X-Amz-Signature'];
         };
 
-        $this->freezeSecond();
-        expect($sig('image/jpeg', 100))->toBe($sig('image/jpeg', 100))
+        // Signed at the app clock, so a frozen second is the same signature
+        // (it used to read time(): flaky when two calls straddled a second).
+        $this->travelTo('2026-01-01 00:00:00');
+        parse_str((string) parse_url(PresignedUpload::url('s3', 'u/x/y.jpg', 'image/jpeg', 100, now()->addMinutes(15)), PHP_URL_QUERY), $q);
+        expect($q['X-Amz-Date'])->toBe('20251231T170000Z')
+            ->and($sig('image/jpeg', 100))->toBe($sig('image/jpeg', 100))
             ->not->toBe($sig('image/jpeg', 101))
             ->not->toBe($sig('image/png', 100));
     });
