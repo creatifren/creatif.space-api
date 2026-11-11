@@ -21,6 +21,7 @@ use App\Support\Credits;
 use App\Support\PlanQuota;
 use App\Support\ProductEvents;
 use App\Support\PublishPreflight;
+use App\Support\ScheduleHorizon;
 use App\Support\SendConfirmation;
 use App\Support\SocialPostRelay;
 use App\Support\SocialProviders;
@@ -182,6 +183,7 @@ class SocialPostController extends Controller
         // is only saved; it is checked when it is sent.
         if (! $draft) {
             self::requireQueueable($user, $scheduledAt, $approval);
+            ScheduleHorizon::require((string) config('services.social.provider'), $scheduledAt);
         }
 
         // Only usable accounts: Connected, under the current relay. One the
@@ -389,6 +391,7 @@ class SocialPostController extends Controller
         // window. A draft's time is only a plan — sending checks it.
         if (isset($validated['scheduled_at']) && $socialPost->status !== SocialPostStatus::Draft) {
             PlanQuota::requireScheduleWindow($request->user(), $scheduledAt);
+            ScheduleHorizon::require($socialPost->provider, $scheduledAt);
         }
 
         $media = array_key_exists('media', $validated) ? array_values($validated['media']) : $socialPost->media;
@@ -540,6 +543,7 @@ class SocialPostController extends Controller
                 isset($validated['scheduled_at']) ? self::instant($validated['scheduled_at']) : null,
                 isset($validated['approval']) ? SocialPostApproval::from($validated['approval']) : null,
             );
+            ScheduleHorizon::require($socialPost->provider, isset($validated['scheduled_at']) ? self::instant($validated['scheduled_at']) : null);
         }
         $socialPost->load('targets.account');
 
@@ -659,6 +663,7 @@ class SocialPostController extends Controller
             isset($validated['scheduled_at']) ? self::instant($validated['scheduled_at']) : null,
             isset($validated['approval']) ? SocialPostApproval::from($validated['approval']) : null,
         );
+        ScheduleHorizon::require($socialPost->provider, isset($validated['scheduled_at']) ? self::instant($validated['scheduled_at']) : null);
 
         // The relay charges as it sends, and refuses before the provider if
         // the balance is short; a held draft costs nothing yet.

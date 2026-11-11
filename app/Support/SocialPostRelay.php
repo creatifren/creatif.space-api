@@ -10,6 +10,7 @@ use App\Enums\SocialPostTargetStatus;
 use App\Exceptions\AccountReconnectRequired;
 use App\Exceptions\NotEnoughCredits;
 use App\Exceptions\PublishPreflightFailed;
+use App\Exceptions\ScheduleBeyondHorizon;
 use App\Models\SocialAccount;
 use App\Models\SocialPost;
 use App\Models\SocialPostTarget;
@@ -107,12 +108,19 @@ class SocialPostRelay
      *
      * @throws ConnectionException
      * @throws AccountReconnectRequired when a destination is not usable
+     * @throws ScheduleBeyondHorizon when the slot is past the relay's horizon
+     * @throws PublishPreflightFailed when a network would refuse it
+     * @throws NotEnoughCredits when the Credits do not cover it
+     * @throws ValidationException when the charge itself is refused
      */
     public function send(SocialPost $post): void
     {
         // A destination left under another relay cannot be sent through
         // this one: named, before anything is charged.
         self::ensureUsable($post);
+
+        // A slot past the relay's horizon would be refused after the charge.
+        ScheduleHorizon::require($post->provider, $post->scheduled_at);
 
         // What a network would refuse is named now, not after the charge.
         $this->preflight($post);
@@ -230,15 +238,20 @@ class SocialPostRelay
      * overlapping a single decision) must not send — and charge — twice.
      * False means someone else decided first; that is not an error.
      *
+     * $holdBeyondHorizon is the client's path: a slot further out than the
+     * relay takes is not the client's problem, so the yes is recorded and
+     * the post waits, approved, until SendApprovedHeldPosts can send it
+     * (heldForLater). The owner's own paths get the 422 instead.
+     *
      * @param  list<SocialPostApproval>  $from  the states this caller may approve out of
      *
      * @throws ConnectionException
      * @throws ValidationException when the Credits do not cover it
      * @throws AccountReconnectRequired when a destination is not usable
      */
-    public function approve(SocialPost $post, string $by, array $from): bool
+    public function approve(SocialPost $post, string $by, array $from, bool $holdBeyondHorizon = false): bool
     {
-        return Cache::lock("social-post:{$post->id}:approve", 60)->block(10, function () use ($post, $by, $from): bool {
+        return Cache::lock("social-post:{$post->id}:approve", 60)->block(10, function () use ($post, $by, $from, $holdBeyondHorizon): bool {
             // Fresh state, not whatever this caller loaded earlier; `send`
             // reads the owner for the Credits check.
             $post->refresh()->loadMissing('user');
@@ -248,7 +261,15 @@ class SocialPostRelay
             }
 
             // Provider first: a failed send leaves the post held, not half-approved.
-            $this->send($post);
+            if (! ($holdBeyondHorizon && ScheduleHorizon::beyond($post->provider, $post->scheduled_at))) {
+                try {
+                    $this->send($post);
+                } catch (Throwable $e) {
+                    if (! $holdBeyondHorizon || $post->scheduled_at === null || ! ScheduleHorizon::isRefusal($e)) {
+                        throw $e;
+                    }
+                }
+            }
             $post->update([
                 'approval' => SocialPostApproval::Approved,
                 'approval_by' => $by,
@@ -257,6 +278,19 @@ class SocialPostRelay
 
             return true;
         });
+    }
+
+    /**
+     * Approved, but not at the relay yet: its slot was past the horizon
+     * when the client said yes. SendApprovedHeldPosts sends it once the
+     * slot is close enough.
+     */
+    public static function heldForLater(SocialPost $post): bool
+    {
+        return $post->status === SocialPostStatus::Scheduled
+            && $post->approval === SocialPostApproval::Approved
+            && $post->provider_post_id === null
+            && $post->scheduled_at !== null;
     }
 
     /**

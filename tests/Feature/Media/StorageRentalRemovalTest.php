@@ -64,7 +64,7 @@ it('offers no storage upgrade in /credits or the plan catalog', function () {
     $credits = $this->actingAs($user)->getJson('/api/v1/credits')->assertOk();
     expect($credits->json('data.rate'))->not->toHaveKeys(['block_gb', 'per_block', 'per_block_bulk', 'bulk_from_gb'])
         ->and($credits->json('data.storage'))->not->toHaveKeys(['blocks', 'rent'])
-        ->and($credits->json('data.committed.rent'))->toBe(0)
+        ->and($credits->json('data.committed'))->toHaveKeys(['sends', 'sends_monthly'])->not->toHaveKey('rent')
         ->and($credits->json('data.storage.media'))->toBe(['tier' => 'free', 'used_bytes' => 0, 'quota_bytes' => 1024 ** 3]);
 
     $plans = $this->getJson('/api/v1/plans')->assertOk()->getContent();

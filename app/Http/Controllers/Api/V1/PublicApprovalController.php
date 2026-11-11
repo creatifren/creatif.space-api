@@ -5,6 +5,9 @@ namespace App\Http\Controllers\Api\V1;
 use App\Enums\SocialPostApproval;
 use App\Enums\SocialPostStatus;
 use App\Exceptions\AccountReconnectRequired;
+use App\Exceptions\NotEnoughCredits;
+use App\Exceptions\PublishPreflightFailed;
+use App\Exceptions\ScheduleBeyondHorizon;
 use App\Http\Controllers\Controller;
 use App\Models\SocialApprovalLink;
 use App\Models\SocialPost;
@@ -12,8 +15,11 @@ use App\Models\SocialPostComment;
 use App\Notifications\SocialPostDecided;
 use App\Support\Credits;
 use App\Support\ProductEvents;
+use App\Support\PublishFailure;
+use App\Support\ScheduleHorizon;
 use App\Support\SocialPostRelay;
 use App\Support\Workspace;
+use Illuminate\Http\Client\RequestException;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Validation\ValidationException;
@@ -95,7 +101,10 @@ class PublicApprovalController extends Controller
             if (is_string($outcome)) {
                 return response()->json(['message' => $outcome], 422);
             }
-            $link->user->notify(new SocialPostDecided($link, SocialPostDecided::APPROVED, $validated['name'], 1, $socialPost));
+            // A post held for its slot already told the owner (HELD).
+            if (! SocialPostRelay::heldForLater($socialPost->refresh())) {
+                $link->user->notify(new SocialPostDecided($link, SocialPostDecided::APPROVED, $validated['name'], 1, $socialPost));
+            }
             ProductEvents::approvalDecision($link, $socialPost, 'approved');
         } else {
             $socialPost->update([
@@ -248,17 +257,55 @@ class PublicApprovalController extends Controller
     private function approveFor(SocialApprovalLink $link, SocialPost $post, string $name, SocialPostRelay $relay): bool|string
     {
         try {
-            return $relay->approve($post, $name, [SocialPostApproval::Client, SocialPostApproval::Revision]);
-        } catch (ValidationException|AccountReconnectRequired $e) {
+            $approved = $relay->approve($post, $name, [SocialPostApproval::Client, SocialPostApproval::Revision], holdBeyondHorizon: true);
+
+            // A slot further out than the relay takes: the yes stands and
+            // the post goes out by itself once it is close enough. The
+            // owner is told; the client's tap is never a dead end.
+            if ($approved && SocialPostRelay::heldForLater($post->refresh())) {
+                $link->user->notify(new SocialPostDecided($link, SocialPostDecided::HELD, $name, 1, $post, self::heldReason($post)));
+            }
+
+            return $approved;
+        } catch (ValidationException|AccountReconnectRequired|PublishPreflightFailed|NotEnoughCredits|ScheduleBeyondHorizon $e) {
             $why = $e->getMessage();
         } catch (Throwable $e) {
             report($e);
-            $why = 'Post for Me did not accept it — try sending it again from Approval links.';
+            $why = self::refusedBy($post, $e).' Try sending it again from Approval links.';
         }
 
         $link->user->notify(new SocialPostDecided($link, SocialPostDecided::BLOCKED, $name, 1, $post, $why));
 
         return $this->blockedMessage($link);
+    }
+
+    /** What the owner reads about a post approved but waiting for its slot. */
+    public static function heldReason(SocialPost $post): string
+    {
+        $days = ScheduleHorizon::days($post->provider);
+        $from = $days === null ? null : $post->scheduled_at?->copy()->subDays($days);
+
+        return 'It is scheduled for '.$post->scheduled_at?->format('j M Y, H:i').' UTC, further ahead than the networks accept'
+            .($days !== null ? " (at most {$days} days)" : '')
+            .'. It stays approved and is sent automatically'
+            .($from !== null ? ' from '.$from->format('j M Y') : ' once it is close enough')
+            .'. Nothing else to do.';
+    }
+
+    /** "{Network} did not accept it: {reason}" — never the relay's name. */
+    public static function refusedBy(SocialPost $post, Throwable $e): string
+    {
+        $networks = $post->targets()->with('account')->get()
+            ->map(fn ($t) => $t->account?->platform?->value)->filter()->unique()
+            ->map(fn ($n) => PublishFailure::networkName($n))->values();
+        $network = $networks->isEmpty() ? 'The network' : $networks->join(', ', ' and ');
+
+        $raw = $e instanceof RequestException
+            ? ($e->response->json('message') ?? $e->response->json('error.message') ?? $e->response->json('error') ?? $e->response->body())
+            : $e->getMessage();
+        $reason = PublishFailure::detail(is_string($raw) ? $raw : json_encode($raw)) ?? 'no reason given';
+
+        return "{$network} did not accept it: {$reason}.";
     }
 
     private function blockedMessage(SocialApprovalLink $link): string

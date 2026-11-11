@@ -217,11 +217,11 @@ describe('get_credits', () => {
       urls: { billing: 'https://creatif.space/settings?section=subscription', top_up: 'https://creatif.space/credits' },
     };
     const res = await call('get_credits', {}, {
-      'GET /credits': () => ({ body: { data: { plan: 'free', committed: 300, limits, rate: {} } } }),
+      'GET /credits': () => ({ body: { data: { plan: 'free', committed: { sends: 300, sends_monthly: 600 }, limits, rate: {} } } }),
     });
     expect(payload(res)).toEqual({
       plan: limits.plan,
-      credits: { ...limits.credits, committed: 300 },
+      credits: { ...limits.credits, committed: { sends: 300, sends_monthly: 600 } },
       price_per_send: limits.price_per_send,
       monthly_posts: limits.monthly_posts,
       connected_accounts: limits.connected_accounts,
@@ -231,6 +231,14 @@ describe('get_credits', () => {
       mcp_daily_sends: limits.mcp_daily_sends,
       urls: limits.urls,
     });
+  });
+
+  it('never passes on committed.rent, even from an older API that still sends it', async () => {
+    const res = await call('get_credits', {}, {
+      'GET /credits': () => ({ body: { data: { plan: 'pro', committed: { sends: 0, sends_monthly: 300, rent: 0 }, limits: {} } } }),
+    });
+    expect(payload(res).credits.committed).toEqual({ sends: 0, sends_monthly: 300 });
+    expect(JSON.stringify(payload(res))).not.toContain('rent');
   });
 
   it('maps an expired upstream token to unauthorized and a 5xx to upstream_unavailable', async () => {

@@ -136,10 +136,9 @@ final class Credits
 
     /**
      * Already spoken for: sends handed over but not yet out (Top-up, and
-     * Monthly apart). `rent` is always 0 since storage rental was removed;
-     * kept so older clients reading it do not break.
+     * Monthly apart). Storage rental is gone (Media v2), and so is `rent`.
      *
-     * @return array{sends: int, sends_monthly: int, rent: int}
+     * @return array{sends: int, sends_monthly: int}
      */
     public static function committed(User $user): array
     {
@@ -148,7 +147,6 @@ final class Credits
         return [
             'sends' => $topup,
             'sends_monthly' => $monthly,
-            'rent' => 0,
         ];
     }
 
