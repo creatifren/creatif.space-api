@@ -3,14 +3,22 @@
 namespace App\Http\Controllers\Api\V1;
 
 use App\Enums\ActivityAction;
+use App\Exceptions\MediaRefused;
 use App\Http\Controllers\Controller;
 use App\Http\Resources\FileResource;
 use App\Http\Resources\FolderResource;
 use App\Models\Activity;
 use App\Models\File;
 use App\Models\Folder;
+use App\Models\User;
 use App\Notifications\StorageAlmostFull;
 use App\Support\AcceptedUploads;
+use App\Support\Media\FileSignature;
+use App\Support\Media\MediaLimits;
+use App\Support\Media\MediaQuota;
+use App\Support\Media\MediaRetention;
+use App\Support\Media\MediaUploadGuard;
+use App\Support\Media\PresignedUpload;
 use App\Support\PlanQuota;
 use App\Support\Workspace;
 use Illuminate\Http\JsonResponse;
@@ -136,7 +144,12 @@ class FileController extends Controller
             $meta['breadcrumb'] = $folder?->ancestorsAndSelf() ?? [];
         }
 
-        return FileResource::collection($query->paginate($perPage)->appends($request->query()))
+        $page = $query->paginate($perPage)->appends($request->query());
+        // One batch for the page's is_kept / auto_delete_at, not a query per row.
+        MediaRetention::prime($page->getCollection());
+        $meta['usage'] = MediaQuota::usage($user);
+
+        return FileResource::collection($page)
             ->additional(['meta' => $meta])
             ->response();
     }
@@ -177,6 +190,12 @@ class FileController extends Controller
      * Phase one of a direct upload: validate, reserve quota with a pending
      * row, and hand the browser a presigned PUT so the bytes go straight
      * to R2 without passing through here.
+     *
+     * Media v2 checks, in order: the INTERNAL abuse limits, the per-file
+     * cap for the tier and kind, then the quota (Free 1 GB total; paid the
+     * Keep quota). The PUT is signed for the declared Content-Type and
+     * Content-Length, so R2 refuses any other body; complete() checks the
+     * real bytes again.
      */
     public function presign(Request $request): JsonResponse
     {
@@ -185,18 +204,17 @@ class FileController extends Controller
         $validated = $request->validate([
             'name' => ['required', 'string', 'max:200'],
             'mime_type' => ['required', 'string', 'in:'.implode(',', AcceptedUploads::MIMES)],
-            'size_bytes' => ['required', 'integer', 'min:1', 'max:'.AcceptedUploads::MAX_BYTES],
+            'size_bytes' => ['required', 'integer', 'min:1'],
             'folder_id' => ['sometimes', 'nullable', 'string', 'max:26'],
         ]);
 
         $user = Workspace::owner($request->user());
         $folder = Folder::ownedBy($user, $validated['folder_id'] ?? null);
+        $size = (int) $validated['size_bytes'];
 
-        if (! PlanQuota::canStore($user, (int) $validated['size_bytes'])) {
-            throw ValidationException::withMessages([
-                'size_bytes' => 'Your storage is full — free some space or upgrade your plan.',
-            ]);
-        }
+        MediaUploadGuard::presign($user, $size);
+        self::assertFileSize($user, $validated['mime_type'], $size);
+        MediaQuota::assertUploadFits($user, $size);
 
         $ulid = (string) str()->ulid();
 
@@ -204,34 +222,35 @@ class FileController extends Controller
             'user_id' => $user->id,
             'folder_id' => $folder?->id,
             'ulid' => $ulid,
-            'path' => File::keyFor($user, $ulid, $validated['name']),
+            'path' => File::keyFor($user, $ulid, $validated['name'], $validated['mime_type']),
             'name' => $validated['name'],
             'mime_type' => $validated['mime_type'],
-            'size_bytes' => (int) $validated['size_bytes'],
+            'size_bytes' => $size,
             'status' => File::STATUS_PENDING,
             'source' => 'upload',
         ]);
 
-        // ContentType is pinned into the signature: the browser must send
-        // exactly the declared mime or R2 refuses the PUT.
-        ['url' => $url] = Storage::disk('s3')->temporaryUploadUrl(
-            $file->path,
-            now()->addMinutes(File::PRESIGN_TTL_MINUTES),
-            ['ContentType' => $validated['mime_type']],
-        );
+        // Content-Type and Content-Length are signed (LockedPutSignature):
+        // the browser must send exactly the declared mime and size or R2
+        // refuses the PUT. (The SDK's default presign signed neither.)
+        $url = PresignedUpload::url('s3', $file->path, $validated['mime_type'], $size, now()->addMinutes(File::PRESIGN_TTL_MINUTES));
 
         return response()->json(['data' => [
             'id' => $file->ulid,
             'upload_url' => $url,
+            // What the PUT must carry (the browser sets Content-Length itself).
+            'headers' => ['Content-Type' => $validated['mime_type']],
             'expires_at' => now()->addMinutes(File::PRESIGN_TTL_MINUTES),
         ]], 201);
     }
 
     /**
      * Phase two: the browser says the PUT finished. Believe R2, not the
-     * browser — the object must exist, and its real size wins over the
-     * declared one (re-checked against quota, since a lie the other way
-     * would smuggle bytes past presign).
+     * browser — the object must exist, its real size wins over the declared
+     * one (re-checked against the per-file cap and the quota), and its first
+     * bytes must be the format it claims (magic bytes, ranged GET). Anything
+     * else deletes the object and marks the row failed before the file is
+     * ever usable.
      */
     public function complete(Request $request, File $file): FileResource|JsonResponse
     {
@@ -254,20 +273,35 @@ class FileController extends Controller
             ]);
         }
 
-        $realSize = $disk->size($file->path);
+        $realSize = (int) $disk->size($file->path);
         $declared = (int) $file->size_bytes;
-
-        if ($realSize > $declared && ! PlanQuota::canStore($user, $realSize - $declared)) {
+        $reject = function () use ($disk, $file) {
             $disk->delete($file->path);
             $file->update(['status' => File::STATUS_FAILED]);
+        };
 
-            throw ValidationException::withMessages([
-                'file' => 'The upload is larger than the space you have left.',
-            ]);
+        try {
+            self::assertFileSize($user, $file->mime_type, $realSize);
+            if ($realSize > $declared) {
+                MediaQuota::assertUploadFits($user, $realSize - $declared);
+            }
+        } catch (MediaRefused $e) {
+            $reject();
+
+            throw $e;
+        }
+
+        $detected = FileSignature::verify((string) FileSignature::head($disk, $file->path), $file->mime_type);
+        if ($detected === null) {
+            $reject();
+            MediaUploadGuard::hit($user, 'unsupported_format');
+
+            throw MediaRefused::unsupportedFormat();
         }
 
         $file->update([
             'size_bytes' => $realSize,
+            'mime_type' => $detected,
             /* The object's MD5, read from R2 rather than trusted from the
                browser — it is what "these two files are the same bytes"
                rests on. Null for a multipart upload, whose ETag is not an
@@ -289,6 +323,63 @@ class FileController extends Controller
         StorageAlmostFull::checkAndSend($user);
 
         return new FileResource($file->refresh());
+    }
+
+    /**
+     * Mark a file Keep: retention never deletes it. Paid only, within the
+     * Keep quota; refused with 402 quota_exceeded otherwise.
+     */
+    public function keep(Request $request, File $file): FileResource
+    {
+        $user = Workspace::owner($request->user());
+        abort_unless($file->user_id === $user->id, 404);
+        abort_unless(Workspace::canWrite($request->user()), 403);
+        abort_unless($file->status === File::STATUS_READY, 409);
+
+        MediaQuota::keep($user, $file);
+
+        return new FileResource($file->refresh()->load('spaceItems.space')->loadCount('versions'));
+    }
+
+    /** Back under the retention rules. Always allowed. */
+    public function unkeep(Request $request, File $file): FileResource
+    {
+        $user = Workspace::owner($request->user());
+        abort_unless($file->user_id === $user->id, 404);
+        abort_unless(Workspace::canWrite($request->user()), 403);
+
+        MediaQuota::unkeep($file);
+
+        return new FileResource($file->refresh()->load('spaceItems.space')->loadCount('versions'));
+    }
+
+    /**
+     * Media usage: paid {keep_used_bytes, keep_quota_bytes}, Free
+     * {used_bytes, quota_bytes}.
+     */
+    public function usage(Request $request): JsonResponse
+    {
+        return response()->json(['data' => MediaQuota::usage($request->user())]);
+    }
+
+    /**
+     * The tier's per-file cap for this kind. A plan cap is named in the
+     * refusal; the internal technical ceiling never is.
+     *
+     * @throws MediaRefused
+     */
+    public static function assertFileSize(User $owner, string $mime, int $bytes): void
+    {
+        ['bytes' => $max, 'plan_cap' => $planCap] = MediaLimits::perFileMax($owner, $mime);
+
+        if ($bytes > $max) {
+            MediaUploadGuard::hit($owner, 'file_too_large');
+
+            throw MediaRefused::tooLarge(
+                $planCap ? $max : null,
+                FileSignature::family($mime) === 'video' ? MediaLimits::nextStep($owner) : null,
+            );
+        }
     }
 
     /**

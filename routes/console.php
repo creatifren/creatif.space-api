@@ -1,6 +1,7 @@
 <?php
 
 use App\Jobs\AggregateSpaceStats;
+use App\Jobs\ApplyMediaRetention;
 use App\Jobs\BackfillFileChecksums;
 use App\Jobs\ExpireSubscriptions;
 use App\Jobs\PruneActivityLog;
@@ -10,7 +11,6 @@ use App\Jobs\PruneSpaceEvents;
 use App\Jobs\PruneStaleUploads;
 use App\Jobs\PurgeTrashedFiles;
 use App\Jobs\ReleaseCommissions;
-use App\Jobs\RenewCredits;
 use App\Jobs\RenewMonthlyCredits;
 use App\Jobs\RetryRateLimitedPublishes;
 use App\Jobs\SyncInboxes;
@@ -28,16 +28,12 @@ Artisan::command('inspire', function () {
  */
 Schedule::job(new ExpireSubscriptions)->dailyAt('03:00');
 
-/*
- * Storage rent, then the plan's Credits — on the first, after billing has
- * settled who is still on a plan, before anyone is sending.
- */
-Schedule::job(new RenewCredits)->monthlyOn(1, '03:20');
+// Storage rent (RenewCredits, 1st at 03:20) was removed in Media v2.
 
 /*
  * Monthly Credits: each owner's cycle turns on their own day (sign-up or
  * subscription start), so every day — after billing has settled plans,
- * after the 1st's rent, before anyone is sending.
+ * before anyone is sending.
  */
 Schedule::job(new RenewMonthlyCredits)->dailyAt('03:40');
 
@@ -79,6 +75,13 @@ Schedule::job(new PruneStaleUploads)->hourly();
  * the time this looks.
  */
 Schedule::job(new PurgeTrashedFiles)->dailyAt('01:45');
+
+/*
+ * Media v2 retention: post media past its rule (MediaRetention). After the
+ * Trash purge, before the archives. MEDIA_RETENTION_MODE=report (default)
+ * only logs what it would delete; delete deletes.
+ */
+Schedule::job(new ApplyMediaRetention)->dailyAt('01:48')->withoutOverlapping();
 
 /*
  * Built "Download all" archives live 24 hours. Without this every press

@@ -7,6 +7,7 @@ use App\Enums\SocialPostApproval;
 use App\Enums\SocialPostStatus;
 use App\Enums\SocialPostTargetStatus;
 use App\Notifications\SocialPostFailed;
+use App\Support\Media\MediaLinks;
 use Carbon\CarbonImmutable;
 use Database\Factories\SocialPostFactory;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
@@ -110,6 +111,13 @@ class SocialPost extends Model
             $post->ulid ??= (string) str()->ulid();
             // Which relay holds it; ids mean nothing to the other one.
             $post->provider ??= (string) config('services.social.provider');
+        });
+
+        // Keep social_post_files in step with the media URLs (Media v2).
+        static::saved(function (self $post): void {
+            if ($post->wasRecentlyCreated || $post->wasChanged('media')) {
+                MediaLinks::sync($post);
+            }
         });
     }
 

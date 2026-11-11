@@ -34,7 +34,8 @@ use Spatie\Permission\Traits\HasRoles;
  * @property CarbonImmutable|null $tour_seen_at
  * @property CarbonImmutable|null $suspended_at
  * @property string|null $suspended_reason
- * @property int $storage_blocks
+ * @property int $storage_blocks Legacy: blocks rented before Media v2 removed rental (record only)
+ * @property CarbonImmutable|null $storage_rental_ended_at
  * @property array<string, mixed>|null $social_settings
  * @property CarbonImmutable|null $created_at
  * @property-read Handle|null $handle
@@ -92,6 +93,7 @@ class User extends Authenticatable implements FilamentUser
             'suspended_at' => 'datetime',
             'is_staff' => 'boolean',
             'storage_blocks' => 'integer',
+            'storage_rental_ended_at' => 'datetime',
             'social_settings' => 'array',
             'password' => 'hashed',
             'status' => UserStatus::class,

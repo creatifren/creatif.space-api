@@ -89,7 +89,9 @@ class PlanSeeder extends Seeder
     public function run(): void
     {
         $paidQuotas = [
-            'storage_bytes' => 25 * 1024 * 1024 * 1024,
+            // Media v2: display only — limits are enforced from config/media.php
+            // (Keep quota per tier); Pro/Max set their own below.
+            'storage_bytes' => (int) config('media.tiers.pro.keep_quota_bytes'),
             // null = no limit. Not zero, which would mean none.
             'spaces_total' => null,
             'spaces_active' => null,
@@ -113,7 +115,8 @@ class PlanSeeder extends Seeder
                 'price_monthly' => 0,
                 'price_yearly' => 0,
                 'quotas' => [
-                    'storage_bytes' => 2 * 1024 * 1024 * 1024,
+                    // Media v2: Free's 1 GB total (config/media.php).
+                    'storage_bytes' => (int) config('media.tiers.free.total_bytes'),
                     'spaces_total' => 15,
                     // All fifteen may be published — there is no active limit.
                     'spaces_active' => null,
@@ -150,7 +153,8 @@ class PlanSeeder extends Seeder
                 'name' => 'Max',
                 'price_monthly' => 1499,
                 'price_yearly' => 14990,
-                'quotas' => $paidQuotas + ['credits_monthly' => 150000, 'social_posts_monthly' => 500],
+                // Media v2: Max's Keep quota (config/media.php).
+                'quotas' => ['storage_bytes' => (int) config('media.tiers.max.keep_quota_bytes')] + $paidQuotas + ['credits_monthly' => 150000, 'social_posts_monthly' => 500],
                 'features' => $paidFeatures,
                 'is_active' => true,
                 'sort_order' => 3,
@@ -179,7 +183,8 @@ class PlanSeeder extends Seeder
                 'name' => 'Enterprise',
                 'price_monthly' => 0,
                 'price_yearly' => 0,
-                'quotas' => $paidQuotas + ['credits_monthly' => 150000, 'social_posts_monthly' => 500],
+                // Media v2: Max's Keep quota (config/media.php).
+                'quotas' => ['storage_bytes' => (int) config('media.tiers.max.keep_quota_bytes')] + $paidQuotas + ['credits_monthly' => 150000, 'social_posts_monthly' => 500],
                 'features' => $paidFeatures,
                 'is_active' => true,
                 'sort_order' => 5,

@@ -16,12 +16,13 @@ use Illuminate\Validation\ValidationException;
 use RuntimeException;
 
 /**
- * One balance for sends and storage (the Credits comp, 2026-10).
+ * One balance for sends (the Credits comp, 2026-10).
  *
  * The whole price list: $1 buys 10.000 Credits ($10 = 100.000, the smallest
  * top-up), a publish costs 300 ($0.03) — on X 2.000 when the caption has a
- * link (X bills us $0.20 for those) — a 5 GB block of storage costs 5.000 a
- * month, 4.500 once the account passes 100 GB, on every block.
+ * link (X bills us $0.20 for those). Storage is no longer sold for Credits:
+ * the 5 GB rental blocks were removed in Media v2 (11 Nov 2026); storage is
+ * the plan's (config/media.php).
  *
  * Two buckets (owner decision, 2026-11-09):
  * - Monthly Credits (wallet `monthly`): the plan's `credits_monthly`, granted
@@ -30,15 +31,14 @@ use RuntimeException;
  * - Top-up Credits (wallet `credits`): purchases and grants. Never expire.
  * A send spends Monthly first, then Top-up; a destination that never goes
  * out gives each part back to the bucket it came from (Monthly only while
- * its cycle lasts — after that it had expired anyway). Rent is Top-up only.
+ * its cycle lasts — after that it had expired anyway).
  *
- * Order matters: rent is taken on the first, before anything is sent, so
- * a send never spends money the rent was going to need. A send is taken
+ * A send is taken
  * up front when the post is handed to the provider, and a destination that
  * never goes out (failed, cancelled) gives its publish back to where it
  * came from — the allowance or the Credits — so the user is only ever out
  * of pocket for what was delivered. Approval, drafts, scheduling and
- * uploads inside rented storage move nothing.
+ * uploads move nothing.
  */
 final class Credits
 {
@@ -55,15 +55,6 @@ final class Credits
 
     /** X's price for a caption with a link, when config says nothing. */
     public const PER_SEND_X_LINK = 2000;
-
-    public const BLOCK_GB = 5;
-
-    public const PER_BLOCK = 5000;
-
-    public const PER_BLOCK_BULK = 4500;
-
-    /** Past this many plan-plus-rented GB, every block is at the bulk rate. */
-    public const BULK_FROM_GB = 100;
 
     /** Once, at sign-up — Free and paid alike. */
     public const FREE_WELCOME = 3000;
@@ -144,44 +135,9 @@ final class Credits
     }
 
     /**
-     * What one month of the given blocks costs, given the plan's own GB.
-     */
-    public static function rentFor(int $blocks, int $planGb): int
-    {
-        if ($blocks <= 0) {
-            return 0;
-        }
-
-        $totalGb = $planGb + $blocks * self::BLOCK_GB;
-
-        return $blocks * ($totalGb > self::BULK_FROM_GB ? self::PER_BLOCK_BULK : self::PER_BLOCK);
-    }
-
-    public static function rent(User $user): int
-    {
-        $owner = self::owner($user);
-
-        return self::rentFor(self::blocks($owner), self::planGb($owner));
-    }
-
-    /** Bytes the rented blocks add on top of the plan's storage. */
-    public static function rentedBytes(User $user): int
-    {
-        return self::blocks(self::owner($user)) * self::BLOCK_GB * 1024 * 1024 * 1024;
-    }
-
-    /**
-     * A model built in memory (factory, firstOrCreate) has no default read
-     * back from the database; zero is what the column defaults to.
-     */
-    public static function blocks(User $owner): int
-    {
-        return (int) ($owner->getAttributes()['storage_blocks'] ?? 0);
-    }
-
-    /**
      * Already spoken for: sends handed over but not yet out (Top-up, and
-     * Monthly apart), and next month's rent.
+     * Monthly apart). `rent` is always 0 since storage rental was removed;
+     * kept so older clients reading it do not break.
      *
      * @return array{sends: int, sends_monthly: int, rent: int}
      */
@@ -192,7 +148,7 @@ final class Credits
         return [
             'sends' => $topup,
             'sends_monthly' => $monthly,
-            'rent' => self::rent($user),
+            'rent' => 0,
         ];
     }
 
@@ -477,70 +433,6 @@ final class Credits
         }
     }
 
-    /**
-     * Rent blocks now: the first month is taken today, in full.
-     *
-     * ponytail: not prorated — a block bought on the 28th costs a full month
-     * and renews on the 1st. Prorate if anyone asks.
-     *
-     * @throws ValidationException
-     */
-    public static function addBlocks(User $user, int $blocks): void
-    {
-        $owner = self::owner($user);
-        $planGb = self::planGb($owner);
-        $price = self::rentFor(self::blocks($owner) + $blocks, $planGb) - self::rentFor(self::blocks($owner), $planGb);
-
-        DB::transaction(function () use ($owner, $blocks, $price) {
-            try {
-                Wallet::debit($owner, WalletTransactionType::CreditsRent, max($price, 1), null, null,
-                    "+{$blocks} × ".self::BLOCK_GB.' GB this month', Wallet::CREDITS);
-            } catch (RuntimeException) {
-                throw ValidationException::withMessages([
-                    'blocks' => "That needs {$price} Credits and the balance has ".self::balance($owner).'.',
-                ]);
-            }
-
-            $owner->forceFill(['storage_blocks' => self::blocks($owner) + $blocks])->save();
-        });
-    }
-
-    /**
-     * Drop blocks from next month on. Nothing comes back for this month —
-     * the dialog says so before it is confirmed.
-     */
-    public static function releaseBlocks(User $user, int $blocks): void
-    {
-        $owner = self::owner($user);
-        $owner->forceFill(['storage_blocks' => max(0, self::blocks($owner) - $blocks)])->save();
-    }
-
-    /**
-     * The first of the month: rent. Rent that cannot be paid lapses the
-     * blocks (storage read-only until it fits; nothing is deleted). Rent is
-     * paid from Top-up Credits only; Monthly Credits are for publishing.
-     *
-     * @return 'renewed'|'lapsed'|'none'
-     */
-    public static function monthly(User $owner): string
-    {
-        $outcome = 'none';
-        $rent = self::rent($owner);
-
-        if ($rent > 0) {
-            try {
-                Wallet::debit($owner, WalletTransactionType::CreditsRent, $rent, null, null,
-                    self::blocks($owner).' × '.self::BLOCK_GB.' GB · '.now()->format('F'), Wallet::CREDITS);
-                $outcome = 'renewed';
-            } catch (RuntimeException) {
-                $owner->forceFill(['storage_blocks' => 0])->save();
-                $outcome = 'lapsed';
-            }
-        }
-
-        return $outcome;
-    }
-
     /** One Inbox reply (CREDITS_PER_REPLY); zero means replies are free. */
     public static function perReply(): int
     {
@@ -641,13 +533,6 @@ final class Credits
         $price = config("services.social.per_send.{$key}");
 
         return is_numeric($price) && (int) $price >= 0 ? (int) $price : $fallback;
-    }
-
-    private static function planGb(User $owner): int
-    {
-        $bytes = PlanQuota::planStorageLimit($owner);
-
-        return $bytes === null ? 0 : intdiv($bytes, 1024 * 1024 * 1024);
     }
 
     /** Credits are pooled at the account owner, like storage. */

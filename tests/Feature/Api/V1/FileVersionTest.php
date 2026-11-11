@@ -3,10 +3,15 @@
 use App\Models\File;
 use App\Models\FileVersion;
 use App\Models\User;
+use App\Support\PlanQuota;
 use Illuminate\Support\Facades\Storage;
 
+// JPEG-signed bodies: a replacement must be the same kind of file (Media v2).
+const FV_V1 = "\xFF\xD8\xFF v1-bytes";
+const FV_V2 = "\xFF\xD8\xFF v2-bytes";
+
 /** A ready file with real bytes behind it. */
-function storedFile(User $user, string $body = 'v1-bytes'): File
+function storedFile(User $user, string $body = FV_V1): File
 {
     $file = File::factory()->for($user)->create([
         'size_bytes' => strlen($body),
@@ -53,7 +58,7 @@ describe('replacing the bytes', function () {
         // The browser's PUT.
         Storage::disk('s3')->put(
             FileVersion::keyFor($file, $upload, $file->name),
-            'v2-bytes',
+            FV_V2,
         );
 
         $this->actingAs($user)
@@ -63,7 +68,7 @@ describe('replacing the bytes', function () {
             ->assertOk();
 
         expect($file->refresh()->path)->toBe($originalPath)
-            ->and(Storage::disk('s3')->get($originalPath))->toBe('v2-bytes');
+            ->and(Storage::disk('s3')->get($originalPath))->toBe(FV_V2);
     });
 
     it('files the old bytes away rather than overwriting them', function () {
@@ -74,7 +79,7 @@ describe('replacing the bytes', function () {
         $upload = $this->actingAs($user)
             ->postJson("/api/v1/files/{$file->ulid}/versions/presign", ['size_bytes' => 8])
             ->json('data.upload_id');
-        Storage::disk('s3')->put(FileVersion::keyFor($file, $upload, $file->name), 'v2-bytes');
+        Storage::disk('s3')->put(FileVersion::keyFor($file, $upload, $file->name), FV_V2);
         $this->actingAs($user)
             ->postJson("/api/v1/files/{$file->ulid}/versions/complete", [
                 'upload_id' => $upload,
@@ -85,7 +90,7 @@ describe('replacing the bytes', function () {
         $version = $file->versions()->sole();
         expect($version->number)->toBe(1)
             ->and($version->note)->toBe('Reshot the cover')
-            ->and(Storage::disk('s3')->get($version->path))->toBe('v1-bytes');
+            ->and(Storage::disk('s3')->get($version->path))->toBe(FV_V1);
     });
 
     it('charges the history against the storage quota', function () {
@@ -96,12 +101,12 @@ describe('replacing the bytes', function () {
         $upload = $this->actingAs($user)
             ->postJson("/api/v1/files/{$file->ulid}/versions/presign", ['size_bytes' => 8])
             ->json('data.upload_id');
-        Storage::disk('s3')->put(FileVersion::keyFor($file, $upload, $file->name), 'v2-bytes');
+        Storage::disk('s3')->put(FileVersion::keyFor($file, $upload, $file->name), FV_V2);
         $this->actingAs($user)
             ->postJson("/api/v1/files/{$file->ulid}/versions/complete", ['upload_id' => $upload]);
 
         // Both sets of bytes are really in the bucket, so both are billed.
-        expect(\App\Support\PlanQuota::storageUsed($user))->toBe(16);
+        expect(PlanQuota::storageUsed($user))->toBe(2 * strlen(FV_V1));
     });
 
     it('refuses a file whose own upload never landed', function () {
@@ -136,7 +141,7 @@ describe('restoring', function () {
         $upload = $this->actingAs($user)
             ->postJson("/api/v1/files/{$file->ulid}/versions/presign", ['size_bytes' => 8])
             ->json('data.upload_id');
-        Storage::disk('s3')->put(FileVersion::keyFor($file, $upload, $file->name), 'v2-bytes');
+        Storage::disk('s3')->put(FileVersion::keyFor($file, $upload, $file->name), FV_V2);
         $this->actingAs($user)
             ->postJson("/api/v1/files/{$file->ulid}/versions/complete", ['upload_id' => $upload]);
 
@@ -149,9 +154,9 @@ describe('restoring', function () {
 
         // v1 is serving again, and v2 is now the history — restoring is
         // itself undoable.
-        expect(Storage::disk('s3')->get($file->refresh()->path))->toBe('v1-bytes')
+        expect(Storage::disk('s3')->get($file->refresh()->path))->toBe(FV_V1)
             ->and($file->versions()->count())->toBe(2)
-            ->and(Storage::disk('s3')->get($file->versions()->first()->path))->toBe('v2-bytes');
+            ->and(Storage::disk('s3')->get($file->versions()->first()->path))->toBe(FV_V2);
     });
 
     it('refuses a version belonging to another file', function () {
@@ -180,7 +185,7 @@ describe('deleting a version', function () {
         $upload = $this->actingAs($user)
             ->postJson("/api/v1/files/{$file->ulid}/versions/presign", ['size_bytes' => 8])
             ->json('data.upload_id');
-        Storage::disk('s3')->put(FileVersion::keyFor($file, $upload, $file->name), 'v2-bytes');
+        Storage::disk('s3')->put(FileVersion::keyFor($file, $upload, $file->name), FV_V2);
         $this->actingAs($user)
             ->postJson("/api/v1/files/{$file->ulid}/versions/complete", ['upload_id' => $upload]);
 
@@ -193,7 +198,7 @@ describe('deleting a version', function () {
 
         Storage::disk('s3')->assertMissing($oldPath);
         expect($file->versions()->count())->toBe(0)
-            ->and(Storage::disk('s3')->get($file->refresh()->path))->toBe('v2-bytes')
-            ->and(\App\Support\PlanQuota::storageUsed($user))->toBe(8);
+            ->and(Storage::disk('s3')->get($file->refresh()->path))->toBe(FV_V2)
+            ->and(PlanQuota::storageUsed($user))->toBe(strlen(FV_V2));
     });
 });

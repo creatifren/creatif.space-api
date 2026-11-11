@@ -12,6 +12,7 @@ use App\Models\User;
 use App\Models\WalletTransaction;
 use App\Services\CreemService;
 use App\Support\Credits;
+use App\Support\Media\MediaQuota;
 use App\Support\PlanQuota;
 use App\Support\ProductEvents;
 use App\Support\Wallet;
@@ -21,7 +22,7 @@ use Illuminate\Http\Request;
 
 /**
  * /credits — the balance, what is already committed, storage
- * with its rented blocks, and every movement. Owner-only for anything that
+ * (no longer rentable: Media v2), and every movement. Owner-only for anything that
  * spends; members can read.
  */
 class CreditsController extends Controller
@@ -49,10 +50,6 @@ class CreditsController extends Controller
                 'per_dollar' => Credits::PER_DOLLAR,
                 'per_send' => Credits::perSend(),
                 'per_send_by_platform' => Credits::perSendByPlatform(),
-                'block_gb' => Credits::BLOCK_GB,
-                'per_block' => Credits::PER_BLOCK,
-                'per_block_bulk' => Credits::PER_BLOCK_BULK,
-                'bulk_from_gb' => Credits::BULK_FROM_GB,
             ],
             // Legacy: the old count-based allowance, no longer charged.
             'allowance' => [
@@ -65,9 +62,9 @@ class CreditsController extends Controller
                 'used' => PlanQuota::storageUsed($user),
                 'plan' => PlanQuota::planStorageLimit($user),
                 'limit' => PlanQuota::storageLimit($user),
-                'blocks' => Credits::blocks(Workspace::owner($user)),
-                'rent' => Credits::rent($user),
                 'read_only' => PlanQuota::readOnly($user),
+                // Media v2: Free {used_bytes, quota_bytes}; paid {keep_used_bytes, keep_quota_bytes}.
+                'media' => MediaQuota::usage($user),
             ],
             'packs' => self::PACKS,
             'top_up' => ['min' => Credits::TOP_UP_MIN, 'max' => Credits::TOP_UP_MAX],
@@ -206,42 +203,5 @@ class CreditsController extends Controller
             'checkout_url' => $checkout['checkout_url'],
             'purchase_id' => $purchase->ulid,
         ]], 201);
-    }
-
-    /**
-     * Rent more storage now — the first month is taken today.
-     */
-    public function addBlocks(Request $request): JsonResponse
-    {
-        Workspace::ownerOnly($request->user());
-        $validated = $request->validate(['blocks' => ['required', 'integer', 'min:1', 'max:200']]);
-
-        Credits::addBlocks($request->user(), $validated['blocks']);
-
-        return $this->show($request);
-    }
-
-    /**
-     * Stop renting blocks from next month. Nothing comes back for this one,
-     * and blocks the files still need are refused — read-only is what a
-     * lapse does, not something to choose.
-     */
-    public function releaseBlocks(Request $request): JsonResponse
-    {
-        Workspace::ownerOnly($request->user());
-        $validated = $request->validate(['blocks' => ['required', 'integer', 'min:1']]);
-        $user = $request->user();
-
-        $limit = PlanQuota::storageLimit($user);
-        $after = $limit === null ? null : $limit - $validated['blocks'] * Credits::BLOCK_GB * 1024 ** 3;
-        if ($after !== null && PlanQuota::storageUsed($user) > $after) {
-            return response()->json([
-                'message' => 'Your files would not fit without those blocks — free some space first.',
-            ], 422);
-        }
-
-        Credits::releaseBlocks($user, $validated['blocks']);
-
-        return $this->show($request);
     }
 }

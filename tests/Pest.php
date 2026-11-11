@@ -115,3 +115,6 @@ function bearer(TestCase $test, string $token): TestCase
 
     return $test->withToken($token);
 }
+
+// Media v2 test helpers (mediaUser, mediaFile, postWith, …).
+require_once __DIR__.'/Feature/Media/MediaHelpers.php';

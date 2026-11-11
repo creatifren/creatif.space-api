@@ -23,7 +23,7 @@ describe('storage summary', function () {
                real objects in the bucket, which is what makes "free up
                400 bytes" a true sentence rather than an invitation. */
             ->assertJsonPath('data.used', 1_900)
-            ->assertJsonPath('data.limit', 2 * 1024 * 1024 * 1024)
+            ->assertJsonPath('data.limit', 1024 * 1024 * 1024) // Free: 1 GB of media
             ->assertJsonPath('data.reclaimable.versions', 400);
     });
 
