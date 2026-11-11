@@ -163,6 +163,12 @@ export const draftPost = defineTool({
   },
 });
 
+/** Credits already spoken for by sends handed over but not yet out. */
+interface CommittedCredits {
+  sends: number;
+  sends_monthly: number;
+}
+
 export const getCredits = defineTool({
   name: 'get_credits',
   title: 'Get plan, limits and Credits',
@@ -176,11 +182,15 @@ export const getCredits = defineTool({
   input: {},
   annotations: READ_ONLY,
   run: async (_args, { v1 }) => {
-    const { data } = await v1.get<{ data: Record<string, unknown> & { limits?: Record<string, unknown> } }>('/credits');
+    const { data } = await v1.get<{
+      data: Record<string, unknown> & { limits?: Record<string, unknown>; committed?: CommittedCredits };
+    }>('/credits');
     const limits = data.limits ?? {};
+    // Only the sends: storage rental (and its `rent`) is gone.
+    const committed = data.committed ? { sends: data.committed.sends, sends_monthly: data.committed.sends_monthly } : undefined;
     return {
       plan: limits.plan ?? { key: data.plan },
-      credits: { ...(limits.credits as object | undefined), committed: data.committed },
+      credits: { ...(limits.credits as object | undefined), committed },
       price_per_send: limits.price_per_send,
       monthly_posts: limits.monthly_posts,
       connected_accounts: limits.connected_accounts,

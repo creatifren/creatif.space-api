@@ -2,8 +2,13 @@
 
 namespace App\Services;
 
+use App\Exceptions\MediaRefused;
+use App\Exceptions\NotEnoughCredits;
+use App\Exceptions\PlanFeatureRequired;
 use App\Exceptions\ProviderConnectRefused;
 use App\Exceptions\ProviderRateLimited;
+use App\Exceptions\PublishPreflightFailed;
+use App\Exceptions\ScheduleBeyondHorizon;
 use App\Jobs\SendAnalytics;
 use Illuminate\Auth\AuthenticationException;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
@@ -72,8 +77,28 @@ class ErrorTracking
         }
     }
 
+    /**
+     * Answers to the person, not failures: a plan limit, a format or size
+     * the rules refuse, a post a network would refuse, a short balance, a
+     * slot too far out. Logged at info / warning (bootstrap/app.php), never
+     * sent to error tracking.
+     *
+     * @var array<class-string<Throwable>, string>
+     */
+    public const REFUSALS = [
+        PlanFeatureRequired::class => 'info',
+        PublishPreflightFailed::class => 'info',
+        NotEnoughCredits::class => 'info',
+        ScheduleBeyondHorizon::class => 'info',
+        MediaRefused::class => 'warning',
+    ];
+
     public static function skip(Throwable $e): bool
     {
+        if (isset(self::REFUSALS[$e::class])) {
+            return true;
+        }
+
         if ($e instanceof ValidationException
             || $e instanceof AuthenticationException
             || $e instanceof ModelNotFoundException

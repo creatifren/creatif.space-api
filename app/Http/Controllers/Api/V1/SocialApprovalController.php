@@ -5,6 +5,9 @@ namespace App\Http\Controllers\Api\V1;
 use App\Enums\SocialPostApproval;
 use App\Enums\SocialPostStatus;
 use App\Exceptions\AccountReconnectRequired;
+use App\Exceptions\NotEnoughCredits;
+use App\Exceptions\PublishPreflightFailed;
+use App\Exceptions\ScheduleBeyondHorizon;
 use App\Http\Controllers\Controller;
 use App\Http\Resources\SocialPostResource;
 use App\Models\SocialApprovalLink;
@@ -14,6 +17,7 @@ use App\Models\User;
 use App\Support\Credits;
 use App\Support\PlanQuota;
 use App\Support\ProductEvents;
+use App\Support\ScheduleHorizon;
 use App\Support\SocialPostRelay;
 use App\Support\Workspace;
 use Illuminate\Database\Eloquent\Builder;
@@ -96,6 +100,7 @@ class SocialApprovalController extends Controller
         $user = $request->user();
         PlanQuota::requireApprovalClient($user, $validated['client_name'] ?? null);
         self::requireWindow($user, $posts, 'post_ids');
+        self::requireHorizon($posts, 'post_ids');
         PlanQuota::requireQueueRoom($user, $posts->where('status', SocialPostStatus::Draft)->count(), 'post_ids');
 
         $hours = $validated['expires_in_hours'] ?? null;
@@ -187,7 +192,9 @@ class SocialApprovalController extends Controller
                 ->pluck('id')
             : collect();
         if ($add->isNotEmpty()) {
-            self::requireWindow($request->user(), SocialPost::query()->whereIn('id', $add)->get(), 'add_post_ids');
+            $adding = SocialPost::query()->whereIn('id', $add)->get();
+            self::requireWindow($request->user(), $adding, 'add_post_ids');
+            self::requireHorizon($adding, 'add_post_ids');
         }
         $remove = isset($validated['remove_post_ids'])
             ? $link->posts()->whereIn('ulid', array_unique($validated['remove_post_ids']))->pluck('social_posts.id')
@@ -272,11 +279,11 @@ class SocialApprovalController extends Controller
             $message = null;
             try {
                 $approved = $relay->approve($post, $request->user()->name, [SocialPostApproval::Client]);
-            } catch (ValidationException|AccountReconnectRequired $e) {
+            } catch (ValidationException|AccountReconnectRequired|PublishPreflightFailed|NotEnoughCredits|ScheduleBeyondHorizon $e) {
                 [$approved, $message] = [false, $e->getMessage()];
             } catch (Throwable $e) {
                 report($e);
-                [$approved, $message] = [false, 'Post for Me did not accept it — try again.'];
+                [$approved, $message] = [false, PublicApprovalController::refusedBy($post, $e).' Try again.'];
             }
             $results[] = ['id' => $post->ulid, 'approved' => $approved, 'message' => $message];
         }
@@ -317,6 +324,20 @@ class SocialApprovalController extends Controller
     {
         foreach ($posts as $post) {
             PlanQuota::requireScheduleWindow($user, $post->scheduled_at, $field);
+        }
+    }
+
+    /**
+     * A post put to a client must be one the relay can take on its slot:
+     * the owner hears it now (422 with the latest date), not the client
+     * after their yes.
+     *
+     * @param  Collection<int, SocialPost>  $posts
+     */
+    private static function requireHorizon(Collection $posts, string $field): void
+    {
+        foreach ($posts as $post) {
+            ScheduleHorizon::require($post->provider, $post->scheduled_at, $field);
         }
     }
 

@@ -29,6 +29,9 @@ class SocialPostDecided extends Notification implements ShouldQueue
 
     public const BLOCKED = 'blocked';
 
+    /** Approved, but its slot is past the relay's horizon: sent later by itself. */
+    public const HELD = 'held';
+
     public function __construct(
         public SocialApprovalLink $link,
         public string $decision,
@@ -43,7 +46,7 @@ class SocialPostDecided extends Notification implements ShouldQueue
      */
     public function via(object $notifiable): array
     {
-        return $this->decision === self::BLOCKED
+        return in_array($this->decision, [self::BLOCKED, self::HELD], true)
             ? ['mail', 'database']
             : NotificationChannels::for($notifiable, NotificationType::SocialPostDecision);
     }
@@ -56,6 +59,7 @@ class SocialPostDecided extends Notification implements ShouldQueue
                 ? "{$this->by} approved “{$caption}”"
                 : "{$this->by} approved {$this->count} posts",
             self::REVISE => "{$this->by} asked for changes".($caption ? " on “{$caption}”" : ''),
+            self::HELD => "{$this->by} approved “{$caption}” — it goes out closer to its date",
             default => "A post {$this->by} approved couldn’t go out",
         };
 

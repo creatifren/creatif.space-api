@@ -72,6 +72,12 @@ return Application::configure(basePath: dirname(__DIR__))
             ], 429, $e->getHeaders());
         });
 
+        // Refusals the person is told about (plan, format, preflight,
+        // Credits, horizon) are not errors: info / warning, not ERROR.
+        foreach (ErrorTracking::REFUSALS as $class => $level) {
+            $exceptions->level($class, $level);
+        }
+
         // To PostHog error tracking as well as laravel.log (the callback
         // returns nothing, so the default logging still runs).
         $exceptions->report(function (Throwable $e): void {

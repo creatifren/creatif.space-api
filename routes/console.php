@@ -13,6 +13,7 @@ use App\Jobs\PurgeTrashedFiles;
 use App\Jobs\ReleaseCommissions;
 use App\Jobs\RenewMonthlyCredits;
 use App\Jobs\RetryRateLimitedPublishes;
+use App\Jobs\SendApprovedHeldPosts;
 use App\Jobs\SyncInboxes;
 use Illuminate\Foundation\Inspiring;
 use Illuminate\Support\Facades\Artisan;
@@ -110,3 +111,9 @@ Schedule::job(new SyncInboxes)->hourly();
  * failing on the spot; every minute, the ones whose wait is over go again.
  */
 Schedule::job(new RetryRateLimitedPublishes)->everyMinute()->withoutOverlapping();
+
+/*
+ * Posts a client approved while their slot was past the relay's scheduling
+ * horizon wait approved; each goes to the relay once its slot is inside it.
+ */
+Schedule::job(new SendApprovedHeldPosts)->everyFiveMinutes()->withoutOverlapping();
