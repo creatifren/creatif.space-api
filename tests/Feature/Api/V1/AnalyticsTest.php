@@ -12,6 +12,10 @@ use App\Models\User;
 use Illuminate\Support\Facades\Date;
 use Illuminate\Support\Facades\Notification;
 
+// Plans v2 puts Insights behind Pro on Free (feature `insight`, tested in
+// PlansV2Test). These tests are about the rules underneath, so Free has it on.
+beforeEach(fn () => planWith('free', ['insight' => true]));
+
 /**
  * A creator on Premium — the plan whose `full_analytics` feature is what
  * every gate below reads.

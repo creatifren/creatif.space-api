@@ -118,6 +118,11 @@ return [
         'webhook_secret' => env('POSTFORME_WEBHOOK_SECRET'),
     ],
 
+    // Where Enterprise "Contact sales" requests are emailed.
+    'enterprise' => [
+        'contact_email' => env('ENTERPRISE_CONTACT_EMAIL', 'halo@creatif.space'),
+    ],
+
     // Any OpenAI-compatible chat endpoint, for the composer's caption help.
     'ai' => [
         'key' => env('AI_API_KEY'),

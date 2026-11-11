@@ -79,8 +79,8 @@ export function toToolError(e: unknown, notFoundWhat = 'That item'): ToolError {
     return new ToolError(
       'plan_required',
       message,
-      'Tell the user this message as it is (it includes the upgrade link). Do not retry.',
-      pick(body, ['feature', 'billing_url']),
+      'Tell the user this message as it is (it names the plan limit and includes the trial/upgrade link). Do not retry.',
+      pick(body, ['reason', 'feature', 'required_plan', 'limit', 'billing_url']),
     );
   }
   if (code === 'insufficient_credits') {

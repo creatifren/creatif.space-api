@@ -44,7 +44,7 @@ Rate limit: 60 requests / minute / token (429 + `Retry-After`).
 | `list_files` (search, type, folder_id, limit) | read | `GET /files` |
 | `draft_post` (caption, channel_ids, file_ids, media_urls, captions_by_channel, type) | draft | `POST /social-posts` with `draft: true` |
 | `get_credits` | read | `GET /credits` |
-| `create_approval_link` (post_ids, title, client_name, expires_in_hours) — Pro/Max | approve | `POST /social-approval-links` (drafts accepted) |
+| `create_approval_link` (post_ids, title, client_name, expires_in_hours) — every plan; Free: one client, 7-day window, 10 queued | approve | `POST /social-approval-links` (drafts accepted) |
 | `check_approval_status` (post_id \| link_id) | read | `GET /social-posts/{id}` or `GET /social-approval-links/{id}` |
 | `update_post` (caption, scheduled_at, labels) | draft (drafts and posts waiting for approval only) | `PATCH /social-posts/{id}` |
 | `schedule_post` (post_id, scheduled_at, confirm) | publish | preview `GET /social-posts/{id}/send-preview`; `confirm: true` → `POST /social-posts/{id}/send` |
@@ -71,6 +71,16 @@ approval (or whose client asked for changes) is never sent or scheduled, from
 the app or a token (409 `approval_required`); it can only be held for the
 client again. A token cannot drop the editor's own approval step either. A
 token can only edit drafts and posts waiting for approval (409 `not_editable`).
+
+**Plan limits are the API's rules too** (one plan definition: `PlanSeeder`,
+enforced by `PlanQuota`). Free schedules at most 7 days ahead (UTC), holds at
+most 10 queued posts (scheduled + waiting for approval) and has approval links
+for one client at a time; Pro and Max have none of these limits. Past one, the
+API answers 402 `{message, reason: "plan_required", feature, required_plan,
+limit?}` (`feature`: `schedule_window`, `queue_limit`, `approval_clients`, or
+a gated feature) and the tool error is `plan_required` with those fields in
+`details`. `schedule_post` sends its `scheduled_at` with the preview, so the
+limit answers before the user is asked to confirm.
 
 Errors come back as tool results with `isError: true` and
 `{error: {code, message, hint, details?}}`; codes: `reconnect_required`,

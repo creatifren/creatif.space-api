@@ -91,6 +91,13 @@ class SocialApprovalController extends Controller
             return response()->json(['message' => 'None of these posts can still be approved.'], 422);
         }
 
+        // Plans v2 limits (Free): one client at a time, each post's slot in
+        // the scheduling window, and drafts joining the queue fit in it.
+        $user = $request->user();
+        PlanQuota::requireApprovalClient($user, $validated['client_name'] ?? null);
+        self::requireWindow($user, $posts, 'post_ids');
+        PlanQuota::requireQueueRoom($user, $posts->where('status', SocialPostStatus::Draft)->count(), 'post_ids');
+
         $hours = $validated['expires_in_hours'] ?? null;
         $link = SocialApprovalLink::create([
             // The workspace's link, whoever on the team made it.
@@ -165,6 +172,11 @@ class SocialApprovalController extends Controller
         if (! empty($validated['add_post_ids'])) {
             PlanQuota::requireClientApprovals($request->user(), 'add_post_ids');
         }
+        // Naming a different client is asking someone new (plans v2).
+        if (array_key_exists('client_name', $validated)
+            && PlanQuota::approvalIdentity($validated['client_name'], $link->id) !== PlanQuota::approvalIdentity($link->client_name, $link->id)) {
+            PlanQuota::requireApprovalClient($request->user(), $validated['client_name'], $link);
+        }
 
         $add = isset($validated['add_post_ids'])
             ? SocialPost::query()->whereIn('user_id', self::workspaceIds($request->user()))
@@ -174,6 +186,9 @@ class SocialApprovalController extends Controller
                 ->whereNotIn('id', $link->posts()->select('social_posts.id'))
                 ->pluck('id')
             : collect();
+        if ($add->isNotEmpty()) {
+            self::requireWindow($request->user(), SocialPost::query()->whereIn('id', $add)->get(), 'add_post_ids');
+        }
         $remove = isset($validated['remove_post_ids'])
             ? $link->posts()->whereIn('ulid', array_unique($validated['remove_post_ids']))->pluck('social_posts.id')
             : collect();
@@ -290,6 +305,19 @@ class SocialApprovalController extends Controller
         return $link === null
             ? response()->json(['message' => 'This post is not on a live approval link — share it from List.'], 404)
             : response()->json(['data' => $this->linkArray($link)]);
+    }
+
+    /**
+     * Every post put to a client has its slot inside the plan's scheduling
+     * window (a post with no slot goes out on approval — always inside).
+     *
+     * @param  Collection<int, SocialPost>  $posts
+     */
+    private static function requireWindow(User $user, Collection $posts, string $field): void
+    {
+        foreach ($posts as $post) {
+            PlanQuota::requireScheduleWindow($user, $post->scheduled_at, $field);
+        }
     }
 
     /**

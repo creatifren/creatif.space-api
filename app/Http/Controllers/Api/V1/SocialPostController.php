@@ -25,6 +25,7 @@ use App\Support\SendConfirmation;
 use App\Support\SocialPostRelay;
 use App\Support\SocialProviders;
 use App\Support\Workspace;
+use Carbon\CarbonInterface;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
@@ -172,6 +173,16 @@ class SocialPostController extends Controller
         $draft = (bool) ($validated['draft'] ?? false);
         $ids = array_values(array_unique($validated['account_ids']));
         $sendsNow = $approval === null && ! $draft;
+        $scheduledAt = isset($validated['scheduled_at'])
+            ? self::instant($validated['scheduled_at'])
+            : null;
+
+        // Plan limits on what joins the queue (a future slot, or held for
+        // approval), before anything else is looked at or paid for. A draft
+        // is only saved; it is checked when it is sent.
+        if (! $draft) {
+            self::requireQueueable($user, $scheduledAt, $approval);
+        }
 
         // Only usable accounts: Connected, under the current relay. One the
         // user owns but left under another relay (or disconnected) gets a
@@ -212,9 +223,6 @@ class SocialPostController extends Controller
                     .' — top up, or send to fewer accounts.',
             ]);
         }
-        $scheduledAt = isset($validated['scheduled_at'])
-            ? self::instant($validated['scheduled_at'])
-            : null;
 
         // The post's public ulid doubles as the provider external_id, so a
         // webhook can find the row even before provider_post_id lands.
@@ -377,6 +385,12 @@ class SocialPostController extends Controller
             ? self::instant($validated['scheduled_at'])
             : $socialPost->scheduled_at;
 
+        // A queued post moved to a new slot: the slot is inside the plan's
+        // window. A draft's time is only a plan — sending checks it.
+        if (isset($validated['scheduled_at']) && $socialPost->status !== SocialPostStatus::Draft) {
+            PlanQuota::requireScheduleWindow($request->user(), $scheduledAt);
+        }
+
         $media = array_key_exists('media', $validated) ? array_values($validated['media']) : $socialPost->media;
         $edited = $caption !== $socialPost->caption
             || $media !== $socialPost->media
@@ -512,7 +526,21 @@ class SocialPostController extends Controller
     {
         Gate::allowIf(fn ($user) => $socialPost->user_id === $user->id);
 
+        $validated = $request->validate([
+            // The slot or hold the send would ask for: the plan's limits
+            // answer here (402) before the user is asked to confirm.
+            'scheduled_at' => ['sometimes', 'nullable', 'date'],
+            'approval' => ['sometimes', 'nullable', Rule::in(['awaiting', 'client'])],
+        ]);
+
         $user = $request->user();
+        if ($socialPost->status === SocialPostStatus::Draft) {
+            self::requireQueueable(
+                $user,
+                isset($validated['scheduled_at']) ? self::instant($validated['scheduled_at']) : null,
+                isset($validated['approval']) ? SocialPostApproval::from($validated['approval']) : null,
+            );
+        }
         $socialPost->load('targets.account');
 
         $targets = $socialPost->targets->map(function ($target) use ($socialPost) {
@@ -626,6 +654,11 @@ class SocialPostController extends Controller
         if (($validated['approval'] ?? null) === SocialPostApproval::Client->value) {
             PlanQuota::requireClientApprovals($request->user());
         }
+        self::requireQueueable(
+            $request->user(),
+            isset($validated['scheduled_at']) ? self::instant($validated['scheduled_at']) : null,
+            isset($validated['approval']) ? SocialPostApproval::from($validated['approval']) : null,
+        );
 
         // The relay charges as it sends, and refuses before the provider if
         // the balance is short; a held draft costs nothing yet.
@@ -641,6 +674,20 @@ class SocialPostController extends Controller
         }
 
         return new SocialPostResource($socialPost->fresh()->load('targets.account'));
+    }
+
+    /**
+     * Plans v2: a post joining the queue — a future slot, or held for
+     * approval — fits the plan's scheduling window and queue limit (Free:
+     * 7 days, 10 posts). A send-now joins nothing and is not checked here.
+     */
+    private static function requireQueueable(User $user, ?CarbonInterface $scheduledAt, ?SocialPostApproval $approval): void
+    {
+        PlanQuota::requireScheduleWindow($user, $scheduledAt);
+
+        if ($scheduledAt !== null || $approval !== null) {
+            PlanQuota::requireQueueRoom($user, 1, $scheduledAt !== null ? 'scheduled_at' : 'approval');
+        }
     }
 
     /**

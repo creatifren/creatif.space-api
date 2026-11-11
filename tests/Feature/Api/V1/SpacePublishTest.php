@@ -3,6 +3,10 @@
 use App\Models\Space;
 use App\Models\User;
 
+// Plans v2 puts Spaces and the link in bio behind Pro on Free (feature `spaces`, tested in
+// PlansV2Test). These tests are about the rules underneath, so Free has it on.
+beforeEach(fn () => planWith('free', ['spaces' => true]));
+
 it('publishes a draft and sets published_at', function () {
     $user = User::factory()->create();
     $space = Space::factory()->for($user)->create();

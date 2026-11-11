@@ -10,6 +10,10 @@ use App\Models\User;
 use Illuminate\Support\Facades\Queue;
 use Illuminate\Support\Facades\Storage;
 
+// Plans v2 puts Spaces and the link in bio behind Pro on Free (feature `spaces`, tested in
+// PlansV2Test). These tests are about the rules underneath, so Free has it on.
+beforeEach(fn () => planWith('free', ['spaces' => true]));
+
 function archivableSpace(int $files = 2, array $settings = []): Space
 {
     Storage::fake('s3');

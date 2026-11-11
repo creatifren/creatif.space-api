@@ -19,9 +19,12 @@ beforeEach(function () {
     }]);
 });
 
-it('sells only Free Pro and Max at the approved USD prices', function () {
-    $rows = collect($this->getJson('/api/v1/plans')->assertOk()->assertJsonCount(3, 'data')->json('data'))->keyBy('key');
-    expect($rows->keys()->all())->toBe(['free', 'pro', 'max'])
+it('sells only Pro and Max at the approved USD prices; lists Free, and Enterprise as contact sales', function () {
+    $rows = collect($this->getJson('/api/v1/plans')->assertOk()->assertJsonCount(4, 'data')->json('data'))->keyBy('key');
+    expect($rows->keys()->all())->toBe(['free', 'pro', 'max', 'enterprise'])
+        ->and($rows->where('checkout', true)->keys()->all())->toBe(['pro', 'max'])
+        ->and($rows['enterprise']['contact_sales'])->toBeTrue()
+        ->and($rows['enterprise']['price_monthly'])->toBeNull()
         ->and($rows['pro']['price_monthly'])->toBe(999)
         ->and($rows['pro']['price_yearly'])->toBe(9990)
         ->and($rows['max']['price_monthly'])->toBe(1499)

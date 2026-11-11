@@ -100,11 +100,25 @@ class CreditsController extends Controller
                 'limit' => $accountsLimit,
                 'used' => $owner->socialAccounts()->usable()->count(),
             ],
+            // Plans v2: what can join the queue, and for how many clients.
+            'scheduling' => [
+                'window_days' => PlanQuota::scheduleWindowDays($user),
+                'queued_posts' => [
+                    'limit' => PlanQuota::queueLimit($user),
+                    'used' => PlanQuota::queuedPosts($user),
+                ],
+            ],
+            'approval_clients' => [
+                'limit' => PlanQuota::approvalClientsLimit($user),
+                'used' => PlanQuota::approvalClients($user)->count(),
+            ],
             'features' => [
                 'approval_links' => $plan->feature('client_approvals'),
                 'analytics' => $plan->feature('full_analytics'),
                 'delivery_history' => $plan->feature('delivery_history'),
                 'branding_removed' => $plan->feature('branding_removed'),
+                // The gates PlanQuota::requireFeature() enforces (402 when false).
+                ...collect(PlanQuota::FEATURES)->mapWithKeys(fn (string $f) => [$f => $plan->feature($f)])->all(),
             ],
             'credits' => [
                 'monthly' => Credits::monthlyBalance($user),

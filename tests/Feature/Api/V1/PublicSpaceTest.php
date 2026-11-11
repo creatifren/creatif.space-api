@@ -6,6 +6,10 @@ use App\Models\Handle;
 use App\Models\Space;
 use App\Models\User;
 
+// Plans v2 puts Spaces and the link in bio behind Pro on Free (feature `spaces`, tested in
+// PlansV2Test). These tests are about the rules underneath, so Free has it on.
+beforeEach(fn () => planWith('free', ['spaces' => true]));
+
 function publishedSpaceFor(User $user, array $attributes = []): Space
 {
     Handle::factory()->for($user)->create(['name' => 'rani']);

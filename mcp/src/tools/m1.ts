@@ -168,8 +168,9 @@ export const getCredits = defineTool({
   title: 'Get plan, limits and Credits',
   description:
     'Gets the workspace’s creatif.space plan and its limits, all as set on the plan: plan name; this month’s posts vs the plan’s monthly figure; connected channels used vs allowed; ' +
-    'features (approval links, analytics); Credits (Monthly, when they reset, Top-up, total, committed to scheduled posts); the Credit price per send by platform; ' +
-    'and how many sends connected apps have left today (cap 20/day). Every plan, Free included, can use this server: sending spends Credits, and approval links need Pro or Max. ' +
+    'scheduling (how many days ahead a post may be scheduled, and queued posts — scheduled or waiting for approval — used vs allowed); approval clients used vs allowed; ' +
+    'features (approval links, analytics, AI captions, Spaces…); Credits (Monthly, when they reset, Top-up, total, committed to scheduled posts); the Credit price per send by platform; ' +
+    'and how many sends connected apps have left today (cap 20/day). Every plan, Free included, can use this server: sending spends Credits. Free schedules up to 7 days ahead, holds up to 10 queued posts and has approval links for one client; null means no limit (Pro, Max). ' +
     'Call this before scheduling or publishing when the user asks what they can afford.',
   scope: 'read',
   input: {},
@@ -183,6 +184,8 @@ export const getCredits = defineTool({
       price_per_send: limits.price_per_send,
       monthly_posts: limits.monthly_posts,
       connected_accounts: limits.connected_accounts,
+      scheduling: limits.scheduling,
+      approval_clients: limits.approval_clients,
       features: limits.features,
       mcp_daily_sends: limits.mcp_daily_sends,
       urls: limits.urls,
