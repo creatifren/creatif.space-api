@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { ToolError } from '../errors.js';
-import { defineTool } from './define.js';
+import { defineTool, describeTool } from './define.js';
 import { shapePost, type V1Post } from './shape.js';
 
 const READ_ONLY = { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false } as const;
@@ -11,9 +11,16 @@ const ulid = (what: string) =>
 export const listChannels = defineTool({
   name: 'list_channels',
   title: 'List connected channels',
-  description:
-    'Lists the social channels (Instagram, Facebook, TikTok, LinkedIn, X, Threads, YouTube, Pinterest, Bluesky…) connected to the user’s creatif.space workspace. ' +
-    'Use the returned channel ids for list_posts and draft_post. A channel with reconnect_required=true or status other than "connected" cannot be posted to until the user reconnects it in creatif.space → Channels.',
+  description: describeTool({
+    does: "Lists the social channels (Instagram, Facebook, TikTok, LinkedIn, X, Threads, YouTube, Pinterest, Bluesky…) connected to the user’s creatif.space workspace, with each channel’s id and whether it can be posted to.",
+    when: "first, before draft_post, list_posts by channel or any send — it is the only source of channel ids. A channel with reconnect_required=true (or status other than \"connected\") cannot be posted to until the user reconnects it in creatif.space → Channels.",
+    example: "list_channels {} → { channels: [{ id: \"01JD…\", platform: \"instagram\", username: \"studio\", status: \"connected\", reconnect_required: false }] }",
+    errors: [
+      ["scope_missing", "reconnect and allow \"read\""],
+      ["unauthorized", "ask the user to reconnect the creatif.space connector"],
+      ["upstream_unavailable", "wait a minute and call again"],
+    ],
+  }),
   scope: 'read',
   input: {},
   annotations: READ_ONLY,
@@ -35,10 +42,17 @@ export const listChannels = defineTool({
 export const listPosts = defineTool({
   name: 'list_posts',
   title: 'List posts',
-  description:
-    'Lists the user’s creatif.space posts, newest first: drafts, scheduled, published, failed and cancelled. ' +
-    'Filter by status, by a date window (from/to, ISO 8601 — matched on the scheduled time, or on creation time for unscheduled posts) and by channel. ' +
-    'Comments are omitted here; call get_post for one post’s full detail and review thread.',
+  description: describeTool({
+    does: "Lists the user’s creatif.space posts, newest first — drafts, scheduled, published, failed and cancelled — filtered by status, date window and channel.",
+    when: "to find post ids or see what is planned or out (e.g. status \"draft\" before schedule_post, publish_post or create_approval_link). Comments are omitted here; use get_post for one post’s full detail and review thread. from/to are ISO 8601, matched on the scheduled time (creation time for unscheduled posts).",
+    example: "list_posts { \"status\": \"draft\", \"limit\": 10 } → { count, posts: [{ id, status, caption, scheduled_at, approval, channels }] }",
+    errors: [
+      ["not_found", "the channel_id is unknown: take one from list_channels or drop the filter"],
+      ["invalid_input", "fix the fields in details and call again"],
+      ["unauthorized", "ask the user to reconnect the creatif.space connector"],
+      ["upstream_unavailable", "wait a minute and call again"],
+    ],
+  }),
   scope: 'read',
   input: {
     status: z.enum(['draft', 'scheduled', 'published', 'failed', 'cancelled']).optional().describe('Only posts in this state'),
@@ -64,8 +78,16 @@ export const listPosts = defineTool({
 export const getPost = defineTool({
   name: 'get_post',
   title: 'Get a post',
-  description:
-    'Gets one creatif.space post by id: caption, media, schedule, approval state, each channel’s delivery status and link, and the review thread (comments, client feedback, suggestions).',
+  description: describeTool({
+    does: "Gets one creatif.space post by id: caption, media, schedule, approval state, each channel’s delivery status and link, and the review thread (comments, client feedback, suggestions).",
+    when: "for the detail of one post you already have the id of (list_posts gives ids), e.g. to check delivery after publish_post. For approval decisions alone, check_approval_status is shorter.",
+    example: "get_post { \"post_id\": \"01JD…\" } → { post: { id, status, caption, channels: [{ platform, status, platform_url }], comments } }",
+    errors: [
+      ["not_found", "find the id with list_posts"],
+      ["unauthorized", "ask the user to reconnect the creatif.space connector"],
+      ["upstream_unavailable", "wait a minute and call again"],
+    ],
+  }),
   scope: 'read',
   input: { post_id: ulid('Post') },
   annotations: READ_ONLY,
@@ -79,9 +101,16 @@ export const getPost = defineTool({
 export const listFiles = defineTool({
   name: 'list_files',
   title: 'List library files',
-  description:
-    'Lists files in the user’s creatif.space library (Crefile), newest first. Filter by a name search and by type (image, video, pdf). ' +
-    'Pass the returned file ids to draft_post to attach them. The url is a signed link valid for about 24 hours.',
+  description: describeTool({
+    does: "Lists files in the user’s creatif.space library (Crefile), newest first, filtered by name search, type (image, video, pdf) and folder.",
+    when: "to attach media that is already in the library: pass the returned ids to draft_post or update_post file_ids. For a new file you hold the bytes of, use request_media_upload instead; for a public https URL, pass it to draft_post media_urls. The url is a signed link valid about 24 hours.",
+    example: "list_files { \"search\": \"launch\", \"type\": \"image\" } → { total, files: [{ id, name, mime_type, status, url }] }",
+    errors: [
+      ["not_found", "the folder_id is unknown: call again without it"],
+      ["unauthorized", "ask the user to reconnect the creatif.space connector"],
+      ["upstream_unavailable", "wait a minute and call again"],
+    ],
+  }),
   scope: 'read',
   input: {
     search: z.string().trim().max(255).optional().describe('Match on file name'),
@@ -118,10 +147,20 @@ export const listFiles = defineTool({
 export const draftPost = defineTool({
   name: 'draft_post',
   title: 'Draft a post',
-  description:
-    'Saves a DRAFT post in creatif.space for the given channels. Nothing is published or scheduled and no Credits are spent (on every plan, Free included); the user reviews and sends it from creatif.space, or you schedule/publish it with the user’s explicit agreement. ' +
-    'Attach media by library file ids (from list_files, or from confirm_media_upload for a file you just uploaded — an upload that was not confirmed is refused with file_not_ready) and/or public https media URLs (up to 10 in all). ' +
-    'captions_by_channel optionally overrides the caption for specific channels, e.g. a shorter one for X.',
+  description: describeTool({
+    does: "Saves a DRAFT post in creatif.space for the given channels — nothing is published or scheduled and no Credits are spent (every plan, Free included).",
+    when: "to create any new post; it is always the safe first step. The user reviews and sends it from creatif.space, or you send it later with schedule_post / publish_post (with the user’s explicit agreement) or share it with create_approval_link. To change an existing draft, use update_post instead of drafting again.",
+    example: "draft_post { \"caption\": \"Winter set is live\", \"channel_ids\": [\"01JD…\"], \"file_ids\": [\"01JE…\"], \"captions_by_channel\": { \"01JF…\": \"Shorter for X\" } }",
+    rules: "Media: library file ids (from list_files, or from confirm_media_upload for a file you just uploaded) and/or public https media URLs, 10 items in all. captions_by_channel overrides the caption for channels that are also in channel_ids. type picks the placement on Facebook, Instagram and Threads.",
+    errors: [
+      ["file_not_ready", "call confirm_media_upload for that file, or take ids from list_files"],
+      ["invalid_input", "fix what details names (e.g. a captions_by_channel id not in channel_ids, more than 10 media)"],
+      ["not_found", "take channel ids from list_channels and file ids from list_files"],
+      ["reconnect_required", "the user reconnects the channel in creatif.space → Channels"],
+      ["scope_missing", "reconnect and allow \"draft\""],
+      ["upstream_unavailable", "check list_posts before calling again — it may have been saved"],
+    ],
+  }),
   scope: 'draft',
   input: {
     caption: z.string().min(1).max(63206).describe('The post caption'),
@@ -179,12 +218,16 @@ interface CommittedCredits {
 export const getCredits = defineTool({
   name: 'get_credits',
   title: 'Get plan, limits and Credits',
-  description:
-    'Gets the workspace’s creatif.space plan and its limits, all as set on the plan: plan name; this month’s posts vs the plan’s monthly figure; connected channels used vs allowed; ' +
-    'scheduling (how many days ahead a post may be scheduled, and queued posts — scheduled or waiting for approval — used vs allowed); approval clients used vs allowed; ' +
-    'features (approval links, analytics, AI captions, Spaces…); Credits (Monthly, when they reset, Top-up, total, committed to scheduled posts); the Credit price per send by platform; ' +
-    'and how many sends connected apps have left today (cap 20/day). Every plan, Free included, can use this server: sending spends Credits. Free schedules up to 7 days ahead, holds up to 10 queued posts and has approval links for one client; null means no limit (Pro, Max). ' +
-    'Call this before scheduling or publishing when the user asks what they can afford.',
+  description: describeTool({
+    does: "Gets the workspace’s creatif.space plan, its limits and its Credits — everything that decides what can be sent.",
+    when: "before schedule_post or publish_post when the user asks what they can afford or why something was refused. It returns, as set on the plan: plan name; this month’s posts vs the plan’s monthly figure; connected channels used vs allowed; scheduling (days ahead allowed, queued posts — scheduled or waiting for approval — used vs allowed); approval clients used vs allowed; features (approval links, analytics, AI captions, Spaces…); Credits (Monthly, when they reset, Top-up, total, committed to scheduled posts); the Credit price per send by platform; and how many sends connected apps have left today (cap 20/day).",
+    example: "get_credits {} → { plan: { key: \"free\" }, credits: { monthly, topup, resets_at, committed }, price_per_send, scheduling, approval_clients, mcp_daily_sends }",
+    rules: "Every plan, Free included, can use this server: sending spends Credits. Free schedules up to 7 days ahead, holds up to 10 queued posts and has approval links for one client; null means no limit (Pro, Max).",
+    errors: [
+      ["unauthorized", "ask the user to reconnect the creatif.space connector"],
+      ["upstream_unavailable", "wait a minute and call again"],
+    ],
+  }),
   scope: 'read',
   input: {},
   annotations: READ_ONLY,

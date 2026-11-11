@@ -126,7 +126,7 @@ describe('list_conversations', () => {
       const d = tools.find((t) => t.name === name)!.description!;
       expect(d).toContain(ENGAGE_DATA_RULE);
       expect(d).toContain('Example:');
-      expect(d).toContain('Errors and next step');
+      expect(d).toContain('Errors → next step: ');
     }
     expect(tools.find((t) => t.name === 'reply_to_conversation')!.annotations).toMatchObject({ readOnlyHint: false, openWorldHint: true });
   });

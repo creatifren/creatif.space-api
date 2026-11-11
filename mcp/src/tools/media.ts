@@ -1,7 +1,7 @@
 import { z } from 'zod';
 import { ToolError } from '../errors.js';
 import { V1Error } from '../v1.js';
-import { defineTool } from './define.js';
+import { defineTool, describeTool } from './define.js';
 
 /*
  * Media upload in two steps, over the same presign/complete the app uses —
@@ -42,15 +42,20 @@ const fileId = z.string().trim().min(10).max(26).describe('The file_id request_m
 export const requestMediaUpload = defineTool({
   name: 'request_media_upload',
   title: 'Request a media upload URL',
-  description:
-    'Step 1 of 2 to put a NEW image or video into the user’s creatif.space library so it can go on a post. ' +
-    'Use it when you have the file’s bytes (generated, or given to you) and no public https URL for it; if the file is already in the library, use list_files instead, and if it is at a public https URL, pass that URL to draft_post media_urls. ' +
-    'Returns a file_id and a presigned upload_url (valid about 15 minutes). Then: (1) HTTP PUT the exact bytes to upload_url with the Content-Type header given — the size must equal size_bytes, or storage refuses it; ' +
-    '(2) call confirm_media_upload with the file_id; (3) pass that id in draft_post or update_post file_ids. ' +
-    'Example: request_media_upload { "filename": "launch.jpg", "mime": "image/jpeg", "size_bytes": 482113 } → { file_id, upload: { method: "PUT", url, headers: { "Content-Type": "image/jpeg" } }, expires_at }. ' +
-    'Accepted: JPEG, PNG, WebP, GIF, MP4, MOV (also SVG and PDF for the library). The workspace’s plan limits apply (Free: 1 GB in total; Pro 25 GB / Max 50 GB for media on posts and kept files; per-file caps by plan). ' +
-    'Errors and what to do: storage_full → tell the user to free up space (link given) or upgrade (link given), do not retry; file_too_large → make it smaller, or upgrade (link given); ' +
-    'unsupported_format → convert to a format above; upload_limit → stop for today; scope_missing → reconnect with "draft" allowed.',
+  description: describeTool({
+    does: "Step 1 of 2 to put a NEW image or video into the user’s creatif.space library: returns a file_id and a presigned upload_url (valid about 15 minutes).",
+    when: "when you have the file’s bytes (generated, or given to you) and no public https URL for it. If the file is already in the library, use list_files; if it is at a public https URL, pass that URL to draft_post media_urls. Then: (1) HTTP PUT the exact bytes to upload_url with the Content-Type header given — the size must equal size_bytes; (2) call confirm_media_upload with the file_id; (3) pass that id in draft_post or update_post file_ids.",
+    example: "request_media_upload { \"filename\": \"launch.jpg\", \"mime\": \"image/jpeg\", \"size_bytes\": 482113 } → { file_id, upload: { method: \"PUT\", url, headers: { \"Content-Type\": \"image/jpeg\" } }, expires_at }",
+    rules: "Accepted: JPEG, PNG, WebP, GIF, MP4, MOV (also SVG and PDF for the library). The workspace’s plan limits apply (Free: 1 GB in total; Pro 25 GB / Max 50 GB for media on posts and kept files; per-file caps by plan).",
+    errors: [
+      ["storage_full", "tell the user to free up space (link given) or upgrade (link given); do not retry"],
+      ["file_too_large", "make it smaller, or upgrade (link given)"],
+      ["unsupported_format", "convert to a format above"],
+      ["upload_limit", "stop for today"],
+      ["not_found", "the folder_id is unknown: call again without it"],
+      ["scope_missing", "reconnect with \"draft\" allowed"],
+    ],
+  }),
   scope: 'draft',
   input: {
     filename: z.string().trim().min(1).max(200).describe('File name to show in the library, e.g. "launch.jpg"'),
@@ -88,15 +93,18 @@ export const requestMediaUpload = defineTool({
 export const confirmMediaUpload = defineTool({
   name: 'confirm_media_upload',
   title: 'Confirm a media upload',
-  description:
-    'Step 2 of 2: after you PUT the bytes to the upload_url from request_media_upload, call this with its file_id. ' +
-    'creatif.space checks the stored file — its real size against the plan’s limits and its first bytes against the format (a renamed file is refused) — and returns the ready file. ' +
-    'Pass the returned id in draft_post or update_post file_ids. Safe to call again: a file that is already confirmed is returned as it is. ' +
-    'Example: confirm_media_upload { "file_id": "01JD…" } → { file: { id, name, mime_type, size_bytes, status: "ready", url } }. ' +
-    'Errors and what to do: upload_incomplete → the PUT has not arrived; PUT the bytes (or request a new URL if it expired) and call again; ' +
-    'unsupported_format → the bytes are not the declared format; the upload was deleted — convert and start over with request_media_upload; ' +
-    'file_too_large / storage_full → as in request_media_upload (smaller file, free up space or upgrade, links given); ' +
-    'not_found → the id is not an upload in this workspace; request a new upload.',
+  description: describeTool({
+    does: "Step 2 of 2: after you PUT the bytes to the upload_url from request_media_upload, checks the stored file and returns it ready to attach.",
+    when: "right after the PUT has answered 200, with the file_id from request_media_upload. creatif.space checks the file’s real size against the plan’s limits and its first bytes against the format (a renamed file is refused). Pass the returned id in draft_post or update_post file_ids. Safe to call again: an already confirmed file is returned as it is.",
+    example: "confirm_media_upload { \"file_id\": \"01JD…\" } → { file: { id, name, mime_type, size_bytes, status: \"ready\", url } }",
+    errors: [
+      ["upload_incomplete", "the PUT has not arrived; PUT the bytes (or request a new URL if it expired) and call again"],
+      ["unsupported_format", "the bytes are not the declared format and the upload was deleted; convert and start over with request_media_upload"],
+      ["file_too_large / storage_full", "as in request_media_upload (smaller file, free up space or upgrade, links given)"],
+      ["invalid_input", "the upload was refused or abandoned; start over with request_media_upload"],
+      ["not_found", "the id is not an upload in this workspace; request a new upload"],
+    ],
+  }),
   scope: 'draft',
   input: { file_id: fileId },
   annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false },
