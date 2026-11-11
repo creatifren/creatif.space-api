@@ -28,6 +28,7 @@ use App\Http\Controllers\Api\V1\OutstandConnectController;
 use App\Http\Controllers\Api\V1\PinterestBoardController;
 use App\Http\Controllers\Api\V1\ProfileFontController;
 use App\Http\Controllers\Api\V1\PublicApprovalController;
+use App\Http\Controllers\Api\V1\PublicHealthController;
 use App\Http\Controllers\Api\V1\PublicProfileController;
 use App\Http\Controllers\Api\V1\PublicSpaceController;
 use App\Http\Controllers\Api\V1\SocialAccountController;
@@ -66,6 +67,12 @@ Route::post('/oauth/introspect', IntrospectionController::class)
 Route::get('/plans', [SubscriptionController::class, 'plans'])
     ->middleware('throttle:60,1')
     ->name('api.v1.plans');
+
+// Public health: db / queue / storage pass or fail and the deployed commit,
+// 200 or 503. No reasons, no user data (those are on /health/deep).
+Route::get('/health', PublicHealthController::class)
+    ->middleware('throttle:60,1')
+    ->name('api.v1.health');
 
 // For an external uptime monitor: every dependency, behind HEALTH_TOKEN
 // (404 when unset). /up stays the cheap public liveness probe.
