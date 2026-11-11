@@ -12,6 +12,7 @@ import { m2Tools } from './tools/m2.js';
 import { mediaTools } from './tools/media.js';
 import { engageTools } from './tools/engage.js';
 import { V1Client } from './v1.js';
+import { mcpCors } from './cors.js';
 import { DEFAULT_FREE_RATE_LIMIT, DEFAULT_GLAMA_CLAIM } from './config.js';
 import { mountFree } from './free/server.js';
 
@@ -57,6 +58,10 @@ export function createApp(deps: AppDeps) {
   const app = express();
   app.disable('x-powered-by');
   app.set('trust proxy', 'loopback');
+
+  // Before every route, so the preflight never reaches auth and 401/429
+  // answers carry the headers too.
+  app.use(mcpCors());
 
   app.get('/health', (_req, res) => {
     res.json({ ok: true, name: SERVER_INFO.name, version: SERVER_INFO.version });

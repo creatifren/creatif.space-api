@@ -19,6 +19,16 @@ No business logic lives here.
 | `GET /.well-known/oauth-protected-resource/mcp` | the same document at the RFC 9728 path form |
 | `POST /free` | **Creatif Space Free Tools** — a separate MCP server, **no auth**, 30 calls/min per IP |
 
+**CORS** (browser clients: MCP Inspector web, web IDEs) on `/mcp`, `/` and
+`/free`: `OPTIONS` → `204` with `Access-Control-Allow-Origin: *` (no
+credentials — auth is the Bearer header only), `Allow-Methods: GET, POST,
+DELETE, OPTIONS`, `Allow-Headers: authorization, content-type,
+mcp-protocol-version, mcp-session-id, last-event-id`, `Expose-Headers:
+mcp-session-id, www-authenticate`, `Max-Age: 600`. The same headers are on
+every response from those paths, 401 and 429 included. Done in the Node app
+(`src/cors.ts`); nginx passes `OPTIONS` through and must not add its own
+`Access-Control-*` headers.
+
 No / invalid token → `401` with
 `WWW-Authenticate: Bearer resource_metadata="https://mcp.creatif.space/.well-known/oauth-protected-resource/mcp"` (RFC 9728 path form, built from the origin; the root well-known serves the same document).
 
