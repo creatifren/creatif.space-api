@@ -1,7 +1,7 @@
 import { z } from 'zod';
 import { ToolError } from '../errors.js';
 import { V1Error } from '../v1.js';
-import { defineTool, type ToolContext } from './define.js';
+import { defineTool, describeTool, type ToolContext } from './define.js';
 import { shapePost, type V1Post } from './shape.js';
 
 const ulid = (what: string) =>
@@ -157,12 +157,19 @@ function previewResult(p: SendPreview, action: 'publish' | 'schedule', scheduled
 export const createApprovalLink = defineTool({
   name: 'create_approval_link',
   title: 'Create a client approval link',
-  description:
-    'Creates a creatif.space approval link for one or more posts (drafts, or posts already held for approval) and returns its URL for the user to share with their client. ' +
-    'The posts are held — nothing is published until the client approves. approver_email is required: only that person, signed in with that address (Google or a one-time email link on the approval page), can approve or request changes; ask the user for it if you do not have it. ' +
-    'Every plan: on Free, links are for one client at a time (the approver_email tells clients apart; links to the same address are fine), posts scheduled at most 7 days ahead, and at most 10 queued posts. ' +
-    'Past a Free limit it returns plan_required (details.feature approval_clients, schedule_window or queue_limit) with a message to pass on to the user as it is (it has the trial/upgrade link). ' +
-    'The link is not sent anywhere by this tool; hand the URL to the user.',
+  description: describeTool({
+    does: "Creates a creatif.space approval link for one or more drafts (or posts already held for approval) and returns its URL for the user to share with their client; the posts are held until the client approves.",
+    when: "when the user wants a client to approve posts before they go out. To follow decisions on an existing link, use check_approval_status with link_id instead of making a new link. The link is not sent anywhere by this tool; hand the URL to the user.",
+    example: "create_approval_link { \"post_ids\": [\"01JD…\"], \"approver_email\": \"client@example.com\", \"title\": \"November posts\", \"expires_in_hours\": 168 } → { link: { id, url, posts }, skipped? }",
+    rules: "approver_email is required: only that person, signed in with that address (Google or a one-time email link on the approval page), can approve or ask for changes; ask the user for it if you do not have it. Every plan: on Free, links are for one client at a time (the approver_email tells clients apart; links to the same address are fine), posts scheduled at most 7 days ahead, and at most 10 queued posts. Posts that cannot be approved are left off and listed in skipped with their status and reason.",
+    errors: [
+      ["not_approvable", "none of the posts can go on a link (details.refused gives each post’s status and reason): list_posts status \"draft\", or draft_post a new one, then call again"],
+      ["plan_required", "details.feature approval_clients, schedule_window or queue_limit — pass the message to the user as it is (it has the trial/upgrade link), do not retry"],
+      ["not_found", "check ids with list_posts"],
+      ["scope_missing", "reconnect and allow \"approve\""],
+      ["upstream_unavailable", "check list_posts / check_approval_status before calling again"],
+    ],
+  }),
   scope: 'approve',
   input: {
     post_ids: z.array(ulid('Post')).min(1).max(50).describe('Posts to put on the link'),
@@ -261,8 +268,17 @@ async function skippedFromLink(ctx: ToolContext, linkId: string, ids: string[]):
 export const checkApprovalStatus = defineTool({
   name: 'check_approval_status',
   title: 'Check approval status',
-  description:
-    'Checks where client approval stands — for one post (post_id) or for a whole approval link (link_id): approved / waiting / changes requested, who decided and when, and the open feedback threads.',
+  description: describeTool({
+    does: "Checks where client approval stands — for one post (post_id) or a whole approval link (link_id): approved / waiting / changes requested, who decided and when, and the open feedback threads.",
+    when: "after create_approval_link, to follow the client’s decisions. Give exactly one of post_id or link_id. For a post’s full detail (media, delivery), use get_post.",
+    example: "check_approval_status { \"link_id\": \"01JL…\" } → { link, posts: [{ id, approval, approval_by, approval_at, open_feedback }] }",
+    errors: [
+      ["invalid_input", "pass exactly one of post_id or link_id"],
+      ["not_found", "post ids come from list_posts, link ids from create_approval_link"],
+      ["unauthorized", "ask the user to reconnect the creatif.space connector"],
+      ["upstream_unavailable", "wait a minute and call again"],
+    ],
+  }),
   scope: 'read',
   input: {
     post_id: ulid('Post').optional(),
@@ -313,11 +329,19 @@ const keptMedia = (post: V1Post) =>
 export const updatePost = defineTool({
   name: 'update_post',
   title: 'Update a post',
-  description:
-    'Changes a draft or a post still waiting for approval: its caption, its scheduled time, its labels, or its media. ' +
-    'Media: file_ids REPLACES the post’s media with these library files (ids from list_files, or from confirm_media_upload for a new upload); add_file_ids keeps the current media and adds these after it (10 items at most). ' +
-    'Example: update_post { "post_id": "01JD…", "add_file_ids": ["01JE…"] }. A file that was not confirmed is refused with file_not_ready — call confirm_media_upload first. ' +
-    'Posts already queued to publish, published or otherwise done cannot be changed from here (not_editable) — the user edits those in creatif.space.',
+  description: describeTool({
+    does: "Changes a draft or a post still waiting for approval: its caption, scheduled time, labels or media.",
+    when: "to edit an existing draft instead of drafting a new one. Posts already queued to publish, published or otherwise done cannot be changed from here — the user edits those in creatif.space.",
+    example: "update_post { \"post_id\": \"01JD…\", \"caption\": \"New caption\", \"add_file_ids\": [\"01JE…\"] }",
+    rules: "Media: file_ids REPLACES the post’s media with these library files ([] removes all); add_file_ids keeps the current media and adds these after it (10 items at most). Ids come from list_files, or from confirm_media_upload for a new upload.",
+    errors: [
+      ["not_editable", "details.status says why; tell the user to change it in creatif.space, or draft_post a new version"],
+      ["file_not_ready", "call confirm_media_upload first"],
+      ["invalid_input", "fix what details names (both file_ids and add_file_ids, nothing to change, more than 10 media)"],
+      ["not_found", "find the id with list_posts"],
+      ["scope_missing", "reconnect and allow \"draft\""],
+    ],
+  }),
   scope: 'draft',
   input: {
     post_id: ulid('Post'),
@@ -375,11 +399,22 @@ export const updatePost = defineTool({
 export const schedulePost = defineTool({
   name: 'schedule_post',
   title: 'Schedule a draft',
-  description:
-    'Schedules a DRAFT to publish at a future time on its channels. Two steps: call with confirm false (default) to get a preview — channels and Credit cost; ' +
-    'show it to the user, and only after they explicitly agree call again with confirm: true. The confirm sends exactly what that preview showed (it carries the preview’s signed confirm_token, valid 10 minutes); if the channels or cost changed, nothing is sent and you get preview_stale with the new preview. Credits are charged when it is scheduled (Monthly Credits first, then Top-up; on every plan). ' +
-    'If the Credits do not cover it you get insufficient_credits or quota_exceeded with a message to pass on as it is — nothing is charged. ' +
-    'On Free, scheduled_at is at most 7 days ahead and at most 10 posts can be queued: past that you get plan_required (details.feature schedule_window or queue_limit) with a message to pass on as it is. Connected apps can send at most 20 posts a day.',
+  description: describeTool({
+    does: "Schedules a DRAFT to publish at a future time on its channels, after the user agrees to a preview of channels and Credit cost.",
+    when: "when the user wants a draft to go out later; use publish_post to send now, and create_approval_link if a client must approve first. Two steps: call with confirm false (default) to get the preview; show it to the user, and only after they explicitly agree call again with confirm: true.",
+    example: "schedule_post { \"post_id\": \"01JD…\", \"scheduled_at\": \"2026-12-01T09:00:00+07:00\" } → preview; then the same call with \"confirm\": true → { post, note }",
+    rules: "The confirm sends exactly what that preview showed (a signed confirm_token kept by the server, valid 10 minutes). Credits are charged when it is scheduled (Monthly Credits first, then Top-up; on every plan). On Free, scheduled_at is at most 7 days ahead and at most 10 posts can be queued. Connected apps can send at most 20 posts a day.",
+    errors: [
+      ["preview_stale", "nothing was sent; show the user the new preview in details.preview and confirm again only if they agree"],
+      ["insufficient_credits or quota_exceeded", "pass the message on as it is (nothing was charged); retry after a top-up"],
+      ["plan_required", "details.feature schedule_window or queue_limit — pass the message on as it is"],
+      ["not_draft", "list_posts status \"draft\", or draft_post"],
+      ["invalid_input", "scheduled_at must be in the future"],
+      ["daily_cap_reached", "send from creatif.space or wait for details.resets_at"],
+      ["reconnect_required", "the user reconnects the channel"],
+      ["scope_missing", "reconnect and allow \"publish\""],
+    ],
+  }),
   scope: 'publish',
   input: {
     post_id: ulid('Draft post'),
@@ -408,10 +443,22 @@ export const schedulePost = defineTool({
 export const publishPost = defineTool({
   name: 'publish_post',
   title: 'Publish a draft now',
-  description:
-    'Publishes a DRAFT now on its channels — this goes public and cannot be undone. Two steps: call with confirm false (default) to get a preview — channels and Credit cost; ' +
-    'show it to the user, and only after they explicitly agree call again with confirm: true. The confirm sends exactly what that preview showed (it carries the preview’s signed confirm_token, valid 10 minutes); if the channels or cost changed, nothing is sent and you get preview_stale with the new preview. Credits are charged (Monthly Credits first, then Top-up; on every plan). ' +
-    'If the Credits do not cover it you get insufficient_credits or quota_exceeded, and past a plan limit plan_required, each with a message to pass on as it is — nothing is charged. Connected apps can send at most 20 posts a day.',
+  description: describeTool({
+    does: "Publishes a DRAFT now on its channels — it goes public and cannot be undone — after the user agrees to a preview of channels and Credit cost.",
+    when: "only when the user wants it out now; use schedule_post for later and create_approval_link if a client must approve first. Two steps: call with confirm false (default) to get the preview; show it to the user, and only after they explicitly agree call again with confirm: true.",
+    example: "publish_post { \"post_id\": \"01JD…\" } → preview; then publish_post { \"post_id\": \"01JD…\", \"confirm\": true } → { post, note }; then get_post for each channel’s link",
+    rules: "The confirm sends exactly what that preview showed (a signed confirm_token kept by the server, valid 10 minutes). Credits are charged (Monthly Credits first, then Top-up; on every plan). Connected apps can send at most 20 posts a day.",
+    errors: [
+      ["preview_stale", "nothing was sent; show the user the new preview in details.preview and confirm again only if they agree"],
+      ["insufficient_credits or quota_exceeded", "pass the message on as it is (nothing was charged); retry after a top-up"],
+      ["plan_required", "pass the message on as it is"],
+      ["not_draft", "list_posts status \"draft\", or draft_post"],
+      ["daily_cap_reached", "send from creatif.space or wait for details.resets_at"],
+      ["reconnect_required", "the user reconnects the channel"],
+      ["scope_missing", "reconnect and allow \"publish\""],
+      ["upstream_unavailable", "check get_post before calling again — it may have gone out"],
+    ],
+  }),
   scope: 'publish',
   input: {
     post_id: ulid('Draft post'),
