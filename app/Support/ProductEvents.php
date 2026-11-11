@@ -28,9 +28,79 @@ final class ProductEvents
     /** Which page or button a signup started from: a slug, never a referral code. */
     public const ENTRY_PATTERN = '/^[a-z0-9-]{1,40}$/';
 
+    /** X-Creatif-Platform: where the app runs. Anything else is ignored. */
+    public const PLATFORM_HEADER = 'X-Creatif-Platform';
+
+    public const PLATFORMS = ['web', 'android_app', 'android_twa'];
+
+    /** Events also sent under a second name while dashboards move over. */
+    private const ALIASES = [
+        'approval_link_created' => 'approval_link_sent',
+        'approval_decision_made' => 'approval_decided',
+    ];
+
+    /** Events that carry plan + platform (the tracking plan's core five). */
+    private const WITH_CONTEXT = ['user_signed_up', 'post_published', 'approval_link_created', 'approval_decision_made', 'channel_connected'];
+
     private static function analytics(): Analytics
     {
         return app(Analytics::class);
+    }
+
+    /**
+     * Where this request comes from: the app's X-Creatif-Platform header
+     * when it is one we know; a person's own request without it is the web
+     * app; a webhook, job or console run is none (null).
+     */
+    public static function platform(): ?string
+    {
+        if (! app()->bound('request') || app()->runningInConsole() && ! app()->runningUnitTests()) {
+            return null;
+        }
+
+        $request = request();
+        $given = strtolower(trim((string) $request->headers->get(self::PLATFORM_HEADER, '')));
+        if (in_array($given, self::PLATFORMS, true)) {
+            return $given;
+        }
+
+        $uri = (string) $request->route()?->uri();
+
+        return $uri === '' || str_starts_with($uri, 'api/v1/webhooks') ? null : 'web';
+    }
+
+    /**
+     * Every product event goes through here: none for an internal account
+     * (staff, ANALYTICS_INTERNAL_EMAILS, hello@creatif.space), plan and
+     * platform on the core five, and the alias name sent too while it lasts.
+     *
+     * @param  array<string, mixed>  $properties
+     */
+    private static function capture(User $user, string $event, array $properties): void
+    {
+        if (Analytics::isInternal($user)) {
+            return;
+        }
+
+        if (in_array($event, self::WITH_CONTEXT, true)) {
+            $properties += ['plan' => self::planOf($user), 'platform' => self::platform()];
+        }
+
+        self::analytics()->capture($user->ulid, $event, $properties);
+
+        $alias = self::ALIASES[$event] ?? null;
+        $until = (string) config('services.posthog.alias_until', '');
+        if ($alias !== null && ($until === '' || now()->lessThanOrEqualTo($until))) {
+            self::analytics()->capture($user->ulid, $alias, $properties);
+        }
+    }
+
+    /** @param  array<string, mixed>  $properties */
+    private static function set(User $user, array $properties): void
+    {
+        if (! Analytics::isInternal($user)) {
+            self::analytics()->set($user->ulid, $properties);
+        }
     }
 
     /**
@@ -53,8 +123,8 @@ final class ProductEvents
             $extra['$set_once'] = ['initial_entry' => $entry];
         }
 
-        self::analytics()->capture($user->ulid, 'user_signed_up', ['method' => $method, 'plan' => 'free'] + $context + $extra);
-        self::analytics()->set($user->ulid, [
+        self::capture($user, 'user_signed_up', ['method' => $method, 'plan' => 'free'] + $context + $extra);
+        self::set($user, [
             'plan' => 'free',
             'signup_method' => $method,
             'signed_up_at' => ($user->created_at ?? now())->toIso8601String(),
@@ -100,6 +170,9 @@ final class ProductEvents
      */
     public static function waitlistJoined(string $email, string $list, bool $referred, bool $refCodePresent, array $utm = []): void
     {
+        if (Analytics::isInternalEmail($email)) {
+            return;
+        }
         $extra = array_filter(array_intersect_key($utm, array_flip(self::UTM)), fn (string $v) => $v !== '');
 
         self::analytics()->capture(hash('sha256', strtolower($email)), 'waitlist_joined', [
@@ -112,6 +185,9 @@ final class ProductEvents
     /** A waitlist referrer reached the priority batch. Same hashed id as waitlist_joined. */
     public static function waitlistPriorityReached(string $email, int $referrals): void
     {
+        if (Analytics::isInternalEmail($email)) {
+            return;
+        }
         self::analytics()->capture(hash('sha256', strtolower($email)), 'waitlist_priority_reached', ['list' => 'mcp', 'referral_count' => $referrals]);
     }
 
@@ -132,7 +208,7 @@ final class ProductEvents
     {
         $now = self::planOf($user);
         if ($before === null || self::key($before) !== $now) {
-            self::analytics()->set($user->ulid, ['plan' => $now]);
+            self::set($user, ['plan' => $now]);
         }
     }
 
@@ -141,18 +217,18 @@ final class ProductEvents
     {
         $count = self::connectedCount($user);
 
-        self::analytics()->capture($user->ulid, 'channel_connected', [
+        self::capture($user, 'channel_connected', [
             'network' => $account->platform->value,
             // Ever: a reconnect of an old row is not a new row, so only the very first row counts.
             'is_first_channel' => $user->socialAccounts()->whereKeyNot($account->id)->doesntExist(),
             'channels_count' => $count,
         ]);
-        self::analytics()->set($user->ulid, ['channels_count' => $count]);
+        self::set($user, ['channels_count' => $count]);
     }
 
     public static function channelsCount(User $user): void
     {
-        self::analytics()->set($user->ulid, ['channels_count' => self::connectedCount($user)]);
+        self::set($user, ['channels_count' => self::connectedCount($user)]);
     }
 
     private static function connectedCount(User $user): int
@@ -165,7 +241,7 @@ final class ProductEvents
     {
         $post->loadMissing('targets.account', 'user');
 
-        self::analytics()->capture($post->user->ulid, 'post_created', [
+        self::capture($post->user, 'post_created', [
             'post_id' => $post->ulid,
             'status' => $status,
             'networks' => $post->targets->map(fn ($t) => $t->account->platform->value)->unique()->values()->all(),
@@ -179,7 +255,7 @@ final class ProductEvents
     {
         $owner = $link->user;
 
-        self::analytics()->capture($owner->ulid, 'approval_link_created', [
+        self::capture($owner, 'approval_link_created', [
             'link_id' => $link->ulid,
             'posts_count' => $postsCount,
             'expires_in_days' => $hours === null ? null : round($hours / 24, 1),
@@ -200,7 +276,7 @@ final class ProductEvents
             return;
         }
 
-        self::analytics()->capture($link->user->ulid, 'approval_link_opened', [
+        self::capture($link->user, 'approval_link_opened', [
             'link_id' => $link->ulid,
             'posts_count' => $postsCount,
         ]);
@@ -209,7 +285,7 @@ final class ProductEvents
     /** @param  'approved'|'changes_requested'|'retracted'  $decision */
     public static function approvalDecision(SocialApprovalLink $link, SocialPost $post, string $decision): void
     {
-        self::analytics()->capture($link->user->ulid, 'approval_decision_made', [
+        self::capture($link->user, 'approval_decision_made', [
             'link_id' => $link->ulid,
             'post_id' => $post->ulid,
             'decision' => $decision,
@@ -248,7 +324,9 @@ final class ProductEvents
                 ->whereHas('post', fn ($q) => $q->where('user_id', $post->user_id))
                 ->exists();
 
-            self::analytics()->capture($post->user->ulid, 'post_published', [
+            self::capture($post->user, 'post_published', [
+                // Where the post was made: this runs in a webhook or job.
+                'platform' => self::platform() ?? $post->client_platform,
                 'post_id' => $post->ulid,
                 'network' => $network,
                 'credits_charged' => (int) $target->charged_credits + (int) $target->charged_monthly,
@@ -266,7 +344,7 @@ final class ProductEvents
 
         $failure = PublishFailure::classify($error, $network);
 
-        self::analytics()->capture($post->user->ulid, 'post_publish_failed', [
+        self::capture($post->user, 'post_publish_failed', [
             'post_id' => $post->ulid,
             'network' => $network,
             'error_code' => $failure['error_code'],
@@ -291,7 +369,7 @@ final class ProductEvents
      */
     public static function checkoutStarted(User $user, string $kind, PlanKey|string|null $plan, ?string $period, int $amountCents, bool $trial = false): void
     {
-        self::analytics()->capture($user->ulid, 'checkout_started', [
+        self::capture($user, 'checkout_started', [
             'kind' => $kind,
             'plan' => self::key($plan),
             'period' => $period,
@@ -303,7 +381,7 @@ final class ProductEvents
     /** Once per subscription: Creem says its trial began. */
     public static function trialStarted(User $user, PlanKey|string $plan, string $period, int $days): void
     {
-        self::analytics()->capture($user->ulid, 'trial_started', [
+        self::capture($user, 'trial_started', [
             'plan' => self::key($plan),
             'period' => $period,
             'trial_days' => $days,
@@ -313,7 +391,7 @@ final class ProductEvents
     /** @param  'creem'|'google'  $provider */
     public static function subscriptionStarted(User $user, PlanKey|string $plan, string $period, int $amountCents, string $provider = 'creem'): void
     {
-        self::analytics()->capture($user->ulid, 'subscription_started', [
+        self::capture($user, 'subscription_started', [
             'plan' => self::key($plan),
             'period' => $period,
             'amount_usd' => round($amountCents / 100, 2),
@@ -323,12 +401,12 @@ final class ProductEvents
 
     public static function subscriptionCanceled(User $user, PlanKey|string $plan): void
     {
-        self::analytics()->capture($user->ulid, 'subscription_canceled', ['plan' => self::key($plan)]);
+        self::capture($user, 'subscription_canceled', ['plan' => self::key($plan)]);
     }
 
     public static function creditsPurchased(User $user, int $amountCents, int $credits): void
     {
-        self::analytics()->capture($user->ulid, 'credits_purchased', [
+        self::capture($user, 'credits_purchased', [
             'amount_usd' => round($amountCents / 100, 2),
             'credits' => $credits,
         ]);
@@ -337,6 +415,6 @@ final class ProductEvents
     /** @param  'dm'|'comment'|'private_reply'  $kind */
     public static function replySent(User $user, string $kind, ?string $network): void
     {
-        self::analytics()->capture($user->ulid, 'engage_reply_sent', ['kind' => $kind, 'network' => $network]);
+        self::capture($user, 'engage_reply_sent', ['kind' => $kind, 'network' => $network]);
     }
 }
