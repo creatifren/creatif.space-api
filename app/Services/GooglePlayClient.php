@@ -67,7 +67,7 @@ class GooglePlayClient
     {
         $url = $this->app().'/purchases/subscriptions/'.rawurlencode($productId)
             .'/tokens/'.rawurlencode($purchaseToken).':acknowledge';
-        $response = $this->send(fn (PendingRequest $http) => $http->post($url, (object) []));
+        $response = $this->send(fn (PendingRequest $http) => $http->withBody('{}', 'application/json')->post($url));
 
         if (! $response->successful()) {
             throw new GooglePlayUnavailable('acknowledge answered HTTP '.$response->status());
