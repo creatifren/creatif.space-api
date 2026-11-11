@@ -234,13 +234,14 @@ describe('rule 2 — approval on Free', function () {
         $b = v2Draft($user);
         $c = v2Draft($user);
 
-        $this->actingAs($user)->postJson('/api/v1/social-approval-links', ['post_ids' => [$a->ulid], 'client_name' => 'Acme'])->assertCreated();
-        // The same client again (any case / spacing) is still one client.
-        $this->actingAs($user)->postJson('/api/v1/social-approval-links', ['post_ids' => [$b->ulid], 'client_name' => '  acme '])->assertCreated();
+        $this->actingAs($user)->postJson('/api/v1/social-approval-links', ['approver_email' => 'acme@client.test', 'post_ids' => [$a->ulid], 'client_name' => 'Acme'])->assertCreated();
+        // The same approver again (any case / spacing) is still one client,
+        // whatever the link calls them.
+        $this->actingAs($user)->postJson('/api/v1/social-approval-links', ['approver_email' => '  ACME@Client.test ', 'post_ids' => [$b->ulid], 'client_name' => 'Acme marketing'])->assertCreated();
 
-        v2Assert402($this->actingAs($user)->postJson('/api/v1/social-approval-links', ['post_ids' => [$c->ulid], 'client_name' => 'Globex']), 'approval_clients', 1);
-        // An unnamed link cannot be told apart from another client either.
-        v2Assert402($this->actingAs($user)->postJson('/api/v1/social-approval-links', ['post_ids' => [$c->ulid]]), 'approval_clients', 1);
+        v2Assert402($this->actingAs($user)->postJson('/api/v1/social-approval-links', ['approver_email' => 'globex@client.test', 'post_ids' => [$c->ulid], 'client_name' => 'Globex']), 'approval_clients', 1);
+        // A different address is a different client, even under the same name.
+        v2Assert402($this->actingAs($user)->postJson('/api/v1/social-approval-links', ['approver_email' => 'someone@else.test', 'post_ids' => [$c->ulid], 'client_name' => 'Acme']), 'approval_clients', 1);
         expect($c->fresh()->status->value)->toBe('draft');
     });
 
@@ -252,7 +253,7 @@ describe('rule 2 — approval on Free', function () {
         expect(PlanQuota::approvalClients($user)->all())->toBe(['name:acme']);
         $this->actingAs($user)->deleteJson("/api/v1/social-approval-links/{$link->ulid}")->assertNoContent();
 
-        $this->actingAs($user)->postJson('/api/v1/social-approval-links', ['post_ids' => [v2Draft($user)->ulid], 'client_name' => 'Globex'])->assertCreated();
+        $this->actingAs($user)->postJson('/api/v1/social-approval-links', ['approver_email' => 'globex@client.test', 'post_ids' => [v2Draft($user)->ulid], 'client_name' => 'Globex'])->assertCreated();
         expect($expired->fresh()->revoked_at)->toBeNull();
     });
 
@@ -273,8 +274,8 @@ describe('rule 2 — approval on Free', function () {
         $edge = v2Draft($user, ['status' => 'scheduled', 'approval' => 'awaiting', 'scheduled_at' => now()->addDays(7)]);
         $far = v2Draft($user, ['status' => 'scheduled', 'approval' => 'awaiting', 'scheduled_at' => now()->addDays(7)->addMinute()]);
 
-        v2Assert402($this->actingAs($user)->postJson('/api/v1/social-approval-links', ['post_ids' => [$far->ulid]]), 'schedule_window', 7);
-        $link = $this->actingAs($user)->postJson('/api/v1/social-approval-links', ['post_ids' => [$edge->ulid]])->assertCreated()->json('data.id');
+        v2Assert402($this->actingAs($user)->postJson('/api/v1/social-approval-links', ['approver_email' => 'client@example.test', 'post_ids' => [$far->ulid]]), 'schedule_window', 7);
+        $link = $this->actingAs($user)->postJson('/api/v1/social-approval-links', ['approver_email' => 'client@example.test', 'post_ids' => [$edge->ulid]])->assertCreated()->json('data.id');
         v2Assert402($this->actingAs($user)->patchJson("/api/v1/social-approval-links/{$link}", ['add_post_ids' => [$far->ulid]]), 'schedule_window', 7);
     });
 
@@ -284,15 +285,15 @@ describe('rule 2 — approval on Free', function () {
         $one = v2Draft($user);
         $two = v2Draft($user);
 
-        v2Assert402($this->actingAs($user)->postJson('/api/v1/social-approval-links', ['post_ids' => [$one->ulid, $two->ulid]]), 'queue_limit', 10);
-        $this->actingAs($user)->postJson('/api/v1/social-approval-links', ['post_ids' => [$one->ulid]])->assertCreated();
+        v2Assert402($this->actingAs($user)->postJson('/api/v1/social-approval-links', ['approver_email' => 'client@example.test', 'post_ids' => [$one->ulid, $two->ulid]]), 'queue_limit', 10);
+        $this->actingAs($user)->postJson('/api/v1/social-approval-links', ['approver_email' => 'client@example.test', 'post_ids' => [$one->ulid]])->assertCreated();
     });
 
     it('is unchanged on Pro: many clients, any slot', function () {
         $user = v2Pro();
         foreach (['Acme', 'Globex', 'Initech'] as $client) {
             $post = v2Draft($user, ['status' => 'scheduled', 'approval' => 'awaiting', 'scheduled_at' => now()->addDays(40)]);
-            $this->actingAs($user)->postJson('/api/v1/social-approval-links', ['post_ids' => [$post->ulid], 'client_name' => $client])->assertCreated();
+            $this->actingAs($user)->postJson('/api/v1/social-approval-links', ['approver_email' => strtolower($client).'@client.test', 'post_ids' => [$post->ulid], 'client_name' => $client])->assertCreated();
         }
     });
 });
@@ -500,7 +501,7 @@ describe('rule 6 — MCP / API keys get the same answers', function () {
         SocialApprovalLink::create(['user_id' => $user->id, 'client_name' => 'Acme']);
 
         v2Assert402(bearer($this, v2ApiKey($this, $user))
-            ->postJson('/api/v1/social-approval-links', ['post_ids' => [v2Draft($user)->ulid], 'client_name' => 'Globex']), 'approval_clients', 1);
+            ->postJson('/api/v1/social-approval-links', ['approver_email' => 'globex@client.test', 'post_ids' => [v2Draft($user)->ulid], 'client_name' => 'Globex']), 'approval_clients', 1);
     });
 });
 

@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\Api\V1\ProfileFontController;
+use App\Http\Controllers\Auth\ApproverLinkController;
 use App\Http\Controllers\Auth\GoogleAuthController;
 use App\Http\Controllers\Auth\PasswordAuthController;
 use App\Http\Middleware\RequirePkce;
@@ -23,6 +24,12 @@ Route::get('/auth/google/callback', [GoogleAuthController::class, 'callback'])->
 Route::post('/auth/google/native', [GoogleAuthController::class, 'native'])
     ->middleware('throttle:10,1')
     ->name('auth.google.native');
+
+// An approver's one-time email sign-in link (POST /api/v1/a/{token}/email-link
+// sends it): signs in or creates that address and returns to the approval page.
+Route::get('/auth/approver-link/{token}', ApproverLinkController::class)
+    ->middleware('throttle:20,1')
+    ->name('auth.approver-link');
 
 // Email + password. JSON for the SPA except the verify link, which is opened
 // from an inbox and redirects back to the frontend.

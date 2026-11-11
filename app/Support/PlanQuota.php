@@ -144,10 +144,11 @@ class PlanQuota
 
     /**
      * Who the workspace is asking for approval right now: one identity per
-     * open (live) approval link — its client_name, trimmed and lower-cased,
-     * when the editor named one; otherwise the link itself (an unnamed link
-     * is a client we cannot tell apart from any other). Two links for
-     * "Acme" are one client; two unnamed links are two.
+     * open (live) approval link. Since the signed-in approver, that is its
+     * approver_email (lower-cased) when the link has one; links made before
+     * fall back to the client_name rule — the name, trimmed and lower-cased,
+     * or the link itself when unnamed. Two links to the same address are one
+     * client; two unnamed old links are two.
      *
      * @return Collection<int, string>
      */
@@ -157,15 +158,20 @@ class PlanQuota
             ->where('user_id', Workspace::owner($user)->id)
             ->live()
             ->when($except !== null, fn ($q) => $q->whereKeyNot($except->getKey()))
-            ->get(['id', 'client_name'])
+            ->get(['id', 'client_name', 'approver_email'])
             ->toBase()
-            ->map(fn (SocialApprovalLink $link) => static::approvalIdentity($link->client_name, $link->id))
+            ->map(fn (SocialApprovalLink $link) => static::approvalIdentity($link->client_name, $link->id, $link->approver_email))
             ->unique()
             ->values();
     }
 
-    public static function approvalIdentity(?string $clientName, ?int $linkId = null): string
+    public static function approvalIdentity(?string $clientName, ?int $linkId = null, ?string $approverEmail = null): string
     {
+        $email = mb_strtolower(trim((string) $approverEmail));
+        if ($email !== '') {
+            return 'email:'.$email;
+        }
+
         $name = mb_strtolower(trim((string) $clientName));
 
         return $name !== '' ? 'name:'.$name : 'link:'.($linkId ?? 'new');
@@ -173,11 +179,11 @@ class PlanQuota
 
     /**
      * Room for an approval link for this client? $except is the link being
-     * renamed (its own identity does not count against it).
+     * changed (its own identity does not count against it).
      *
      * @throws PlanFeatureRequired
      */
-    public static function requireApprovalClient(User $user, ?string $clientName, ?SocialApprovalLink $except = null, string $field = 'client_name'): void
+    public static function requireApprovalClient(User $user, ?string $clientName, ?SocialApprovalLink $except = null, string $field = 'client_name', ?string $approverEmail = null): void
     {
         $limit = static::approvalClientsLimit($user);
         if ($limit === null) {
@@ -185,7 +191,7 @@ class PlanQuota
         }
 
         $identities = static::approvalClients($user, $except)
-            ->push(static::approvalIdentity($clientName, $except?->id))
+            ->push(static::approvalIdentity($clientName, $except?->id, $approverEmail))
             ->unique();
 
         if ($identities->count() > $limit) {

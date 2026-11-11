@@ -149,7 +149,7 @@ describe('approval links from drafts', function () {
         $post = draftFor($user);
 
         $this->actingAs($user)
-            ->postJson('/api/v1/social-approval-links', ['post_ids' => [$post->ulid]])
+            ->postJson('/api/v1/social-approval-links', ['approver_email' => 'client@example.test', 'post_ids' => [$post->ulid]])
             ->assertCreated()
             ->assertJsonPath('data.posts', 1);
 
@@ -166,10 +166,10 @@ describe('approval links from drafts', function () {
         $other = draftFor($user);
 
         $this->actingAs($user)
-            ->postJson('/api/v1/social-approval-links', ['post_ids' => [$post->ulid]])
+            ->postJson('/api/v1/social-approval-links', ['approver_email' => 'client@example.test', 'post_ids' => [$post->ulid]])
             ->assertCreated();
         $this->actingAs($user)
-            ->postJson('/api/v1/social-approval-links', ['post_ids' => [$other->ulid]])
+            ->postJson('/api/v1/social-approval-links', ['approver_email' => 'second@example.test', 'post_ids' => [$other->ulid]])
             ->assertStatus(402)
             ->assertJsonPath('feature', 'approval_clients');
 

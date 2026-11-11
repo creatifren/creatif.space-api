@@ -140,31 +140,46 @@ Route::post('/profiles/{handle}/spaces/{slug}/unlock', [PublicSpaceController::c
     ->middleware('throttle:10,1')
     ->name('api.v1.profiles.spaces.unlock');
 
-// Approval link — a client with no account. The token is the credential.
+// Approval link — anyone holding the token may look (no sign-in); deciding
+// needs the invited approver signed in (below).
 Route::get('/a/{token}', [PublicApprovalController::class, 'show'])
     ->middleware('throttle:60,1')
     ->name('api.v1.approval-links.show');
 
-// Its writes. The token is the whole credential, so they run without the
-// stateful-SPA layer: no session, no cookie login, no CSRF — nothing a
-// cross-site request could ride on. That also lets the page send a
-// decision with navigator.sendBeacon (text/plain JSON) as the tab closes.
+// Its decisions — approve, ask for changes, take back, approve all — need the
+// invited approver signed in (ApproverGate: 401 sign_in_required, 403
+// approver_mismatch). They keep the stateful-SPA layer, so the app's session
+// cookie arrives, but are exempt from the CSRF header check (bootstrap/app.php)
+// so the page can still send a last decision with navigator.sendBeacon as the
+// tab closes. Cross-site requests carry no session: the cookie is SameSite=Lax
+// and Sanctum only starts a session for our own origins — so a forged request
+// is simply unauthenticated (401).
+Route::middleware(AcceptBeaconJson::class)->group(function () {
+    Route::post('/a/{token}/posts/{post}/decision', [PublicApprovalController::class, 'decide'])
+        ->middleware('throttle:30,1')
+        ->name('api.v1.approval-links.decide');
+    Route::post('/a/{token}/posts/{post}/retract', [PublicApprovalController::class, 'retract'])
+        ->middleware('throttle:30,1')
+        ->name('api.v1.approval-links.retract');
+    // Group approval (RF-043): every post the client was shown, in one request.
+    Route::post('/a/{token}/approve-all', [PublicApprovalController::class, 'approveAll'])
+        ->middleware('throttle:10,1')
+        ->name('api.v1.approval-links.approve-all');
+});
+
+// Comments and the email sign-in request stay token-only: no session, no
+// cookie login, no CSRF — nothing a cross-site request could ride on.
 Route::withoutMiddleware([EnsureFrontendRequestsAreStateful::class])
     ->middleware(AcceptBeaconJson::class)
     ->group(function () {
-        Route::post('/a/{token}/posts/{post}/decision', [PublicApprovalController::class, 'decide'])
-            ->middleware('throttle:30,1')
-            ->name('api.v1.approval-links.decide');
-        Route::post('/a/{token}/posts/{post}/retract', [PublicApprovalController::class, 'retract'])
-            ->middleware('throttle:30,1')
-            ->name('api.v1.approval-links.retract');
         Route::post('/a/{token}/posts/{post}/comments', [PublicApprovalController::class, 'comment'])
             ->middleware('throttle:30,1')
             ->name('api.v1.approval-links.comment');
-        // Group approval (RF-043): every post the client was shown, in one request.
-        Route::post('/a/{token}/approve-all', [PublicApprovalController::class, 'approveAll'])
-            ->middleware('throttle:10,1')
-            ->name('api.v1.approval-links.approve-all');
+        // A one-time sign-in link by email; always 202 (never says whether
+        // the address matched). Also throttled per link + address.
+        Route::post('/a/{token}/email-link', [PublicApprovalController::class, 'emailLink'])
+            ->middleware('throttle:5,1')
+            ->name('api.v1.approval-links.email-link');
     });
 
 // Content Plan share link — read-only, the token is the credential.
@@ -475,6 +490,10 @@ Route::middleware(['auth:sanctum,mcp', EnforceTokenScope::class])->group(functio
         ->middleware('throttle:10,1')
         ->name('api.v1.me.subscription.portal');
     Route::get('/me/invoices', [SubscriptionController::class, 'invoices'])->name('api.v1.me.invoices');
+
+    // "Waiting your approval": links sent to my (verified) email with posts
+    // still waiting on my decision.
+    Route::get('/me/approvals/waiting', [SocialApprovalController::class, 'waiting'])->name('api.v1.me.approvals.waiting');
 
     // Bell, Needs Attention, and the five switches
     Route::get('/me/attention', [NotificationController::class, 'attention'])->name('api.v1.me.attention');

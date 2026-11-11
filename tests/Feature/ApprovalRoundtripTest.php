@@ -12,7 +12,9 @@ use App\Models\Subscription;
 use App\Models\User;
 use App\Support\Credits;
 use App\Support\Workspace;
+use Illuminate\Foundation\Http\Middleware\ValidateCsrfToken;
 use Illuminate\Http\Client\Request as HttpRequest;
+use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Route;
 use Laravel\Sanctum\Http\Middleware\EnsureFrontendRequestsAreStateful;
@@ -135,14 +137,36 @@ describe('the client decision survives a closing tab', function () {
         expect($other->headers->get('Access-Control-Allow-Origin'))->not->toBe('https://evil.test');
     });
 
-    it('runs the write routes without the session/CSRF layer, keeping their rate limits', function (string $name) {
+    it('runs the decision routes with the session (signed-in approver) but no CSRF header check, keeping their rate limits', function (string $name, string $uri) {
         $route = Route::getRoutes()->getByName($name);
         $middleware = app('router')->gatherRouteMiddleware($route);
 
-        expect($middleware)->not->toContain(EnsureFrontendRequestsAreStateful::class)
+        // The session arrives (Sanctum stateful) — the approver is the signed-in user…
+        expect($middleware)->toContain(EnsureFrontendRequestsAreStateful::class)
             ->and($middleware)->toContain(AcceptBeaconJson::class)
             ->and(collect($middleware)->contains(fn ($m) => str_contains((string) $m, 'Throttle')))->toBeTrue();
-    })->with(['api.v1.approval-links.decide', 'api.v1.approval-links.retract', 'api.v1.approval-links.comment', 'api.v1.approval-links.approve-all']);
+
+        // …and a beacon, which cannot send X-XSRF-TOKEN, is not refused for it.
+        $csrf = new class(app(), app('encrypter')) extends ValidateCsrfToken
+        {
+            public function excluded(Request $r): bool
+            {
+                return $this->inExceptArray($r);
+            }
+        };
+        expect($csrf->excluded(Request::create($uri, 'POST')))->toBeTrue();
+    })->with([
+        ['api.v1.approval-links.decide', '/api/v1/a/tok/posts/p/decision'],
+        ['api.v1.approval-links.retract', '/api/v1/a/tok/posts/p/retract'],
+        ['api.v1.approval-links.approve-all', '/api/v1/a/tok/approve-all'],
+    ]);
+
+    it('keeps comments and the email sign-in request token-only (no session, no CSRF layer)', function (string $name) {
+        $middleware = app('router')->gatherRouteMiddleware(Route::getRoutes()->getByName($name));
+
+        expect($middleware)->not->toContain(EnsureFrontendRequestsAreStateful::class)
+            ->and(collect($middleware)->contains(fn ($m) => str_contains((string) $m, 'Throttle')))->toBeTrue();
+    })->with(['api.v1.approval-links.comment', 'api.v1.approval-links.email-link']);
 
     it('starts no session and honours no login from the app\'s origin', function () {
         $owner = rtOwner();
@@ -168,7 +192,7 @@ describe('the client decision survives a closing tab', function () {
         $owner = rtOwner();
         [$post, $link] = rtHeld($owner);
 
-        $this->call('POST', "/api/v1/a/{$link->token}/posts/{$post->ulid}/decision", [], [], [], [
+        asApprover($this)->call('POST', "/api/v1/a/{$link->token}/posts/{$post->ulid}/decision", [], [], [], [
             'CONTENT_TYPE' => 'text/plain;charset=UTF-8',
             'HTTP_ACCEPT' => 'application/json',
             'HTTP_ORIGIN' => 'https://app.test',
@@ -183,7 +207,7 @@ describe('the client decision survives a closing tab', function () {
         $owner = rtOwner();
         [$post, $link] = rtHeld($owner);
 
-        $this->call('POST', "/api/v1/a/{$link->token}/posts/{$post->ulid}/decision", [], [], [], [
+        asApprover($this)->call('POST', "/api/v1/a/{$link->token}/posts/{$post->ulid}/decision", [], [], [], [
             'CONTENT_TYPE' => 'text/plain', 'HTTP_ACCEPT' => 'application/json',
         ], 'approve please')->assertUnprocessable();
     });
@@ -195,8 +219,8 @@ describe('a repeated decision is idempotent', function () {
         [$post, $link] = rtHeld($owner);
         $url = "/api/v1/a/{$link->token}/posts/{$post->ulid}/decision";
 
-        $this->postJson($url, ['name' => 'Andi', 'decision' => 'approve'])->assertOk()->assertJsonPath('data.approval', 'approved');
-        $this->postJson($url, ['name' => 'Andi', 'decision' => 'approve'])->assertOk()->assertJsonPath('data.approval', 'approved');
+        asApprover($this)->postJson($url, ['name' => 'Andi', 'decision' => 'approve'])->assertOk()->assertJsonPath('data.approval', 'approved');
+        asApprover($this)->postJson($url, ['name' => 'Andi', 'decision' => 'approve'])->assertOk()->assertJsonPath('data.approval', 'approved');
 
         expect(rtCreates())->toBe(1);
     });
@@ -207,8 +231,8 @@ describe('a repeated decision is idempotent', function () {
         $url = "/api/v1/a/{$link->token}/posts/{$post->ulid}/decision";
         $body = ['name' => 'Andi', 'decision' => 'revise', 'reason' => 'Warmer opener please'];
 
-        $this->postJson($url, $body)->assertOk()->assertJsonPath('data.approval', 'revision');
-        $this->postJson($url, $body)->assertOk()->assertJsonPath('data.approval', 'revision');
+        asApprover($this)->postJson($url, $body)->assertOk()->assertJsonPath('data.approval', 'revision');
+        asApprover($this)->postJson($url, $body)->assertOk()->assertJsonPath('data.approval', 'revision');
 
         expect(SocialPostComment::query()->where('social_post_id', $post->id)->where('role', 'APPROVER')->count())->toBe(1);
     });
@@ -218,8 +242,8 @@ describe('a repeated decision is idempotent', function () {
         [$post, $link] = rtHeld($owner);
         $url = "/api/v1/a/{$link->token}/posts/{$post->ulid}/decision";
 
-        $this->postJson($url, ['name' => 'Andi', 'decision' => 'approve'])->assertOk();
-        $this->postJson($url, ['name' => 'Andi', 'decision' => 'revise', 'reason' => 'Wait'])
+        asApprover($this)->postJson($url, ['name' => 'Andi', 'decision' => 'approve'])->assertOk();
+        asApprover($this)->postJson($url, ['name' => 'Andi', 'decision' => 'revise', 'reason' => 'Wait'])
             ->assertUnprocessable()
             ->assertJsonPath('message', 'This post has already been decided.');
     });
@@ -229,8 +253,8 @@ describe('a repeated decision is idempotent', function () {
         [$post, $link] = rtHeld($owner);
         $body = ['name' => 'Andi', 'post_ids' => [$post->ulid]];
 
-        $this->postJson("/api/v1/a/{$link->token}/approve-all", $body)->assertOk()->assertJsonPath('data.results.0.approved', true);
-        $this->postJson("/api/v1/a/{$link->token}/approve-all", $body)
+        asApprover($this)->postJson("/api/v1/a/{$link->token}/approve-all", $body)->assertOk()->assertJsonPath('data.results.0.approved', true);
+        asApprover($this)->postJson("/api/v1/a/{$link->token}/approve-all", $body)
             ->assertOk()
             ->assertJsonPath('data.results.0.approved', true)
             ->assertJsonPath('data.posts.0.approval', 'approved');

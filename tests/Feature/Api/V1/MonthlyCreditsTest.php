@@ -11,6 +11,7 @@ use App\Models\WalletTransaction;
 use App\Support\Credits;
 use App\Support\Wallet;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Validation\ValidationException;
 
 /*
  * Monthly Credits (owner, 2026-11-09): the plan's credits_monthly per
@@ -98,7 +99,7 @@ it('refuses without touching Monthly when Top-up cannot cover the rest', functio
     $user = User::factory()->create();
     $post = monthlyPost($user, ['instagram', 'threads']);
 
-    expect(fn () => Credits::chargeSend($post))->toThrow(Illuminate\Validation\ValidationException::class);
+    expect(fn () => Credits::chargeSend($post))->toThrow(ValidationException::class);
     expect(Credits::monthlyBalance($user))->toBe(300)
         ->and($post->targets()->whereNotNull('paid_with')->count())->toBe(0);
 });

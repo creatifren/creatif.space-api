@@ -63,33 +63,45 @@ describe('create_approval_link', () => {
   it('posts the ids and returns the shareable url', async () => {
     const res = await call(
       'create_approval_link',
-      { post_ids: [POST], title: 'November', expires_in_hours: 168 },
+      { post_ids: [POST], approver_email: 'rani@client.test', title: 'November', expires_in_hours: 168 },
       {
         'POST /social-approval-links': () => ({
           status: 201,
-          body: { data: { id: LINK, url: 'https://creatif.space/a/tok', status: 'active', posts: 1, expires_at: 'x', counts: {} } },
+          body: { data: { id: LINK, url: 'https://creatif.space/a/tok', status: 'active', posts: 1, approver_email: 'rani@client.test', expires_at: 'x', counts: {} } },
         }),
       },
     );
-    expect(app!.v1.calls[0]!.body).toEqual({ post_ids: [POST], title: 'November', expires_in_hours: 168 });
-    expect(payload(res).link).toEqual({ id: LINK, url: 'https://creatif.space/a/tok', status: 'active', posts: 1, expires_at: 'x' });
+    expect(app!.v1.calls[0]!.body).toEqual({ post_ids: [POST], approver_email: 'rani@client.test', title: 'November', expires_in_hours: 168 });
+    expect(payload(res).link).toEqual({ id: LINK, url: 'https://creatif.space/a/tok', status: 'active', posts: 1, approver_email: 'rani@client.test', expires_at: 'x' });
+  });
+
+  it('requires approver_email and never calls the API without one', async () => {
+    const res = await call('create_approval_link', { post_ids: [POST] }, {});
+    expect(res.isError).toBe(true);
+    expect(app!.v1.calls).toHaveLength(0);
+  });
+
+  it('refuses an approver_email that is not an address', async () => {
+    const res = await call('create_approval_link', { post_ids: [POST], approver_email: 'rani' }, {});
+    expect(res.isError).toBe(true);
+    expect(app!.v1.calls).toHaveLength(0);
   });
 
   it('needs the approve scope', async () => {
-    const res = await call('create_approval_link', { post_ids: [POST] }, {}, TOKEN_ALL);
+    const res = await call('create_approval_link', { post_ids: [POST], approver_email: 'rani@client.test' }, {}, TOKEN_ALL);
     expect(payload(res).error).toMatchObject({ code: 'scope_missing', details: { required: 'approve' } });
     expect(app!.v1.calls).toHaveLength(0);
   });
 
   it('maps the Free-plan refusal to plan_required', async () => {
-    const res = await call('create_approval_link', { post_ids: [POST] }, {
+    const res = await call('create_approval_link', { post_ids: [POST], approver_email: 'rani@client.test' }, {
       'POST /social-approval-links': () => ({ status: 422, body: { message: 'Client approvals are part of Pro and Max.', errors: {} } }),
     });
     expect(payload(res).error.code).toBe('plan_required');
   });
 
   it('refuses an expiry the app does not offer', async () => {
-    const res = await call('create_approval_link', { post_ids: [POST], expires_in_hours: 5 }, {});
+    const res = await call('create_approval_link', { post_ids: [POST], approver_email: 'rani@client.test', expires_in_hours: 5 }, {});
     expect(res.isError).toBe(true);
     expect(app!.v1.calls).toHaveLength(0);
   });
@@ -283,7 +295,7 @@ describe('plan and Credit limits are passed on verbatim', () => {
   });
 
   it('402 plan_required → plan_required with the API sentence as the message', async () => {
-    const res = await call('create_approval_link', { post_ids: [POST], client_name: 'Second client' }, {
+    const res = await call('create_approval_link', { post_ids: [POST], approver_email: 'second@client.test', client_name: 'Second client' }, {
       'POST /social-approval-links': () => plan402('approval_clients', TRIAL, 1),
     });
     expect(payload(res).error).toMatchObject({

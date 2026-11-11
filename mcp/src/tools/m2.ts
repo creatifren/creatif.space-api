@@ -158,12 +158,14 @@ export const createApprovalLink = defineTool({
   title: 'Create a client approval link',
   description:
     'Creates a creatif.space approval link for one or more posts (drafts, or posts already held for approval) and returns its URL for the user to share with their client. ' +
-    'The posts are held — nothing is published until the client approves. Every plan: on Free, links are for one client at a time (client_name tells clients apart; links for the same client are fine), posts scheduled at most 7 days ahead, and at most 10 queued posts. ' +
+    'The posts are held — nothing is published until the client approves. approver_email is required: only that person, signed in with that address (Google or a one-time email link on the approval page), can approve or request changes; ask the user for it if you do not have it. ' +
+    'Every plan: on Free, links are for one client at a time (the approver_email tells clients apart; links to the same address are fine), posts scheduled at most 7 days ahead, and at most 10 queued posts. ' +
     'Past a Free limit it returns plan_required (details.feature approval_clients, schedule_window or queue_limit) with a message to pass on to the user as it is (it has the trial/upgrade link). ' +
     'The link is not sent anywhere by this tool; hand the URL to the user.',
   scope: 'approve',
   input: {
     post_ids: z.array(ulid('Post')).min(1).max(50).describe('Posts to put on the link'),
+    approver_email: z.string().trim().email().max(254).describe('Email of the person who approves; they sign in with it to decide'),
     title: z.string().trim().max(120).optional().describe('Shown to the client above the posts'),
     client_name: z.string().trim().max(120).optional().describe('Private note on who it is for; the client never sees it'),
     expires_in_hours: z.union([z.literal(48), z.literal(168), z.literal(720)]).optional().describe('48, 168 (7 days) or 720 (30 days); omit for no expiry'),
@@ -172,6 +174,7 @@ export const createApprovalLink = defineTool({
   run: async (args, { v1 }) => {
     const { data } = await v1.post<{ data: Record<string, unknown> }>('/social-approval-links', {
       post_ids: args.post_ids,
+      approver_email: args.approver_email,
       ...(args.title ? { title: args.title } : {}),
       ...(args.client_name ? { client_name: args.client_name } : {}),
       ...(args.expires_in_hours ? { expires_in_hours: args.expires_in_hours } : {}),
@@ -182,9 +185,10 @@ export const createApprovalLink = defineTool({
         url: data.url,
         status: data.status,
         posts: data.posts,
+        approver_email: data.approver_email,
         expires_at: data.expires_at,
       },
-      note: 'Share the url with the client. Use check_approval_status with link_id to follow their decisions.',
+      note: 'Share the url with the client. They sign in with the approver email to decide. Use check_approval_status with link_id to follow their decisions.',
     };
   },
 });

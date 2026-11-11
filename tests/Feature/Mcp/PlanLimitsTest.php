@@ -114,11 +114,11 @@ describe('Free plan through a real API key', function () {
         $key = planKey($this, $user);
 
         bearer($this, $key)
-            ->postJson('/api/v1/social-approval-links', ['post_ids' => [$first->ulid], 'client_name' => 'Acme'])
+            ->postJson('/api/v1/social-approval-links', ['approver_email' => 'client@example.test', 'post_ids' => [$first->ulid], 'client_name' => 'Acme'])
             ->assertCreated();
 
         bearer($this, $key)
-            ->postJson('/api/v1/social-approval-links', ['post_ids' => [$second->ulid], 'client_name' => 'Globex'])
+            ->postJson('/api/v1/social-approval-links', ['approver_email' => 'globex@example.test', 'post_ids' => [$second->ulid], 'client_name' => 'Globex'])
             ->assertStatus(402)
             ->assertJsonPath('reason', 'plan_required')
             ->assertJsonPath('code', 'plan_required')
@@ -137,14 +137,14 @@ describe('Free plan through a real API key', function () {
         $second = planDraft($user);
 
         $this->actingAs($user)
-            ->postJson('/api/v1/social-approval-links', ['post_ids' => [$first->ulid]])
+            ->postJson('/api/v1/social-approval-links', ['approver_email' => 'client@example.test', 'post_ids' => [$first->ulid]])
             ->assertCreated();
         $this->actingAs($user)
-            ->postJson('/api/v1/social-approval-links', ['post_ids' => [$second->ulid]])
+            ->postJson('/api/v1/social-approval-links', ['approver_email' => 'second@example.test', 'post_ids' => [$second->ulid]])
             ->assertStatus(402)
             ->assertJsonPath('reason', 'plan_required')
             ->assertJsonPath('feature', 'approval_clients')
-            ->assertJsonStructure(['message', 'reason', 'feature', 'required_plan', 'limit', 'errors' => ['client_name']]);
+            ->assertJsonStructure(['message', 'reason', 'feature', 'required_plan', 'limit', 'errors' => ['approver_email']]);
     });
 
     it('refuses a send it cannot pay for: insufficient_credits, needed vs available, no debit', function () {

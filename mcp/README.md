@@ -44,7 +44,7 @@ Rate limit: 60 requests / minute / token (429 + `Retry-After`).
 | `list_files` (search, type, folder_id, limit) | read | `GET /files` |
 | `draft_post` (caption, channel_ids, file_ids, media_urls, captions_by_channel, type) | draft | `POST /social-posts` with `draft: true` |
 | `get_credits` | read | `GET /credits` |
-| `create_approval_link` (post_ids, title, client_name, expires_in_hours) — every plan; Free: one client, 7-day window, 10 queued | approve | `POST /social-approval-links` (drafts accepted) |
+| `create_approval_link` (post_ids, **approver_email** (required — the client signs in with it to decide), title, client_name, expires_in_hours) — every plan; Free: one client (by approver_email), 7-day window, 10 queued | approve | `POST /social-approval-links` (drafts accepted) |
 | `check_approval_status` (post_id \| link_id) | read | `GET /social-posts/{id}` or `GET /social-approval-links/{id}` |
 | `update_post` (caption, scheduled_at, labels) | draft (drafts and posts waiting for approval only) | `PATCH /social-posts/{id}` |
 | `schedule_post` (post_id, scheduled_at, confirm) | publish | preview `GET /social-posts/{id}/send-preview`; `confirm: true` → `POST /social-posts/{id}/send` |

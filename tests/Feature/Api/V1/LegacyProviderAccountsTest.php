@@ -209,7 +209,7 @@ describe('sending', function () {
         $link = SocialApprovalLink::create(['user_id' => $user->id, 'title' => 'Desember', 'client_name' => 'Andi']);
         $link->posts()->attach($post->id);
 
-        $results = $this->postJson("/api/v1/a/{$link->token}/approve-all", ['name' => 'Andi', 'post_ids' => [$post->ulid]])
+        $results = asApprover($this)->postJson("/api/v1/a/{$link->token}/approve-all", ['name' => 'Andi', 'post_ids' => [$post->ulid]])
             ->assertOk()
             ->json('data.results');
 
