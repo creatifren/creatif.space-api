@@ -6,6 +6,9 @@ use App\Models\User;
 use Illuminate\Support\Facades\Http;
 
 beforeEach(function () {
+    // Metrics are Insight (Pro and Max); these tests are about the feed
+    // itself, so Free has it on. The gate is tested in InsightGateTest.
+    planWith('free', ['insight' => true]);
     config([
         'services.postforme.key' => 'test-key',
         'services.postforme.base_url' => 'https://api.postforme.test/v1',

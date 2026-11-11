@@ -2,11 +2,13 @@
 
 namespace App\Http\Controllers\Api\V1;
 
+use App\Exceptions\PlanFeatureRequired;
 use App\Http\Controllers\Controller;
 use App\Models\SocialAccount;
 use App\Models\SocialPost;
-use App\Support\Workspace;
+use App\Support\PlanQuota;
 use App\Support\SocialProviders;
+use App\Support\Workspace;
 use Illuminate\Http\Client\RequestException;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -60,6 +62,14 @@ class SocialFeedController extends Controller
             ], $e->response->status() === 404 ? 404 : 409);
         }
 
+        // Metrics are Insight (plans v2, feature `insight`). The posts stay
+        // on every plan — Grid shows the ones made outside Creatif Space —
+        // but on Free every number is withheld and `meta.insight` carries
+        // the same plan_required body the other Insight reads answer 402.
+        $insight = PlanQuota::hasFeature($request->user(), 'insight');
+        $locked = $insight ? null
+            : array_diff_key(PlanFeatureRequired::feature($request->user(), 'insight', 'metrics')->body(), ['errors' => true]);
+
         $posts = SocialPost::query()->whereIn('user_id', $workspace);
         $ours = (clone $posts)->pluck('ulid')->flip();
         // A relay that keeps no external id (Outstand) names its own post id.
@@ -77,9 +87,9 @@ class SocialFeedController extends Controller
                 'post_id' => isset($p['external_post_id'], $ours[$p['external_post_id']])
                     ? $p['external_post_id']
                     : $byProviderId->get((string) ($p['provider_post_id'] ?? '')),
-                'metrics' => $this->metrics((array) ($p['metrics'] ?? [])),
+                'metrics' => $insight ? $this->metrics((array) ($p['metrics'] ?? [])) : null,
             ], $feed['data']),
-            'meta' => ['next_cursor' => $feed['cursor']],
+            'meta' => ['next_cursor' => $feed['cursor'], 'insight' => $locked],
         ]);
     }
 
