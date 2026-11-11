@@ -20,10 +20,10 @@ return [
     'introspection_secret' => env('MCP_INTROSPECT_SECRET', ''),
 
     'scopes' => [
-        'read' => 'Read your channels, posts, files and Credits balance',
+        'read' => 'Read your channels, posts, files, Credits balance and Engage inbox (comments and DMs)',
         'draft' => 'Save draft posts (never sends or schedules them)',
         'approve' => 'Create client approval links for your posts (Free: one client, posts up to 7 days ahead)',
-        'publish' => 'Schedule and publish your drafts, spending Credits (at most 20 a day)',
+        'publish' => 'Schedule and publish your drafts (at most 20 a day) and reply to comments and DMs, spending Credits',
     ],
 
     'default_scopes' => ['read'],
@@ -72,5 +72,11 @@ return [
         'api.v1.social-posts.send' => 'publish',
         'api.v1.social-approval-links.store' => 'approve',
         'api.v1.social-approval-links.show' => 'read',
+
+        // Engage. Replying sends in the user's name (and may cost Credits):
+        // `publish`, like a send. The MCP server previews before it replies.
+        'api.v1.inbox.feed.index' => 'read',
+        'api.v1.inbox.feed.show' => 'read',
+        'api.v1.inbox.feed.reply' => 'publish',
     ],
 ];

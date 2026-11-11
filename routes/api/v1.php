@@ -20,6 +20,7 @@ use App\Http\Controllers\Api\V1\HandleController;
 use App\Http\Controllers\Api\V1\HealthController;
 use App\Http\Controllers\Api\V1\InboxCommentController;
 use App\Http\Controllers\Api\V1\InboxController;
+use App\Http\Controllers\Api\V1\InboxFeedController;
 use App\Http\Controllers\Api\V1\InsightExportController;
 use App\Http\Controllers\Api\V1\McpActivityController;
 use App\Http\Controllers\Api\V1\MeController;
@@ -408,6 +409,18 @@ Route::middleware(['auth:sanctum,mcp', EnforceTokenScope::class, EnsureNotPendin
         Route::post('/comments/{comment}/read', [InboxCommentController::class, 'read'])
             ->middleware('throttle:60,1')
             ->name('api.v1.inbox.comments.read');
+        // Comments and DMs as one list, for connected apps (MCP
+        // list_conversations / reply_to_conversation). Same rows, policies
+        // and reply paths as above.
+        Route::get('/feed', [InboxFeedController::class, 'index'])
+            ->middleware('throttle:60,1')
+            ->name('api.v1.inbox.feed.index');
+        Route::get('/feed/{item}', [InboxFeedController::class, 'show'])
+            ->middleware('throttle:60,1')
+            ->name('api.v1.inbox.feed.show');
+        Route::post('/feed/{item}/reply', [InboxFeedController::class, 'reply'])
+            ->middleware('throttle:30,1')
+            ->name('api.v1.inbox.feed.reply');
     });
 
     // Crefile — the file library (R2-hosted)

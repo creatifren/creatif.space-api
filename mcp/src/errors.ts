@@ -15,7 +15,11 @@ export type ErrorCode =
   | 'preview_stale'
   | 'not_editable'
   | 'approval_required'
-  | 'upstream_unavailable';
+  | 'upstream_unavailable'
+  | 'reply_window_closed'
+  | 'reply_rejected'
+  | 'reply_not_possible'
+  | 'relay_unavailable';
 
 /** An error a tool returns to the model: a machine code plus what to do next. */
 export class ToolError extends Error {
@@ -123,6 +127,34 @@ export function toToolError(e: unknown, notFoundWhat = 'That item'): ToolError {
       message,
       'This post needs approval before it can go out. Use create_approval_link / check_approval_status; do not try to send it another way.',
     );
+  }
+  // Engage replies: the relay's answer, made readable by the API.
+  if (code === 'provider_error') {
+    return new ToolError(
+      'relay_unavailable',
+      message,
+      'Nothing was sent and any Credits were returned. Tell the user the platform could not be reached; try again in a few minutes.',
+    );
+  }
+  if (code === 'reply_window_closed') {
+    return new ToolError(
+      'reply_window_closed',
+      message,
+      'Tell the user Instagram only allows a DM reply within 24 hours of the contact’s last message; they can answer in the Instagram app. Do not retry.',
+      pick(body, ['can_reply_until']),
+    );
+  }
+  if (code === 'provider_rejected' || code === 'conflict') {
+    return new ToolError('reply_rejected', message, 'The platform refused this reply. Pass its message on; change the text only if the user wants to.', pick(body, ['provider_code']));
+  }
+  if (code === 'permission_missing') {
+    return new ToolError('reconnect_required', message, 'Ask the user to reconnect this channel in creatif.space → Channels to allow messages, then retry.');
+  }
+  if (code === 'post_unknown' || code === 'inbox_unsupported' || code === 'already_replied') {
+    return new ToolError('reply_not_possible', message, 'This cannot be answered from here; the user can reply on the platform itself. Do not retry.');
+  }
+  if (code === 'inbox_disabled') {
+    return new ToolError('forbidden', message, 'Engage is not enabled for this account yet. Tell the user; do not retry.');
   }
   if (code === 'scope_missing' || code === 'insufficient_scope') {
     return new ToolError('scope_missing', message, 'Reconnect the creatif.space connector and grant the missing permission.');
