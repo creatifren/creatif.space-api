@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Api\V1;
 
 use App\Casts\UtcDateTime;
 use App\Enums\SocialPostStatus;
+use App\Enums\UserStatus;
 use App\Http\Controllers\Controller;
 use App\Models\SocialPlanLink;
 use App\Models\SocialPost;
@@ -81,7 +82,8 @@ class SocialPlanLinkController extends Controller
     public function show(string $token): JsonResponse
     {
         $link = SocialPlanLink::query()->where('token_hash', SocialPlanLink::hashToken($token))->with('user')->first();
-        if ($link === null) {
+        // An owner whose account is being deleted is gone to the public.
+        if ($link === null || $link->user === null || $link->user->status === UserStatus::PendingDeletion) {
             abort(404);
         }
         if ($link->revoked_at !== null) {

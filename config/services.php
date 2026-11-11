@@ -169,6 +169,10 @@ return [
     'posthog' => [
         'key' => env('POSTHOG_API_KEY'),
         'host' => env('POSTHOG_HOST', 'https://us.i.posthog.com'),
+        // Private API, for deleting a person on account deletion.
+        'app_host' => env('POSTHOG_APP_HOST', 'https://us.posthog.com'),
+        'personal_api_key' => env('POSTHOG_PERSONAL_API_KEY', ''),
+        'project_id' => env('POSTHOG_PROJECT_ID', ''),
         'internal_email_domains' => array_values(array_filter(array_map(
             fn (string $d) => strtolower(ltrim(trim($d), '@')),
             explode(',', (string) env('ANALYTICS_INTERNAL_EMAIL_DOMAINS', '')),

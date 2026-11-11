@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Actions\Auth\RevokeUserAccess;
 use App\Enums\NotificationType;
 use App\Enums\SubscriptionStatus;
 use App\Enums\UserStatus;
@@ -15,7 +16,6 @@ use Illuminate\Database\Eloquent\Relations\HasOne;
 use Illuminate\Database\Eloquent\SoftDeletes;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
-use Illuminate\Support\Facades\DB;
 use Laravel\Sanctum\HasApiTokens;
 use Spatie\Permission\Traits\HasRoles;
 
@@ -34,6 +34,7 @@ use Spatie\Permission\Traits\HasRoles;
  * @property CarbonImmutable|null $tour_seen_at
  * @property CarbonImmutable|null $suspended_at
  * @property string|null $suspended_reason
+ * @property CarbonImmutable|null $deletion_requested_at
  * @property int $storage_blocks Legacy: blocks rented before Media v2 removed rental (record only)
  * @property CarbonImmutable|null $storage_rental_ended_at
  * @property array<string, mixed>|null $social_settings
@@ -91,6 +92,7 @@ class User extends Authenticatable implements FilamentUser
             'onboarded_at' => 'datetime',
             'tour_seen_at' => 'datetime',
             'suspended_at' => 'datetime',
+            'deletion_requested_at' => 'datetime',
             'is_staff' => 'boolean',
             'storage_blocks' => 'integer',
             'storage_rental_ended_at' => 'datetime',
@@ -284,17 +286,7 @@ class User extends Authenticatable implements FilamentUser
         // owns, and MCP audit logs. None of these tables cascades from a
         // soft delete, and the token tables have no foreign key at all.
         static::deleting(function (self $user): void {
-            $user->tokens()->delete();
-
-            $accessTokens = DB::table('oauth_access_tokens')->where('user_id', $user->id)->pluck('id');
-            DB::table('oauth_refresh_tokens')->whereIn('access_token_id', $accessTokens)->delete();
-            DB::table('oauth_access_tokens')->whereIn('id', $accessTokens)->delete();
-            DB::table('oauth_auth_codes')->where('user_id', $user->id)->delete();
-            DB::table('oauth_clients')
-                ->whereIn('owner_type', [self::class, $user->getMorphClass()])
-                ->where('owner_id', $user->id)
-                ->delete();
-
+            RevokeUserAccess::run($user);
             McpAuditLog::query()->where('user_id', $user->id)->delete();
         });
     }

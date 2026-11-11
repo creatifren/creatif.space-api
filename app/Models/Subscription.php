@@ -198,4 +198,15 @@ class Subscription extends Model
             && (in_array($this->status, [SubscriptionStatus::Active, SubscriptionStatus::Trialing], true)
                 || ($this->status === SubscriptionStatus::Cancelled && $this->isEntitled()));
     }
+
+    /** Where a Play subscriber manages (and cancels) it; null when not Play. */
+    public function playManageUrl(): ?string
+    {
+        return $this->isGoogle()
+            ? 'https://play.google.com/store/account/subscriptions?'.http_build_query([
+                'sku' => $this->google_product_id,
+                'package' => config('services.google_play.package_name'),
+            ])
+            : null;
+    }
 }

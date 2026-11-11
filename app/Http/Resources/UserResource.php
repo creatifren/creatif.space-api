@@ -3,6 +3,7 @@
 namespace App\Http\Resources;
 
 use App\Models\User;
+use App\Support\AccountDeletion;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
 
@@ -45,6 +46,14 @@ class UserResource extends JsonResource
             // Null until the dashboard tour is finished or skipped (RF-004).
             'tour_seen_at' => $this->tour_seen_at,
             'created_at' => $this->created_at,
+            // Account deletion: set while the account waits to be purged
+            // (status pending_deletion); null otherwise.
+            'deletion_requested_at' => $this->deletion_requested_at?->utc()->toIso8601String(),
+            'purge_at' => AccountDeletion::purgeAt($this->resource)?->utc()->toIso8601String(),
+            // What this API supports, for an app that ships ahead of it.
+            'capabilities' => [
+                'account_deletion' => true,
+            ],
         ];
     }
 }

@@ -123,3 +123,8 @@ Schedule::job(new SendApprovedHeldPosts)->everyFiveMinutes()->withoutOverlapping
  * to services.ops.alert_email — only when there were any.
  */
 Schedule::command('ops:daily-digest')->dailyAt('06:20');
+
+/*
+ * Accounts whose deletion grace period (30 days) has passed are purged.
+ */
+Schedule::command('accounts:purge-deleted')->dailyAt('03:25')->withoutOverlapping();

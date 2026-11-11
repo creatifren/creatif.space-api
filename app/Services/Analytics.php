@@ -4,6 +4,7 @@ namespace App\Services;
 
 use App\Jobs\SendAnalytics;
 use App\Models\User;
+use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
 use Throwable;
@@ -55,6 +56,34 @@ class Analytics
     public function captureException(string $distinctId, array $properties): void
     {
         $this->dispatch(['type' => 'capture', 'distinct_id' => $distinctId, 'event' => '$exception', 'properties' => $properties], afterCommit: false);
+    }
+
+    /**
+     * Delete the person (and their events) from PostHog — account deletion.
+     * Needs the private API: POSTHOG_PERSONAL_API_KEY with person:write and
+     * POSTHOG_PROJECT_ID; without them it is skipped and logged. Never
+     * throws: the purge goes on either way.
+     */
+    public function deletePerson(string $distinctId): void
+    {
+        $key = (string) config('services.posthog.personal_api_key');
+        $project = (string) config('services.posthog.project_id');
+        if ($key === '' || $project === '') {
+            Log::warning('posthog.person_delete_skipped', ['reason' => 'POSTHOG_PERSONAL_API_KEY or POSTHOG_PROJECT_ID not set']);
+
+            return;
+        }
+
+        try {
+            $base = rtrim((string) config('services.posthog.app_host'), '/')."/api/projects/{$project}/persons";
+            $client = Http::withToken($key)->timeout(10);
+            $person = $client->get($base.'/', ['distinct_id' => $distinctId])->throw()->json('results.0.id');
+            if (is_string($person) && $person !== '') {
+                $client->delete($base.'/'.rawurlencode($person).'/', ['delete_events' => 'true'])->throw();
+            }
+        } catch (Throwable $e) {
+            Log::warning('posthog.person_delete_failed', ['error' => $e->getMessage()]);
+        }
     }
 
     /**
