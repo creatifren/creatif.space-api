@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Middleware\AssignRequestId;
 use App\Http\Middleware\ThrottlePerRoute;
 use App\Http\Middleware\TrustAppServer;
 use App\Services\ErrorTracking;
@@ -42,6 +43,9 @@ return Application::configure(basePath: dirname(__DIR__))
         // The visitor's IP may come only from our app server (TRUSTED_PROXIES),
         // only via X-Forwarded-For. See TrustAppServer.
         $middleware->replace(TrustProxies::class, TrustAppServer::class);
+
+        // Every request gets an id: logs, error tracking, X-Request-Id back.
+        $middleware->prepend(AssignRequestId::class);
 
         $middleware->alias([
             'throttle' => ThrottlePerRoute::class,

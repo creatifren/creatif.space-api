@@ -15,11 +15,11 @@ Route::get('/', fn () => redirect(config('app.frontend_url')));
 
 // A profile's uploaded display font. Here, not under /api, so it can carry
 // its own open CORS header — see ProfileFontController::show.
-Route::get('/fonts/{handle}', [ProfileFontController::class, 'show'])->name('profiles.font');
+Route::get('/fonts/{handle}', [ProfileFontController::class, 'show'])->middleware('throttle:120,1')->name('profiles.font');
 
 // Google OAuth (session-based, consumed by the Next.js SPA via Sanctum cookies)
-Route::get('/auth/google/redirect', [GoogleAuthController::class, 'redirect'])->name('auth.google.redirect');
-Route::get('/auth/google/callback', [GoogleAuthController::class, 'callback'])->name('auth.google.callback');
+Route::get('/auth/google/redirect', [GoogleAuthController::class, 'redirect'])->middleware('throttle:20,1')->name('auth.google.redirect');
+Route::get('/auth/google/callback', [GoogleAuthController::class, 'callback'])->middleware('throttle:20,1')->name('auth.google.callback');
 // The Android app: an ID token from Credential Manager, posted from inside the WebView (see GoogleAuthController::native).
 Route::post('/auth/google/native', [GoogleAuthController::class, 'native'])
     ->middleware('throttle:10,1')
@@ -73,4 +73,4 @@ Route::get('/oauth/resume', function () {
     return Auth::guard('web')->check() && str_starts_with($intended, $prefix)
         ? redirect()->to($intended)
         : redirect(config('app.frontend_url'));
-})->name('oauth.resume');
+})->middleware('throttle:30,1')->name('oauth.resume');

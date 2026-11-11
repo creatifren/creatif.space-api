@@ -13,10 +13,13 @@ use Laravel\Passport\Http\Controllers\AccessTokenController;
 
 // Discovery (RFC 8414, RFC 9728).
 Route::get('/.well-known/oauth-authorization-server', [MetadataController::class, 'authorizationServer'])
+    ->middleware('throttle:120,1')
     ->name('oauth.metadata');
 Route::get('/.well-known/oauth-protected-resource', [MetadataController::class, 'protectedResource'])
+    ->middleware('throttle:120,1')
     ->name('oauth.protected-resource');
 Route::get('/.well-known/oauth-protected-resource/mcp', [MetadataController::class, 'protectedResource'])
+    ->middleware('throttle:120,1')
     ->name('oauth.protected-resource.mcp');
 
 Route::prefix('oauth')->group(function () {

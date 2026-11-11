@@ -117,3 +117,9 @@ Schedule::job(new RetryRateLimitedPublishes)->everyMinute()->withoutOverlapping(
  * horizon wait approved; each goes to the relay once its slot is inside it.
  */
 Schedule::job(new SendApprovedHeldPosts)->everyFiveMinutes()->withoutOverlapping();
+
+/*
+ * The morning ops mail: failed jobs and failed publishes in the last 24h,
+ * to services.ops.alert_email — only when there were any.
+ */
+Schedule::command('ops:daily-digest')->dailyAt('06:20');
