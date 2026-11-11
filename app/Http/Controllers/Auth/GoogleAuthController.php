@@ -2,14 +2,15 @@
 
 namespace App\Http\Controllers\Auth;
 
-use App\Enums\UserStatus;
+use App\Actions\Auth\GoogleIdentity;
+use App\Actions\Auth\ResolveGoogleUser;
+use App\Exceptions\GoogleLoginRefused;
+use App\Exceptions\InvalidGoogleIdToken;
 use App\Http\Controllers\Controller;
-use App\Models\User;
-use App\Support\AutoHandle;
+use App\Support\GoogleIdToken;
 use App\Support\ProductEvents;
-use App\Support\ReferralAttribution;
 use App\Support\SafePath;
-use App\Support\TeamInvite;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
@@ -17,6 +18,7 @@ use Illuminate\Support\Facades\Log;
 use Laravel\Socialite\Facades\Socialite;
 use Laravel\Socialite\Two\InvalidStateException;
 use Laravel\Socialite\Two\User as GoogleUser;
+use RuntimeException;
 use Symfony\Component\HttpFoundation\RedirectResponse as SymfonyRedirectResponse;
 
 class GoogleAuthController extends Controller
@@ -65,7 +67,7 @@ class GoogleAuthController extends Controller
      * Handle the OAuth callback: find or create the creator, start the
      * session (Sanctum SPA cookie), and hand off to the Next.js frontend.
      */
-    public function callback(Request $request): RedirectResponse
+    public function callback(Request $request, ResolveGoogleUser $resolve): RedirectResponse
     {
         /* Cancel on Google's consent screen comes back as ?error=access_denied
            with no code; a stale or replayed callback fails the state check.
@@ -81,75 +83,96 @@ class GoogleAuthController extends Controller
             return $this->cancelled();
         }
 
-        // The account this Google identity already belongs to wins; only
-        // then an account with the same address.
-        $user = User::query()->where('google_id', $googleUser->getId())->first()
-            ?? User::query()->where('email', $googleUser->getEmail())->first();
-
-        if ($user?->status === UserStatus::Suspended) {
-            return redirect(config('app.frontend_url').'/login?error=suspended');
+        try {
+            $user = $resolve->handle(new GoogleIdentity(
+                id: (string) $googleUser->getId(),
+                email: (string) $googleUser->getEmail(),
+                name: $googleUser->getName() ?? $googleUser->getNickname(),
+                avatar: $googleUser->getAvatar(),
+            ), $request);
+        } catch (GoogleLoginRefused $e) {
+            return redirect(config('app.frontend_url').'/login?error='.$e->reason);
         }
-
-        /* Staff (anyone who can reach /admin) are never linked or signed in
-           by email: a Google account that merely carries a staff address —
-           a re-created mailbox, a shared domain — must not become a way into
-           the panel. Their google_id has to match, set beforehand. */
-        if ($user !== null && $user->is_staff && $user->google_id !== $googleUser->getId()) {
-            Log::warning('auth.google_staff_link_refused', ['user' => $user->ulid, 'had_google_id' => $user->google_id !== null]);
-
-            return redirect(config('app.frontend_url').'/login?error=google_not_linked');
-        }
-
-        if ($user === null) {
-            $user = User::query()->create([
-                'name' => $googleUser->getName() ?? $googleUser->getNickname() ?? 'Creator',
-                'email' => $googleUser->getEmail(),
-                'google_id' => $googleUser->getId(),
-                'avatar_url' => $googleUser->getAvatar(),
-            ]);
-            $user->forceFill(['email_verified_at' => now()])->save();
-
-            // Only a brand-new account can be somebody's referral — a
-            // returning login is not a signup, whatever link they used.
-            $code = request()->session()->pull('referral_code');
-
-            if (is_string($code)) {
-                ReferralAttribution::attach($user, $code);
-            }
-
-            $utm = request()->session()->pull('signup_utm');
-            $entry = request()->session()->pull('signup_entry');
-            ProductEvents::signedUp($user, 'google', [
-                'ref' => is_string($code) ? $code : null,
-                'entry' => is_string($entry) ? $entry : null,
-            ] + (is_array($utm) ? $utm : []));
-        } elseif ($user->google_id === null) {
-            // Existing (non-staff) account signing in with Google for the first time.
-            $user->forceFill(['google_id' => $googleUser->getId()])->save();
-
-            // A password signup nobody confirmed: whoever typed that password
-            // never proved this address was theirs, and Google just did. The
-            // password goes, so it can't be a way into the owner's account.
-            if ($user->email_verified_at === null) {
-                $user->forceFill(['password' => null, 'email_verified_at' => now()])->save();
-            }
-        }
-
-        // Somebody may have invited this address to their team, whether the
-        // account is new or a year old — this login is when it takes.
-        TeamInvite::claim($user);
-        // No onboarding screen: the address comes from the email.
-        AutoHandle::give($user);
 
         Auth::login($user, remember: true);
-        request()->session()->regenerate();
+        $request->session()->regenerate();
 
         /* Where to land: the page the guard interrupted, checked a second
            time because a session value is only as trustworthy as what was
            put in it — otherwise Home. */
-        $wanted = SafePath::of(request()->session()->pull('next_path'));
+        return redirect(self::landing($request->session()->pull('next_path')));
+    }
 
-        return redirect(config('app.frontend_url').($wanted !== '/' ? $wanted : '/home'));
+    /**
+     * Native Google Sign-In for the Android app (Capacitor shell).
+     *
+     * Google refuses OAuth inside a WebView, so the shell signs in with
+     * Android Credential Manager (serverClientId = our WEB client id,
+     * services.google.client_id) and the page inside the WebView posts the
+     * ID token here — same origin rules, cookies and CSRF as the web app:
+     *
+     *     GET  /sanctum/csrf-cookie
+     *     POST /auth/google/native   X-XSRF-TOKEN, credentials: include
+     *          {"id_token": "<JWT>", "next": "/spaces"}   (next optional)
+     *
+     * The token is verified offline against Google's keys (GoogleIdToken),
+     * then the account is found, created or linked exactly as on the web
+     * (ResolveGoogleUser) and the session starts.
+     *
+     *   200 {"redirect": "<FRONTEND_URL><next or /home>"}
+     *   422 {"reason": "invalid_token"}      bad signature/aud/iss/exp, unverified email — one message, reason logged
+     *   403 {"reason": "suspended"}
+     *   403 {"reason": "google_not_linked"}  staff address matched by email only
+     *   429 throttled (10/min per IP)
+     *   503 {"reason": "google_unavailable"} Google's key set could not be fetched
+     *
+     * The token itself is never logged.
+     */
+    public function native(Request $request, GoogleIdToken $tokens, ResolveGoogleUser $resolve): JsonResponse
+    {
+        // A missing or oversized token is just another invalid one: JSON
+        // either way, whatever Accept header the WebView sent.
+        $token = $request->input('id_token');
+        $next = $request->input('next');
+
+        try {
+            if (! is_string($token) || $token === '' || strlen($token) > 8192) {
+                throw new InvalidGoogleIdToken('missing or oversized id_token');
+            }
+            $google = $tokens->verify($token);
+        } catch (InvalidGoogleIdToken $e) {
+            Log::info('auth.google_native_invalid_token', ['reason' => $e->getMessage(), 'ip' => $request->ip()]);
+
+            return response()->json(['message' => 'Google sign-in could not be verified. Try again.', 'reason' => 'invalid_token'], 422);
+        } catch (RuntimeException $e) {
+            Log::warning('auth.google_native_jwks_unavailable', ['error' => $e->getMessage()]);
+
+            return response()->json(['message' => 'Google sign-in is unavailable right now. Try again in a minute.', 'reason' => 'google_unavailable'], 503);
+        }
+
+        try {
+            $user = $resolve->handle($google, $request, platform: 'android_app');
+        } catch (GoogleLoginRefused $e) {
+            return response()->json([
+                'message' => $e->reason === 'suspended'
+                    ? 'This account is suspended.'
+                    : 'This account cannot sign in with Google until its Google account is linked.',
+                'reason' => $e->reason,
+            ], 403);
+        }
+
+        Auth::login($user, remember: true);
+        $request->session()->regenerate();
+
+        return response()->json(['redirect' => self::landing(is_string($next) ? $next : null)]);
+    }
+
+    /** The frontend page to land on: $next if it is one of ours, Home otherwise. */
+    private static function landing(mixed $next): string
+    {
+        $wanted = SafePath::of($next);
+
+        return config('app.frontend_url').($wanted !== '/' ? $wanted : '/home');
     }
 
     private function cancelled(): RedirectResponse

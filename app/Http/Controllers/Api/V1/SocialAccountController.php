@@ -103,6 +103,8 @@ class SocialAccountController extends Controller
             // Bluesky has no OAuth page: it signs in with a handle and an app password.
             'handle' => ['required_if:platform,bluesky', 'nullable', 'string', 'max:253'],
             'app_password' => ['required_if:platform,bluesky', 'nullable', 'string', 'max:64'],
+            // The Android app shell: the connect return then says so (shell=android).
+            'client' => ['nullable', Rule::in(['android'])],
         ]);
 
         $this->ensureRoom($request->user(), 'platform');
@@ -113,6 +115,7 @@ class SocialAccountController extends Controller
             $validated['platform'] === 'bluesky'
                 ? ['handle' => ltrim($validated['handle'], '@'), 'app_password' => $validated['app_password']]
                 : [],
+            $validated['client'] ?? null,
         );
 
         return response()->json(['data' => ['url' => $url]]);

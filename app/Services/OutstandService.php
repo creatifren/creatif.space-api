@@ -55,11 +55,14 @@ class OutstandService implements SocialProvider
      * Bluesky has no OAuth: it connects right here, and the "URL" is the
      * connect page the browser would have returned to.
      *
+     * $client (`android`) rides in the sealed state, so the return can tell
+     * the frontend it is inside the app shell (`shell=android`).
+     *
      * @param  array{handle?: string, app_password?: string}  $bluesky
      *
      * @throws ConnectionException
      */
-    public function authUrl(string $platform, string $externalId, array $bluesky = []): string
+    public function authUrl(string $platform, string $externalId, array $bluesky = [], ?string $client = null): string
     {
         if ($platform === 'bluesky') {
             self::refusedIf4xx($platform, $this->client()->post('/social-accounts/bluesky', [
@@ -68,10 +71,10 @@ class OutstandService implements SocialProvider
                 'tenantId' => $externalId,
             ]))->throw();
 
-            return config('app.frontend_url').'/social/connect?social=connected';
+            return config('app.frontend_url').'/social/connect?social=connected'.($client === 'android' ? '&shell=android' : '');
         }
 
-        $redirect = route('api.v1.webhooks.outstand.return', ['state' => self::seal($externalId, $platform)]);
+        $redirect = route('api.v1.webhooks.outstand.return', ['state' => self::seal($externalId, $platform, $client)]);
         // Outstand validates redirect_uri as an absolute URI: a relative or
         // non-http APP_URL would come back as a 400 for every connect.
         if (filter_var($redirect, FILTER_VALIDATE_URL) === false || ! preg_match('#^https?://#', $redirect)) {
@@ -611,14 +614,14 @@ class OutstandService implements SocialProvider
 
     private const ATTEMPT_PREFIX = 'outstand-connect-attempt:';
 
-    /** Our tenant (and the network being connected), sealed for the OAuth round trip. */
-    public static function seal(string $externalId, ?string $network = null): string
+    /** Our tenant (the network being connected, and the app shell it started in), sealed for the OAuth round trip. */
+    public static function seal(string $externalId, ?string $network = null, ?string $client = null): string
     {
         // A short random key, not an encrypted blob: it rides inside
         // Outstand's redirect_uri, so it stays URL-safe and well under any
         // length limit. The tenant lives server-side for the state's life.
         $key = Str::random(40);
-        Cache::put(self::STATE_PREFIX.$key, ['tenant' => $externalId, 'network' => $network], now()->addMinutes(self::STATE_MINUTES));
+        Cache::put(self::STATE_PREFIX.$key, ['tenant' => $externalId, 'network' => $network, 'client' => $client], now()->addMinutes(self::STATE_MINUTES));
 
         return $key;
     }
@@ -632,7 +635,7 @@ class OutstandService implements SocialProvider
     /**
      * What a state was sealed with, or null when forged or stale.
      *
-     * @return array{tenant: string, network: string|null}|null
+     * @return array{tenant: string, network: string|null, client: string|null}|null
      */
     public static function sealed(?string $state): ?array
     {
@@ -643,10 +646,14 @@ class OutstandService implements SocialProvider
 
         // A state sealed before the network rode along holds the bare tenant.
         if (is_string($value)) {
-            return ['tenant' => $value, 'network' => null];
+            return ['tenant' => $value, 'network' => null, 'client' => null];
         }
         if (is_array($value) && is_string($value['tenant'] ?? null)) {
-            return ['tenant' => $value['tenant'], 'network' => is_string($value['network'] ?? null) ? $value['network'] : null];
+            return [
+                'tenant' => $value['tenant'],
+                'network' => is_string($value['network'] ?? null) ? $value['network'] : null,
+                'client' => is_string($value['client'] ?? null) ? $value['client'] : null,
+            ];
         }
 
         return null;

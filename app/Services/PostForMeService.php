@@ -36,11 +36,14 @@ class PostForMeService implements SocialProvider
      * platform and grant the account. `external_id` tags the resulting
      * account with our user, which is what sync and webhooks key on.
      *
+     * $client is not carried: the browser lands on the project's fixed
+     * redirect URL (see below), which no per-request value can change.
+     *
      * @param  array{handle?: string, app_password?: string}  $bluesky
      *
      * @throws ConnectionException
      */
-    public function authUrl(string $platform, string $externalId, array $bluesky = []): string
+    public function authUrl(string $platform, string $externalId, array $bluesky = [], ?string $client = null): string
     {
         // Where the browser lands after granting is the PROJECT's redirect
         // URL, set once in the Post for Me dashboard — point it at

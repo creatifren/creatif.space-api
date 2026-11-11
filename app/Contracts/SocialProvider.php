@@ -54,10 +54,11 @@ interface SocialProvider
      * our user (or a claim tag).
      *
      * @param  array{handle?: string, app_password?: string}  $bluesky
+     * @param  string|null  $client  the app shell the connect started in (`android`), or null for the web
      *
      * @throws ConnectionException
      */
-    public function authUrl(string $platform, string $externalId, array $bluesky = []): string;
+    public function authUrl(string $platform, string $externalId, array $bluesky = [], ?string $client = null): string;
 
     /**
      * Every account tagged with this external id.

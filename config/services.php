@@ -34,6 +34,10 @@ return [
          * CreemService throwing when its key is absent.
          */
         'redirect' => env('GOOGLE_REDIRECT_URI'),
+        // POST /auth/google/native accepts ID tokens whose `aud` is client_id
+        // (the Android app passes it as serverClientId) or one of these
+        // (comma-separated). Empty by default.
+        'native_extra_audiences' => env('GOOGLE_NATIVE_EXTRA_AUDIENCES', ''),
     ],
 
     // Payments — Creem is the merchant of record: hosted checkout for plans

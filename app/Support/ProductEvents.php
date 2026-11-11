@@ -37,8 +37,9 @@ final class ProductEvents
      * A user row was created.
      *
      * @param  array<string, string|null>  $attribution  ref, utm_* and entry — only the present ones are sent
+     * @param  array<string, string>  $context  sent as is, e.g. ['platform' => 'android_app'] for the app shell
      */
-    public static function signedUp(User $user, string $method, array $attribution = []): void
+    public static function signedUp(User $user, string $method, array $attribution = [], array $context = []): void
     {
         $extra = array_filter(
             array_intersect_key($attribution, array_flip(['ref', ...self::UTM])),
@@ -52,7 +53,7 @@ final class ProductEvents
             $extra['$set_once'] = ['initial_entry' => $entry];
         }
 
-        self::analytics()->capture($user->ulid, 'user_signed_up', ['method' => $method, 'plan' => 'free'] + $extra);
+        self::analytics()->capture($user->ulid, 'user_signed_up', ['method' => $method, 'plan' => 'free'] + $context + $extra);
         self::analytics()->set($user->ulid, [
             'plan' => 'free',
             'signup_method' => $method,

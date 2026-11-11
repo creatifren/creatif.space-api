@@ -9,6 +9,11 @@
 <a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/l/laravel/framework" alt="License"></a>
 </p>
 
+## Android app (Capacitor shell)
+
+- **Google sign-in:** `GET /sanctum/csrf-cookie`, then `POST /auth/google/native` with `X-XSRF-TOKEN` and `{"id_token": "<Credential Manager ID token>", "next": "/spaces"}` (`next` optional). Answers `200 {"redirect": "…"}`, `422 invalid_token`, `403 suspended | google_not_linked`, `429`, or `503 google_unavailable`. The token's `aud` must be `GOOGLE_CLIENT_ID` (the web client, used as `serverClientId`) or one of `GOOGLE_NATIVE_EXTRA_AUDIENCES`. Details: `GoogleAuthController::native`.
+- **Social connect:** send `"client": "android"` to `POST /api/v1/social-accounts/auth-url`; the return to `/social/connect` then carries `shell=android` (Outstand only; Post for Me's redirect is fixed per project).
+
 ## About Laravel
 
 Laravel is a web application framework with expressive, elegant syntax. We believe development must be an enjoyable and creative experience to be truly fulfilling. Laravel takes the pain out of development by easing common tasks used in many web projects, such as:
