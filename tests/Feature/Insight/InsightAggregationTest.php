@@ -5,11 +5,11 @@ use App\Support\Insight\InsightCollector;
 use App\Support\Insight\InsightPeriod;
 use App\Support\Workspace;
 use Carbon\CarbonImmutable;
-use Tests\Fixtures\InsightFixture;
+use Tests\Support\InsightFixture;
 
 /*
  * What a report says, number by number, from the fixture workspace
- * (tests/Fixtures/InsightFixture.php): exact sums per network, "—" (null)
+ * (tests/Support/InsightFixture.php): exact sums per network, "—" (null)
  * with a footnote wherever a network leaves a number out, never a guess.
  */
 

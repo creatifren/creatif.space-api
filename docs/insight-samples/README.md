@@ -1,6 +1,6 @@
 # Insight PDF samples (fixture data)
 
-Made from `tests/Fixtures/InsightFixture.php` (a fictional workspace, "Kopi Senja", October 2026) by the render smoke test:
+Made from `tests/Support/InsightFixture.php` (a fictional workspace, "Kopi Senja", October 2026) by the render smoke test:
 
 ```bash
 INSIGHT_SAMPLES_DIR=docs/insight-samples vendor/bin/pest tests/Feature/Insight/InsightRenderTest.php

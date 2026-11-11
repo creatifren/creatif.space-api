@@ -12,7 +12,7 @@ use App\Support\Workspace;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Facades\Queue;
 use Illuminate\Support\Facades\Storage;
-use Tests\Fixtures\InsightFixture;
+use Tests\Support\InsightFixture;
 
 /*
  * The contract the export sheet is built against:

@@ -10,7 +10,7 @@ use App\Support\Insight\InsightView;
 use App\Support\Workspace;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Facades\Storage;
-use Tests\Fixtures\InsightFixture;
+use Tests\Support\InsightFixture;
 
 /*
  * Render smoke test: all three layouts from the fixture workspace, through

@@ -1,6 +1,6 @@
 <?php
 
-namespace Tests\Fixtures;
+namespace Tests\Support;
 
 use App\Contracts\SocialProvider;
 use App\Enums\SocialPostApproval;

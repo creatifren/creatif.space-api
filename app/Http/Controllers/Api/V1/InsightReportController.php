@@ -8,6 +8,7 @@ use App\Models\InsightReport;
 use App\Support\Insight\InsightAccess;
 use App\Support\Insight\InsightClients;
 use App\Support\Insight\InsightPeriod;
+use App\Support\PlanQuota;
 use App\Support\Workspace;
 use Carbon\CarbonImmutable;
 use Illuminate\Http\JsonResponse;
@@ -30,9 +31,8 @@ class InsightReportController extends Controller
     {
         $user = $request->user();
 
-        if (! InsightAccess::allowed($user)) {
-            return InsightAccess::refusal($user);
-        }
+        // Pro / Max (plans v2): 402 plan_required, feature "insight".
+        PlanQuota::requireFeature($user, 'insight');
 
         $validated = $request->validate([
             'client_id' => ['required', 'string', 'max:64'],
