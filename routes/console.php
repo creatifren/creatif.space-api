@@ -136,3 +136,9 @@ Schedule::command('ops:daily-digest')->dailyAt('06:20');
  * Accounts whose deletion grace period (30 days) has passed are purged.
  */
 Schedule::command('accounts:purge-deleted')->dailyAt('03:25')->withoutOverlapping();
+
+/*
+ * The same db / queue / storage checks as GET /api/v1/health; a failure is
+ * logged as a warning (health.selfcheck_failed) naming the failed checks.
+ */
+Schedule::command('health:selfcheck')->everyFiveMinutes()->withoutOverlapping();
