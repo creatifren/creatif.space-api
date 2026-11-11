@@ -10,6 +10,7 @@ use App\Support\Insight\InsightImages;
 use App\Support\Insight\InsightPeriod;
 use App\Support\Insight\InsightRenderer;
 use App\Support\Insight\InsightView;
+use App\Support\PlanQuota;
 use App\Support\Workspace;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Queue\Queueable;
@@ -42,6 +43,14 @@ class BuildInsightReport implements ShouldQueue
         $report->update(['status' => InsightReport::STATUS_BUILDING]);
 
         $owner = $report->owner;
+
+        // Fail closed: a workspace that dropped to Free between the request
+        // and this build gets no report (GET answers 402 for it anyway).
+        if (! PlanQuota::hasFeature($owner, 'insight')) {
+            $report->update(['status' => InsightReport::STATUS_FAILED, 'failure_reason' => 'plan_required']);
+
+            return;
+        }
         $options = $report->options;
         $period = InsightPeriod::fromDates($report->period_from, $report->period_to, $options['period_kind']);
 
