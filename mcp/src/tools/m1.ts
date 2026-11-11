@@ -48,6 +48,7 @@ export const listPosts = defineTool({
     limit: z.number().int().min(1).max(100).default(25).describe('At most this many posts (1–100, default 25)'),
   },
   annotations: READ_ONLY,
+  notFound: { what: 'That channel', next: 'Call list_channels for valid channel ids, or call list_posts without channel_id.' },
   run: async (args, { v1 }) => {
     const res = await v1.get<{ data: V1Post[] }>('/social-posts', {
       status: args.status,
@@ -68,7 +69,7 @@ export const getPost = defineTool({
   scope: 'read',
   input: { post_id: ulid('Post') },
   annotations: READ_ONLY,
-  notFound: 'That post',
+  notFound: { what: 'That post', next: 'Check the post id: find it with list_posts (status draft for drafts) and call again.' },
   run: async ({ post_id }, { v1 }) => {
     const res = await v1.get<{ data: V1Post }>(`/social-posts/${encodeURIComponent(post_id)}`);
     return { post: shapePost(res.data, true) };
@@ -89,6 +90,7 @@ export const listFiles = defineTool({
     limit: z.number().int().min(1).max(60).default(30).describe('At most this many files (1–60, default 30)'),
   },
   annotations: READ_ONLY,
+  notFound: { what: 'That folder', next: 'Call list_files without folder_id to see the whole library.' },
   run: async (args, { v1 }) => {
     const res = await v1.get<{ data: Record<string, unknown>[]; meta?: Record<string, unknown> }>('/files', {
       search: args.search,
@@ -133,18 +135,23 @@ export const draftPost = defineTool({
     type: z.enum(['post', 'reels', 'story']).default('post').describe('Placement on Facebook, Instagram and Threads; others post normally'),
   },
   annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false },
+  notFound: { what: 'A channel or file', next: 'Take channel ids from list_channels and file ids from list_files (or confirm_media_upload), then call again.' },
   run: async (args, { v1 }) => {
     const unknownChannels = Object.keys(args.captions_by_channel ?? {}).filter((id) => !args.channel_ids.includes(id));
     if (unknownChannels.length > 0) {
       throw new ToolError(
         'invalid_input',
         'captions_by_channel names channels that are not in channel_ids.',
-        'Use only ids that are also listed in channel_ids.',
-        { channels: unknownChannels },
+        'Use only ids that are also listed in channel_ids (add the channel to channel_ids, or drop it from captions_by_channel) and call again.',
+        { field: 'captions_by_channel', channels: unknownChannels, channel_ids: args.channel_ids },
       );
     }
     if ((args.file_ids?.length ?? 0) + (args.media_urls?.length ?? 0) > 10) {
-      throw new ToolError('invalid_input', 'A post takes up to 10 media items.', 'Attach 10 or fewer files and URLs in total.');
+      throw new ToolError('invalid_input', 'A post takes up to 10 media items.', 'Attach 10 or fewer files and URLs in total, then call again.', {
+        max: 10,
+        file_ids: args.file_ids?.length ?? 0,
+        media_urls: args.media_urls?.length ?? 0,
+      });
     }
 
     const res = await v1.post<{ data: V1Post }>('/social-posts', {

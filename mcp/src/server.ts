@@ -6,7 +6,7 @@ import { noopAnalytics, type Analytics, type FreeAnalytics } from './analytics.j
 import { bearerAuth, metadataUrls, protectedResourceMetadata, type CallerAuth } from './auth/middleware.js';
 import type { FetchLike, Introspector } from './auth/introspection.js';
 import { TokenRateLimiter } from './rateLimit.js';
-import { registerTool } from './tools/define.js';
+import { registerTool, structureSdkErrors } from './tools/define.js';
 import { m1Tools } from './tools/m1.js';
 import { m2Tools } from './tools/m2.js';
 import { mediaTools } from './tools/media.js';
@@ -45,9 +45,11 @@ export interface AppDeps {
 export function buildMcpServer(auth: CallerAuth, deps: AppDeps): McpServer {
   const server = new McpServer(SERVER_INFO, { instructions: INSTRUCTIONS });
   const v1 = new V1Client(deps.v1ApiUrl, auth.token, deps.fetchImpl);
-  for (const tool of [...m1Tools, ...m2Tools, ...mediaTools, ...engageTools]) {
+  const tools = [...m1Tools, ...m2Tools, ...mediaTools, ...engageTools];
+  for (const tool of tools) {
     registerTool(server, tool, { auth, v1, analytics: deps.analytics });
   }
+  structureSdkErrors(server, tools.map((t) => t.name));
   return server;
 }
 
@@ -106,7 +108,15 @@ export function createApp(deps: AppDeps) {
       await transport.handleRequest(req, res, req.body);
     } catch {
       if (!res.headersSent) {
-        res.status(500).json({ jsonrpc: '2.0', error: { code: -32603, message: 'Internal server error' }, id: null });
+        res.status(500).json({
+          jsonrpc: '2.0',
+          error: {
+            code: -32603,
+            message: 'internal_error: the creatif.space connector could not handle this request. Retry once; if it repeats, the user can do this in creatif.space.',
+            data: { code: 'internal_error', next_step: 'Retry once; if it repeats, tell the user to do this step in creatif.space.' },
+          },
+          id: null,
+        });
       }
     }
   };

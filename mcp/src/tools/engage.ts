@@ -150,6 +150,7 @@ export const listConversations = defineTool({
     cursor: z.string().trim().max(200).optional().describe('next_cursor from the previous page'),
   },
   annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
+  notFound: { what: 'That channel', next: 'Take channel_id from list_channels, or call list_conversations without it.' },
   run: async (args, { v1 }) => {
     const res = await v1.get<{ data: FeedItem[]; meta: { next_cursor: string | null } }>('/inbox/feed', {
       type: args.type,
@@ -196,7 +197,7 @@ export const replyToConversation = defineTool({
       .describe('Leave false first: you get a preview and nothing is sent. Set true only after the user explicitly agreed to that preview.'),
   },
   annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: true },
-  notFound: 'That conversation',
+  notFound: { what: 'That conversation', next: 'Call list_conversations again and use an id from there (dm_… or comment_…).' },
   run: async (args, ctx) => {
     const id = args.conversation_id;
     if (!args.confirm) return preview(ctx, id, args.text);

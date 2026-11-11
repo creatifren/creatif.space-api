@@ -59,7 +59,7 @@ export const requestMediaUpload = defineTool({
     folder_id: z.string().trim().min(10).max(26).optional().describe('Library folder to put it in (optional; default the main folder)'),
   },
   annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false },
-  notFound: 'That folder',
+  notFound: { what: 'That folder', next: 'Call again without folder_id (the file goes to the main folder).' },
   run: async (args, { v1 }) => {
     const { data } = await v1.post<{
       data: { id: string; upload_url: string; headers?: Record<string, string>; expires_at: string };
@@ -100,7 +100,7 @@ export const confirmMediaUpload = defineTool({
   scope: 'draft',
   input: { file_id: fileId },
   annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false },
-  notFound: 'That upload',
+  notFound: { what: 'That upload', next: 'Start over: call request_media_upload for a new file_id and upload URL.' },
   run: async ({ file_id }, { v1 }) => {
     const path = `/files/${encodeURIComponent(file_id)}`;
     try {
@@ -118,6 +118,7 @@ export const confirmMediaUpload = defineTool({
       'invalid_input',
       `This upload cannot be confirmed: it is "${data.status}" (refused or abandoned).`,
       'Start over with request_media_upload for a new file_id and upload URL.',
+      { file_id, status: data.status },
     );
   },
 });

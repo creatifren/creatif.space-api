@@ -116,7 +116,7 @@ describe('list_conversations', () => {
     });
     const err = payload(await client.callTool({ name: 'list_conversations', arguments: {} })).error;
     expect(err).toMatchObject({ code: 'plan_required', details: { reason: 'plan_required', feature: 'engage', required_plan: 'pro' } });
-    expect(err.hint).toMatch(/as it is/);
+    expect(err.next_step).toMatch(/as it is/);
   });
 
   it('says the data rule and gives an example and next steps in its description', async () => {
@@ -236,8 +236,8 @@ describe('reply_to_conversation', () => {
 
     expect(res.isError).toBe(true);
     expect(err.code).toBe('not_found');
-    expect(err.message).toBe('That conversation was not found.');
-    expect(err.hint).toMatch(/list_/);
+    expect(err.message).toBe('That conversation was not found in this workspace.');
+    expect(err.next_step).toMatch(/list_/);
     expect(sends()).toHaveLength(0);
   });
 
@@ -253,7 +253,7 @@ describe('reply_to_conversation', () => {
 
     expect(res.isError).toBe(true);
     expect(err).toMatchObject({ code: 'relay_unavailable', message: 'Instagram could not be reached just now. Try again shortly.' });
-    expect(err.hint).toMatch(/Nothing was sent/);
+    expect(err.next_step).toMatch(/Nothing was sent/);
   });
 
   it('maps the 24h refusal at send time to reply_window_closed', async () => {

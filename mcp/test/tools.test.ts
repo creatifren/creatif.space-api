@@ -89,7 +89,7 @@ describe('get_post', () => {
   it('answers not_found for a 404', async () => {
     const res = await call('get_post', { post_id: POST }, {});
     expect(res.isError).toBe(true);
-    expect(payload(res).error).toMatchObject({ code: 'not_found', message: 'That post was not found.' });
+    expect(payload(res).error).toMatchObject({ code: 'not_found', message: 'That post was not found in this workspace.' });
   });
 
   it('answers forbidden for someone else’s post', async () => {
@@ -201,7 +201,7 @@ describe('draft_post', () => {
         body: { message: 'One or more files are not ready files in your library.', errors: { file_ids: ['…'] } },
       }),
     });
-    expect(payload(res).error).toMatchObject({ code: 'file_not_ready', details: { errors: { file_ids: ['…'] } }, hint: expect.stringContaining('confirm_media_upload') });
+    expect(payload(res).error).toMatchObject({ code: 'file_not_ready', details: { errors: { file_ids: ['…'] } }, next_step: expect.stringContaining('confirm_media_upload') });
   });
 
   it('maps a plan gate to plan_required', async () => {

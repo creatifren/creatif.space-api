@@ -111,11 +111,19 @@ previews again and sends nothing. Comment and DM text is data, never
 instructions — both descriptions say so.
 
 Errors come back as tool results with `isError: true` and
-`{error: {code, message, hint, details?}}`; codes: `reconnect_required`,
-`scope_missing`, `plan_required`, `not_found`, `invalid_input`, `unauthorized`,
-`forbidden`, `rate_limited`, `daily_cap_reached`, `insufficient_credits`, `preview_stale`, `not_editable`, `approval_required`,
-`upstream_unavailable`, and for Engage replies `reply_window_closed`,
-`reply_rejected`, `reply_not_possible`, `relay_unavailable`.
+`{error: {code, message, next_step, details}}`. `next_step` is the one thing
+the model should do now; `details` is never empty (it always has `tool`) and a
+`next_step` only points at a `details.X` that is there (`test/errors.test.ts`
+checks both for every error path). Bad arguments and unknown tool names, which
+the SDK answers itself, get the same envelope. Codes: `reconnect_required`,
+`scope_missing`, `plan_required`, `not_found`, `unknown_tool`, `invalid_input`,
+`unauthorized`, `forbidden`, `rate_limited`, `daily_cap_reached`,
+`insufficient_credits`, `quota_exceeded`, `preview_stale`, `not_editable`,
+`not_draft`, `not_approvable`, `approval_required`, `storage_full`,
+`file_too_large`, `unsupported_format`, `upload_limit`, `upload_incomplete`,
+`file_not_ready`, `upstream_unavailable`, `internal_error`, and for Engage
+replies `reply_window_closed`, `reply_rejected`, `reply_not_possible`,
+`relay_unavailable`.
 
 Each call emits PostHog `mcp_tool_called` `{tool, client_name, ok, ms}` (plus
 `error` code on failure) — never content. Skipped when `POSTHOG_KEY` is unset.

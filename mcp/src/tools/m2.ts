@@ -79,9 +79,10 @@ async function preview(ctx: ToolContext, postId: string, scheduledAt?: string): 
   );
   if (!data.sendable) {
     throw new ToolError(
-      'invalid_input',
+      'not_draft',
       `Only a draft can be scheduled or published from here; this post is "${data.status}".`,
-      'Use list_posts with status "draft" to find drafts, or draft_post to make one.',
+      'Use list_posts with status "draft" to find a draft to send, or draft_post to make a new one.',
+      { post_id: postId, status: data.status },
     );
   }
   previewTokens.remember(ctx.auth.extra.userUlid, postId, data);
@@ -171,14 +172,36 @@ export const createApprovalLink = defineTool({
     expires_in_hours: z.union([z.literal(48), z.literal(168), z.literal(720)]).optional().describe('48, 168 (7 days) or 720 (30 days); omit for no expiry'),
   },
   annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: true },
-  run: async (args, { v1 }) => {
-    const { data } = await v1.post<{ data: Record<string, unknown> }>('/social-approval-links', {
-      post_ids: args.post_ids,
-      approver_email: args.approver_email,
-      ...(args.title ? { title: args.title } : {}),
-      ...(args.client_name ? { client_name: args.client_name } : {}),
-      ...(args.expires_in_hours ? { expires_in_hours: args.expires_in_hours } : {}),
-    });
+  notFound: { what: 'A post', next: 'Check the post ids with list_posts (status draft) and call again.' },
+  run: async (args, ctx) => {
+    const ids = [...new Set(args.post_ids)];
+    let data: Record<string, unknown>;
+    try {
+      ({ data } = await ctx.v1.post<{ data: Record<string, unknown> }>('/social-approval-links', {
+        post_ids: ids,
+        approver_email: args.approver_email,
+        ...(args.title ? { title: args.title } : {}),
+        ...(args.client_name ? { client_name: args.client_name } : {}),
+        ...(args.expires_in_hours ? { expires_in_hours: args.expires_in_hours } : {}),
+      }));
+    } catch (e) {
+      // The API refuses a set with no approvable post in one bare sentence;
+      // say which post is what, and what to do instead.
+      if (e instanceof V1Error && e.status === 422 && !e.body?.errors && !e.body?.code && /can still be approved/i.test(String(e.body?.message ?? ''))) {
+        const refused = await whyNotApprovable(ctx, ids);
+        throw new ToolError(
+          'not_approvable',
+          'None of these posts can go on an approval link: only drafts and posts still held for approval can.',
+          'Use list_posts with status "draft" to find drafts to share, or draft_post to make a new draft (you can reuse a published post’s caption and media), then call create_approval_link with those ids.',
+          { refused },
+        );
+      }
+      throw e;
+    }
+    // Posts the API left off the link (published, queued, cancelled…) are
+    // dropped silently by the API; name them.
+    const onLink = typeof data.posts === 'number' ? data.posts : ids.length;
+    const skipped = onLink < ids.length ? await skippedFromLink(ctx, String(data.id), ids) : [];
     return {
       link: {
         id: data.id,
@@ -188,10 +211,52 @@ export const createApprovalLink = defineTool({
         approver_email: data.approver_email,
         expires_at: data.expires_at,
       },
-      note: 'Share the url with the client. They sign in with the approver email to decide. Use check_approval_status with link_id to follow their decisions.',
+      ...(skipped.length ? { skipped } : {}),
+      note:
+        'Share the url with the client. They sign in with the approver email to decide. Use check_approval_status with link_id to follow their decisions.' +
+        (skipped.length ? ' Some posts were not added (see skipped, with each one’s status and reason): tell the user.' : ''),
     };
   },
 });
+
+interface Refusal {
+  post_id: string;
+  status: string;
+  reason: string;
+}
+
+const REASONS: Record<string, string> = {
+  published: 'already published; a published post cannot be approved again',
+  scheduled: 'already handed to the channels to publish (approved or not held for approval), so it can no longer be put up for approval',
+  failed: 'publishing failed; it is no longer a draft',
+  cancelled: 'cancelled',
+};
+
+/** Each post's status and why it cannot go on a link. One read per post (at most 50). */
+async function whyNotApprovable(ctx: ToolContext, ids: string[]): Promise<Refusal[]> {
+  return Promise.all(
+    ids.map(async (id): Promise<Refusal> => {
+      try {
+        const { data } = await ctx.v1.get<{ data: V1Post }>(`/social-posts/${encodeURIComponent(id)}`);
+        return { post_id: id, status: data.status, reason: REASONS[data.status] ?? `its status is "${data.status}"` };
+      } catch (e) {
+        if (e instanceof V1Error && e.status === 404) return { post_id: id, status: 'not_found', reason: 'no such post in this workspace' };
+        return { post_id: id, status: 'unknown', reason: 'could not be checked right now' };
+      }
+    }),
+  );
+}
+
+/** The requested posts that are not on the new link, with why. */
+async function skippedFromLink(ctx: ToolContext, linkId: string, ids: string[]): Promise<Refusal[]> {
+  try {
+    const { data } = await ctx.v1.get<{ data: { posts: { id: string }[] } }>(`/social-approval-links/${encodeURIComponent(linkId)}`);
+    const on = new Set(data.posts.map((p) => p.id));
+    return whyNotApprovable(ctx, ids.filter((id) => !on.has(id)));
+  } catch {
+    return [];
+  }
+}
 
 export const checkApprovalStatus = defineTool({
   name: 'check_approval_status',
@@ -204,10 +269,13 @@ export const checkApprovalStatus = defineTool({
     link_id: ulid('Approval link').optional(),
   },
   annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
-  notFound: 'That post or approval link',
+  notFound: { what: 'That post or approval link', next: 'Check the id: posts come from list_posts, link ids from create_approval_link. Call again with one valid id.' },
   run: async (args, { v1 }) => {
     if (!!args.post_id === !!args.link_id) {
-      throw new ToolError('invalid_input', 'Give exactly one of post_id or link_id.', 'Pass post_id for one post, or link_id for a link.');
+      throw new ToolError('invalid_input', 'Give exactly one of post_id or link_id.', 'Call again with post_id for one post, or link_id for a whole link — not both, not neither.', {
+        fields: ['post_id', 'link_id'],
+        given: { post_id: !!args.post_id, link_id: !!args.link_id },
+      });
     }
     if (args.post_id) {
       const { data } = await v1.get<{ data: V1Post }>(`/social-posts/${encodeURIComponent(args.post_id)}`);
@@ -260,14 +328,18 @@ export const updatePost = defineTool({
     add_file_ids: z.array(ulid('File')).min(1).max(10).optional().describe('Adds these library files after the post’s current media'),
   },
   annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false },
-  notFound: 'That post',
+  notFound: { what: 'That post', next: 'Check the post id: find it with list_posts (status draft for drafts) and call again.' },
   run: async (args, { v1 }) => {
     if (args.file_ids !== undefined && args.add_file_ids !== undefined) {
-      throw new ToolError('invalid_input', 'Pass file_ids or add_file_ids, not both.', 'file_ids replaces the media; add_file_ids appends to it.');
+      throw new ToolError('invalid_input', 'Pass file_ids or add_file_ids, not both.', 'Call again with only one: file_ids replaces the media; add_file_ids appends to it.', {
+        fields: ['file_ids', 'add_file_ids'],
+      });
     }
     const changesMedia = args.file_ids !== undefined || args.add_file_ids !== undefined;
     if (args.caption === undefined && args.scheduled_at === undefined && args.labels === undefined && !changesMedia) {
-      throw new ToolError('invalid_input', 'Nothing to change.', 'Pass caption, scheduled_at, labels, file_ids and/or add_file_ids.');
+      throw new ToolError('invalid_input', 'Nothing to change: no field to update was given.', 'Call again with at least one of caption, scheduled_at, labels, file_ids or add_file_ids.', {
+        fields: ['caption', 'scheduled_at', 'labels', 'file_ids', 'add_file_ids'],
+      });
     }
     // The API decides what may change (drafts and posts waiting for approval
     // only, through a token); this only says so before trying.
@@ -277,7 +349,8 @@ export const updatePost = defineTool({
       throw new ToolError(
         'not_editable',
         `Only drafts and posts waiting for approval can be changed from here; this post is "${current.status}"${current.approval === 'approved' ? ' (approved)' : ''}.`,
-        'Tell the user to change it in creatif.space.',
+        'Tell the user to change it in creatif.space, or draft_post a new version and work on that.',
+        { post_id: args.post_id, status: current.status, approval: current.approval },
       );
     }
     if (args.add_file_ids !== undefined && keptMedia(current).length + args.add_file_ids.length > 10) {
@@ -285,6 +358,7 @@ export const updatePost = defineTool({
         'invalid_input',
         `A post takes up to 10 media items; this one has ${keptMedia(current).length}.`,
         'Add fewer files, or pass file_ids to replace the media instead.',
+        { max: 10, current: keptMedia(current).length, adding: args.add_file_ids.length },
       );
     }
     const { data } = await v1.patch<{ data: V1Post }>(`/social-posts/${encodeURIComponent(args.post_id)}`, {
@@ -313,10 +387,14 @@ export const schedulePost = defineTool({
     confirm,
   },
   annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: true },
-  notFound: 'That post',
+  notFound: { what: 'That post', next: 'Check the post id: find it with list_posts (status draft for drafts) and call again.' },
   run: async (args, ctx) => {
     if (Date.parse(args.scheduled_at) <= Date.now()) {
-      throw new ToolError('invalid_input', 'scheduled_at must be in the future.', 'Use publish_post to send now, or pick a later time.');
+      throw new ToolError('invalid_input', 'scheduled_at must be in the future.', 'Pick a later time and call again, or use publish_post to send now.', {
+        field: 'scheduled_at',
+        scheduled_at: args.scheduled_at,
+        now: new Date().toISOString(),
+      });
     }
     if (!args.confirm) {
       return previewResult(await preview(ctx, args.post_id, args.scheduled_at), 'schedule', args.scheduled_at);
@@ -340,7 +418,7 @@ export const publishPost = defineTool({
     confirm,
   },
   annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: false, openWorldHint: true },
-  notFound: 'That post',
+  notFound: { what: 'That post', next: 'Check the post id: find it with list_posts (status draft for drafts) and call again.' },
   run: async (args, ctx) => {
     if (!args.confirm) {
       return previewResult(await preview(ctx, args.post_id), 'publish');
