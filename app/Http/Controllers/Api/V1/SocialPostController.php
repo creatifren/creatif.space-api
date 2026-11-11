@@ -274,6 +274,7 @@ class SocialPostController extends Controller
                 'scheduled_at' => $scheduledAt,
                 'approval' => $approval,
                 'status' => $draft ? SocialPostStatus::Draft : SocialPostStatus::Scheduled,
+                'client_platform' => ProductEvents::platform(),
             ]);
 
             foreach ($accounts as $account) {
@@ -670,6 +671,8 @@ class SocialPostController extends Controller
         $socialPost->update([
             'scheduled_at' => isset($validated['scheduled_at']) ? self::instant($validated['scheduled_at']) : null,
             'approval' => isset($validated['approval']) ? SocialPostApproval::from($validated['approval']) : null,
+            // Where it was sent from, for post_published (fired later, by a webhook or job).
+            'client_platform' => ProductEvents::platform() ?? $socialPost->client_platform,
         ]);
 
         if ($socialPost->held()) {

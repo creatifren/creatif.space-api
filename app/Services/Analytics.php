@@ -102,12 +102,26 @@ class Analytics
      */
     public static function isInternal(User $user): bool
     {
-        $email = Str::lower((string) $user->email);
+        // Staff are internal whatever their address (raw read: a model built
+        // in memory may not carry the column default).
+        if ((bool) ($user->getAttributes()['is_staff'] ?? false)) {
+            return true;
+        }
+
+        return self::isInternalEmail((string) ($user->getAttributes()['email'] ?? ''));
+    }
+
+    /** Our own inbox, always, plus ANALYTICS_INTERNAL_EMAILS and _DOMAINS. */
+    public const ALWAYS_INTERNAL = ['hello@creatif.space'];
+
+    public static function isInternalEmail(string $email): bool
+    {
+        $email = Str::lower(trim($email));
         if ($email === '') {
             return false;
         }
 
-        if (in_array($email, (array) config('services.posthog.internal_emails', []), true)) {
+        if (in_array($email, [...self::ALWAYS_INTERNAL, ...(array) config('services.posthog.internal_emails', [])], true)) {
             return true;
         }
 

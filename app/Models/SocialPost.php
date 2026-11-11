@@ -21,6 +21,7 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
  * @property string $ulid
  * @property int $user_id
  * @property string $provider
+ * @property string|null $client_platform web | android_app | android_twa (analytics)
  * @property string|null $provider_post_id
  * @property string $caption
  * @property string $type
@@ -45,6 +46,7 @@ class SocialPost extends Model
         'ulid',
         'user_id',
         'provider',
+        'client_platform',
         'provider_post_id',
         'caption',
         'type',

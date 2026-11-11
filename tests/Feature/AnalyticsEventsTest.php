@@ -191,22 +191,20 @@ describe('the service', function () {
 
 describe('user_signed_up', function () {
     it('fires once for an email signup, with attribution and person properties', function () {
-        config(['services.posthog.internal_email_domains' => ['creatif.space']]);
-
         $this->postJson('/auth/register', [
-            'email' => 'ren@creatif.space', 'password' => 'long-enough-1',
+            'email' => 'ren@studio.test', 'password' => 'long-enough-1',
             'ref' => 'RANI10', 'utm_source' => 'instagram', 'utm_campaign' => 'launch',
         ])->assertStatus(202);
 
         $user = User::query()->sole();
-        $m = ae()->assertCapturedWithKeys('user_signed_up', ['method', 'plan', 'ref', 'utm_source', 'utm_campaign']);
+        $m = ae()->assertCapturedWithKeys('user_signed_up', ['method', 'plan', 'platform', 'ref', 'utm_source', 'utm_campaign']);
         expect($m['distinct_id'])->toBe($user->ulid)
             ->and($m['properties'])->toMatchArray(['method' => 'email', 'plan' => 'free', 'ref' => 'RANI10', 'utm_source' => 'instagram'])
-            ->and(ae()->setFor($user->ulid)[0])->toMatchArray(['plan' => 'free', 'signup_method' => 'email', 'is_internal' => true])
+            ->and(ae()->setFor($user->ulid)[0])->toMatchArray(['plan' => 'free', 'signup_method' => 'email', 'is_internal' => false])
             ->and(ae()->setFor($user->ulid)[0])->toHaveKey('signed_up_at');
 
         // The same address again is a reset link, not a signup.
-        $this->postJson('/auth/register', ['email' => 'ren@creatif.space', 'password' => 'long-enough-1'])->assertStatus(202);
+        $this->postJson('/auth/register', ['email' => 'ren@studio.test', 'password' => 'long-enough-1'])->assertStatus(202);
         ae()->assertCapturedOnce('user_signed_up');
     });
 
@@ -214,7 +212,7 @@ describe('user_signed_up', function () {
         $this->postJson('/auth/register', ['email' => 'secret@example.com', 'password' => 'long-enough-1'])->assertStatus(202);
 
         expect(json_encode(ae()->sent))->not->toContain('secret@example.com');
-        ae()->assertCapturedWithKeys('user_signed_up', ['method', 'plan']);
+        ae()->assertCapturedWithKeys('user_signed_up', ['method', 'plan', 'platform']);
     });
 
     it('fires once for a Google signup, not for the login after', function () {
@@ -231,7 +229,7 @@ describe('user_signed_up', function () {
         $this->get('/auth/google/callback?code=abc')->assertRedirect();
 
         $user = User::query()->sole();
-        $m = ae()->assertCapturedWithKeys('user_signed_up', ['method', 'plan', 'ref', 'utm_source', 'utm_medium']);
+        $m = ae()->assertCapturedWithKeys('user_signed_up', ['method', 'plan', 'platform', 'ref', 'utm_source', 'utm_medium']);
         expect($m['distinct_id'])->toBe($user->ulid)
             ->and($m['properties']['method'])->toBe('google')
             ->and(ae()->setFor($user->ulid)[0]['is_internal'])->toBeFalse();
@@ -257,7 +255,7 @@ describe('user_signed_up entry and utm_term/utm_content', function () {
         ])->assertStatus(202);
 
         $m = ae()->assertCapturedWithKeys('user_signed_up', [
-            'method', 'plan', 'utm_source', 'utm_medium', 'utm_campaign', 'utm_term', 'utm_content', 'entry', '$set_once',
+            'method', 'plan', 'platform', 'utm_source', 'utm_medium', 'utm_campaign', 'utm_term', 'utm_content', 'entry', '$set_once',
         ]);
         expect($m['properties'])->toMatchArray([
             'utm_term' => 'client approval',
@@ -275,7 +273,7 @@ describe('user_signed_up entry and utm_term/utm_content', function () {
         aeGoogleCallback();
         $this->get('/auth/google/callback?code=abc')->assertRedirect();
 
-        $m = ae()->assertCapturedWithKeys('user_signed_up', ['method', 'plan', 'utm_term', 'utm_content', 'entry', '$set_once']);
+        $m = ae()->assertCapturedWithKeys('user_signed_up', ['method', 'plan', 'platform', 'utm_term', 'utm_content', 'entry', '$set_once']);
         expect($m['properties'])->toMatchArray([
             'method' => 'google',
             'entry' => 'mcp-page',
@@ -288,7 +286,7 @@ describe('user_signed_up entry and utm_term/utm_content', function () {
             'email' => 'andi@example.com', 'password' => 'long-enough-1', 'entry' => $entry,
         ])->assertStatus(202);
 
-        ae()->assertCapturedWithKeys('user_signed_up', ['method', 'plan']);
+        ae()->assertCapturedWithKeys('user_signed_up', ['method', 'plan', 'platform']);
     })->with([
         'uppercase' => 'Pricing',
         'space' => 'pricing hero',
@@ -304,7 +302,7 @@ describe('user_signed_up entry and utm_term/utm_content', function () {
         aeGoogleCallback();
         $this->get('/auth/google/callback?code=abc')->assertRedirect();
 
-        ae()->assertCapturedWithKeys('user_signed_up', ['method', 'plan']);
+        ae()->assertCapturedWithKeys('user_signed_up', ['method', 'plan', 'platform']);
     });
 
     it('never treats entry as a referral code', function () {
@@ -333,11 +331,11 @@ describe('channels', function () {
 
         ae()->assertCapturedTimes('channel_connected', 2);
         $first = ae()->captured('channel_connected')[0];
-        expect(array_keys($first['properties']))->toEqualCanonicalizing(['network', 'is_first_channel', 'channels_count'])
+        expect(array_keys($first['properties']))->toEqualCanonicalizing(['network', 'is_first_channel', 'channels_count', 'plan', 'platform'])
             ->and($first['distinct_id'])->toBe($user->ulid)
-            ->and($first['properties'])->toBe(['network' => 'instagram', 'is_first_channel' => true, 'channels_count' => 1])
+            ->and($first['properties'])->toBe(['network' => 'instagram', 'is_first_channel' => true, 'channels_count' => 1, 'plan' => 'free', 'platform' => 'web'])
             ->and(ae()->captured('channel_connected')[1]['properties'])
-            ->toBe(['network' => 'tiktok', 'is_first_channel' => false, 'channels_count' => 2])
+            ->toBe(['network' => 'tiktok', 'is_first_channel' => false, 'channels_count' => 2, 'plan' => 'free', 'platform' => 'web'])
             ->and(collect(ae()->setFor($user->ulid))->last())->toBe(['channels_count' => 2]);
     });
 
@@ -426,7 +424,7 @@ describe('approval links', function () {
 
         ae()->assertCapturedTimes('approval_link_created', 2);
         [$first, $second] = ae()->captured('approval_link_created');
-        expect(array_keys($first['properties']))->toEqualCanonicalizing(['link_id', 'posts_count', 'expires_in_days', 'is_first_link'])
+        expect(array_keys($first['properties']))->toEqualCanonicalizing(['link_id', 'posts_count', 'expires_in_days', 'is_first_link', 'plan', 'platform'])
             ->and($first['properties'])->toMatchArray(['posts_count' => 2, 'expires_in_days' => 7.0, 'is_first_link' => true])
             ->and($second['properties'])->toMatchArray(['posts_count' => 1, 'expires_in_days' => null, 'is_first_link' => false])
             ->and(json_encode(ae()->sent))->not->toContain('Client Co');
@@ -470,7 +468,7 @@ describe('approval links', function () {
         $all = ae()->captured('approval_decision_made');
         expect(collect($all)->pluck('properties.decision')->all())->toBe(['approved', 'changes_requested', 'retracted'])
             ->and(collect($all)->pluck('distinct_id')->unique()->all())->toBe([$owner->ulid])
-            ->and(array_keys($all[0]['properties']))->toEqualCanonicalizing(['link_id', 'post_id', 'decision', 'hours_since_link'])
+            ->and(array_keys($all[0]['properties']))->toEqualCanonicalizing(['link_id', 'post_id', 'decision', 'hours_since_link', 'plan', 'platform'])
             ->and($all[0]['properties'])->toMatchArray(['link_id' => $link->ulid, 'post_id' => $a->ulid, 'hours_since_link' => 3.0])
             ->and(json_encode($all))->not->toContain('Andi')->not->toContain('Darker');
     });
@@ -511,7 +509,7 @@ describe('publishing results', function () {
 
         ae()->assertCapturedTimes('post_published', 2);
         [$first, $second] = ae()->captured('post_published');
-        expect(array_keys($first['properties']))->toEqualCanonicalizing(['post_id', 'network', 'credits_charged', 'via', 'is_first_publish', 'source'])
+        expect(array_keys($first['properties']))->toEqualCanonicalizing(['post_id', 'network', 'credits_charged', 'via', 'is_first_publish', 'source', 'plan', 'platform'])
             ->and($first['distinct_id'])->toBe($user->ulid)
             ->and($first['properties'])->toMatchArray(['post_id' => $post->ulid, 'network' => 'instagram', 'via' => 'scheduled', 'is_first_publish' => true, 'source' => 'webhook'])
             ->and($first['properties']['credits_charged'])->toBeGreaterThan(0)
@@ -819,5 +817,120 @@ describe('engage_reply_sent', function () {
         $this->actingAs($this->account->user)->postJson("/api/v1/inbox/comments/{$this->comment->ulid}/reply", ['content' => 'Thanks']);
 
         ae()->assertNotCaptured('engage_reply_sent');
+    });
+});
+
+describe('plan, platform, aliases and internal accounts (CS_Product_3, 11 Nov)', function () {
+    it('takes platform from X-Creatif-Platform, web by default, and ignores anything else', function (?string $header, string $expected) {
+        $headers = $header === null ? [] : [ProductEvents::PLATFORM_HEADER => $header];
+
+        $this->postJson('/auth/register', ['email' => 'p@studio.test', 'password' => 'long-enough-1'], $headers)->assertStatus(202);
+
+        expect(ae()->captured('user_signed_up')[0]['properties'])->toMatchArray(['plan' => 'free', 'platform' => $expected]);
+    })->with([
+        'android app' => ['android_app', 'android_app'],
+        'android TWA' => ['android_twa', 'android_twa'],
+        'web, explicit' => ['web', 'web'],
+        'no header' => [null, 'web'],
+        'unknown value' => ['ios_app', 'web'],
+        'case and spaces' => [' Android_App ', 'android_app'],
+    ]);
+
+    it('sends the plan the user is on, and the platform on approval links, decisions and channels', function () {
+        $user = User::factory()->create();
+        Subscription::factory()->for($user)->create(['plan_id' => Plan::query()->where('key', 'max')->value('id')]);
+        $post = aeHeldPost($user, 'awaiting');
+
+        $this->actingAs($user)->postJson('/api/v1/social-approval-links',
+            ['approver_email' => 'client@example.test', 'post_ids' => [$post->ulid]],
+            [ProductEvents::PLATFORM_HEADER => 'android_twa'],
+        )->assertCreated();
+
+        expect(ae()->captured('approval_link_created')[0]['properties'])->toMatchArray(['plan' => 'max', 'platform' => 'android_twa']);
+    });
+
+    it('sends approval_link_sent and approval_decided next to the old names, until the alias date', function () {
+        $user = User::factory()->create();
+        $post = aeHeldPost($user, 'awaiting');
+        $link = SocialApprovalLink::create(['user_id' => $user->id]);
+        config(['services.posthog.alias_until' => now()->addDay()->toDateString()]);
+
+        ProductEvents::approvalLinkCreated($link, 1, null);
+        ProductEvents::approvalDecision($link, $post, 'approved');
+
+        $sent = ae()->captured('approval_link_sent');
+        expect($sent)->toHaveCount(1)
+            ->and($sent[0]['properties'])->toBe(ae()->captured('approval_link_created')[0]['properties'])
+            ->and(ae()->captured('approval_decided'))->toHaveCount(1)
+            ->and(ae()->captured('approval_decided')[0]['properties'])->toBe(ae()->captured('approval_decision_made')[0]['properties']);
+
+        config(['services.posthog.alias_until' => now()->subDay()->toDateString()]);
+        ProductEvents::approvalLinkCreated($link, 1, null);
+        ae()->assertCapturedTimes('approval_link_created', 2);
+        ae()->assertCapturedTimes('approval_link_sent', 1);
+    });
+
+    it('keeps the aliases until 11 Dec 2026 by default', function () {
+        expect(config('services.posthog.alias_until'))->toBe('2026-12-11');
+    });
+
+    it('carries the creating platform onto post_published, which fires from a webhook', function () {
+        config(['services.social.provider' => 'postforme']);
+        $user = aePaidUser();
+        $ig = SocialAccount::factory()->for($user)->create(['platform' => 'instagram']);
+        $post = SocialPost::factory()->for($user)->create(['provider_post_id' => 'post_app', 'scheduled_at' => now()->addHour(), 'client_platform' => 'android_app']);
+        $post->targets()->create(['social_account_id' => $ig->id]);
+        Credits::chargeSend($post);
+
+        aeHook(['event_type' => 'social.post.result.created', 'data' => [
+            'id' => 'res_app', 'post_id' => 'post_app', 'social_account_id' => $ig->provider_account_id, 'success' => true,
+        ]])->assertOk();
+
+        expect(ae()->captured('post_published')[0]['properties'])->toMatchArray(['platform' => 'android_app', 'plan' => 'pro']);
+    });
+
+    it('records where a post was made', function () {
+        $user = aePaidUser();
+        $account = SocialAccount::factory()->for($user)->create(['platform' => 'linkedin']);
+
+        $id = $this->actingAs($user)->postJson('/api/v1/social-posts',
+            ['caption' => 'Hi', 'account_ids' => [$account->ulid], 'draft' => true],
+            [ProductEvents::PLATFORM_HEADER => 'android_app'],
+        )->assertCreated()->json('data.id');
+
+        expect(SocialPost::query()->where('ulid', $id)->value('client_platform'))->toBe('android_app');
+    });
+
+    it('sends nothing at all for internal accounts: staff, the internal lists, and hello@creatif.space', function (array $attrs, array $config) {
+        config($config);
+        $user = User::factory()->create($attrs);
+        $post = aeHeldPost($user, 'awaiting');
+        $link = SocialApprovalLink::create(['user_id' => $user->id]);
+        $account = SocialAccount::factory()->for($user)->create();
+
+        ProductEvents::signedUp($user, 'email');
+        ProductEvents::approvalLinkCreated($link, 1, null);
+        ProductEvents::approvalDecision($link, $post, 'approved');
+        ProductEvents::channelConnected($user, $account);
+        ProductEvents::postCreated($post, 'draft');
+        ProductEvents::checkoutStarted($user, 'credits', null, null, 1000);
+        ProductEvents::planChanged($user);
+
+        expect(ae()->sent)->toBe([]);
+    })->with([
+        'hello@creatif.space (always)' => [['email' => 'hello@creatif.space'], []],
+        'HELLO@creatif.space, any case' => [['email' => 'HELLO@Creatif.Space'], []],
+        'ANALYTICS_INTERNAL_EMAILS' => [['email' => 'qa@gmail.com'], ['services.posthog.internal_emails' => ['qa@gmail.com']]],
+        'internal domain' => [['email' => 'ren@creatif.space'], ['services.posthog.internal_email_domains' => ['creatif.space']]],
+        'staff' => [['email' => 'staff@gmail.com', 'is_staff' => true], []],
+    ]);
+
+    it('skips the waitlist events for an internal address too', function () {
+        ProductEvents::waitlistJoined('hello@creatif.space', 'mcp', false, false);
+        ProductEvents::waitlistPriorityReached('hello@creatif.space', 3);
+        ProductEvents::waitlistJoined('someone@studio.test', 'mcp', false, false);
+
+        ae()->assertCapturedTimes('waitlist_joined', 1);
+        ae()->assertNotCaptured('waitlist_priority_reached');
     });
 });

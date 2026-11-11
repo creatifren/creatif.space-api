@@ -269,7 +269,7 @@ describe('the web callback after the refactor', function () {
         $this->assertAuthenticatedAs($user);
 
         $props = $this->analytics->captured('user_signed_up')[0]['properties'];
-        expect($props['method'])->toBe('google')->and($props)->not->toHaveKey('platform');
+        expect($props['method'])->toBe('google')->and($props['platform'])->toBe('web');
     });
 
     it('still clears an unverified password when linking by email', function () {

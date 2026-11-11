@@ -173,6 +173,9 @@ return [
         'app_host' => env('POSTHOG_APP_HOST', 'https://us.posthog.com'),
         'personal_api_key' => env('POSTHOG_PERSONAL_API_KEY', ''),
         'project_id' => env('POSTHOG_PROJECT_ID', ''),
+        // approval_link_sent / approval_decided are sent next to the old
+        // names until this date (30 days from 11 Nov 2026); empty = forever.
+        'alias_until' => env('POSTHOG_ALIAS_UNTIL', '2026-12-11'),
         'internal_email_domains' => array_values(array_filter(array_map(
             fn (string $d) => strtolower(ltrim(trim($d), '@')),
             explode(',', (string) env('ANALYTICS_INTERNAL_EMAIL_DOMAINS', '')),
