@@ -127,5 +127,6 @@ it('has no Insight read route outside the gated list (new ones must be added her
         ->values()
         ->all();
 
-    expect($insightReads)->toBe(['api.v1.me.analytics']);
+    // Each is gated on `insight`; the export's gate is in InsightExportTest.
+    expect($insightReads)->toBe(['api.v1.me.analytics', 'api.v1.insight.export']);
 });
