@@ -19,6 +19,10 @@ Route::get('/fonts/{handle}', [ProfileFontController::class, 'show'])->name('pro
 // Google OAuth (session-based, consumed by the Next.js SPA via Sanctum cookies)
 Route::get('/auth/google/redirect', [GoogleAuthController::class, 'redirect'])->name('auth.google.redirect');
 Route::get('/auth/google/callback', [GoogleAuthController::class, 'callback'])->name('auth.google.callback');
+// The Android app: an ID token from Credential Manager, posted from inside the WebView (see GoogleAuthController::native).
+Route::post('/auth/google/native', [GoogleAuthController::class, 'native'])
+    ->middleware('throttle:10,1')
+    ->name('auth.google.native');
 
 // Email + password. JSON for the SPA except the verify link, which is opened
 // from an inbox and redirects back to the frontend.

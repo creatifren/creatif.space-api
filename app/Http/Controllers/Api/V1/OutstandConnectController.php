@@ -62,9 +62,10 @@ class OutstandConnectController extends Controller
         }
 
         $tenant = $sealed['tenant'];
+        $client = $sealed['client'];
         $user = User::query()->where('ulid', $tenant)->first();
         if ($user === null) {
-            return redirect(self::failed($network, 'invalid_state'));
+            return redirect(self::forShell(self::failed($network, 'invalid_state'), $client));
         }
 
         try {
@@ -73,6 +74,8 @@ class OutstandConnectController extends Controller
             Log::warning('social.connect_return', ['tenant' => $tenant, 'platform' => $network, 'outcome' => 'exception', 'error' => $e->getMessage()]);
             $target = self::failed($network, 'error');
         }
+        // Spent below with the shell marker on, so a replay keeps it too.
+        $target = self::forShell($target, $client);
 
         $parts = [];
         parse_str((string) parse_url($target, PHP_URL_QUERY), $parts);
@@ -212,6 +215,16 @@ class OutstandConnectController extends Controller
         }
 
         return self::page(['social' => 'connected', 'count' => $connected, 'connect' => 'success', 'network' => $network]);
+    }
+
+    /**
+     * The connect screen URL, marked `shell=android` when the connect started
+     * in the Android app, so the frontend can hand back to the shell. A
+     * state we cannot read (forged, expired) names no client: web as before.
+     */
+    private static function forShell(string $target, ?string $client): string
+    {
+        return $client === 'android' ? $target.(str_contains($target, '?') ? '&' : '?').'shell=android' : $target;
     }
 
     /**
