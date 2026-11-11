@@ -46,11 +46,12 @@ describe('presign', function () {
     });
 
     it('refuses a file over the per-file ceiling', function () {
+        // Free video cap: 100 MB (config/media.php).
         $this->actingAs(User::factory()->create())
             ->postJson('/api/v1/files/presign', [
                 'name' => 'raw-footage.mp4',
                 'mime_type' => 'video/mp4',
-                'size_bytes' => 501 * 1024 * 1024,
+                'size_bytes' => 101 * 1024 * 1024,
             ])
             ->assertUnprocessable()
             ->assertJsonValidationErrors('size_bytes');
@@ -59,9 +60,9 @@ describe('presign', function () {
     it('refuses when the storage quota is full — pending rows count too', function () {
         $user = User::factory()->create();
 
-        // Free plan: 2 GB. A pending upload already claims all of it.
+        // Free: 1 GB of media. A pending upload already claims all of it.
         File::factory()->for($user)->pending()->create([
-            'size_bytes' => 2 * 1024 * 1024 * 1024,
+            'size_bytes' => 1024 * 1024 * 1024,
         ]);
 
         $this->actingAs($user)
@@ -70,8 +71,8 @@ describe('presign', function () {
                 'mime_type' => 'image/jpeg',
                 'size_bytes' => 1_000_000,
             ])
-            ->assertUnprocessable()
-            ->assertJsonValidationErrors('size_bytes');
+            ->assertStatus(402)
+            ->assertJson(['reason' => 'quota_exceeded', 'feature' => 'media_quota', 'next_step' => 'upgrade_pro']);
     });
 
     it('stops counting a pending upload once its presign window has passed', function () {
@@ -80,9 +81,9 @@ describe('presign', function () {
 
         // Presigned, never PUT. Inside the window it still holds its space.
         File::factory()->for($user)->pending()->create([
-            'size_bytes' => 2 * 1024 * 1024 * 1024,
+            'size_bytes' => 1024 * 1024 * 1024,
         ]);
-        expect(PlanQuota::storageUsed($user))->toBe(1_000 + 2 * 1024 * 1024 * 1024);
+        expect(PlanQuota::storageUsed($user))->toBe(1_000 + 1024 * 1024 * 1024);
 
         $this->travel(File::PRESIGN_TTL_MINUTES)->minutes();
         $this->travel(1)->seconds();
@@ -121,7 +122,9 @@ describe('complete', function () {
         $user = User::factory()->create();
         $file = File::factory()->for($user)->pending()->create(['size_bytes' => 999]);
 
-        Storage::disk('s3')->put($file->path, 'the-actual-bytes');
+        // Real JPEG bytes: complete() checks the signature too.
+        $bytes = mediaFixture('pic.jpg');
+        Storage::disk('s3')->put($file->path, $bytes);
 
         $this->actingAs($user)
             ->postJson("/api/v1/files/{$file->ulid}/complete", ['width' => 4000, 'height' => 3000])
@@ -129,11 +132,11 @@ describe('complete', function () {
             ->assertJsonPath('data.status', 'ready')
             ->assertJsonPath('data.width', 4000);
 
-        expect($file->fresh()->size_bytes)->toBe(strlen('the-actual-bytes'))
+        expect($file->fresh()->size_bytes)->toBe(strlen($bytes))
             /* The stored checksum is the object's own MD5, read back from
                storage — it is what duplicate detection rests on, so it must
                not come from the browser. */
-            ->and($file->fresh()->checksum)->toBe(md5('the-actual-bytes'));
+            ->and($file->fresh()->checksum)->toBe(md5($bytes));
     });
 
     it('stores no checksum when storage cannot give a plain MD5', function () {
@@ -151,7 +154,7 @@ describe('complete', function () {
         Storage::fake('s3');
         $user = User::factory()->create();
         $file = File::factory()->for($user)->pending()->create();
-        Storage::disk('s3')->put($file->path, 'bytes');
+        Storage::disk('s3')->put($file->path, mediaFixture('pic.jpg'));
 
         $this->actingAs($user)
             ->postJson("/api/v1/files/{$file->ulid}/complete")
@@ -211,7 +214,7 @@ describe('the library', function () {
 
         expect($response->json('data'))->toHaveCount(2)
             ->and($response->json('meta.storage_used'))->toBe(1_500)
-            ->and($response->json('meta.storage_limit'))->toBe(2 * 1024 * 1024 * 1024);
+            ->and($response->json('meta.storage_limit'))->toBe(1024 * 1024 * 1024); // Free: 1 GB of media
     });
 
     it('filters to files stored more than once, showing every copy', function () {

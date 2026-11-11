@@ -6,6 +6,8 @@ use App\Contracts\SocialProvider;
 use App\Exceptions\ProviderConnectRefused;
 use App\Exceptions\ProviderRateLimited;
 use App\Models\SocialAccount;
+use App\Support\Media\FileSignature;
+use App\Support\Media\MediaLinks;
 use Carbon\CarbonImmutable;
 use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Http\Client\PendingRequest;
@@ -1000,12 +1002,24 @@ class OutstandService implements SocialProvider
         return null;
     }
 
-    /** Outstand wants a filename with an extension for each file. */
+    /**
+     * Outstand wants a filename with an extension for each file, and reads
+     * the media type from it. A library file whose key has no extension
+     * (uploaded before keys took theirs from the MIME) is named from its
+     * MIME — calling every such file "media-N.jpg" made Outstand treat
+     * videos as images (the Media v2 video bug).
+     */
     private static function filename(string $url, int $i): string
     {
         $name = basename((string) parse_url($url, PHP_URL_PATH));
 
-        return $name !== '' && str_contains($name, '.') ? $name : "media-{$i}.jpg";
+        if ($name !== '' && str_contains($name, '.')) {
+            return $name;
+        }
+
+        $ext = ($file = MediaLinks::fileFor($url)) !== null ? FileSignature::extension($file->mime_type) : null;
+
+        return $name !== '' && $ext !== null ? "{$name}.{$ext}" : "media-{$i}.".($ext ?? 'jpg');
     }
 
     /**

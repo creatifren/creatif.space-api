@@ -12,6 +12,7 @@ use App\Models\FileVersion;
 use App\Models\SocialApprovalLink;
 use App\Models\SocialPost;
 use App\Models\User;
+use App\Support\Media\MediaLimits;
 use Carbon\CarbonInterface;
 use Illuminate\Support\Collection;
 
@@ -274,28 +275,23 @@ class PlanQuota
     }
 
     /**
-     * Storage is a per-seat number, pooled: Team at 3 seats shares 3× the
-     * plan's storage_bytes across the workspace. Free and Premium have one
-     * seat, so the multiplier is invisible there.
+     * The total storage ceiling (Media v2, config/media.php): Free 1 GB;
+     * paid tiers have no total — they are bounded by the Keep quota and
+     * retention instead (MediaQuota). Rented blocks are gone.
      */
     public static function storageLimit(User $user): ?int
     {
-        $plan = static::planStorageLimit($user);
-
-        // The plan's storage plus whatever the account rents in Credits.
-        return $plan === null ? null : $plan + Credits::rentedBytes($user);
+        return MediaLimits::totalCap($user);
     }
 
-    /** What the plan alone includes — the base the rented blocks sit on. */
+    /** Same as storageLimit(): there is nothing on top of the plan any more. */
     public static function planStorageLimit(User $user): ?int
     {
-        $limit = $user->plan()->quota('storage_bytes');
-
-        return $limit === null ? null : $limit * Workspace::seats($user);
+        return static::storageLimit($user);
     }
 
     /**
-     * Over the ceiling: a block lapsed, or the plan shrank. Uploads stop
+     * Over the ceiling: the plan shrank (a downgrade to Free). Uploads stop
      * until it fits; nothing is deleted and every link keeps working.
      */
     public static function readOnly(User $user): bool

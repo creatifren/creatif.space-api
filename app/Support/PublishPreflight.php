@@ -4,6 +4,8 @@ namespace App\Support;
 
 use App\Exceptions\PublishPreflightFailed;
 use App\Models\SocialAccount;
+use App\Support\Media\FileSignature;
+use App\Support\Media\MediaLinks;
 
 /**
  * What each network needs before a post may go to it — checked before
@@ -105,10 +107,17 @@ final class PublishPreflight
         return $problems;
     }
 
-    /** 'video' | 'image' | 'unknown', from the URL path's extension. */
+    /**
+     * 'video' | 'image' | 'unknown', from the URL path's extension — or,
+     * for a library file whose key has none, from the file's MIME.
+     */
     public static function kind(string $url): string
     {
         $ext = strtolower(pathinfo((string) parse_url($url, PHP_URL_PATH), PATHINFO_EXTENSION));
+
+        if ($ext === '' && ($file = MediaLinks::fileFor($url)) !== null) {
+            $ext = (string) FileSignature::extension($file->mime_type);
+        }
 
         return match (true) {
             in_array($ext, self::VIDEO, true) => 'video',

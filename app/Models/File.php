@@ -2,11 +2,13 @@
 
 namespace App\Models;
 
+use App\Support\Media\FileSignature;
 use Carbon\CarbonImmutable;
 use Database\Factories\FileFactory;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\SoftDeletes;
 use Illuminate\Support\Facades\Storage;
@@ -37,6 +39,8 @@ use Illuminate\Support\Facades\Storage;
  * @property array<string, mixed>|null $source_meta
  * @property CarbonImmutable|null $deleted_at
  * @property CarbonImmutable|null $purge_at
+ * @property CarbonImmutable|null $kept_at
+ * @property CarbonImmutable|null $created_at
  */
 class File extends Model
 {
@@ -116,6 +120,7 @@ class File extends Model
             'exif' => 'array',
             'source_meta' => 'array',
             'purge_at' => 'datetime',
+            'kept_at' => 'datetime',
         ];
     }
 
@@ -175,12 +180,29 @@ class File extends Model
 
     /**
      * Object key for a user-owned asset.
+     *
+     * The extension comes from the MIME when we know it, not from the name
+     * the browser sent: a video picked from a phone often has no extension
+     * ("IMG_4021", "video"), and an extension-less key made every consumer
+     * that reads the URL — Outstand's filename, the publish preflight —
+     * take the video for something else (the Media v2 video bug).
      */
-    public static function keyFor(User $user, string $ulid, string $originalName): string
+    public static function keyFor(User $user, string $ulid, string $originalName, ?string $mime = null): string
     {
-        $ext = strtolower(pathinfo($originalName, PATHINFO_EXTENSION));
+        $ext = ($mime !== null ? FileSignature::extension($mime) : null)
+            ?? strtolower(pathinfo($originalName, PATHINFO_EXTENSION));
 
         return 'u/'.$user->ulid.'/'.$ulid.($ext !== '' ? '.'.$ext : '');
+    }
+
+    /**
+     * The posts that carry this file (social_post_files).
+     *
+     * @return BelongsToMany<SocialPost, $this>
+     */
+    public function posts(): BelongsToMany
+    {
+        return $this->belongsToMany(SocialPost::class, 'social_post_files')->withTimestamps();
     }
 
     /**

@@ -5,6 +5,7 @@ use App\Jobs\PruneActivityLog;
 use App\Models\Activity;
 use App\Models\File;
 use App\Models\User;
+use App\Notifications\StorageAlmostFull;
 use Illuminate\Support\Facades\Storage;
 
 describe('the ledger', function () {
@@ -12,7 +13,7 @@ describe('the ledger', function () {
         Storage::fake('s3');
         $user = User::factory()->create();
         $file = File::factory()->for($user)->pending()->create(['name' => 'shot.jpg']);
-        Storage::disk('s3')->put($file->path, 'bytes');
+        Storage::disk('s3')->put($file->path, mediaFixture('pic.jpg'));
 
         $this->actingAs($user)
             ->postJson("/api/v1/files/{$file->ulid}/complete")
@@ -54,7 +55,7 @@ describe('the activity feed', function () {
         $user = User::factory()->create();
 
         Activity::log($user, ActivityAction::SpacePublish, 'Published Winter Noel', 'space', 'x');
-        $user->notify(new App\Notifications\StorageAlmostFull(1_900_000_000, 2_000_000_000));
+        $user->notify(new StorageAlmostFull(1_900_000_000, 2_000_000_000));
 
         $rows = $this->actingAs($user)->getJson('/api/v1/me/activity')->assertOk()->json('data');
 

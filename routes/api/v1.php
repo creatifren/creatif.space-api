@@ -218,11 +218,8 @@ Route::middleware(['auth:sanctum,mcp', EnforceTokenScope::class])->group(functio
     Route::post('/credits/top-up', [CreditsController::class, 'topUp'])
         ->middleware('throttle:10,1')
         ->name('api.v1.credits.top-up');
-    Route::post('/credits/storage-blocks', [CreditsController::class, 'addBlocks'])
-        ->middleware('throttle:10,1')
-        ->name('api.v1.credits.blocks.add');
-    Route::delete('/credits/storage-blocks', [CreditsController::class, 'releaseBlocks'])
-        ->name('api.v1.credits.blocks.release');
+    // Storage rental (POST/DELETE /credits/storage-blocks) was removed in
+    // Media v2 (11 Nov 2026): the routes are gone, so both answer 404.
 
     Route::get('/social-accounts', [SocialAccountController::class, 'index'])->name('api.v1.social-accounts.index');
     Route::post('/social-accounts/auth-url', [SocialAccountController::class, 'authUrl'])
@@ -371,11 +368,21 @@ Route::middleware(['auth:sanctum,mcp', EnforceTokenScope::class])->group(functio
     /* Trash. Declared before /files/{file} so "trash" is never read as a
        ULID by the route matcher. */
     Route::get('/files/trash', [FileController::class, 'trash'])->name('api.v1.files.trash');
+    // Media v2: usage (Free {used_bytes, quota_bytes}; paid {keep_used_bytes,
+    // keep_quota_bytes}). Before /files/{file} for the same reason as trash.
+    Route::get('/files/usage', [FileController::class, 'usage'])->name('api.v1.files.usage');
     Route::delete('/files/trash', [FileController::class, 'emptyTrash'])->name('api.v1.files.trash.empty');
     Route::post('/files/trash/{ulid}/restore', [FileController::class, 'restore'])->name('api.v1.files.trash.restore');
     Route::delete('/files/trash/{ulid}', [FileController::class, 'forceDestroy'])->name('api.v1.files.trash.force');
 
     Route::get('/files/{file}', [FileController::class, 'show'])->name('api.v1.files.show');
+    // Media v2: Keep — retention never deletes a kept file (paid, within quota).
+    Route::post('/files/{file}/keep', [FileController::class, 'keep'])
+        ->middleware('throttle:60,1')
+        ->name('api.v1.files.keep');
+    Route::delete('/files/{file}/keep', [FileController::class, 'unkeep'])
+        ->middleware('throttle:60,1')
+        ->name('api.v1.files.unkeep');
     /* The owner's own download. Public Spaces and Transfers have had one
        since the bucket went private; this is the same signed URL, minted
        for the person who uploaded the bytes. */

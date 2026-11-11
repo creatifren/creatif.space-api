@@ -3,6 +3,7 @@
 namespace App\Http\Resources;
 
 use App\Models\File;
+use App\Support\Media\MediaRetention;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
 
@@ -37,6 +38,11 @@ class FileResource extends JsonResource
                 'versions',
                 fn () => 1 + $this->versions_count,
             ),
+            /* Media v2, from the same calculator the retention job deletes
+               by (MediaRetention). auto_delete_at is null when the file is
+               kept, on a queued post, or not subject to retention. */
+            'is_kept' => $this->kept_at !== null,
+            'auto_delete_at' => MediaRetention::for($this->resource)->dueAt?->utc()->toIso8601ZuluString(),
             'source' => $this->source,
             'exif' => $this->exif,
             'created_at' => $this->created_at,

@@ -3,13 +3,16 @@
 namespace App\Http\Controllers\Api\V1;
 
 use App\Enums\ActivityAction;
+use App\Exceptions\MediaRefused;
 use App\Http\Controllers\Controller;
 use App\Http\Resources\FileVersionResource;
 use App\Models\Activity;
 use App\Models\File;
 use App\Models\FileVersion;
-use App\Support\AcceptedUploads;
-use App\Support\PlanQuota;
+use App\Support\Media\FileSignature;
+use App\Support\Media\MediaQuota;
+use App\Support\Media\MediaUploadGuard;
+use App\Support\Media\PresignedUpload;
 use App\Support\Workspace;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -57,17 +60,17 @@ class FileVersionController extends Controller
         abort_unless($file->status === File::STATUS_READY, 409);
 
         $validated = $request->validate([
-            'size_bytes' => ['required', 'integer', 'min:1', 'max:'.AcceptedUploads::MAX_BYTES],
+            'size_bytes' => ['required', 'integer', 'min:1'],
             'note' => ['sometimes', 'nullable', 'string', 'max:500'],
         ]);
 
         /* The old bytes stay, so a replacement costs the new size on top of
-           what is already stored — not the difference. */
-        if (! PlanQuota::canStore($user, (int) $validated['size_bytes'])) {
-            throw ValidationException::withMessages([
-                'size_bytes' => 'Your storage is full — free some space or upgrade your plan.',
-            ]);
-        }
+           what is already stored — not the difference. Same Media v2 gates
+           as a new upload. */
+        $size = (int) $validated['size_bytes'];
+        MediaUploadGuard::presign($user, $size);
+        FileController::assertFileSize($user, $file->mime_type, $size);
+        MediaQuota::assertUploadFits($user, $size);
 
         /* The incoming bytes go to a fresh key rather than over the file's
            own. If the upload dies half way, the file still serves what it
@@ -75,11 +78,7 @@ class FileVersionController extends Controller
         $ulid = (string) str()->ulid();
         $path = FileVersion::keyFor($file, $ulid, $file->name);
 
-        ['url' => $url] = Storage::disk($file->disk)->temporaryUploadUrl(
-            $path,
-            now()->addMinutes(File::PRESIGN_TTL_MINUTES),
-            ['ContentType' => $file->mime_type],
-        );
+        $url = PresignedUpload::url($file->disk, $path, $file->mime_type, $size, now()->addMinutes(File::PRESIGN_TTL_MINUTES));
 
         return response()->json(['data' => [
             'upload_id' => $ulid,
@@ -116,14 +115,23 @@ class FileVersionController extends Controller
             ]);
         }
 
-        $realSize = $disk->size($incoming);
+        $realSize = (int) $disk->size($incoming);
 
-        if (! PlanQuota::canStore($user, $realSize)) {
+        try {
+            FileController::assertFileSize($user, $file->mime_type, $realSize);
+            MediaQuota::assertUploadFits($user, $realSize);
+        } catch (MediaRefused $e) {
             $disk->delete($incoming);
 
-            throw ValidationException::withMessages([
-                'file' => 'The upload is larger than the space you have left.',
-            ]);
+            throw $e;
+        }
+
+        // The new bytes must be the same kind of file as the old ones.
+        if (FileSignature::verify((string) FileSignature::head($disk, $incoming), $file->mime_type) === null) {
+            $disk->delete($incoming);
+            MediaUploadGuard::hit($user, 'unsupported_format');
+
+            throw MediaRefused::unsupportedFormat();
         }
 
         /* The file keeps its own path: everything that ever linked to it —
