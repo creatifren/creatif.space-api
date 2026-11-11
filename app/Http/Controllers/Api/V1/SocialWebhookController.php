@@ -16,6 +16,7 @@ use App\Support\ProductEvents;
 use App\Support\ProviderFields;
 use App\Support\SocialPostRelay;
 use App\Support\SocialProviders;
+use App\Support\WebhookEventTime;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -255,8 +256,8 @@ class SocialWebhookController extends Controller
                 'event_id' => $eventId,
                 'type' => substr('inbox.'.$event['type'], 0, 64),
                 'payload' => json_encode($event['data'], JSON_THROW_ON_ERROR),
-                'created_at' => now(),
-                'updated_at' => now(),
+                // UTC, flagged (old rows hold WIB; WebhookEventTime reads both).
+                ...WebhookEventTime::stamp(),
             ])) {
                 return;
             }

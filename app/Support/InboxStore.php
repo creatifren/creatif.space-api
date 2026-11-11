@@ -256,7 +256,9 @@ class InboxStore
             'source' => $m['source'] ?? null,
             'platform_message_id' => $m['platform_message_id'] ?? null,
             'scheduled_at' => self::time($m['scheduled_at'] ?? null),
-            'sent_at' => self::time($m['sent_at'] ?? null),
+            'sent_at' => self::time($m['sent_at'] ?? null)
+                ?? self::time($m['event_at'] ?? null)
+                ?? self::time($m['received_at'] ?? null),
         ], fn ($v) => $v !== null));
         if ($status === SocialMessage::SENT) {
             $message->error = null;
@@ -340,7 +342,12 @@ class InboxStore
             'author_username' => isset($c['author_username']) ? ProviderFields::text(ltrim((string) $c['author_username'], '@')) : null,
             'text' => $c['text'] ?? null,
             'network' => $network !== '' ? $network : $account->platform->value,
-            'commented_at' => self::time($c['created_at'] ?? null),
+            // The comment's own time; else the event's (provider envelope);
+            // else when the webhook arrived (a replay passes the stored
+            // receipt time) — never the moment of a later replay.
+            'commented_at' => self::time($c['created_at'] ?? null)
+                ?? self::time($c['event_at'] ?? null)
+                ?? self::time($c['received_at'] ?? null),
         ], fn ($v) => $v !== null));
         $comment->commented_at ??= now();
         $comment->save();

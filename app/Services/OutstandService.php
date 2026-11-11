@@ -478,6 +478,13 @@ class OutstandService implements SocialProvider
             return [];
         }
 
+        // When it happened, from the provider's envelope: stored with the
+        // event, so a replay days later still files it at its own time.
+        $at = self::pick($request->all(), 'timestamp', 'createdAt', 'created_at', 'occurredAt');
+        if ($at !== null && $at !== '') {
+            $inbox['data']['event_at'] = $at;
+        }
+
         // Outstand's own delivery id when it sends one; otherwise the event
         // and the id of the thing it is about — a redelivery has both.
         $natural = match ($event) {
