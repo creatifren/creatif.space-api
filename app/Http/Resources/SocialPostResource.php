@@ -31,6 +31,8 @@ class SocialPostResource extends JsonResource
             'approval' => $this->approval,
             'approval_by' => $this->approval_by,
             'approval_at' => $this->approval_at,
+            // A draft the owner shows the client on a Content Plan.
+            'for_review' => ($this->resource->getAttributes()['review_requested_at'] ?? null) !== null,
             // "Created by" in the post's history (RF-040): the account that
             // made it, not whoever is reading.
             'author' => $this->whenLoaded('user', fn () => $this->user->name),

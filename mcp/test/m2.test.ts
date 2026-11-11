@@ -75,6 +75,33 @@ describe('create_approval_link', () => {
     expect(payload(res).link).toEqual({ id: LINK, url: 'https://creatif.space/a/tok', status: 'active', posts: 1, approver_email: 'rani@client.test', expires_at: 'x' });
   });
 
+  it('creates a Content Plan from a date range and channels', async () => {
+    const res = await call(
+      'create_approval_link',
+      { date_from: '2026-12-01', date_to: '2026-12-31', timezone: 'Asia/Jakarta', channel_ids: [POST], approver_email: 'rani@client.test' },
+      {
+        'POST /social-approval-links': () => ({
+          status: 201,
+          body: { data: { id: LINK, url: 'https://creatif.space/a/tok', status: 'active', posts: 4, kind: 'plan', scope: { date_from: '2026-12-01', date_to: '2026-12-31' }, approver_email: 'rani@client.test', expires_at: null } },
+        }),
+      },
+    );
+    expect(app!.v1.calls[0]!.body).toEqual({
+      date_from: '2026-12-01', date_to: '2026-12-31', timezone: 'Asia/Jakarta', channel_ids: [POST], approver_email: 'rani@client.test',
+    });
+    expect(payload(res).link).toMatchObject({ kind: 'plan', posts: 4, scope: { date_from: '2026-12-01', date_to: '2026-12-31' } });
+  });
+
+  it('refuses post_ids together with a date range, and half a range, without calling the API', async () => {
+    const both = await call('create_approval_link', { post_ids: [POST], date_from: '2026-12-01', date_to: '2026-12-31', approver_email: 'rani@client.test' }, {});
+    expect(payload(both).error.code).toBe('invalid_input');
+    const half = await call('create_approval_link', { date_from: '2026-12-01', approver_email: 'rani@client.test' }, {});
+    expect(payload(half).error.code).toBe('invalid_input');
+    const bad = await call('create_approval_link', { date_from: '1 Dec', date_to: '2026-12-31', approver_email: 'rani@client.test' }, {});
+    expect(bad.isError).toBe(true);
+    expect(app!.v1.calls).toHaveLength(0);
+  });
+
   it('requires approver_email and never calls the API without one', async () => {
     const res = await call('create_approval_link', { post_ids: [POST] }, {});
     expect(res.isError).toBe(true);

@@ -19,6 +19,8 @@ use App\Notifications\SocialPostDecided;
 use App\Support\ApproverGate;
 use App\Support\ApproverSignIn;
 use App\Support\Credits;
+use App\Support\PlanQuota;
+use App\Support\PlanScope;
 use App\Support\ProductEvents;
 use App\Support\PublishFailure;
 use App\Support\ScheduleHorizon;
@@ -43,6 +45,12 @@ use Throwable;
  */
 class PublicApprovalController extends Controller
 {
+    /** The link this request resolved (postArray reads its rules). */
+    private ?SocialApprovalLink $link = null;
+
+    /** @var array<int, list<array<string, mixed>>> media per post id, primed for a page */
+    private array $media = [];
+
     public function show(Request $request, string $token): JsonResponse
     {
         $link = $this->resolve($token);
@@ -50,10 +58,23 @@ class PublicApprovalController extends Controller
             return $link;
         }
 
-        $posts = $link->posts()
+        // Filters inside the link (Content Plan views): a channel, and a date
+        // range in the link's timezone. Never wider than the link itself.
+        $filters = $request->validate([
+            'channel' => ['sometimes', 'nullable', 'string', 'max:26'],
+            'from' => ['sometimes', 'nullable', 'date_format:Y-m-d'],
+            'to' => ['sometimes', 'nullable', 'date_format:Y-m-d'],
+        ]);
+
+        $posts = PlanScope::filtered($link, $filters['channel'] ?? null, $filters['from'] ?? null, $filters['to'] ?? null)
             ->with(['targets.account', 'comments.replies'])
             ->orderBy('scheduled_at')
-            ->get();
+            ->limit(500)
+            ->get()
+            // In time order: a post sent "now" sits where it was made.
+            ->sortBy(fn (SocialPost $p) => PlanScope::when($p)?->getTimestamp() ?? 0)
+            ->values();
+        $this->media = PlanScope::media($posts);
 
         ProductEvents::approvalLinkOpened($link, $posts->count(), $request);
 
@@ -66,6 +87,18 @@ class PublicApprovalController extends Controller
             'branding_removed' => Workspace::owner($link->user)->plan()->feature('branding_removed'),
             // Who may decide, and whether the person looking can.
             'approver' => ApproverGate::viewer($request, $link),
+            // Content Plan: the scope (null on a fixed-list link), the
+            // channels to filter by, the filters applied, and per-state counts.
+            'kind' => $link->isScoped() ? 'plan' : 'list',
+            'scope' => PlanScope::toArray($link),
+            'channels' => PlanScope::channels($link),
+            'filters' => [
+                'channel' => $filters['channel'] ?? null,
+                'from' => $filters['from'] ?? null,
+                'to' => $filters['to'] ?? null,
+            ],
+            'counts' => PlanScope::counts($link),
+            'window_days' => PlanQuota::scheduleWindowDays($link->user),
             'posts' => $posts->map(fn (SocialPost $p) => $this->postArray($p))->all(),
         ]]);
     }
@@ -92,7 +125,7 @@ class PublicApprovalController extends Controller
         ]);
         $name = self::displayName($validated['name'] ?? null, $approver);
 
-        $socialPost = $link->posts()->where('ulid', $post)->firstOrFail();
+        $socialPost = PlanScope::posts($link)->where('ulid', $post)->firstOrFail();
 
         // The same decision again (a retry, a beacon after the fetch, a
         // double tap) is answered with where the post stands, not refused.
@@ -101,8 +134,18 @@ class PublicApprovalController extends Controller
         }
 
         if ($socialPost->status !== SocialPostStatus::Scheduled
-            || ! in_array($socialPost->approval, [SocialPostApproval::Client, SocialPostApproval::Revision], true)) {
+            || ! in_array($socialPost->approval, PlanScope::decidableFrom($link), true)) {
             return response()->json(['message' => 'This post has already been decided.'], 422);
+        }
+
+        // Free: only posts inside the scheduling window can be decided yet.
+        $window = PlanScope::decidability($link, $socialPost);
+        if (! $window['decidable']) {
+            return response()->json([
+                'message' => 'This post can be decided closer to its date.',
+                'reason' => 'outside_window',
+                'decidable_from' => $window['decidable_from'],
+            ], 422);
         }
 
         ApproverGate::bindIfUnbound($request, $link, $approver,
@@ -206,19 +249,22 @@ class PublicApprovalController extends Controller
         ]);
         $name = self::displayName($validated['name'] ?? null, $approver);
 
-        $eligible = $link->posts()
+        $eligible = PlanScope::posts($link)
             ->whereIn('ulid', array_unique($validated['post_ids']))
             ->where('status', SocialPostStatus::Scheduled)
-            ->whereIn('approval', [SocialPostApproval::Client->value, SocialPostApproval::Revision->value])
+            ->whereIn('approval', array_map(fn (SocialPostApproval $a) => $a->value, PlanScope::decidableFrom($link)))
             ->orderBy('scheduled_at')
-            ->get();
+            ->get()
+            // Free: only what is inside the scheduling window yet.
+            ->filter(fn (SocialPost $p) => PlanScope::decidability($link, $p)['decidable'])
+            ->values();
 
         if ($eligible->isEmpty()) {
             // Approve-all again, once everything it named is approved: the
             // same answer as the first time, nothing sent twice.
-            $named = $link->posts()->whereIn('ulid', array_unique($validated['post_ids']))->get();
+            $named = PlanScope::posts($link)->whereIn('ulid', array_unique($validated['post_ids']))->get();
             if ($named->isNotEmpty() && $named->every(fn (SocialPost $p) => $p->approval === SocialPostApproval::Approved)) {
-                $posts = $link->posts()->with(['targets.account', 'comments.replies'])->orderBy('scheduled_at')->get();
+                $posts = PlanScope::posts($link)->with(['targets.account', 'comments.replies'])->orderBy('scheduled_at')->get();
 
                 return response()->json(['data' => [
                     'posts' => $posts->map(fn (SocialPost $p) => $this->postArray($p))->all(),
@@ -265,7 +311,7 @@ class PublicApprovalController extends Controller
             ));
         }
 
-        $posts = $link->posts()->with(['targets.account', 'comments.replies'])->orderBy('scheduled_at')->get();
+        $posts = PlanScope::posts($link)->with(['targets.account', 'comments.replies'])->orderBy('scheduled_at')->get();
 
         return response()->json(['data' => [
             'posts' => $posts->map(fn (SocialPost $p) => $this->postArray($p))->all(),
@@ -283,7 +329,7 @@ class PublicApprovalController extends Controller
     private function approveFor(SocialApprovalLink $link, SocialPost $post, string $name, SocialPostRelay $relay): bool|string
     {
         try {
-            $approved = $relay->approve($post, $name, [SocialPostApproval::Client, SocialPostApproval::Revision], holdBeyondHorizon: true);
+            $approved = $relay->approve($post, $name, PlanScope::decidableFrom($link), holdBeyondHorizon: true);
 
             // A slot further out than the relay takes: the yes stands and
             // the post goes out by itself once it is close enough. The
@@ -357,7 +403,7 @@ class PublicApprovalController extends Controller
 
         $validated = $request->validate(['name' => ['sometimes', 'nullable', 'string', 'max:120']]);
         $name = self::displayName($validated['name'] ?? null, $approver);
-        $socialPost = $link->posts()->where('ulid', $post)->firstOrFail();
+        $socialPost = PlanScope::posts($link)->where('ulid', $post)->firstOrFail();
         $was = $socialPost->approval;
 
         if ($socialPost->status !== SocialPostStatus::Scheduled
@@ -399,7 +445,7 @@ class PublicApprovalController extends Controller
             'suggestion' => ['sometimes', 'nullable', 'string', 'max:63206'],
         ]);
 
-        $socialPost = $link->posts()->where('ulid', $post)->firstOrFail();
+        $socialPost = PlanScope::posts($link)->where('ulid', $post)->firstOrFail();
         $parent = isset($validated['parent_id'])
             ? $socialPost->comments()->where('ulid', $validated['parent_id'])->firstOrFail()
             : null;
@@ -464,6 +510,8 @@ class PublicApprovalController extends Controller
             return response()->json(['message' => 'This link has expired.', 'editor' => $link->user->name], 410);
         }
 
+        $this->link = $link;
+
         return $link;
     }
 
@@ -475,10 +523,27 @@ class PublicApprovalController extends Controller
      */
     private function postArray(SocialPost $post): array
     {
+        $link = $this->link;
+        $window = $link === null ? ['decidable' => false, 'decidable_from' => null] : PlanScope::decidability($link, $post);
+        $tz = $link === null ? (string) config('app.timezone') : PlanScope::timezone($link);
+
         return [
             'id' => $post->ulid,
             'caption' => $post->caption,
             'media' => $post->media ?? [],
+            // View-agnostic (Grid / Calendar / Feed): every channel the post
+            // goes to, media with kind and aspect, one state, and whether the
+            // client may decide on it now.
+            'channels' => $post->targets->map(fn ($t) => [
+                'id' => $t->account->ulid,
+                'platform' => $t->account->platform->value,
+                'handle' => $t->account->username,
+            ])->values()->all(),
+            'media_items' => $this->media[$post->id] ?? (PlanScope::media(collect([$post]))[$post->id] ?? []),
+            'state' => PlanScope::state($post),
+            'decidable' => $window['decidable'],
+            'decidable_from' => $window['decidable_from'],
+            'local_date' => PlanScope::when($post)?->setTimezone($tz)->format('Y-m-d'),
             'scheduled_at' => $post->scheduled_at?->toIso8601String(),
             'approval' => $post->approval?->value,
             'approval_by' => $post->approval_by,

@@ -548,6 +548,12 @@ Route::middleware(['auth:sanctum,mcp', EnforceTokenScope::class, EnsureNotPendin
     // "Waiting your approval": links sent to my (verified) email with posts
     // still waiting on my decision.
     Route::get('/me/approvals/waiting', [SocialApprovalController::class, 'waiting'])->name('api.v1.me.approvals.waiting');
+    // "Reports shared with you" — not built yet: always [] in its final shape.
+    Route::get('/me/reports/shared', [SocialApprovalController::class, 'sharedReports'])->name('api.v1.me.reports.shared');
+    // Show a draft to the client on a Content Plan covering its date.
+    Route::post('/social-posts/{socialPost}/review', [SocialApprovalController::class, 'markForReview'])
+        ->middleware('throttle:60,1')
+        ->name('api.v1.social-posts.review');
 
     // Bell, Needs Attention, and the five switches
     Route::get('/me/attention', [NotificationController::class, 'attention'])->name('api.v1.me.attention');

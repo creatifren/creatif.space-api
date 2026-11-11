@@ -10,12 +10,14 @@ use App\Exceptions\PublishPreflightFailed;
 use App\Exceptions\ScheduleBeyondHorizon;
 use App\Http\Controllers\Controller;
 use App\Http\Resources\SocialPostResource;
+use App\Models\SocialAccount;
 use App\Models\SocialApprovalLink;
 use App\Models\SocialPost;
 use App\Models\SocialPostComment;
 use App\Models\User;
 use App\Support\Credits;
 use App\Support\PlanQuota;
+use App\Support\PlanScope;
 use App\Support\ProductEvents;
 use App\Support\ScheduleHorizon;
 use App\Support\SocialPostRelay;
@@ -61,14 +63,19 @@ class SocialApprovalController extends Controller
     }
 
     /**
-     * One link for a set of the user's held posts. Posts on it switch to
-     * waiting for the client. Returns the URL to share by hand.
+     * One link for a set of the user's held posts — or a Content Plan: a
+     * date range (in `timezone`, default the app's) and optional channels,
+     * showing every workspace post inside it, including later ones. Posts
+     * on a fixed list switch to waiting for the client. Returns the URL to
+     * share by hand.
      */
     public function link(Request $request): JsonResponse
     {
         $validated = $request->validate([
-            'post_ids' => ['required', 'array', 'min:1', 'max:50'],
+            // A fixed list of posts, or a scope — one of the two.
+            'post_ids' => ['required_without:date_from', 'prohibits:date_from,date_to', 'array', 'min:1', 'max:50'],
             'post_ids.*' => ['string'],
+            ...self::scopeRules(),
             // The share dialog's choices; absent = no expiry.
             'expires_in_hours' => ['sometimes', 'nullable', 'integer', Rule::in([48, 168, 720])],
             // Shown to the client above the posts.
@@ -83,7 +90,11 @@ class SocialApprovalController extends Controller
             'approver_email.email' => 'That is not an email address.',
         ]);
 
-        PlanQuota::requireClientApprovals($request->user(), 'post_ids');
+        PlanQuota::requireClientApprovals($request->user(), isset($validated['date_from']) ? 'date_from' : 'post_ids');
+
+        if (isset($validated['date_from'])) {
+            return $this->createPlan($request, $validated);
+        }
 
         // Held posts, and drafts (API clients share a draft straight to a
         // client — the same hold that sending it with approval=client makes).
@@ -123,6 +134,98 @@ class SocialApprovalController extends Controller
         ProductEvents::approvalLinkCreated($link, $posts->count(), $hours);
 
         return response()->json(['data' => $this->linkArray($this->withCounts($link))], 201);
+    }
+
+    /**
+     * A Content Plan link: no posts attached; the scope decides. Free's
+     * one-client rule applies as to any link; its 7-day window applies to
+     * deciding (PlanScope::decidability), not to what the plan shows.
+     *
+     * @param  array<string, mixed>  $validated
+     */
+    private function createPlan(Request $request, array $validated): JsonResponse
+    {
+        $user = $request->user();
+        abort_unless(Workspace::canWrite($user), 403, 'Viewers cannot share posts for approval.');
+        PlanQuota::requireApprovalClient($user, $validated['client_name'] ?? null, null, 'approver_email', $validated['approver_email']);
+
+        $hours = $validated['expires_in_hours'] ?? null;
+        $link = SocialApprovalLink::create([
+            'user_id' => Workspace::owner($user)->id,
+            'title' => $validated['title'] ?? null,
+            'client_name' => $validated['client_name'] ?? null,
+            'approver_email' => $validated['approver_email'],
+            'expires_at' => $hours ? now()->addHours($hours) : null,
+        ] + self::scopeFields($user, $validated));
+
+        ProductEvents::approvalLinkCreated($link, PlanScope::posts($link)->count(), $hours);
+
+        return response()->json(['data' => $this->linkArray($this->withCounts($link))], 201);
+    }
+
+    /**
+     * Validation for a Content Plan's scope.
+     *
+     * @return array<string, list<mixed>>
+     */
+    private static function scopeRules(): array
+    {
+        return [
+            // Calendar dates in `timezone`; both ends included.
+            'date_from' => ['required_without:post_ids', 'date_format:Y-m-d'],
+            'date_to' => ['required_with:date_from', 'date_format:Y-m-d', 'after_or_equal:date_from'],
+            'timezone' => ['sometimes', 'nullable', 'string', 'timezone:all'],
+            // Social account ids (ulids) of the workspace; absent/null = all.
+            'channel_ids' => ['sometimes', 'nullable', 'array', 'max:20'],
+            'channel_ids.*' => ['string', 'max:26', 'distinct'],
+        ];
+    }
+
+    /**
+     * The stored scope from validated input; checks the span and that every
+     * channel is the workspace's.
+     *
+     * @param  array<string, mixed>  $validated
+     * @param  SocialApprovalLink|null  $link  the plan being changed (its values fill what is not sent)
+     * @return array<string, mixed>
+     *
+     * @throws ValidationException
+     */
+    private static function scopeFields(User $user, array $validated, ?SocialApprovalLink $link = null): array
+    {
+        $from = $validated['date_from'] ?? $link?->scope_from?->format('Y-m-d');
+        $to = $validated['date_to'] ?? $link?->scope_to?->format('Y-m-d');
+        $tz = array_key_exists('timezone', $validated)
+            ? ($validated['timezone'] ?: (string) config('app.timezone'))
+            : (($link === null ? null : $link->scope_timezone) ?? (string) config('app.timezone'));
+
+        if ($from === null || $to === null || $to < $from) {
+            throw ValidationException::withMessages(['date_to' => 'The plan ends before it starts.']);
+        }
+        [$starts, $ends] = PlanScope::bounds($from, $to, $tz);
+        if ($starts->diffInDays($ends) > PlanScope::MAX_DAYS) {
+            throw ValidationException::withMessages(['date_to' => 'A Content Plan covers at most '.PlanScope::MAX_DAYS.' days.']);
+        }
+
+        $accountIds = $link?->scope_account_ids;
+        if (array_key_exists('channel_ids', $validated)) {
+            $ulids = array_values(array_unique((array) ($validated['channel_ids'] ?? [])));
+            $accounts = $ulids === [] ? collect()
+                : SocialAccount::query()->where('user_id', Workspace::owner($user)->id)->whereIn('ulid', $ulids)->pluck('id');
+            if ($accounts->count() !== count($ulids)) {
+                throw ValidationException::withMessages(['channel_ids' => 'One or more channels are not connected accounts of this workspace.']);
+            }
+            $accountIds = $ulids === [] ? null : $accounts->map(fn ($id) => (int) $id)->sort()->values()->all();
+        }
+
+        return [
+            'scope_from' => $from,
+            'scope_to' => $to,
+            'scope_timezone' => $tz,
+            'scope_starts_at' => $starts,
+            'scope_ends_at' => $ends,
+            'scope_account_ids' => $accountIds,
+        ];
     }
 
     /**
@@ -174,12 +277,27 @@ class SocialApprovalController extends Controller
             'add_post_ids.*' => ['string'],
             'remove_post_ids' => ['sometimes', 'array', 'max:'.self::MAX_POSTS],
             'remove_post_ids.*' => ['string'],
+            // Content Plan only: move or narrow the scope.
+            'date_from' => ['sometimes', 'date_format:Y-m-d'],
+            'date_to' => ['sometimes', 'date_format:Y-m-d'],
+            'timezone' => ['sometimes', 'nullable', 'string', 'timezone:all'],
+            'channel_ids' => ['sometimes', 'nullable', 'array', 'max:20'],
+            'channel_ids.*' => ['string', 'max:26', 'distinct'],
         ]);
 
         $link = $socialApprovalLink;
         if ($link->revoked_at !== null) {
             return response()->json(['message' => 'This link was revoked for good — make a new one from List.'], 422);
         }
+
+        $scopeKeys = array_intersect_key($validated, array_flip(['date_from', 'date_to', 'timezone', 'channel_ids']));
+        if ($link->isScoped() && (isset($validated['add_post_ids']) || isset($validated['remove_post_ids']))) {
+            return response()->json(['message' => 'A Content Plan shows every post in its dates — change the dates or channels instead.', 'errors' => ['add_post_ids' => ['A Content Plan has no post list.']]], 422);
+        }
+        if (! $link->isScoped() && $scopeKeys !== []) {
+            return response()->json(['message' => 'This link is a fixed list of posts — make a Content Plan to share a date range.', 'errors' => ['date_from' => ['Not a Content Plan.']]], 422);
+        }
+        $scope = $scopeKeys === [] ? [] : self::scopeFields($request->user(), $validated, $link);
 
         // Asking the client about more posts is a new request; renaming,
         // extending or taking posts off a link already sent is not.
@@ -212,7 +330,8 @@ class SocialApprovalController extends Controller
             ? $link->posts()->whereIn('ulid', array_unique($validated['remove_post_ids']))->pluck('social_posts.id')
             : collect();
 
-        $after = $link->posts()->count() + $add->count() - $remove->count();
+        // A fixed list's size; a Content Plan has no list.
+        $after = $link->isScoped() ? 1 : $link->posts()->count() + $add->count() - $remove->count();
         if ($after > self::MAX_POSTS) {
             return response()->json(['message' => 'A link holds at most '.self::MAX_POSTS.' posts.'], 422);
         }
@@ -220,7 +339,7 @@ class SocialApprovalController extends Controller
             return response()->json(['message' => 'A link needs at least one post — revoke it instead.'], 422);
         }
 
-        DB::transaction(function () use ($link, $validated, $add, $remove): void {
+        DB::transaction(function () use ($link, $validated, $add, $remove, $scope): void {
             $fields = array_intersect_key($validated, array_flip(['title', 'client_name', 'approver_email']));
             if (isset($fields['approver_email'])) {
                 // Re-addressed by the owner: no longer a first-use binding.
@@ -231,6 +350,7 @@ class SocialApprovalController extends Controller
                 $fields['expires_at'] = $hours ? now()->addHours($hours) : null;
                 $fields['extended_at'] = now();
             }
+            $fields += $scope;
             if ($fields !== []) {
                 $link->update($fields);
             }
@@ -272,7 +392,7 @@ class SocialApprovalController extends Controller
             return response()->json(['message' => 'This link was revoked — approve its posts one by one in the Feed.'], 422);
         }
 
-        $waiting = $link->posts()
+        $waiting = PlanScope::posts($link)
             ->where('status', SocialPostStatus::Scheduled)
             ->where('approval', SocialPostApproval::Client->value)
             ->orderBy('scheduled_at')
@@ -485,6 +605,15 @@ class SocialApprovalController extends Controller
             'posts as approved_count' => fn ($q) => $q->where('approval', SocialPostApproval::Approved->value),
             'posts as waiting_count' => fn ($q) => $q->where('approval', SocialPostApproval::Client->value),
             'posts as revision_count' => fn ($q) => $q->where('approval', SocialPostApproval::Revision->value),
+            // The rest of the states, for by_state — still one query.
+            'posts as held_count' => fn ($q) => $q->where('status', SocialPostStatus::Scheduled->value)
+                ->where('approval', SocialPostApproval::Awaiting->value),
+            'posts as scheduled_count' => fn ($q) => $q->where('status', SocialPostStatus::Scheduled->value)
+                ->whereNull('approval'),
+            'posts as draft_count' => fn ($q) => $q->where('status', SocialPostStatus::Draft->value),
+            'posts as published_count' => fn ($q) => $q->where('status', SocialPostStatus::Published->value),
+            'posts as approved_open_count' => fn ($q) => $q->where('status', SocialPostStatus::Scheduled->value)
+                ->where('approval', SocialPostApproval::Approved->value),
         ];
 
         return $target instanceof Builder ? $target->withCount($counts) : $target->loadCount($counts);
@@ -495,7 +624,7 @@ class SocialApprovalController extends Controller
      */
     private function detail(SocialApprovalLink $link): array
     {
-        $posts = $link->posts()
+        $posts = PlanScope::posts($link)
             ->with(['targets.account', 'comments' => fn ($q) => $q->whereNull('resolved_at')->with('replies')])
             ->orderBy('scheduled_at')
             ->get();
@@ -511,6 +640,8 @@ class SocialApprovalController extends Controller
      */
     private function linkArray(SocialApprovalLink $link): array
     {
+        $plan = $link->isScoped() ? PlanScope::counts($link) : null;
+
         return [
             'id' => $link->ulid,
             'url' => $link->url(),
@@ -519,12 +650,30 @@ class SocialApprovalController extends Controller
             // Null on links made before signed-in approvers until someone binds it.
             'approver_email' => $link->approver_email,
             'approver_bound_at' => $link->approver_bound_at?->toIso8601String(),
-            'posts' => $link->posts_count ?? 0,
+            // 'list' (fixed posts) or 'plan' (Content Plan: scope below).
+            'kind' => $link->isScoped() ? 'plan' : 'list',
+            'scope' => PlanScope::toArray($link),
+            'posts' => $plan === null ? ($link->posts_count ?? 0) : $plan['total'],
             'status' => $link->status(),
-            'counts' => [
+            // approved / waiting / revision as before; by_state adds every
+            // state (waiting, changes_requested, approved, scheduled, draft).
+            'counts' => $plan === null ? [
                 'approved' => (int) ($link->approved_count ?? 0),
                 'waiting' => (int) ($link->waiting_count ?? 0),
                 'revision' => (int) ($link->revision_count ?? 0),
+            ] : [
+                'approved' => $plan[PlanScope::STATE_APPROVED],
+                'waiting' => $plan[PlanScope::STATE_WAITING],
+                'revision' => $plan[PlanScope::STATE_CHANGES],
+            ],
+            'by_state' => $plan ?? [
+                'total' => (int) ($link->posts_count ?? 0),
+                PlanScope::STATE_WAITING => (int) ($link->waiting_count ?? 0) + (int) ($link->held_count ?? 0),
+                PlanScope::STATE_CHANGES => (int) ($link->revision_count ?? 0),
+                PlanScope::STATE_APPROVED => (int) ($link->approved_open_count ?? 0),
+                PlanScope::STATE_SCHEDULED => (int) ($link->scheduled_count ?? 0),
+                PlanScope::STATE_DRAFT => (int) ($link->draft_count ?? 0),
+                PlanScope::STATE_PUBLISHED => (int) ($link->published_count ?? 0),
             ],
             'expires_at' => $link->expires_at?->toIso8601String(),
             'extended_at' => $link->extended_at?->toIso8601String(),
@@ -548,31 +697,79 @@ class SocialApprovalController extends Controller
         $links = SocialApprovalLink::query()
             ->live()
             ->where('approver_email', mb_strtolower(trim($user->email)))
-            ->whereHas('posts', fn ($q) => $q->where('status', SocialPostStatus::Scheduled)
-                ->where('approval', SocialPostApproval::Client->value))
-            ->with(['user:id,name', 'posts' => fn ($q) => $q->where('status', SocialPostStatus::Scheduled)
-                ->where('approval', SocialPostApproval::Client->value)
-                ->orderBy('scheduled_at')])
+            ->with('user:id,name')
             ->latest('id')
             ->limit(100)
             ->get();
 
-        return response()->json(['data' => $links->map(fn (SocialApprovalLink $link) => [
-            'link' => [
-                'url' => $link->url(),
-                'title' => $link->title,
-                'editor' => $link->user->name,
-                'expires_at' => $link->expires_at?->toIso8601String(),
-                'created_at' => $link->created_at?->toIso8601String(),
-            ],
-            'waiting' => $link->posts->count(),
-            'posts' => $link->posts->map(fn (SocialPost $p) => [
-                'id' => $p->ulid,
-                'caption' => str($p->caption)->limit(140)->toString(),
-                'scheduled_at' => $p->scheduled_at?->toIso8601String(),
-                'approval' => $p->approval?->value,
-            ])->values()->all(),
-        ])->all()]);
+        $rows = [];
+        foreach ($links as $link) {
+            // Fixed lists and Content Plans alike: what is waiting on me.
+            $posts = PlanScope::posts($link)
+                ->where('status', SocialPostStatus::Scheduled)
+                ->whereIn('approval', array_map(fn (SocialPostApproval $a) => $a->value, PlanScope::decidableFrom($link)))
+                ->whereNot('approval', SocialPostApproval::Revision->value)
+                ->orderBy('scheduled_at')
+                ->get();
+            if ($posts->isEmpty()) {
+                continue;
+            }
+
+            $rows[] = [
+                'link' => [
+                    'url' => $link->url(),
+                    'title' => $link->title,
+                    'editor' => $link->user->name,
+                    'kind' => $link->isScoped() ? 'plan' : 'list',
+                    'scope' => PlanScope::toArray($link),
+                    'expires_at' => $link->expires_at?->toIso8601String(),
+                    'created_at' => $link->created_at?->toIso8601String(),
+                ],
+                'waiting' => $posts->count(),
+                'posts' => $posts->map(fn (SocialPost $p) => [
+                    'id' => $p->ulid,
+                    'caption' => str($p->caption)->limit(140)->toString(),
+                    'scheduled_at' => $p->scheduled_at?->toIso8601String(),
+                    'approval' => $p->approval?->value,
+                    'decidable' => PlanScope::decidability($link, $p)['decidable'],
+                ])->values()->all(),
+            ];
+        }
+
+        return response()->json(['data' => $rows]);
+    }
+
+    /**
+     * GET /me/reports/shared — "Reports shared with you". Not built yet:
+     * always empty, in its final shape so the app can render it:
+     * [{report_id, title, period: {from, to}, owner: {name}, url}].
+     */
+    public function sharedReports(Request $request): JsonResponse
+    {
+        return response()->json(['data' => []]);
+    }
+
+    /**
+     * POST /social-posts/{post}/review {for_review: bool} — show a draft to
+     * the client on a Content Plan covering its date (or stop showing it).
+     * Drafts only: a scheduled post is on the plan anyway.
+     */
+    public function markForReview(Request $request, SocialPost $socialPost): JsonResponse
+    {
+        self::writable($request->user(), $socialPost->user_id);
+        $validated = $request->validate(['for_review' => ['required', 'boolean']]);
+
+        if ($socialPost->status !== SocialPostStatus::Draft) {
+            return response()->json(['message' => 'Only a draft is marked for review — a scheduled post is on the plan already.'], 422);
+        }
+
+        $socialPost->update(['review_requested_at' => $validated['for_review'] ? now() : null]);
+
+        return response()->json(['data' => [
+            'id' => $socialPost->ulid,
+            'for_review' => $socialPost->review_requested_at !== null,
+            'review_requested_at' => $socialPost->review_requested_at?->toIso8601String(),
+        ]]);
     }
 
     /**
