@@ -49,7 +49,6 @@ class ApplyMediaRetention implements ShouldQueue
 
         File::query()
             ->where('status', File::STATUS_READY)
-            ->whereNull('kept_at')
             ->where(fn ($q) => $q->where('mime_type', 'like', 'image/%')->orWhere('mime_type', 'like', 'video/%'))
             ->chunkById($chunk, function ($files) use ($mode, &$summary) {
                 MediaRetention::flush();

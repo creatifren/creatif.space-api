@@ -64,10 +64,11 @@ final class MediaRetention
 
             // Only files the rules could put a date on need the lookups.
             $ids = $group
-                ->filter(fn (File $f) => $f->status === File::STATUS_READY && ! $f->trashed() && $f->kept_at === null && FileSignature::isPostMedia((string) $f->mime_type))
+                // Kept files too: on Free after a downgrade they have a date.
+                ->filter(fn (File $f) => $f->status === File::STATUS_READY && ! $f->trashed() && FileSignature::isPostMedia((string) $f->mime_type))
                 ->pluck('id')->all();
             $context = $ids === []
-                ? ['tier' => MediaLimits::FREE, 'protected' => [], 'haystack' => '', 'posts' => []]
+                ? ['tier' => MediaLimits::FREE, 'downgraded_at' => null, 'protected' => [], 'haystack' => '', 'posts' => []]
                 : self::context($owner, $ids);
 
             foreach ($group as $file) {
@@ -84,7 +85,7 @@ final class MediaRetention
     /**
      * Pure rule evaluation — every input is in $context.
      *
-     * @param  array{tier: string, protected: array<int, true>, haystack: string, posts: array<int, list<array{status: SocialPostStatus, published_at: ?CarbonImmutable, retry_until: ?CarbonImmutable}>>}  $context
+     * @param  array{tier: string, downgraded_at?: ?CarbonImmutable, protected: array<int, true>, haystack: string, posts: array<int, list<array{status: SocialPostStatus, published_at: ?CarbonImmutable, retry_until: ?CarbonImmutable}>>}  $context
      */
     public static function decide(File $file, array $context): RetentionVerdict
     {
@@ -93,7 +94,8 @@ final class MediaRetention
         if ($file->status !== File::STATUS_READY || $file->trashed()) {
             return new RetentionVerdict(RetentionVerdict::NOT_READY, null, $kept);
         }
-        if ($kept) {
+        // Paid: a kept file is never taken.
+        if ($kept && $context['tier'] !== MediaLimits::FREE) {
             return new RetentionVerdict(RetentionVerdict::KEPT, null, true);
         }
         if (! FileSignature::isPostMedia((string) $file->mime_type)) {
@@ -106,7 +108,19 @@ final class MediaRetention
         $posts = $context['posts'][$file->id] ?? [];
         $queued = array_filter($posts, fn ($p) => in_array($p['status'], [SocialPostStatus::Draft, SocialPostStatus::Scheduled], true));
         if ($queued !== []) {
-            return new RetentionVerdict(RetentionVerdict::QUEUED, null, false);
+            return new RetentionVerdict(RetentionVerdict::QUEUED, null, $kept);
+        }
+
+        // Downgrade policy (/terms): after a paid account drops to Free its
+        // kept files stay for media.retention.downgrade_keep_days (30) from
+        // the downgrade, then go. Kept on Free with no downgrade on record
+        // (cannot normally happen: Keep is paid) stays kept.
+        if ($kept) {
+            $downgraded = $context['downgraded_at'] ?? null;
+
+            return $downgraded === null
+                ? new RetentionVerdict(RetentionVerdict::KEPT, null, true)
+                : new RetentionVerdict(RetentionVerdict::FREE_KEPT_GRACE, $downgraded->addDays((int) config('media.retention.downgrade_keep_days')), true);
         }
 
         $published = array_values(array_filter(array_map(fn ($p) => $p['status'] === SocialPostStatus::Published ? $p['published_at'] : null, $posts)));
@@ -145,7 +159,7 @@ final class MediaRetention
      * Everything decide() needs about one owner's files.
      *
      * @param  list<int>  $ids
-     * @return array{tier: string, protected: array<int, true>, haystack: string, posts: array<int, list<array{status: SocialPostStatus, published_at: ?CarbonImmutable, retry_until: ?CarbonImmutable}>>}
+     * @return array{tier: string, downgraded_at: ?CarbonImmutable, protected: array<int, true>, haystack: string, posts: array<int, list<array{status: SocialPostStatus, published_at: ?CarbonImmutable, retry_until: ?CarbonImmutable}>>}
      */
     public static function context(User $owner, array $ids): array
     {
@@ -177,6 +191,7 @@ final class MediaRetention
 
         return [
             'tier' => MediaLimits::tier($owner),
+            'downgraded_at' => MediaLimits::downgradedAt($owner),
             'protected' => $protected,
             'haystack' => self::brandHaystack($owner),
             'posts' => $posts,

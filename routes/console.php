@@ -4,6 +4,7 @@ use App\Jobs\AggregateSpaceStats;
 use App\Jobs\ApplyMediaRetention;
 use App\Jobs\BackfillFileChecksums;
 use App\Jobs\ExpireSubscriptions;
+use App\Jobs\NotifyKeptFilesDowngrade;
 use App\Jobs\PruneActivityLog;
 use App\Jobs\PruneMcpAuditLogs;
 use App\Jobs\PruneSpaceArchives;
@@ -83,6 +84,13 @@ Schedule::job(new PurgeTrashedFiles)->dailyAt('01:45');
  * only logs what it would delete; delete deletes.
  */
 Schedule::job(new ApplyMediaRetention)->dailyAt('01:48')->withoutOverlapping();
+
+/*
+ * Downgrade notices: 7 days and 1 day before a downgraded account's kept
+ * files go (MEDIA_DOWNGRADE_NOTICES=report logs only; send emails). In the
+ * morning, when people read mail.
+ */
+Schedule::job(new NotifyKeptFilesDowngrade)->dailyAt('09:10');
 
 /*
  * Built "Download all" archives live 24 hours. Without this every press
