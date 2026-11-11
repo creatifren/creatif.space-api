@@ -287,13 +287,13 @@ describe('conversations', function () {
 
         $this->actingAs($b)->getJson('/api/v1/inbox/conversations')->assertOk()->assertJsonCount(0, 'data');
         $this->getJson('/api/v1/inbox/comments')->assertOk()->assertJsonCount(0, 'data');
-        $this->getJson("/api/v1/inbox/conversations/{$thread->ulid}")->assertForbidden();
-        $this->postJson("/api/v1/inbox/conversations/{$thread->ulid}/messages", ['content' => 'hi'])->assertForbidden();
-        $this->postJson("/api/v1/inbox/conversations/{$thread->ulid}/read")->assertForbidden();
-        $this->patchJson("/api/v1/inbox/conversations/{$thread->ulid}", ['status' => 'done'])->assertForbidden();
-        $this->postJson("/api/v1/inbox/comments/{$comment->ulid}/reply", ['content' => 'x'])->assertForbidden();
-        $this->postJson("/api/v1/inbox/comments/{$comment->ulid}/private-reply", ['content' => 'x'])->assertForbidden();
-        $this->postJson("/api/v1/inbox/comments/{$comment->ulid}/read")->assertForbidden();
+        $this->getJson("/api/v1/inbox/conversations/{$thread->ulid}")->assertNotFound();
+        $this->postJson("/api/v1/inbox/conversations/{$thread->ulid}/messages", ['content' => 'hi'])->assertNotFound();
+        $this->postJson("/api/v1/inbox/conversations/{$thread->ulid}/read")->assertNotFound();
+        $this->patchJson("/api/v1/inbox/conversations/{$thread->ulid}", ['status' => 'done'])->assertNotFound();
+        $this->postJson("/api/v1/inbox/comments/{$comment->ulid}/reply", ['content' => 'x'])->assertNotFound();
+        $this->postJson("/api/v1/inbox/comments/{$comment->ulid}/private-reply", ['content' => 'x'])->assertNotFound();
+        $this->postJson("/api/v1/inbox/comments/{$comment->ulid}/read")->assertNotFound();
         $this->getJson('/api/v1/inbox/summary')->assertJsonPath('data.total_unread', 0);
 
         Http::assertNothingSent();

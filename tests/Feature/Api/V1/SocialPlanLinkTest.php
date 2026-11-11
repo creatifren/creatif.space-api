@@ -59,5 +59,5 @@ it('refuses another user\'s accounts and links', function () {
     $link = $this->actingAs($other->user)->postJson('/api/v1/social-plan-links', [
         'starts_at' => '2026-11-01', 'ends_at' => '2026-11-30',
     ])->json('data.id');
-    $this->actingAs($user)->deleteJson("/api/v1/social-plan-links/{$link}")->assertForbidden();
+    $this->actingAs($user)->deleteJson("/api/v1/social-plan-links/{$link}")->assertNotFound();
 });

@@ -4,6 +4,7 @@ namespace App\Models;
 
 use App\Enums\TeamMemberStatus;
 use App\Enums\TeamRole;
+use App\Models\Contracts\WorkspaceOwned;
 use Carbon\CarbonImmutable;
 use Database\Factories\TeamMemberFactory;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
@@ -27,7 +28,7 @@ use Illuminate\Notifications\Notifiable;
  * @property-read User $owner
  * @property-read User|null $member
  */
-class TeamMember extends Model
+class TeamMember extends Model implements WorkspaceOwned
 {
     /** @use HasFactory<TeamMemberFactory> */
     use HasFactory, Notifiable;
@@ -73,6 +74,11 @@ class TeamMember extends Model
         static::creating(function (self $member): void {
             $member->ulid ??= (string) str()->ulid();
         });
+    }
+
+    public function workspaceUserId(): ?int
+    {
+        return $this->owner_id;
     }
 
     public function getRouteKeyName(): string

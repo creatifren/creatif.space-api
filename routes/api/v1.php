@@ -53,6 +53,7 @@ use App\Http\Middleware\EnforceTokenScope;
 use App\Http\Middleware\EnsureInboxEnabled;
 use App\Http\Middleware\EnsureNotPendingDeletion;
 use App\Http\Middleware\MarketingSiteOrigin;
+use App\Http\Middleware\ScopeToWorkspace;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
 use Laravel\Sanctum\Http\Middleware\EnsureFrontendRequestsAreStateful;
@@ -255,7 +256,8 @@ Route::post('/billing/google/verify', [GooglePlayBillingController::class, 'veri
 
 // Authenticated: Sanctum SPA cookie, or a bearer token (OAuth access token
 // or personal API key) — which EnforceTokenScope fences to config('mcp.routes').
-Route::middleware(['auth:sanctum,mcp', EnforceTokenScope::class, EnsureNotPendingDeletion::class])->group(function () {
+// ScopeToWorkspace: an id from another workspace answers 404, never 403.
+Route::middleware(['auth:sanctum,mcp', EnforceTokenScope::class, EnsureNotPendingDeletion::class, ScopeToWorkspace::class])->group(function () {
     Route::get('/me', MeController::class)->name('api.v1.me');
     Route::post('/me/tour', TourController::class)->name('api.v1.me.tour');
     Route::post('/handles', [HandleController::class, 'claim'])

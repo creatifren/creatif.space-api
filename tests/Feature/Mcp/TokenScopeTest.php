@@ -221,7 +221,7 @@ describe('V1 additions for MCP', function () {
             ->assertOk()->assertJsonPath('data.caption', 'Mine')->assertJsonPath('data.id', $post->ulid);
 
         app('auth')->forgetGuards();
-        $this->actingAs(User::factory()->create(), 'web')->getJson('/api/v1/social-posts/'.$post->ulid)->assertForbidden();
+        $this->actingAs(User::factory()->create(), 'web')->getJson('/api/v1/social-posts/'.$post->ulid)->assertNotFound();
     });
 
     it('filters posts by channel, date window and limit', function () {

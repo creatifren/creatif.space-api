@@ -110,6 +110,18 @@ final class Workspace
             ->push($owner->id);
     }
 
+    /**
+     * Whether a row made by $rowUserId sits in this person's workspace (their
+     * owner and every active member). Outside it, a row does not exist for
+     * them: callers answer 404, never 403, so an id's existence never leaks.
+     * See ScopeToWorkspace, which applies it to every route-bound model.
+     */
+    public static function contains(User $user, ?int $rowUserId): bool
+    {
+        return $rowUserId !== null
+            && self::memberIds(self::owner($user))->contains($rowUserId);
+    }
+
     public static function seats(User $owner): int
     {
         $subscription = $owner->activeSubscription();

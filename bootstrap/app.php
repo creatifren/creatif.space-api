@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Middleware\AssignRequestId;
+use App\Http\Middleware\ScopeToWorkspace;
 use App\Http\Middleware\ThrottlePerRoute;
 use App\Http\Middleware\TrustAppServer;
 use App\Services\ErrorTracking;
@@ -10,6 +11,7 @@ use Illuminate\Foundation\Configuration\Middleware;
 use Illuminate\Http\Exceptions\ThrottleRequestsException;
 use Illuminate\Http\Middleware\TrustProxies;
 use Illuminate\Http\Request;
+use Illuminate\Routing\Middleware\SubstituteBindings;
 use Illuminate\Support\Facades\Route;
 use Symfony\Component\HttpKernel\Exception\HttpException;
 use Symfony\Component\HttpKernel\Exception\HttpExceptionInterface;
@@ -48,6 +50,9 @@ return Application::configure(basePath: dirname(__DIR__))
 
         // Every request gets an id: logs, error tracking, X-Request-Id back.
         $middleware->prepend(AssignRequestId::class);
+
+        // Workspace scope needs the bound models: always after binding.
+        $middleware->appendToPriorityList(SubstituteBindings::class, ScopeToWorkspace::class);
 
         $middleware->alias([
             'throttle' => ThrottlePerRoute::class,

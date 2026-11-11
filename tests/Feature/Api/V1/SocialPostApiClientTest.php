@@ -33,7 +33,7 @@ describe('GET /social-posts/{post}', function () {
 
         $this->actingAs(User::factory()->create())
             ->getJson("/api/v1/social-posts/{$post->ulid}")
-            ->assertForbidden();
+            ->assertNotFound();
     });
 
     it('answers 404 for an unknown id', function () {
