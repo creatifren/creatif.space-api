@@ -118,13 +118,13 @@ export const draftPost = defineTool({
   title: 'Draft a post',
   description:
     'Saves a DRAFT post in creatif.space for the given channels. Nothing is published or scheduled and no Credits are spent (on every plan, Free included); the user reviews and sends it from creatif.space, or you schedule/publish it with the user’s explicit agreement. ' +
-    'Attach media by library file ids (from list_files) and/or public https media URLs (up to 10 in all). ' +
+    'Attach media by library file ids (from list_files, or from confirm_media_upload for a file you just uploaded — an upload that was not confirmed is refused with file_not_ready) and/or public https media URLs (up to 10 in all). ' +
     'captions_by_channel optionally overrides the caption for specific channels, e.g. a shorter one for X.',
   scope: 'draft',
   input: {
     caption: z.string().min(1).max(63206).describe('The post caption'),
     channel_ids: z.array(ulid('Channel')).min(1).max(20).describe('Channels to post to (ids from list_channels)'),
-    file_ids: z.array(ulid('File')).max(10).optional().describe('Library files to attach (ids from list_files)'),
+    file_ids: z.array(ulid('File')).max(10).optional().describe('Library files to attach (ids from list_files or confirm_media_upload)'),
     media_urls: z.array(z.url({ protocol: /^https$/ })).max(10).optional().describe('Public https image/video URLs to attach'),
     captions_by_channel: z
       .record(z.string(), z.string().min(1).max(63206))

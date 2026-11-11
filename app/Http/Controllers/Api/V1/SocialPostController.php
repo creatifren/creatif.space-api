@@ -348,10 +348,26 @@ class SocialPostController extends Controller
             'media' => ['sometimes', 'array', 'max:10'],
             'media.*.url' => ['required', 'url:https'],
             'media.*.thumbnail_url' => ['sometimes', 'nullable', 'url:https'],
+            // Library files (ready, this workspace's): appended after `media`,
+            // and together they replace the post's media — as on create.
+            'file_ids' => ['sometimes', 'array', 'max:10'],
+            'file_ids.*' => ['string', 'max:26', 'distinct'],
             // Labels are ours alone — never sent to the provider.
             'labels' => ['sometimes', 'nullable', 'array', 'max:10'],
             'labels.*' => ['string', 'max:40'],
         ]);
+
+        if (array_key_exists('file_ids', $validated)) {
+            $validated['media'] = [
+                ...($validated['media'] ?? []),
+                ...($validated['file_ids'] === [] ? [] : $this->libraryMedia($request->user(), $validated['file_ids'])),
+            ];
+            unset($validated['file_ids']);
+
+            if (count($validated['media']) > 10) {
+                throw ValidationException::withMessages(['file_ids' => 'A post takes up to 10 media items.']);
+            }
+        }
 
         // Through a connected app or API key, only a draft or a post still
         // waiting for approval changes: nothing already at the provider, on
