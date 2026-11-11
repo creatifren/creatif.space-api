@@ -4,6 +4,10 @@ use App\Models\File;
 use App\Models\Space;
 use App\Models\User;
 
+// Plans v2 puts Spaces and the link in bio behind Pro on Free (feature `spaces`, tested in
+// PlansV2Test). These tests are about the rules underneath, so Free has it on.
+beforeEach(fn () => planWith('free', ['spaces' => true]));
+
 describe('create', function () {
     it('creates a draft private space with a slugified address', function () {
         $user = User::factory()->create();

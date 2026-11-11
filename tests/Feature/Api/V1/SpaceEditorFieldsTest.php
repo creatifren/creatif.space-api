@@ -5,6 +5,10 @@ use App\Models\Space;
 use App\Models\User;
 use Illuminate\Support\Facades\Hash;
 
+// Plans v2 puts Spaces and the link in bio behind Pro on Free (feature `spaces`, tested in
+// PlansV2Test). These tests are about the rules underneath, so Free has it on.
+beforeEach(fn () => planWith('free', ['spaces' => true]));
+
 /*
  * The fields the Space Editor writes, proven to survive a save.
  *

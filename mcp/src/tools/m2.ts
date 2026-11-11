@@ -70,8 +70,13 @@ export class PreviewTokens {
 
 export const previewTokens = new PreviewTokens();
 
-async function preview(ctx: ToolContext, postId: string): Promise<SendPreview> {
-  const { data } = await ctx.v1.get<{ data: SendPreview }>(`/social-posts/${encodeURIComponent(postId)}/send-preview`);
+async function preview(ctx: ToolContext, postId: string, scheduledAt?: string): Promise<SendPreview> {
+  // With the slot, the plan's limits (scheduling window, queue) answer
+  // plan_required here, before the user is asked to confirm anything.
+  const { data } = await ctx.v1.get<{ data: SendPreview }>(
+    `/social-posts/${encodeURIComponent(postId)}/send-preview`,
+    scheduledAt ? { scheduled_at: scheduledAt } : undefined,
+  );
   if (!data.sendable) {
     throw new ToolError(
       'invalid_input',
@@ -99,7 +104,7 @@ async function confirmedSend(
   const user = ctx.auth.extra.userUlid;
   const token = previewTokens.take(user, postId);
   if (!token) {
-    const fresh = previewResult(await preview(ctx, postId), action, scheduledAt);
+    const fresh = previewResult(await preview(ctx, postId, scheduledAt), action, scheduledAt);
     return { ...fresh, note: 'No current preview of this post had been shown (or it expired after 10 minutes), so nothing was sent. Show the user this preview first.' };
   }
   try {
@@ -109,7 +114,7 @@ async function confirmedSend(
   } catch (e) {
     if (e instanceof V1Error && e.status === 409 && e.body?.code === 'preview_stale') {
       previewTokens.forget(user, postId);
-      const fresh = previewResult(await preview(ctx, postId), action, scheduledAt);
+      const fresh = previewResult(await preview(ctx, postId, scheduledAt), action, scheduledAt);
       throw new ToolError(
         'preview_stale',
         'Nothing was sent: the post’s channels or Credit cost changed since the preview (or 10 minutes passed).',
@@ -153,7 +158,8 @@ export const createApprovalLink = defineTool({
   title: 'Create a client approval link',
   description:
     'Creates a creatif.space approval link for one or more posts (drafts, or posts already held for approval) and returns its URL for the user to share with their client. ' +
-    'The posts are held — nothing is published until the client approves. Pro and Max plans only: on Free it returns plan_required with a message to pass on to the user as it is (it has the trial/upgrade link). ' +
+    'The posts are held — nothing is published until the client approves. Every plan: on Free, links are for one client at a time (client_name tells clients apart; links for the same client are fine), posts scheduled at most 7 days ahead, and at most 10 queued posts. ' +
+    'Past a Free limit it returns plan_required (details.feature approval_clients, schedule_window or queue_limit) with a message to pass on to the user as it is (it has the trial/upgrade link). ' +
     'The link is not sent anywhere by this tool; hand the URL to the user.',
   scope: 'approve',
   input: {
@@ -273,7 +279,8 @@ export const schedulePost = defineTool({
   description:
     'Schedules a DRAFT to publish at a future time on its channels. Two steps: call with confirm false (default) to get a preview — channels and Credit cost; ' +
     'show it to the user, and only after they explicitly agree call again with confirm: true. The confirm sends exactly what that preview showed (it carries the preview’s signed confirm_token, valid 10 minutes); if the channels or cost changed, nothing is sent and you get preview_stale with the new preview. Credits are charged when it is scheduled (Monthly Credits first, then Top-up; on every plan). ' +
-    'If the Credits do not cover it you get insufficient_credits or quota_exceeded with a message to pass on as it is — nothing is charged. Connected apps can send at most 20 posts a day.',
+    'If the Credits do not cover it you get insufficient_credits or quota_exceeded with a message to pass on as it is — nothing is charged. ' +
+    'On Free, scheduled_at is at most 7 days ahead and at most 10 posts can be queued: past that you get plan_required (details.feature schedule_window or queue_limit) with a message to pass on as it is. Connected apps can send at most 20 posts a day.',
   scope: 'publish',
   input: {
     post_id: ulid('Draft post'),
@@ -287,7 +294,7 @@ export const schedulePost = defineTool({
       throw new ToolError('invalid_input', 'scheduled_at must be in the future.', 'Use publish_post to send now, or pick a later time.');
     }
     if (!args.confirm) {
-      return previewResult(await preview(ctx, args.post_id), 'schedule', args.scheduled_at);
+      return previewResult(await preview(ctx, args.post_id, args.scheduled_at), 'schedule', args.scheduled_at);
     }
     const res = await confirmedSend(ctx, args.post_id, 'schedule', { scheduled_at: args.scheduled_at }, args.scheduled_at);
     if (!isSent(res)) return res;
@@ -301,7 +308,7 @@ export const publishPost = defineTool({
   description:
     'Publishes a DRAFT now on its channels — this goes public and cannot be undone. Two steps: call with confirm false (default) to get a preview — channels and Credit cost; ' +
     'show it to the user, and only after they explicitly agree call again with confirm: true. The confirm sends exactly what that preview showed (it carries the preview’s signed confirm_token, valid 10 minutes); if the channels or cost changed, nothing is sent and you get preview_stale with the new preview. Credits are charged (Monthly Credits first, then Top-up; on every plan). ' +
-    'If the Credits do not cover it you get insufficient_credits or quota_exceeded with a message to pass on as it is — nothing is charged. Connected apps can send at most 20 posts a day.',
+    'If the Credits do not cover it you get insufficient_credits or quota_exceeded, and past a plan limit plan_required, each with a message to pass on as it is — nothing is charged. Connected apps can send at most 20 posts a day.',
   scope: 'publish',
   input: {
     post_id: ulid('Draft post'),

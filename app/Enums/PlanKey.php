@@ -9,6 +9,8 @@ enum PlanKey: string
     case Max = 'max';
     /** Planned, not sold: the row exists with is_active = false. */
     case Team = 'team';
+    /** Listed on /plans with contact_sales; never sold through checkout. */
+    case Enterprise = 'enterprise';
 
     /**
      * The plans checkout sells.

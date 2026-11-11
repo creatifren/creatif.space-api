@@ -2,13 +2,13 @@
 
 namespace App\Http\Controllers\Api\V1;
 
-use App\Models\Activity;
 use App\Enums\ActivityAction;
 use App\Enums\SpaceStatus;
 use App\Enums\SpaceViewMode;
 use App\Http\Controllers\Controller;
 use App\Http\Resources\SpaceListResource;
 use App\Http\Resources\SpaceResource;
+use App\Models\Activity;
 use App\Models\File;
 use App\Models\Space;
 use App\Models\SpaceItem;
@@ -62,6 +62,7 @@ class SpaceController extends Controller
      */
     public function store(Request $request): JsonResponse
     {
+        PlanQuota::requireFeature($request->user(), 'spaces');
         abort_unless(Workspace::canWrite($request->user()), 403);
         $validated = $request->validate([
             'title' => ['required', 'string', 'max:255'],
@@ -115,6 +116,7 @@ class SpaceController extends Controller
      */
     public function update(Request $request, Space $space): SpaceResource
     {
+        PlanQuota::requireFeature($request->user(), 'spaces');
         abort_unless($space->user_id === Workspace::owner($request->user())->id, 404);
         abort_unless(Workspace::canWrite($request->user()), 403);
 
@@ -177,6 +179,7 @@ class SpaceController extends Controller
      */
     public function publish(Request $request, Space $space): SpaceResource
     {
+        PlanQuota::requireFeature($request->user(), 'spaces');
         abort_unless($space->user_id === Workspace::owner($request->user())->id, 404);
         abort_unless(Workspace::canWrite($request->user()), 403);
 
@@ -242,6 +245,7 @@ class SpaceController extends Controller
      */
     public function reactivate(Request $request, Space $space): SpaceResource
     {
+        PlanQuota::requireFeature($request->user(), 'spaces');
         abort_unless($space->user_id === Workspace::owner($request->user())->id, 404);
         abort_unless(Workspace::canWrite($request->user()), 403);
 
@@ -264,6 +268,7 @@ class SpaceController extends Controller
      */
     public function duplicate(Request $request, Space $space): JsonResponse
     {
+        PlanQuota::requireFeature($request->user(), 'spaces');
         abort_unless($space->user_id === Workspace::owner($request->user())->id, 404);
         abort_unless(Workspace::canWrite($request->user()), 403);
 
@@ -349,6 +354,7 @@ class SpaceController extends Controller
      */
     public function addItems(Request $request, Space $space): JsonResponse
     {
+        PlanQuota::requireFeature($request->user(), 'spaces');
         abort_unless($space->user_id === Workspace::owner($request->user())->id, 404);
         abort_unless(Workspace::canWrite($request->user()), 403);
 

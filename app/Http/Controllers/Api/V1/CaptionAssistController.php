@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Api\V1;
 
 use App\Http\Controllers\Controller;
+use App\Support\PlanQuota;
 use App\Support\Workspace;
 use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Http\JsonResponse;
@@ -14,7 +15,7 @@ use Illuminate\Support\Facades\Http;
  * OpenAI-compatible chat endpoint (AI_BASE_URL + AI_API_KEY + AI_MODEL).
  * The answer comes back as a suggestion — the caption is never written here.
  *
- * ponytail: free and throttled; charge Credits here if usage turns costly.
+ * Pro and Max (plans v2: feature `ai_caption`, hashtags included).
  */
 class CaptionAssistController extends Controller
 {
@@ -26,6 +27,7 @@ class CaptionAssistController extends Controller
     public function __invoke(Request $request): JsonResponse
     {
         abort_unless(Workspace::canWrite($request->user()), 403, 'Viewers cannot write captions.');
+        PlanQuota::requireFeature($request->user(), 'ai_caption', 'mode');
 
         $validated = $request->validate([
             'mode' => ['required', 'in:rewrite,hashtags'],

@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\Space;
 use App\Models\User;
 use App\Support\Analytics;
+use App\Support\PlanQuota;
 use App\Support\Workspace;
 use Carbon\CarbonInterface;
 use Illuminate\Http\JsonResponse;
@@ -16,7 +17,9 @@ use Illuminate\Validation\ValidationException;
 /**
  * Insights → Analytics, in one call.
  *
- * Free gets the headline: how many views, on which days. Everything that
+ * Pro and Max only since plans v2 (feature `insight`): Free gets 402.
+ *
+ * Paid plans without full_analytics get the headline: how many views, on which days. Everything that
  * explains those views — who, from where, at what hour — is what a paid
  * plan buys, and it ships as `null` rather than as a missing key, so the
  * frontend can keep its blur-and-upgrade layout without guessing the plan.
@@ -28,6 +31,8 @@ class AnalyticsController extends Controller
 {
     public function __invoke(Request $request): JsonResponse
     {
+        PlanQuota::requireFeature($request->user(), 'insight');
+
         $validated = $request->validate([
             'range' => ['sometimes', 'string', 'in:this_month,last_month,this_year,custom'],
             'from' => ['sometimes', 'nullable', 'date'],

@@ -2,11 +2,18 @@
 
 namespace App\Support;
 
+use App\Casts\UtcDateTime;
+use App\Enums\SocialPostApproval;
+use App\Enums\SocialPostStatus;
 use App\Enums\SpaceStatus;
 use App\Exceptions\PlanFeatureRequired;
 use App\Models\File;
 use App\Models\FileVersion;
+use App\Models\SocialApprovalLink;
+use App\Models\SocialPost;
 use App\Models\User;
+use Carbon\CarbonInterface;
+use Illuminate\Support\Collection;
 
 /**
  * Plan limits, read from the plans table. No number lives here: a user's
@@ -18,6 +25,173 @@ use App\Models\User;
  */
 class PlanQuota
 {
+    /**
+     * Feature gates (plans v2): a `features` flag each, false on Free.
+     * Refused with 402 plan_required, feature = the key. An endpoint that
+     * does one of these calls requireFeature() first — including the ones
+     * not built yet (alt_text, ai_reply_suggestions, comment_to_dm).
+     */
+    public const FEATURES = ['ai_caption', 'insight', 'spaces', 'alt_text', 'ai_reply_suggestions', 'comment_to_dm'];
+
+    /**
+     * @throws PlanFeatureRequired
+     */
+    public static function requireFeature(User $user, string $feature, string $field = 'plan'): void
+    {
+        if (! Workspace::owner($user)->plan()->feature($feature)) {
+            throw PlanFeatureRequired::feature($user, $feature, $field);
+        }
+    }
+
+    public static function hasFeature(User $user, string $feature): bool
+    {
+        return Workspace::owner($user)->plan()->feature($feature);
+    }
+
+    /** AI alt text for media. No endpoint yet: the one that ships calls this. */
+    public static function requireAltText(User $user, string $field = 'alt_text'): void
+    {
+        static::requireFeature($user, 'alt_text', $field);
+    }
+
+    /** AI-suggested replies in Engage. No endpoint yet: the one that ships calls this. */
+    public static function requireAiReplySuggestions(User $user, string $field = 'reply'): void
+    {
+        static::requireFeature($user, 'ai_reply_suggestions', $field);
+    }
+
+    /** Automatic comment → DM. No endpoint yet: the one that ships calls this. */
+    public static function requireCommentToDm(User $user, string $field = 'comment_to_dm'): void
+    {
+        static::requireFeature($user, 'comment_to_dm', $field);
+    }
+
+    /** Days ahead a post may be scheduled, or null for no limit. */
+    public static function scheduleWindowDays(User $user): ?int
+    {
+        return Workspace::owner($user)->plan()->quota('schedule_window_days');
+    }
+
+    /** Queued posts (scheduled + waiting for approval) allowed, or null. */
+    public static function queueLimit(User $user): ?int
+    {
+        return Workspace::owner($user)->plan()->quota('queued_posts');
+    }
+
+    /** Distinct approval clients allowed at once, or null. */
+    public static function approvalClientsLimit(User $user): ?int
+    {
+        return Workspace::owner($user)->plan()->quota('approval_clients');
+    }
+
+    /**
+     * A time inside the plan's scheduling window? Compared in UTC against
+     * now: exactly `days` ahead is still in. Null (send now / on approval)
+     * always is.
+     *
+     * @throws PlanFeatureRequired
+     */
+    public static function requireScheduleWindow(User $user, ?CarbonInterface $at, string $field = 'scheduled_at'): void
+    {
+        $days = static::scheduleWindowDays($user);
+
+        if ($days !== null && $at !== null
+            && $at->copy()->utc()->greaterThan(now()->utc()->addDays($days))) {
+            throw PlanFeatureRequired::scheduleWindow($user, $days, $field);
+        }
+    }
+
+    /**
+     * The workspace's queue: posts that will go out later — scheduled for a
+     * future slot, or held for approval (editor or client, revision too).
+     * Drafts, published, failed and cancelled posts are not in it, and
+     * neither is a send-now on its way out.
+     */
+    public static function queuedPosts(User $user): int
+    {
+        $owner = Workspace::owner($user);
+
+        return SocialPost::query()
+            ->whereIn('user_id', Workspace::memberIds($owner))
+            ->where('status', SocialPostStatus::Scheduled)
+            ->where(fn ($q) => $q
+                ->whereIn('approval', [
+                    SocialPostApproval::Awaiting->value,
+                    SocialPostApproval::Client->value,
+                    SocialPostApproval::Revision->value,
+                ])
+                ->orWhere(fn ($q) => $q
+                    ->whereNotNull('scheduled_at')
+                    ->where('scheduled_at', '>', UtcDateTime::bind(now()))))
+            ->count();
+    }
+
+    /**
+     * Room for $adding more queued posts? Posts already queued are never
+     * touched — only adding one past the limit is refused.
+     *
+     * @throws PlanFeatureRequired
+     */
+    public static function requireQueueRoom(User $user, int $adding = 1, string $field = 'scheduled_at'): void
+    {
+        $limit = static::queueLimit($user);
+
+        if ($limit !== null && $adding > 0 && static::queuedPosts($user) + $adding > $limit) {
+            throw PlanFeatureRequired::queueLimit($user, $limit, $field);
+        }
+    }
+
+    /**
+     * Who the workspace is asking for approval right now: one identity per
+     * open (live) approval link — its client_name, trimmed and lower-cased,
+     * when the editor named one; otherwise the link itself (an unnamed link
+     * is a client we cannot tell apart from any other). Two links for
+     * "Acme" are one client; two unnamed links are two.
+     *
+     * @return Collection<int, string>
+     */
+    public static function approvalClients(User $user, ?SocialApprovalLink $except = null): Collection
+    {
+        return SocialApprovalLink::query()
+            ->where('user_id', Workspace::owner($user)->id)
+            ->live()
+            ->when($except !== null, fn ($q) => $q->whereKeyNot($except->getKey()))
+            ->get(['id', 'client_name'])
+            ->toBase()
+            ->map(fn (SocialApprovalLink $link) => static::approvalIdentity($link->client_name, $link->id))
+            ->unique()
+            ->values();
+    }
+
+    public static function approvalIdentity(?string $clientName, ?int $linkId = null): string
+    {
+        $name = mb_strtolower(trim((string) $clientName));
+
+        return $name !== '' ? 'name:'.$name : 'link:'.($linkId ?? 'new');
+    }
+
+    /**
+     * Room for an approval link for this client? $except is the link being
+     * renamed (its own identity does not count against it).
+     *
+     * @throws PlanFeatureRequired
+     */
+    public static function requireApprovalClient(User $user, ?string $clientName, ?SocialApprovalLink $except = null, string $field = 'client_name'): void
+    {
+        $limit = static::approvalClientsLimit($user);
+        if ($limit === null) {
+            return;
+        }
+
+        $identities = static::approvalClients($user, $except)
+            ->push(static::approvalIdentity($clientName, $except?->id))
+            ->unique();
+
+        if ($identities->count() > $limit) {
+            throw PlanFeatureRequired::approvalClients($user, $limit, $field);
+        }
+    }
+
     /**
      * Spaces created and not deleted (draft + published + archived).
      */
@@ -167,16 +341,17 @@ class PlanQuota
     }
 
     /**
-     * Asking a client to approve is a paid feature. Refused only when a new
-     * request starts — links already sent keep working through a downgrade,
-     * and approving your own post is open to every plan.
+     * Asking a client to approve: on every plan since plans v2 (Free with
+     * the approval_clients and scheduling limits). A plan row with the flag
+     * off still refuses — only when a new request starts; links already
+     * sent keep working through a downgrade.
      *
      * @throws PlanFeatureRequired
      */
     public static function requireClientApprovals(User $user, string $field = 'approval'): void
     {
         if (! Workspace::owner($user)->plan()->feature('client_approvals')) {
-            throw PlanFeatureRequired::clientApprovals($user, $field);
+            throw PlanFeatureRequired::approvalClients($user, 0, $field);
         }
     }
 

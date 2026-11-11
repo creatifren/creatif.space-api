@@ -17,9 +17,75 @@ use Illuminate\Database\Seeder;
  * updateOrCreate rather than firstOrCreate: prices change, and a re-run
  * must carry the new number rather than quietly keep the old one. Keyed on
  * `key`, so a row that someone edited in Filament is corrected, not doubled.
+ *
+ * This file is the one plan definition. Two sections, two owners:
+ *
+ * - media: `storage_bytes` (and anything storage / rental) — owned by the
+ *   Media v2 work. Plans v2 does not touch those lines.
+ * - plans v2 (founder, 11 Nov 2026): self::v2() — scheduling window and
+ *   queue, approval clients, and the feature gates PlanQuota enforces.
+ *   Enterprise is listed, never sold: contact sales only.
+ *
+ * Storage upgrades are not plans and never appear here.
  */
 class PlanSeeder extends Seeder
 {
+    /**
+     * Plans v2 — merged over each row's quotas / features below and by the
+     * plans-v2 migration onto existing rows. null quota = no limit.
+     *
+     * @return array<string, array{quotas: array<string, int|null>, features: array<string, bool>}>
+     */
+    public static function v2(): array
+    {
+        $paid = [
+            'quotas' => [
+                // Days ahead a post may be scheduled (UTC, from now).
+                'schedule_window_days' => null,
+                // Scheduled + waiting-for-approval posts per workspace.
+                'queued_posts' => null,
+                // Distinct clients across open approval links.
+                'approval_clients' => null,
+            ],
+            'features' => [
+                // Approval links are on every plan now; Free has limits above.
+                'client_approvals' => true,
+                'ai_caption' => true,
+                'insight' => true,
+                'spaces' => true,
+                'alt_text' => true,
+                'ai_reply_suggestions' => true,
+                'comment_to_dm' => true,
+            ],
+        ];
+
+        return [
+            'free' => [
+                'quotas' => [
+                    'schedule_window_days' => 7,
+                    'queued_posts' => 10,
+                    'approval_clients' => 1,
+                ],
+                'features' => [
+                    'client_approvals' => true,
+                    'ai_caption' => false,
+                    'insight' => false,
+                    'spaces' => false,
+                    'alt_text' => false,
+                    'ai_reply_suggestions' => false,
+                    'comment_to_dm' => false,
+                ],
+            ],
+            'pro' => $paid,
+            'max' => $paid,
+            'team' => $paid,
+            'enterprise' => [
+                'quotas' => $paid['quotas'],
+                'features' => $paid['features'] + ['contact_sales' => true],
+            ],
+        ];
+    }
+
     public function run(): void
     {
         $paidQuotas = [
@@ -106,9 +172,24 @@ class PlanSeeder extends Seeder
                 'is_active' => false,
                 'sort_order' => 4,
             ],
+            [
+                // Listed on /plans with contact_sales, never in checkout
+                // (PlanKey::sold()). Prices are agreed per contract.
+                'key' => 'enterprise',
+                'name' => 'Enterprise',
+                'price_monthly' => 0,
+                'price_yearly' => 0,
+                'quotas' => $paidQuotas + ['credits_monthly' => 150000, 'social_posts_monthly' => 500],
+                'features' => $paidFeatures,
+                'is_active' => true,
+                'sort_order' => 5,
+            ],
         ];
 
+        $v2 = self::v2();
         foreach ($plans as $plan) {
+            $plan['quotas'] = [...$plan['quotas'], ...$v2[$plan['key']]['quotas']];
+            $plan['features'] = [...$plan['features'], ...$v2[$plan['key']]['features']];
             Plan::query()->updateOrCreate(['key' => $plan['key']], $plan);
         }
     }

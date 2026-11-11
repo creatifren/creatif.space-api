@@ -22,7 +22,7 @@ return [
     'scopes' => [
         'read' => 'Read your channels, posts, files and Credits balance',
         'draft' => 'Save draft posts (never sends or schedules them)',
-        'approve' => 'Create client approval links for your posts (Pro and Max)',
+        'approve' => 'Create client approval links for your posts (Free: one client, posts up to 7 days ahead)',
         'publish' => 'Schedule and publish your drafts, spending Credits (at most 20 a day)',
     ],
 

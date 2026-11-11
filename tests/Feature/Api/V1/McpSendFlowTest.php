@@ -160,14 +160,20 @@ describe('approval links from drafts', function () {
         Http::assertNothingSent();
     });
 
-    it('stays Pro and Max only', function () {
+    it('is open to Free for one client (plans v2); a second client is 402', function () {
         $user = User::factory()->create(); // Free
         $post = draftFor($user);
+        $other = draftFor($user);
 
         $this->actingAs($user)
             ->postJson('/api/v1/social-approval-links', ['post_ids' => [$post->ulid]])
-            ->assertUnprocessable();
+            ->assertCreated();
+        $this->actingAs($user)
+            ->postJson('/api/v1/social-approval-links', ['post_ids' => [$other->ulid]])
+            ->assertStatus(402)
+            ->assertJsonPath('feature', 'approval_clients');
 
-        expect($post->fresh()->status->value)->toBe('draft');
+        expect($post->fresh()->approval->value)->toBe('client')
+            ->and($other->fresh()->status->value)->toBe('draft');
     });
 });

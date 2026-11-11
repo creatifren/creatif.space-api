@@ -1,5 +1,6 @@
 <?php
 
+use App\Models\Plan;
 use App\Models\User;
 use Database\Seeders\PlanSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -19,6 +20,25 @@ pest()->extend(TestCase::class)
     ->use(RefreshDatabase::class)
     ->beforeEach(fn () => $this->seed(PlanSeeder::class))
     ->in('Feature');
+
+/**
+ * Change a seeded plan row's features / quotas for one test — e.g. Free
+ * with `spaces` on, so a Space test exercises the Space rules rather than
+ * the plans v2 gate (which has its own tests in PlansV2Test).
+ *
+ * @param  array<string, bool>  $features
+ * @param  array<string, int|null>  $quotas
+ */
+function planWith(string $key, array $features = [], array $quotas = []): Plan
+{
+    $plan = Plan::query()->where('key', $key)->sole();
+    $plan->update([
+        'features' => [...$plan->features, ...$features],
+        'quotas' => [...$plan->quotas, ...$quotas],
+    ]);
+
+    return $plan;
+}
 
 /*
  * MCP / OAuth helpers (tests/Feature/Mcp).

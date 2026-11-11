@@ -8,6 +8,7 @@ use App\Http\Controllers\Api\V1\ConnectedAppController;
 use App\Http\Controllers\Api\V1\CreditsController;
 use App\Http\Controllers\Api\V1\CreemWebhookController;
 use App\Http\Controllers\Api\V1\DeliveryLogController;
+use App\Http\Controllers\Api\V1\EnterpriseContactController;
 use App\Http\Controllers\Api\V1\FileController;
 use App\Http\Controllers\Api\V1\FileVersionController;
 use App\Http\Controllers\Api\V1\FolderController;
@@ -57,6 +58,12 @@ Route::post('/oauth/introspect', IntrospectionController::class)
     ->name('api.v1.oauth.introspect');
 
 Route::get('/plans', [SubscriptionController::class, 'plans'])->name('api.v1.plans');
+
+// Enterprise is contact-sales only. Auth optional; the honeypot and the
+// throttle keep it from being a spam relay to the sales inbox.
+Route::post('/enterprise/contact', EnterpriseContactController::class)
+    ->middleware('throttle:5,1')
+    ->name('api.v1.enterprise.contact');
 
 // Creem calls this, not a browser: no auth, no CSRF (api routes have
 // none), and the HMAC-SHA256 raw-body signature is the authentication.

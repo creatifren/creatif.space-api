@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Api\V1;
 
 use App\Http\Controllers\Controller;
 use App\Http\Resources\MyProfileResource;
+use App\Support\PlanQuota;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
@@ -95,6 +96,13 @@ class MyProfileController extends Controller
 
         $accountFields = array_intersect_key($validated, array_flip(['name', 'locale', 'theme', 'avatar_url']));
         $profileFields = array_diff_key($validated, $accountFields);
+
+        // The public profile is the link in bio: editing it is part of
+        // `spaces` (Pro and Max, plans v2). Account settings stay open, and
+        // nothing already published is taken down.
+        if (array_diff_key($profileFields, ['default_view_mode' => true]) !== []) {
+            PlanQuota::requireFeature($user, 'spaces', (string) array_key_first(array_diff_key($profileFields, ['default_view_mode' => true])));
+        }
 
         $user->fill($accountFields);
         $user->save();

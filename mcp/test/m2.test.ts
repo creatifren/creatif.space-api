@@ -266,21 +266,64 @@ describe('publish_post', () => {
 });
 
 describe('plan and Credit limits are passed on verbatim', () => {
-  const TRIAL = 'Client approval links are on Pro and Max. Start the 7-day Pro trial: https://creatif.space/settings?section=subscription';
+  const BILLING = 'https://creatif.space/settings?section=subscription';
+  const TRIAL = `On Free, approval links are for one client at a time. Approval for more clients is on Pro and Max. Start the 7-day Pro trial: ${BILLING}`;
+  const plan402 = (feature: string, message: string, limit?: number) => ({
+    status: 402,
+    body: {
+      message,
+      reason: 'plan_required',
+      feature,
+      required_plan: 'pro',
+      ...(limit !== undefined ? { limit } : {}),
+      code: 'plan_required',
+      billing_url: BILLING,
+      errors: { post_ids: [message] },
+    },
+  });
 
   it('402 plan_required → plan_required with the API sentence as the message', async () => {
-    const res = await call('create_approval_link', { post_ids: [POST] }, {
-      'POST /social-approval-links': () => ({
-        status: 402,
-        body: { message: TRIAL, code: 'plan_required', feature: 'client_approvals', billing_url: 'https://creatif.space/settings?section=subscription' },
-      }),
+    const res = await call('create_approval_link', { post_ids: [POST], client_name: 'Second client' }, {
+      'POST /social-approval-links': () => plan402('approval_clients', TRIAL, 1),
     });
     expect(payload(res).error).toMatchObject({
       code: 'plan_required',
       message: TRIAL,
       hint: expect.stringMatching(/as it is/),
-      details: { feature: 'client_approvals', billing_url: 'https://creatif.space/settings?section=subscription' },
+      details: { reason: 'plan_required', feature: 'approval_clients', required_plan: 'pro', limit: 1, billing_url: BILLING },
     });
+  });
+
+  it('schedule_post sends scheduled_at with the preview; a Free window refusal is plan_required before any confirm', async () => {
+    const msg = `On Free, posts can be scheduled up to 7 days ahead. Scheduling further out is on Pro and Max. Upgrade: ${BILLING}`;
+    const far = new Date(Date.now() + 8 * 86_400_000).toISOString();
+    const res = await call('schedule_post', { post_id: POST, scheduled_at: far }, {
+      [PREVIEW_ROUTE]: () => plan402('schedule_window', msg, 7),
+    });
+    expect(app!.v1.calls[0]!.query).toEqual({ scheduled_at: far });
+    expect(app!.v1.calls.some((c) => c.method === 'POST')).toBe(false);
+    expect(payload(res).error).toMatchObject({
+      code: 'plan_required',
+      message: msg,
+      details: { feature: 'schedule_window', required_plan: 'pro', limit: 7 },
+    });
+  });
+
+  it('schedule_post confirm: a queue_limit 402 from the send is plan_required', async () => {
+    const msg = `On Free, up to 10 posts can be queued (scheduled or waiting for approval) at once. More is on Pro and Max. Upgrade: ${BILLING}`;
+    const { confirmed } = await twoStep('schedule_post', { post_id: POST, scheduled_at: FUTURE }, {
+      [SEND_ROUTE]: () => plan402('queue_limit', msg, 10),
+    });
+    expect(payload(confirmed).error).toMatchObject({ code: 'plan_required', message: msg, details: { feature: 'queue_limit', limit: 10 } });
+  });
+
+  it('publish_post: a 402 from the send is plan_required with the same fields', async () => {
+    const msg = `Creating and editing Spaces and your link in bio is on Pro and Max. Upgrade: ${BILLING}`;
+    const { confirmed } = await twoStep('publish_post', { post_id: POST }, {
+      [SEND_ROUTE]: () => plan402('spaces', msg),
+    });
+    expect(payload(confirmed).error).toMatchObject({ code: 'plan_required', details: { reason: 'plan_required', feature: 'spaces', required_plan: 'pro' } });
+    expect(payload(confirmed).error.details.limit).toBeUndefined();
   });
 
   it('insufficient_credits → needed vs available and the top-up link', async () => {
@@ -318,7 +361,11 @@ describe('plan and Credit limits are passed on verbatim', () => {
     app = await startApp();
     const { tools } = await (await app.connect(TOKEN_FULL)).listTools();
     const d = (n: string) => tools.find((t) => t.name === n)!.description!;
-    expect(d('create_approval_link')).toMatch(/Pro and Max/);
+    expect(d('create_approval_link')).toMatch(/Every plan: on Free, links are for one client at a time/);
+    expect(d('create_approval_link')).toMatch(/approval_clients, schedule_window or queue_limit/);
+    expect(d('create_approval_link')).not.toMatch(/Pro and Max plans only/);
+    expect(d('schedule_post')).toMatch(/at most 7 days ahead and at most 10 posts/);
+    expect(d('get_credits')).toMatch(/approval clients used vs allowed/);
     expect(d('publish_post')).toMatch(/insufficient_credits or quota_exceeded/);
     expect(d('schedule_post')).toMatch(/Monthly Credits first/);
     expect(d('get_credits')).toMatch(/Free included/);

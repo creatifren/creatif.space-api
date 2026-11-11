@@ -107,29 +107,44 @@ describe('GET /credits limits (get_credits)', function () {
 });
 
 describe('Free plan through a real API key', function () {
-    it('refuses an approval link with 402 plan_required and a relayable sentence', function () {
+    it('makes a Free approval link for the first client, and refuses a second client with 402 approval_clients', function () {
         $user = User::factory()->create();
-        $post = planDraft($user);
+        $first = planDraft($user);
+        $second = planDraft($user);
+        $key = planKey($this, $user);
 
-        bearer($this, planKey($this, $user))
-            ->postJson('/api/v1/social-approval-links', ['post_ids' => [$post->ulid]])
+        bearer($this, $key)
+            ->postJson('/api/v1/social-approval-links', ['post_ids' => [$first->ulid], 'client_name' => 'Acme'])
+            ->assertCreated();
+
+        bearer($this, $key)
+            ->postJson('/api/v1/social-approval-links', ['post_ids' => [$second->ulid], 'client_name' => 'Globex'])
             ->assertStatus(402)
+            ->assertJsonPath('reason', 'plan_required')
             ->assertJsonPath('code', 'plan_required')
-            ->assertJsonPath('message', 'Client approval links are on Pro and Max. Start the 7-day Pro trial: https://creatif.space/settings?section=subscription')
+            ->assertJsonPath('feature', 'approval_clients')
+            ->assertJsonPath('required_plan', 'pro')
+            ->assertJsonPath('limit', 1)
+            ->assertJsonPath('message', 'On Free, approval links are for one client at a time. Approval for more clients is on Pro and Max. Start the 7-day Pro trial: https://creatif.space/settings?section=subscription')
             ->assertJsonPath('billing_url', 'https://creatif.space/settings?section=subscription');
 
-        expect($post->fresh()->status->value)->toBe('draft');
+        expect($second->fresh()->status->value)->toBe('draft');
     });
 
-    it('keeps the app\'s 422 for the same refusal (cookie session)', function () {
+    it('answers the app (cookie session) with the same 402 shape', function () {
         $user = User::factory()->create();
-        $post = planDraft($user);
+        $first = planDraft($user);
+        $second = planDraft($user);
 
         $this->actingAs($user)
-            ->postJson('/api/v1/social-approval-links', ['post_ids' => [$post->ulid]])
-            ->assertUnprocessable()
-            ->assertJsonPath('code', 'plan_required')
-            ->assertJsonValidationErrors('post_ids');
+            ->postJson('/api/v1/social-approval-links', ['post_ids' => [$first->ulid]])
+            ->assertCreated();
+        $this->actingAs($user)
+            ->postJson('/api/v1/social-approval-links', ['post_ids' => [$second->ulid]])
+            ->assertStatus(402)
+            ->assertJsonPath('reason', 'plan_required')
+            ->assertJsonPath('feature', 'approval_clients')
+            ->assertJsonStructure(['message', 'reason', 'feature', 'required_plan', 'limit', 'errors' => ['client_name']]);
     });
 
     it('refuses a send it cannot pay for: insufficient_credits, needed vs available, no debit', function () {
