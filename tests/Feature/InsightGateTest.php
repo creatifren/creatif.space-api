@@ -134,5 +134,7 @@ it('has no Insight read route outside the gated list (new ones must be added her
         'api.v1.insight.export',
         'api.v1.insight.clients',
         'api.v1.insight.reports.show',
+        // tests/Feature/Insight/InsightSummaryApiTest.php: 402 on Free.
+        'api.v1.insight.summary',
     ]);
 });

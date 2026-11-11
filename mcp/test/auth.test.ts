@@ -95,6 +95,7 @@ describe('401 flow', () => {
         'request_media_upload', 'confirm_media_upload',
         'list_conversations', 'reply_to_conversation',
         'list_waiting_approvals', 'decide_approval',
+        'get_insight_summary',
       ].sort(),
     );
     for (const tool of tools) {
