@@ -19,6 +19,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
  * @property string|null $client_name
  * @property string|null $ip
  * @property string|null $user_agent
+ * @property string $source web | mcp
  * @property CarbonImmutable|null $created_at
  */
 class SocialApprovalDecision extends Model
@@ -33,7 +34,7 @@ class SocialApprovalDecision extends Model
 
     protected $fillable = [
         'social_approval_link_id', 'social_post_id', 'decision',
-        'approver_user_id', 'approver_email', 'client_name', 'ip', 'user_agent',
+        'approver_user_id', 'approver_email', 'client_name', 'ip', 'user_agent', 'source',
     ];
 
     /**

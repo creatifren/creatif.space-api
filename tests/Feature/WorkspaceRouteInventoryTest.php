@@ -48,6 +48,10 @@ const WSI_NOT_WORKSPACE_MODELS = [
     // Engage feed (MCP): a typed id, dm_<ulid> or comment_<ulid>, looked up
     // only in the caller's workspace by InboxFeedController (404 otherwise).
     'item' => 'Engage feed id (dm_ / comment_)',
+    // Approver side (MCP): a post someone else sent the caller, reached only
+    // through a live link addressed to the caller's verified email (`link`;
+    // none or unknown answers 404).
+    'post' => 'post on an approval link addressed to the caller',
 ];
 
 beforeEach(function () {
@@ -158,6 +162,7 @@ function wsiValue(string $name, User $owner): string
         'apiKey' => (string) $owner->createToken('theirs')->accessToken->getKey(),
         'clientId' => (string) str()->uuid(),
         'item' => 'dm_'.wsiMake(SocialConversation::class, $owner, [])->getRouteKey(),
+        'post' => wsiMake(SocialPost::class, $owner, [])->getRouteKey(),
         default => throw new RuntimeException("No value for {$name}."),
     };
 }

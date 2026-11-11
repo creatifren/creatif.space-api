@@ -123,6 +123,22 @@ class PublicApprovalController extends Controller
             'decision' => ['required', 'in:approve,revise'],
             'reason' => ['required_if:decision,revise', 'nullable', 'string', 'max:5000'],
         ]);
+
+        return $this->decideAs($request, $link, $post, $approver, $validated, $relay, 'web');
+    }
+
+    /**
+     * THE decision path — /a (signed-in session) and MCP decide_approval
+     * both end here, so the rules are one: in scope, still decidable, the
+     * Free window, bind-on-first-use, idempotent repeats, one audit row.
+     * The caller has already checked who the approver is.
+     *
+     * @param  array{decision: string, reason?: string|null, name?: string|null}  $validated
+     * @param  'web'|'mcp'  $source
+     */
+    public function decideAs(Request $request, SocialApprovalLink $link, string $post, User $approver, array $validated, SocialPostRelay $relay, string $source): JsonResponse
+    {
+        $this->link = $link;
         $name = self::displayName($validated['name'] ?? null, $approver);
 
         $socialPost = PlanScope::posts($link)->where('ulid', $post)->firstOrFail();
@@ -162,7 +178,7 @@ class PublicApprovalController extends Controller
             if (is_string($outcome)) {
                 return response()->json(['message' => $outcome], 422);
             }
-            ApproverGate::record($request, $link, $socialPost, SocialApprovalDecision::APPROVED, $approver, $name);
+            ApproverGate::record($request, $link, $socialPost, SocialApprovalDecision::APPROVED, $approver, $name, $source);
             // A post held for its slot already told the owner (HELD).
             if (! SocialPostRelay::heldForLater($socialPost->refresh())) {
                 $link->user->notify(new SocialPostDecided($link, SocialPostDecided::APPROVED, $name, 1, $socialPost));
@@ -180,7 +196,7 @@ class PublicApprovalController extends Controller
                 'role' => 'APPROVER',
                 'body' => $validated['reason'],
             ]);
-            ApproverGate::record($request, $link, $socialPost, SocialApprovalDecision::CHANGES_REQUESTED, $approver, $name);
+            ApproverGate::record($request, $link, $socialPost, SocialApprovalDecision::CHANGES_REQUESTED, $approver, $name, $source);
             $link->user->notify(new SocialPostDecided(
                 $link, SocialPostDecided::REVISE, $name, 1, $socialPost,
                 str($validated['reason'])->limit(200)->toString(),
