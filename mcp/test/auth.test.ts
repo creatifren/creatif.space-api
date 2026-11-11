@@ -93,6 +93,7 @@ describe('401 flow', () => {
         'draft_post', 'get_credits', 'get_post', 'list_channels', 'list_files', 'list_posts',
         'create_approval_link', 'check_approval_status', 'update_post', 'schedule_post', 'publish_post',
         'request_media_upload', 'confirm_media_upload',
+        'list_conversations', 'reply_to_conversation',
       ].sort(),
     );
     for (const tool of tools) {

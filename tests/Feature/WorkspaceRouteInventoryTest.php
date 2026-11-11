@@ -45,6 +45,9 @@ const WSI_NOT_WORKSPACE_MODELS = [
     'clientId' => 'OAuth client id',
     // Trash: looked up only in the caller's workspace trash (404 otherwise).
     'ulid' => 'trashed file ulid',
+    // Engage feed (MCP): a typed id, dm_<ulid> or comment_<ulid>, looked up
+    // only in the caller's workspace by InboxFeedController (404 otherwise).
+    'item' => 'Engage feed id (dm_ / comment_)',
 ];
 
 beforeEach(function () {
@@ -154,6 +157,7 @@ function wsiValue(string $name, User $owner): string
         'ulid' => tap(File::factory()->for($owner)->create(), fn (File $f) => $f->delete())->ulid,
         'apiKey' => (string) $owner->createToken('theirs')->accessToken->getKey(),
         'clientId' => (string) str()->uuid(),
+        'item' => 'dm_'.wsiMake(SocialConversation::class, $owner, [])->getRouteKey(),
         default => throw new RuntimeException("No value for {$name}."),
     };
 }

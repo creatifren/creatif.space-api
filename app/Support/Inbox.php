@@ -6,6 +6,7 @@ use App\Exceptions\InboxUnsupported;
 use App\Exceptions\ProviderRateLimited;
 use App\Models\SocialAccount;
 use App\Models\User;
+use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Http\Client\RequestException;
 use Illuminate\Http\JsonResponse;
 use Throwable;
@@ -58,6 +59,15 @@ final class Inbox
                 'code' => 'rate_limited',
                 'retry_after' => $e->retryAfter,
             ], 429)->header('Retry-After', (string) $e->retryAfter);
+        }
+
+        // The relay did not answer at all (timeout, DNS, reset): the same
+        // readable 502 as a relay 5xx, not a bare 500.
+        if ($e instanceof ConnectionException) {
+            return response()->json([
+                'message' => 'Instagram could not be reached just now. Try again shortly.',
+                'code' => 'provider_error',
+            ], 502);
         }
 
         if (! $e instanceof RequestException) {
