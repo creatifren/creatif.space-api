@@ -225,6 +225,15 @@ describe('accounts that must not sign in', function () {
         Log::shouldHaveReceived('warning')->with('auth.google_staff_link_refused', Mockery::any())->once();
     });
 
+    it('refuses relinking a staff account to another Google id, and keeps the old one', function () {
+        $staff = User::factory()->create(['email' => 'rani@example.com', 'is_staff' => true, 'google_id' => 'g-original']);
+
+        gnPost(gnToken())->assertStatus(403)->assertJson(['reason' => 'google_not_linked']);
+
+        $this->assertGuest();
+        expect($staff->fresh()->google_id)->toBe('g-original');
+    });
+
     it('signs staff in when the google_id matches', function () {
         $staff = User::factory()->create(['email' => 'rani@example.com', 'is_staff' => true, 'google_id' => 'g-100']);
 

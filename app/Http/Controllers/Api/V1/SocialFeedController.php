@@ -13,7 +13,6 @@ use Illuminate\Http\Client\RequestException;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Cache;
-use Illuminate\Support\Facades\Gate;
 
 /**
  * One account's feed as the platform holds it, with metrics — Analytics
@@ -44,7 +43,8 @@ class SocialFeedController extends Controller
     {
         // A team member reads the workspace's feeds, as in the rest of Social.
         $workspace = Workspace::memberIds(Workspace::owner($request->user()));
-        Gate::allowIf(fn () => $workspace->contains($socialAccount->user_id));
+        // Another workspace's account does not exist to this caller.
+        abort_unless($workspace->contains($socialAccount->user_id), 404);
 
         $cursor = $request->string('cursor')->toString() ?: null;
         $key = "social-feed:{$socialAccount->id}:".($cursor ?? 'first');

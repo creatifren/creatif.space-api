@@ -78,12 +78,12 @@ it('sends a held post when its owner approves it', function () {
     Http::assertSentCount(1);
 });
 
-it("forbids approving another user's post", function () {
+it("does not let anyone approve another workspace's post (404)", function () {
     $post = heldPost();
 
     $this->actingAs(User::factory()->create())
         ->postJson("/api/v1/social-posts/{$post->ulid}/approve")
-        ->assertForbidden();
+        ->assertNotFound();
 });
 
 it('lets a client approve on the link, and only posts on that link', function () {
@@ -281,10 +281,10 @@ it("keeps one user's links from another", function () {
     $link = linkFor(heldPost('client'));
     $stranger = User::factory()->create();
 
-    $this->actingAs($stranger)->getJson("/api/v1/social-approval-links/{$link->ulid}")->assertForbidden();
-    $this->actingAs($stranger)->patchJson("/api/v1/social-approval-links/{$link->ulid}", ['title' => 'x'])->assertForbidden();
-    $this->actingAs($stranger)->postJson("/api/v1/social-approval-links/{$link->ulid}/approve")->assertForbidden();
-    $this->actingAs($stranger)->deleteJson("/api/v1/social-approval-links/{$link->ulid}")->assertForbidden();
+    $this->actingAs($stranger)->getJson("/api/v1/social-approval-links/{$link->ulid}")->assertNotFound();
+    $this->actingAs($stranger)->patchJson("/api/v1/social-approval-links/{$link->ulid}", ['title' => 'x'])->assertNotFound();
+    $this->actingAs($stranger)->postJson("/api/v1/social-approval-links/{$link->ulid}/approve")->assertNotFound();
+    $this->actingAs($stranger)->deleteJson("/api/v1/social-approval-links/{$link->ulid}")->assertNotFound();
     $this->actingAs($stranger)->getJson('/api/v1/social-approval-links')->assertOk()->assertJsonCount(0, 'data');
 });
 

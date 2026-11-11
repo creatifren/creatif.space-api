@@ -41,12 +41,12 @@ it("normalises each platform's metrics and marks the posts made through us", fun
         ->assertJsonPath('data.0.media.0', 'https://cdn/a.jpg');
 });
 
-it("forbids another user's account feed", function () {
+it("does not show another workspace's account feed (404)", function () {
     $account = SocialAccount::factory()->create();
 
     $this->actingAs(User::factory()->create())
         ->getJson("/api/v1/social-accounts/{$account->ulid}/feed")
-        ->assertForbidden();
+        ->assertNotFound();
 });
 
 it('says so when the account has not granted its feed', function () {
