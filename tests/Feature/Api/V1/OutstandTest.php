@@ -617,6 +617,7 @@ describe('the outstand webhook', function () {
 });
 
 it('reads an Outstand account feed from its posts and their analytics', function () {
+    planWith('free', ['insight' => true]); // metrics are Insight; gate: InsightGateTest
     $user = User::factory()->create();
     $ig = outstandAccount($user);
     $ours = SocialPost::factory()->for($user)->create(['provider' => 'outstand', 'provider_post_id' => 'f1']);

@@ -52,6 +52,7 @@ describe('R12 analytics counts a post that is still live on the network', functi
     // Prod zvQKF: a remote delete Instagram refused left the destination
     // "failed" with the post id still set; the post is live on Instagram.
     it('reads a refused remote delete as live, a deleted one and a failed publish as not', function () {
+        planWith('free', ['insight' => true]); // metrics are Insight; gate: InsightGateTest
         $user = User::factory()->create();
         $ig = lrAccount($user, 'instagram', 'beUgT');
         $post = lrPublished($user, 'zvQKF', $ig);
