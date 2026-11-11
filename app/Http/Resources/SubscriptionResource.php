@@ -22,6 +22,15 @@ class SubscriptionResource extends JsonResource
                 'key' => $this->plan->key,
                 'name' => $this->plan->name,
             ],
+            // creem (web, managed at creatif.space) | google (Play Store)
+            'provider' => $this->provider,
+            // Google Play's own subscription screen; null for Creem.
+            'manage_url' => $this->isGoogle()
+                ? 'https://play.google.com/store/account/subscriptions?'.http_build_query([
+                    'sku' => $this->google_product_id,
+                    'package' => config('services.google_play.package_name'),
+                ])
+                : null,
             'billing_period' => $this->billing_period,
             // active | trialing | past_due | cancelled | expired
             'status' => $this->status,

@@ -25,6 +25,7 @@ class SubscriptionFactory extends Factory
             // fresh one would collide. Tests name the plan they want.
             'plan_id' => fn () => Plan::query()->where('key', 'pro')->value('id')
                 ?? Plan::factory(),
+            'provider' => 'creem',
             'billing_period' => 'monthly',
             'status' => 'active',
             'seats' => 1,
@@ -66,6 +67,20 @@ class SubscriptionFactory extends Factory
     {
         return $this->state(fn (array $attributes) => [
             'cancelled_at' => now()->subDay(),
+        ]);
+    }
+
+    /**
+     * Bought in the Android app through Google Play.
+     */
+    public function google(string $purchaseToken = 'play-token-factory', string $productId = 'pro_monthly'): static
+    {
+        return $this->state(fn (array $attributes) => [
+            'provider' => 'google',
+            'google_purchase_token' => $purchaseToken,
+            'google_purchase_token_hash' => hash('sha256', $purchaseToken),
+            'google_product_id' => $productId,
+            'google_auto_renewing' => true,
         ]);
     }
 }

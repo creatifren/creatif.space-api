@@ -225,7 +225,7 @@ class User extends Authenticatable implements FilamentUser
     public function activeSubscription(): ?Subscription
     {
         return $this->subscriptions()
-            ->whereIn('status', SubscriptionStatus::entitled())
+            ->entitled()
             // A cancelled trial is Free the moment it ends, not when the
             // daily job or Creem's event gets round to marking it.
             ->where(fn ($q) => $q->where('status', '!=', SubscriptionStatus::Trialing)

@@ -13,6 +13,20 @@
 
 - **Google sign-in:** `GET /sanctum/csrf-cookie`, then `POST /auth/google/native` with `X-XSRF-TOKEN` and `{"id_token": "<Credential Manager ID token>", "next": "/spaces"}` (`next` optional). Answers `200 {"redirect": "…"}`, `422 invalid_token`, `403 suspended | google_not_linked`, `429`, or `503 google_unavailable`. The token's `aud` must be `GOOGLE_CLIENT_ID` (the web client, used as `serverClientId`) or one of `GOOGLE_NATIVE_EXTRA_AUDIENCES`. Details: `GoogleAuthController::native`.
 - **Social connect:** send `"client": "android"` to `POST /api/v1/social-accounts/auth-url`; the return to `/social/connect` then carries `shell=android` (Outstand only; Post for Me's redirect is fixed per project).
+- **Google Play Billing:** the app launches Play Billing with `obfuscatedAccountId` = the user's `id` (ULID from `/api/v1/me`), then sends `POST /api/v1/billing/google/verify` (Sanctum, 20/min) `{"purchase_token": "…", "product_id": "pro_monthly"}`. Answers `200 {"plan", "period", "status", "current_period_end", "provider": "google"}`, `202 pending` (payment not cleared, nothing granted), `422 unknown_product | invalid_token`, `403 account_mismatch`, `409 active_web_subscription` (a Creem plan runs: the purchase is not acknowledged, so Google refunds it), or `503 google_unavailable`. Same token again = same row (idempotent). While a Play plan runs, Creem checkout/cancel/portal answer `409 active_play_subscription`. `/api/v1/me` has `billing_provider` and `/api/v1/me/subscription` has `provider` + `manage_url` (`creem` = manage at creatif.space, `google` = "Manage subscription on Google Play").
+  - **Play product ids** (Play Console → Subscriptions; overridable by env): `pro_monthly` → Pro monthly, `pro_yearly` → Pro yearly, `max_monthly` → Max monthly, `max_yearly` → Max yearly.
+  - **RTDN:** Play Console → Monetization setup → Real-time developer notifications → a Pub/Sub topic with a **push** subscription to `https://<api>/api/v1/webhooks/google-play`, authentication on (service account + audience). Every notification re-reads `purchases.subscriptionsv2` and applies the same mapping; `REVOKED`/voided purchases end the plan at once.
+  - **Env:**
+
+    | Variable | Meaning |
+    | --- | --- |
+    | `GOOGLE_PLAY_PACKAGE_NAME` | default `space.creatif.app` |
+    | `GOOGLE_PLAY_SERVICE_ACCOUNT_JSON` | path to the service account key file on the server (never committed, never logged); the account needs Play Console access to view financial data / manage orders |
+    | `GOOGLE_PLAY_RTDN_AUDIENCE` | the push subscription's audience (exact `aud` of Pub/Sub's OIDC token) |
+    | `GOOGLE_PLAY_RTDN_SA_EMAIL` | the push subscription's service account email |
+    | `GOOGLE_PLAY_PRODUCT_PRO_MONTHLY` / `_PRO_YEARLY` / `_MAX_MONTHLY` / `_MAX_YEARLY` | Play product ids, defaults as above |
+
+    Missing service account → verify answers `503 google_unavailable`; missing RTDN audience/email → every push is `401`.
 
 ## About Laravel
 

@@ -181,7 +181,7 @@ class CreemWebhookController extends Controller
         // The second is left for an operator to refund in Creem.
         $other = Subscription::query()->where('user_id', $subscription->user_id)
             ->whereKeyNot($subscription->id)
-            ->whereIn('status', SubscriptionStatus::entitled())
+            ->entitled()
             ->exists();
         if ($other) {
             Log::warning('billing.duplicate_subscription_paid', [

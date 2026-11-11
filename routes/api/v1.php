@@ -12,6 +12,8 @@ use App\Http\Controllers\Api\V1\EnterpriseContactController;
 use App\Http\Controllers\Api\V1\FileController;
 use App\Http\Controllers\Api\V1\FileVersionController;
 use App\Http\Controllers\Api\V1\FolderController;
+use App\Http\Controllers\Api\V1\GooglePlayBillingController;
+use App\Http\Controllers\Api\V1\GooglePlayWebhookController;
 use App\Http\Controllers\Api\V1\HandleController;
 use App\Http\Controllers\Api\V1\InboxCommentController;
 use App\Http\Controllers\Api\V1\InboxController;
@@ -64,6 +66,13 @@ Route::get('/plans', [SubscriptionController::class, 'plans'])->name('api.v1.pla
 Route::post('/enterprise/contact', EnterpriseContactController::class)
     ->middleware('throttle:5,1')
     ->name('api.v1.enterprise.contact');
+
+// Google Play real-time developer notifications (Pub/Sub push). No auth
+// middleware: the request carries Pub/Sub's Google-signed OIDC token,
+// checked by the controller.
+Route::post('/webhooks/google-play', GooglePlayWebhookController::class)
+    ->middleware('throttle:600,1')
+    ->name('api.v1.webhooks.google-play');
 
 // Creem calls this, not a browser: no auth, no CSRF (api routes have
 // none), and the HMAC-SHA256 raw-body signature is the authentication.
@@ -191,6 +200,11 @@ Route::middleware('auth:sanctum')->group(function () {
     // What connected apps and API keys did — never the content.
     Route::get('/me/mcp-activity', McpActivityController::class)->name('api.v1.me.mcp-activity');
 });
+
+// Google Play Billing: the Android app hands over a Play purchase.
+Route::post('/billing/google/verify', [GooglePlayBillingController::class, 'verify'])
+    ->middleware(['auth:sanctum', 'throttle:20,1'])
+    ->name('api.v1.billing.google.verify');
 
 // Authenticated: Sanctum SPA cookie, or a bearer token (OAuth access token
 // or personal API key) — which EnforceTokenScope fences to config('mcp.routes').

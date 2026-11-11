@@ -310,12 +310,14 @@ final class ProductEvents
         ]);
     }
 
-    public static function subscriptionStarted(User $user, PlanKey|string $plan, string $period, int $amountCents): void
+    /** @param  'creem'|'google'  $provider */
+    public static function subscriptionStarted(User $user, PlanKey|string $plan, string $period, int $amountCents, string $provider = 'creem'): void
     {
         self::analytics()->capture($user->ulid, 'subscription_started', [
             'plan' => self::key($plan),
             'period' => $period,
             'amount_usd' => round($amountCents / 100, 2),
+            'provider' => $provider,
         ]);
     }
 

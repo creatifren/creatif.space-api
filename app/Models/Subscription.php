@@ -6,6 +6,7 @@ use App\Enums\BillingPeriod;
 use App\Enums\SubscriptionStatus;
 use Carbon\CarbonImmutable;
 use Database\Factories\SubscriptionFactory;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -20,6 +21,13 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
  * @property int $plan_id
  * @property string|null $creem_subscription_id
  * @property string|null $creem_customer_id
+ * @property string $provider creem | google
+ * @property string|null $google_purchase_token
+ * @property string|null $google_purchase_token_hash
+ * @property string|null $google_product_id
+ * @property string|null $google_order_id
+ * @property string|null $google_linked_purchase_token_hash
+ * @property bool $google_auto_renewing
  * @property BillingPeriod $billing_period
  * @property SubscriptionStatus $status
  * @property int $seats
@@ -40,10 +48,29 @@ class Subscription extends Model
     /** How long a lapsed subscription keeps its plan before falling to Free. */
     public const GRACE_DAYS = 7;
 
+    public const PROVIDER_CREEM = 'creem';
+
+    public const PROVIDER_GOOGLE = 'google';
+
+    /**
+     * The purchase token is a bearer credential for the Play purchase: it
+     * never leaves the server.
+     *
+     * @var list<string>
+     */
+    protected $hidden = ['google_purchase_token', 'google_purchase_token_hash', 'google_linked_purchase_token_hash'];
+
     protected $fillable = [
         'plan_id',
         'creem_subscription_id',
         'creem_customer_id',
+        'provider',
+        'google_purchase_token',
+        'google_purchase_token_hash',
+        'google_product_id',
+        'google_order_id',
+        'google_linked_purchase_token_hash',
+        'google_auto_renewing',
         'billing_period',
         'status',
         'seats',
@@ -64,6 +91,7 @@ class Subscription extends Model
             'billing_period' => BillingPeriod::class,
             'status' => SubscriptionStatus::class,
             'seats' => 'integer',
+            'google_auto_renewing' => 'boolean',
             'seats_pending' => 'integer',
             'seats_at_renewal' => 'integer',
             'current_period_start' => 'datetime',
@@ -118,7 +146,36 @@ class Subscription extends Model
      */
     public function isEntitled(): bool
     {
-        return in_array($this->status, SubscriptionStatus::entitled(), true);
+        return self::grants($this->status, $this->current_period_end);
+    }
+
+    /**
+     * Whether a row in $status, paid up to $periodEnd, carries the plan.
+     * Cancelled counts until the period ends: Google Play reports a
+     * cancelled subscription that still runs that way (Creem keeps such a
+     * row Active with cancelled_at set, which the first rule covers).
+     */
+    public static function grants(SubscriptionStatus $status, ?\DateTimeInterface $periodEnd): bool
+    {
+        return in_array($status, SubscriptionStatus::entitled(), true)
+            || ($status === SubscriptionStatus::Cancelled && $periodEnd !== null && $periodEnd > now());
+    }
+
+    /**
+     * The rows that carry a plan right now — see grants().
+     *
+     * @param  Builder<self>  $query
+     */
+    public function scopeEntitled(Builder $query): void
+    {
+        $query->where(fn (Builder $q) => $q->whereIn('status', SubscriptionStatus::entitled())
+            ->orWhere(fn (Builder $q) => $q->where('status', SubscriptionStatus::Cancelled)
+                ->where('current_period_end', '>', now())));
+    }
+
+    public function isGoogle(): bool
+    {
+        return $this->provider === self::PROVIDER_GOOGLE;
     }
 
     public function isTrialing(): bool
@@ -138,6 +195,7 @@ class Subscription extends Model
     public function isEndingAtPeriodEnd(): bool
     {
         return $this->cancelled_at !== null
-            && in_array($this->status, [SubscriptionStatus::Active, SubscriptionStatus::Trialing], true);
+            && (in_array($this->status, [SubscriptionStatus::Active, SubscriptionStatus::Trialing], true)
+                || ($this->status === SubscriptionStatus::Cancelled && $this->isEntitled()));
     }
 }

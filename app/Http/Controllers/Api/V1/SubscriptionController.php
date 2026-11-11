@@ -5,12 +5,14 @@ namespace App\Http\Controllers\Api\V1;
 use App\Enums\InvoiceStatus;
 use App\Enums\PlanKey;
 use App\Enums\SubscriptionStatus;
+use App\Exceptions\GooglePlayRefused;
 use App\Http\Controllers\Controller;
 use App\Http\Resources\InvoiceResource;
 use App\Http\Resources\PlanResource;
 use App\Http\Resources\SubscriptionResource;
 use App\Models\Invoice;
 use App\Models\Plan;
+use App\Models\Subscription;
 use App\Models\User;
 use App\Services\CreemService;
 use App\Support\Credits;
@@ -50,6 +52,8 @@ class SubscriptionController extends Controller
                     // The flags the server gates on, so a screen locks the
                     // same features the API refuses (RF-049: custom_fonts).
                     'features' => (object) ($user->plan()->features ?? []),
+                    // creem | google | null (Free): where the plan is managed.
+                    'provider' => $subscription?->provider,
                 ],
                 'subscription' => $subscription === null
                     ? null
@@ -103,6 +107,11 @@ class SubscriptionController extends Controller
             ->where('key', $validated['plan'])
             ->where('is_active', true)
             ->firstOrFail();
+
+        // One plan at a time: a Play subscription is changed in the Play Store.
+        if ($user->subscriptions()->where('provider', Subscription::PROVIDER_GOOGLE)->entitled()->exists()) {
+            throw GooglePlayRefused::activePlaySubscription();
+        }
 
         $current = $user->activeSubscription();
 
@@ -238,6 +247,9 @@ class SubscriptionController extends Controller
                 'plan' => 'There’s no paid plan to cancel.',
             ]);
         }
+        if ($subscription->isGoogle()) {
+            throw GooglePlayRefused::activePlaySubscription();
+        }
 
         if ($subscription->creem_subscription_id !== null) {
             $creem->cancel($subscription);
@@ -262,6 +274,10 @@ class SubscriptionController extends Controller
     {
         Workspace::ownerOnly($request->user());
         $subscription = $request->user()->activeSubscription();
+
+        if ($subscription?->isGoogle()) {
+            throw GooglePlayRefused::activePlaySubscription();
+        }
 
         if ($subscription === null || $subscription->creem_customer_id === null) {
             throw ValidationException::withMessages([
