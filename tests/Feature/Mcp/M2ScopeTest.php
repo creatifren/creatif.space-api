@@ -119,12 +119,12 @@ it('creates an approval link only with approve', function () {
     $post = m2Draft($user);
 
     bearer($this, m2Key($this, $user, ['read', 'draft']))
-        ->postJson('/api/v1/social-approval-links', ['post_ids' => [$post->ulid]])
+        ->postJson('/api/v1/social-approval-links', ['approver_email' => 'client@example.test', 'post_ids' => [$post->ulid]])
         ->assertForbidden()
         ->assertJsonPath('error', 'insufficient_scope');
 
     $id = bearer($this, m2Key($this, $user, ['read', 'approve']))
-        ->postJson('/api/v1/social-approval-links', ['post_ids' => [$post->ulid]])
+        ->postJson('/api/v1/social-approval-links', ['approver_email' => 'client@example.test', 'post_ids' => [$post->ulid]])
         ->assertCreated()
         ->json('data.id');
 

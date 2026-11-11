@@ -92,7 +92,7 @@ it('lets a client approve on the link, and only posts on that link', function ()
     $other = heldPost();
 
     $url = $this->actingAs($post->user)
-        ->postJson('/api/v1/social-approval-links', [
+        ->postJson('/api/v1/social-approval-links', ['approver_email' => 'client@example.test',
             'post_ids' => [$post->ulid, $other->ulid], 'title' => 'Desember', 'client_name' => 'Andi',
         ])
         ->assertCreated()
@@ -107,10 +107,10 @@ it('lets a client approve on the link, and only posts on that link', function ()
     $this->getJson("/api/v1/a/{$token}")->assertOk()->assertJsonCount(1, 'data.posts')
         ->assertJsonMissingPath('data.client_name');
 
-    $this->postJson("/api/v1/a/{$token}/posts/{$other->ulid}/decision", ['name' => 'Andi', 'decision' => 'approve'])
+    asApprover($this)->postJson("/api/v1/a/{$token}/posts/{$other->ulid}/decision", ['name' => 'Andi', 'decision' => 'approve'])
         ->assertNotFound();
 
-    $this->postJson("/api/v1/a/{$token}/posts/{$post->ulid}/decision", ['name' => 'Andi', 'decision' => 'approve'])
+    asApprover($this)->postJson("/api/v1/a/{$token}/posts/{$post->ulid}/decision", ['name' => 'Andi', 'decision' => 'approve'])
         ->assertOk()
         ->assertJsonPath('data.approval_by', 'Andi');
 
@@ -123,10 +123,10 @@ it('needs a reason to ask for changes, and records it as a comment', function ()
     $link = SocialApprovalLink::create(['user_id' => $post->user_id]);
     $link->posts()->attach($post->id);
 
-    $this->postJson("/api/v1/a/{$link->token}/posts/{$post->ulid}/decision", ['name' => 'Andi', 'decision' => 'revise'])
+    asApprover($this)->postJson("/api/v1/a/{$link->token}/posts/{$post->ulid}/decision", ['name' => 'Andi', 'decision' => 'revise'])
         ->assertUnprocessable();
 
-    $this->postJson("/api/v1/a/{$link->token}/posts/{$post->ulid}/decision", [
+    asApprover($this)->postJson("/api/v1/a/{$link->token}/posts/{$post->ulid}/decision", [
         'name' => 'Andi', 'decision' => 'revise', 'reason' => 'Foto ketiga kurang terang.',
     ])->assertOk()->assertJsonPath('data.approval', 'revision');
 
@@ -141,11 +141,11 @@ it('takes an approval back: pulled from the provider, Credits returned, waiting 
     $link->posts()->attach($post->id);
     $before = Credits::balance($post->user);
 
-    $this->postJson("/api/v1/a/{$link->token}/posts/{$post->ulid}/decision", ['name' => 'Andi', 'decision' => 'approve'])
+    asApprover($this)->postJson("/api/v1/a/{$link->token}/posts/{$post->ulid}/decision", ['name' => 'Andi', 'decision' => 'approve'])
         ->assertOk();
     expect(Credits::balance($post->user))->toBe($before - Credits::PER_SEND);
 
-    $this->postJson("/api/v1/a/{$link->token}/posts/{$post->ulid}/retract", ['name' => 'Andi'])
+    asApprover($this)->postJson("/api/v1/a/{$link->token}/posts/{$post->ulid}/retract", ['name' => 'Andi'])
         ->assertOk()
         ->assertJsonPath('data.approval', 'client')
         ->assertJsonPath('data.comments.0.body', 'Approval taken back.');
@@ -161,7 +161,7 @@ it('refuses to take back a post that has gone out', function () {
     $link = SocialApprovalLink::create(['user_id' => $post->user_id]);
     $link->posts()->attach($post->id);
 
-    $this->postJson("/api/v1/a/{$link->token}/posts/{$post->ulid}/retract", ['name' => 'Andi'])
+    asApprover($this)->postJson("/api/v1/a/{$link->token}/posts/{$post->ulid}/retract", ['name' => 'Andi'])
         ->assertUnprocessable();
 });
 
@@ -181,7 +181,7 @@ it('threads comments, resolves without deleting, and applies a suggestion', func
     $link = SocialApprovalLink::create(['user_id' => $post->user_id]);
     $link->posts()->attach($post->id);
 
-    $id = $this->postJson("/api/v1/a/{$link->token}/posts/{$post->ulid}/comments", [
+    $id = asApprover($this)->postJson("/api/v1/a/{$link->token}/posts/{$post->ulid}/comments", [
         'name' => 'Sari', 'body' => 'Lebih pendek?', 'suggestion' => 'Kartu Noel, enam desain.',
     ])->assertCreated()->json('data.id');
 
@@ -426,7 +426,7 @@ it('lets a client approve all they were shown in one request, and tells the owne
     $late = heldPost('client', $user); // added after the client's page loaded
     $link = linkFor($a, $b, $late);
 
-    $this->postJson("/api/v1/a/{$link->token}/approve-all", ['name' => 'Andi', 'post_ids' => [$a->ulid, $b->ulid]])
+    asApprover($this)->postJson("/api/v1/a/{$link->token}/approve-all", ['name' => 'Andi', 'post_ids' => [$a->ulid, $b->ulid]])
         ->assertOk()
         ->assertJsonCount(3, 'data.posts')
         ->assertJsonCount(2, 'data.results')
@@ -449,7 +449,7 @@ it("never shows a client the editor's balance, and sends nothing it cannot pay f
     Wallet::debit($user, WalletTransactionType::CreditsSend,
         Credits::balance($user), wallet: Wallet::CREDITS);
 
-    $message = $this->postJson("/api/v1/a/{$link->token}/approve-all", ['name' => 'Andi', 'post_ids' => [$a->ulid, $b->ulid]])
+    $message = asApprover($this)->postJson("/api/v1/a/{$link->token}/approve-all", ['name' => 'Andi', 'post_ids' => [$a->ulid, $b->ulid]])
         ->assertUnprocessable()
         ->json('message');
 
@@ -459,7 +459,7 @@ it("never shows a client the editor's balance, and sends nothing it cannot pay f
         fn ($n, $channels) => $n->decision === 'blocked' && $channels === ['mail', 'database']);
 
     // The single decision too — the leak this replaces.
-    $single = $this->postJson("/api/v1/a/{$link->token}/posts/{$a->ulid}/decision", ['name' => 'Andi', 'decision' => 'approve'])
+    $single = asApprover($this)->postJson("/api/v1/a/{$link->token}/posts/{$a->ulid}/decision", ['name' => 'Andi', 'decision' => 'approve'])
         ->assertUnprocessable()
         ->json('message');
     expect($single)->not->toMatch('/\d/');
@@ -474,7 +474,7 @@ it('reports a provider failure on the post it happened to, and sends the rest', 
     $b = heldPost('client', $a->user);
     $link = linkFor($a, $b);
 
-    $results = $this->postJson("/api/v1/a/{$link->token}/approve-all", ['name' => 'Andi', 'post_ids' => [$a->ulid, $b->ulid]])
+    $results = asApprover($this)->postJson("/api/v1/a/{$link->token}/approve-all", ['name' => 'Andi', 'post_ids' => [$a->ulid, $b->ulid]])
         ->assertOk()
         ->json('data.results');
 
@@ -489,9 +489,9 @@ it('does not send a post twice when Approve all is pressed twice', function () {
     $a = heldPost('client');
     $link = linkFor($a);
 
-    $this->postJson("/api/v1/a/{$link->token}/approve-all", ['name' => 'Andi', 'post_ids' => [$a->ulid]])->assertOk();
+    asApprover($this)->postJson("/api/v1/a/{$link->token}/approve-all", ['name' => 'Andi', 'post_ids' => [$a->ulid]])->assertOk();
     // Again: answered with where it stands (idempotent), never sent twice.
-    $this->postJson("/api/v1/a/{$link->token}/approve-all", ['name' => 'Andi', 'post_ids' => [$a->ulid]])->assertOk();
+    asApprover($this)->postJson("/api/v1/a/{$link->token}/approve-all", ['name' => 'Andi', 'post_ids' => [$a->ulid]])->assertOk();
 
     Http::assertSentCount(1);
 });
@@ -501,7 +501,7 @@ it('tells the owner when a client asks for changes, and respects the switch', fu
     $post = heldPost('client');
     $link = linkFor($post);
 
-    $this->postJson("/api/v1/a/{$link->token}/posts/{$post->ulid}/decision", [
+    asApprover($this)->postJson("/api/v1/a/{$link->token}/posts/{$post->ulid}/decision", [
         'name' => 'Andi', 'decision' => 'revise', 'reason' => 'Foto kurang terang.',
     ])->assertOk();
     Notification::assertSentTo($post->user, SocialPostDecided::class,
@@ -511,7 +511,7 @@ it('tells the owner when a client asks for changes, and respects the switch', fu
     $post->user->notificationPreferences()->create(['type' => 'social.post.decision', 'email_enabled' => false, 'bell_enabled' => false]);
     $other = heldPost('client', $post->user);
     $link->posts()->attach($other->id);
-    $this->postJson("/api/v1/a/{$link->token}/posts/{$other->ulid}/decision", [
+    asApprover($this)->postJson("/api/v1/a/{$link->token}/posts/{$other->ulid}/decision", [
         'name' => 'Andi', 'decision' => 'revise', 'reason' => 'Lagi.',
     ])->assertOk();
     Notification::assertNotSentTo($post->user, SocialPostDecided::class, fn ($n) => $n->post?->is($other));

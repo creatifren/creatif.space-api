@@ -419,10 +419,10 @@ describe('approval links', function () {
         $a = aeHeldPost($user, 'awaiting');
         $b = aeHeldPost($user, 'awaiting');
 
-        $this->actingAs($user)->postJson('/api/v1/social-approval-links', [
+        $this->actingAs($user)->postJson('/api/v1/social-approval-links', ['approver_email' => 'client@example.test',
             'post_ids' => [$a->ulid, $b->ulid], 'expires_in_hours' => 168, 'client_name' => 'Client Co',
         ])->assertCreated();
-        $this->actingAs($user)->postJson('/api/v1/social-approval-links', ['post_ids' => [$a->ulid]])->assertCreated();
+        $this->actingAs($user)->postJson('/api/v1/social-approval-links', ['approver_email' => 'client@example.test', 'post_ids' => [$a->ulid]])->assertCreated();
 
         ae()->assertCapturedTimes('approval_link_created', 2);
         [$first, $second] = ae()->captured('approval_link_created');
@@ -461,11 +461,11 @@ describe('approval links', function () {
         $link->posts()->attach([$a->id, $b->id]);
         $this->travel(3)->hours();
 
-        $this->postJson("/api/v1/a/{$link->token}/posts/{$a->ulid}/decision", ['name' => 'Andi', 'decision' => 'approve'])->assertOk();
+        asApprover($this)->postJson("/api/v1/a/{$link->token}/posts/{$a->ulid}/decision", ['name' => 'Andi', 'decision' => 'approve'])->assertOk();
         // The same yes again is answered, not refused — and fires nothing.
-        $this->postJson("/api/v1/a/{$link->token}/posts/{$a->ulid}/decision", ['name' => 'Andi', 'decision' => 'approve'])->assertOk();
-        $this->postJson("/api/v1/a/{$link->token}/posts/{$b->ulid}/decision", ['name' => 'Andi', 'decision' => 'revise', 'reason' => 'Darker'])->assertOk();
-        $this->postJson("/api/v1/a/{$link->token}/posts/{$a->ulid}/retract", ['name' => 'Andi'])->assertOk();
+        asApprover($this)->postJson("/api/v1/a/{$link->token}/posts/{$a->ulid}/decision", ['name' => 'Andi', 'decision' => 'approve'])->assertOk();
+        asApprover($this)->postJson("/api/v1/a/{$link->token}/posts/{$b->ulid}/decision", ['name' => 'Andi', 'decision' => 'revise', 'reason' => 'Darker'])->assertOk();
+        asApprover($this)->postJson("/api/v1/a/{$link->token}/posts/{$a->ulid}/retract", ['name' => 'Andi'])->assertOk();
 
         $all = ae()->captured('approval_decision_made');
         expect(collect($all)->pluck('properties.decision')->all())->toBe(['approved', 'changes_requested', 'retracted'])
@@ -483,9 +483,9 @@ describe('approval links', function () {
         $link = SocialApprovalLink::create(['user_id' => $owner->id]);
         $link->posts()->attach([$a->id, $b->id]);
 
-        $this->postJson("/api/v1/a/{$link->token}/approve-all", ['name' => 'Andi', 'post_ids' => [$a->ulid, $b->ulid]])->assertOk();
+        asApprover($this)->postJson("/api/v1/a/{$link->token}/approve-all", ['name' => 'Andi', 'post_ids' => [$a->ulid, $b->ulid]])->assertOk();
         // Approve-all again: answered (idempotent), no second event.
-        $this->postJson("/api/v1/a/{$link->token}/approve-all", ['name' => 'Andi', 'post_ids' => [$a->ulid, $b->ulid]])->assertOk();
+        asApprover($this)->postJson("/api/v1/a/{$link->token}/approve-all", ['name' => 'Andi', 'post_ids' => [$a->ulid, $b->ulid]])->assertOk();
 
         ae()->assertCapturedTimes('approval_decision_made', 2, fn ($p) => $p['decision'] === 'approved');
     });

@@ -76,6 +76,12 @@ class SocialApprovalController extends Controller
             'title' => ['sometimes', 'nullable', 'string', 'max:120'],
             // The editor's own note on who it is for; the client never sees it.
             'client_name' => ['sometimes', 'nullable', 'string', 'max:120'],
+            // Who may decide: the client signs in with this address (Google
+            // or a one-time email link) to approve or ask for changes.
+            'approver_email' => ['required', 'string', 'email:rfc', 'max:254'],
+        ], [
+            'approver_email.required' => 'Add the email address of the person who approves. They sign in with it to decide.',
+            'approver_email.email' => 'That is not an email address.',
         ]);
 
         PlanQuota::requireClientApprovals($request->user(), 'post_ids');
@@ -98,7 +104,7 @@ class SocialApprovalController extends Controller
         // Plans v2 limits (Free): one client at a time, each post's slot in
         // the scheduling window, and drafts joining the queue fit in it.
         $user = $request->user();
-        PlanQuota::requireApprovalClient($user, $validated['client_name'] ?? null);
+        PlanQuota::requireApprovalClient($user, $validated['client_name'] ?? null, null, 'approver_email', $validated['approver_email']);
         self::requireWindow($user, $posts, 'post_ids');
         self::requireHorizon($posts, 'post_ids');
         PlanQuota::requireQueueRoom($user, $posts->where('status', SocialPostStatus::Draft)->count(), 'post_ids');
@@ -109,6 +115,7 @@ class SocialApprovalController extends Controller
             'user_id' => Workspace::owner($request->user())->id,
             'title' => $validated['title'] ?? null,
             'client_name' => $validated['client_name'] ?? null,
+            'approver_email' => $validated['approver_email'],
             'expires_at' => $hours ? now()->addHours($hours) : null,
         ]);
         $link->posts()->attach($posts->pluck('id'));
@@ -160,6 +167,9 @@ class SocialApprovalController extends Controller
         $validated = $request->validate([
             'title' => ['sometimes', 'nullable', 'string', 'max:120'],
             'client_name' => ['sometimes', 'nullable', 'string', 'max:120'],
+            // Change who may decide (not removable: a link always has one
+            // once set).
+            'approver_email' => ['sometimes', 'string', 'email:rfc', 'max:254'],
             'expires_in_hours' => ['sometimes', 'nullable', 'integer', Rule::in([48, 168, 720])],
             'add_post_ids' => ['sometimes', 'array', 'max:'.self::MAX_POSTS],
             'add_post_ids.*' => ['string'],
@@ -177,10 +187,13 @@ class SocialApprovalController extends Controller
         if (! empty($validated['add_post_ids'])) {
             PlanQuota::requireClientApprovals($request->user(), 'add_post_ids');
         }
-        // Naming a different client is asking someone new (plans v2).
-        if (array_key_exists('client_name', $validated)
-            && PlanQuota::approvalIdentity($validated['client_name'], $link->id) !== PlanQuota::approvalIdentity($link->client_name, $link->id)) {
-            PlanQuota::requireApprovalClient($request->user(), $validated['client_name'], $link);
+        // Naming a different client is asking someone new (plans v2): by
+        // approver_email when the link has one, by client_name on old links.
+        $newName = array_key_exists('client_name', $validated) ? $validated['client_name'] : $link->client_name;
+        $newEmail = $validated['approver_email'] ?? $link->approver_email;
+        if (PlanQuota::approvalIdentity($newName, $link->id, $newEmail) !== PlanQuota::approvalIdentity($link->client_name, $link->id, $link->approver_email)) {
+            PlanQuota::requireApprovalClient($request->user(), $newName, $link,
+                isset($validated['approver_email']) ? 'approver_email' : 'client_name', $newEmail);
         }
 
         $add = isset($validated['add_post_ids'])
@@ -209,7 +222,11 @@ class SocialApprovalController extends Controller
         }
 
         DB::transaction(function () use ($link, $validated, $add, $remove): void {
-            $fields = array_intersect_key($validated, array_flip(['title', 'client_name']));
+            $fields = array_intersect_key($validated, array_flip(['title', 'client_name', 'approver_email']));
+            if (isset($fields['approver_email'])) {
+                // Re-addressed by the owner: no longer a first-use binding.
+                $fields['approver_bound_at'] = null;
+            }
             if (array_key_exists('expires_in_hours', $validated)) {
                 $hours = $validated['expires_in_hours'];
                 $fields['expires_at'] = $hours ? now()->addHours($hours) : null;
@@ -500,6 +517,9 @@ class SocialApprovalController extends Controller
             'url' => $link->url(),
             'title' => $link->title,
             'client_name' => $link->client_name,
+            // Null on links made before signed-in approvers until someone binds it.
+            'approver_email' => $link->approver_email,
+            'approver_bound_at' => $link->approver_bound_at?->toIso8601String(),
             'posts' => $link->posts_count ?? 0,
             'status' => $link->status(),
             'counts' => [
@@ -512,6 +532,48 @@ class SocialApprovalController extends Controller
             'revoked_at' => $link->revoked_at?->toIso8601String(),
             'created_at' => $link->created_at?->toIso8601String(),
         ];
+    }
+
+    /**
+     * GET /me/approvals/waiting — "Waiting your approval": live links sent
+     * to my verified email that still have posts waiting on my decision.
+     * Newest first. Empty for an unverified address.
+     */
+    public function waiting(Request $request): JsonResponse
+    {
+        $user = $request->user();
+        if ($user->email_verified_at === null) {
+            return response()->json(['data' => []]);
+        }
+
+        $links = SocialApprovalLink::query()
+            ->live()
+            ->where('approver_email', mb_strtolower(trim($user->email)))
+            ->whereHas('posts', fn ($q) => $q->where('status', SocialPostStatus::Scheduled)
+                ->where('approval', SocialPostApproval::Client->value))
+            ->with(['user:id,name', 'posts' => fn ($q) => $q->where('status', SocialPostStatus::Scheduled)
+                ->where('approval', SocialPostApproval::Client->value)
+                ->orderBy('scheduled_at')])
+            ->latest('id')
+            ->limit(100)
+            ->get();
+
+        return response()->json(['data' => $links->map(fn (SocialApprovalLink $link) => [
+            'link' => [
+                'url' => $link->url(),
+                'title' => $link->title,
+                'editor' => $link->user->name,
+                'expires_at' => $link->expires_at?->toIso8601String(),
+                'created_at' => $link->created_at?->toIso8601String(),
+            ],
+            'waiting' => $link->posts->count(),
+            'posts' => $link->posts->map(fn (SocialPost $p) => [
+                'id' => $p->ulid,
+                'caption' => str($p->caption)->limit(140)->toString(),
+                'scheduled_at' => $p->scheduled_at?->toIso8601String(),
+                'approval' => $p->approval?->value,
+            ])->values()->all(),
+        ])->all()]);
     }
 
     /**

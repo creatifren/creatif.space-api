@@ -1,6 +1,7 @@
 <?php
 
 use App\Enums\SocialPlatform;
+use App\Http\Controllers\Api\V1\OutstandConnectController;
 use App\Models\SocialAccount;
 use App\Models\User;
 use App\Services\OutstandService;
@@ -186,7 +187,7 @@ it('Bluesky has no OAuth return: a refused sign-in answers the request itself', 
 });
 
 it('maps provider error text to reasons', function (string $text, string $reason) {
-    expect(\App\Http\Controllers\Api\V1\OutstandConnectController::reasonFor($text))->toBe($reason);
+    expect(OutstandConnectController::reasonFor($text))->toBe($reason);
 })->with([
     ['access_denied', 'denied'],
     ['user_denied', 'denied'],

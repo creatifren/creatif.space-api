@@ -9,10 +9,14 @@ use App\Exceptions\NotEnoughCredits;
 use App\Exceptions\PublishPreflightFailed;
 use App\Exceptions\ScheduleBeyondHorizon;
 use App\Http\Controllers\Controller;
+use App\Models\SocialApprovalDecision;
 use App\Models\SocialApprovalLink;
 use App\Models\SocialPost;
 use App\Models\SocialPostComment;
+use App\Models\User;
 use App\Notifications\SocialPostDecided;
+use App\Support\ApproverGate;
+use App\Support\ApproverSignIn;
 use App\Support\Credits;
 use App\Support\ProductEvents;
 use App\Support\PublishFailure;
@@ -26,9 +30,13 @@ use Illuminate\Validation\ValidationException;
 use Throwable;
 
 /**
- * creatif.space/a/{token} — the client's side. No account, by design: the
- * token is the credential and a typed name is the identity. Every action
- * is scoped to the posts ON this link; a post id from anywhere else 404s.
+ * creatif.space/a/{token} — the client's side. Looking needs only the token.
+ * Deciding (approve, ask for changes, take back) needs the invited approver
+ * signed in — ApproverGate: 401 sign_in_required, 403 approver_mismatch —
+ * and every decision is written to social_approval_decisions. The typed
+ * name is kept for display only. Comments stay open to the token holder.
+ * Every action is scoped to the posts ON this link; a post id from anywhere
+ * else 404s.
  *
  * Ladder, same as /r/{slug}: 404 unknown, 410 expired, 409 revoked.
  */
@@ -55,6 +63,8 @@ class PublicApprovalController extends Controller
             // The owner's plan, as public Spaces read it: the page hides its
             // footer slogan when branding is removed.
             'branding_removed' => Workspace::owner($link->user)->plan()->feature('branding_removed'),
+            // Who may decide, and whether the person looking can.
+            'approver' => ApproverGate::viewer($request, $link),
             'posts' => $posts->map(fn (SocialPost $p) => $this->postArray($p))->all(),
         ]]);
     }
@@ -71,11 +81,15 @@ class PublicApprovalController extends Controller
             return $link;
         }
 
+        $approver = ApproverGate::authorize($request, $link);
+
         $validated = $request->validate([
-            'name' => ['required', 'string', 'max:120'],
+            // Display only now; the signed-in approver is the identity.
+            'name' => ['sometimes', 'nullable', 'string', 'max:120'],
             'decision' => ['required', 'in:approve,revise'],
             'reason' => ['required_if:decision,revise', 'nullable', 'string', 'max:5000'],
         ]);
+        $name = self::displayName($validated['name'] ?? null, $approver);
 
         $socialPost = $link->posts()->where('ulid', $post)->firstOrFail();
 
@@ -90,8 +104,11 @@ class PublicApprovalController extends Controller
             return response()->json(['message' => 'This post has already been decided.'], 422);
         }
 
+        ApproverGate::bindIfUnbound($request, $link, $approver,
+            $validated['decision'] === 'approve' ? SocialApprovalDecision::APPROVED : SocialApprovalDecision::CHANGES_REQUESTED);
+
         if ($validated['decision'] === 'approve') {
-            $outcome = $this->approveFor($link, $socialPost, $validated['name'], $relay);
+            $outcome = $this->approveFor($link, $socialPost, $name, $relay);
             if ($outcome === false) {
                 // Someone else's request won the race: the same yes is fine.
                 return $this->sameDecision($socialPost->refresh(), $validated)
@@ -101,25 +118,27 @@ class PublicApprovalController extends Controller
             if (is_string($outcome)) {
                 return response()->json(['message' => $outcome], 422);
             }
+            ApproverGate::record($request, $link, $socialPost, SocialApprovalDecision::APPROVED, $approver, $name);
             // A post held for its slot already told the owner (HELD).
             if (! SocialPostRelay::heldForLater($socialPost->refresh())) {
-                $link->user->notify(new SocialPostDecided($link, SocialPostDecided::APPROVED, $validated['name'], 1, $socialPost));
+                $link->user->notify(new SocialPostDecided($link, SocialPostDecided::APPROVED, $name, 1, $socialPost));
             }
             ProductEvents::approvalDecision($link, $socialPost, 'approved');
         } else {
             $socialPost->update([
                 'approval' => SocialPostApproval::Revision,
-                'approval_by' => $validated['name'],
+                'approval_by' => $name,
                 'approval_at' => now(),
             ]);
             SocialPostComment::create([
                 'social_post_id' => $socialPost->id,
-                'author_name' => $validated['name'],
+                'author_name' => $name,
                 'role' => 'APPROVER',
                 'body' => $validated['reason'],
             ]);
+            ApproverGate::record($request, $link, $socialPost, SocialApprovalDecision::CHANGES_REQUESTED, $approver, $name);
             $link->user->notify(new SocialPostDecided(
-                $link, SocialPostDecided::REVISE, $validated['name'], 1, $socialPost,
+                $link, SocialPostDecided::REVISE, $name, 1, $socialPost,
                 str($validated['reason'])->limit(200)->toString(),
             ));
             ProductEvents::approvalDecision($link, $socialPost, 'changes_requested');
@@ -177,11 +196,14 @@ class PublicApprovalController extends Controller
             return $link;
         }
 
+        $approver = ApproverGate::authorize($request, $link);
+
         $validated = $request->validate([
-            'name' => ['required', 'string', 'max:120'],
+            'name' => ['sometimes', 'nullable', 'string', 'max:120'],
             'post_ids' => ['required', 'array', 'min:1', 'max:50'],
             'post_ids.*' => ['string'],
         ]);
+        $name = self::displayName($validated['name'] ?? null, $approver);
 
         $eligible = $link->posts()
             ->whereIn('ulid', array_unique($validated['post_ids']))
@@ -210,17 +232,19 @@ class PublicApprovalController extends Controller
         $balance = Credits::balance($link->user);
         if ($balance < $need) {
             $link->user->notify(new SocialPostDecided(
-                $link, SocialPostDecided::BLOCKED, $validated['name'], $eligible->count(), null,
+                $link, SocialPostDecided::BLOCKED, $name, $eligible->count(), null,
                 "Approving these needs {$need} Credits and the balance has {$balance} — top up, then send them from Approval links.",
             ));
 
             return response()->json(['message' => $this->blockedMessage($link)], 422);
         }
 
+        ApproverGate::bindIfUnbound($request, $link, $approver, SocialApprovalDecision::APPROVED);
+
         $results = [];
         $approved = 0;
         foreach ($eligible as $post) {
-            $outcome = $this->approveFor($link, $post, $validated['name'], $relay);
+            $outcome = $this->approveFor($link, $post, $name, $relay);
             $results[] = [
                 'id' => $post->ulid,
                 'approved' => $outcome === true,
@@ -228,13 +252,14 @@ class PublicApprovalController extends Controller
             ];
             $approved += $outcome === true ? 1 : 0;
             if ($outcome === true) {
+                ApproverGate::record($request, $link, $post, SocialApprovalDecision::APPROVED, $approver, $name);
                 ProductEvents::approvalDecision($link, $post, 'approved');
             }
         }
 
         if ($approved > 0) {
             $link->user->notify(new SocialPostDecided(
-                $link, SocialPostDecided::APPROVED, $validated['name'], $approved,
+                $link, SocialPostDecided::APPROVED, $name, $approved,
                 $approved === 1 ? $eligible->first(fn ($p) => $p->approval === SocialPostApproval::Approved) : null,
             ));
         }
@@ -327,7 +352,10 @@ class PublicApprovalController extends Controller
             return $link;
         }
 
-        $validated = $request->validate(['name' => ['required', 'string', 'max:120']]);
+        $approver = ApproverGate::authorize($request, $link);
+
+        $validated = $request->validate(['name' => ['sometimes', 'nullable', 'string', 'max:120']]);
+        $name = self::displayName($validated['name'] ?? null, $approver);
         $socialPost = $link->posts()->where('ulid', $post)->firstOrFail();
         $was = $socialPost->approval;
 
@@ -343,10 +371,11 @@ class PublicApprovalController extends Controller
         $socialPost->update(['approval' => SocialPostApproval::Client, 'approval_by' => null, 'approval_at' => null]);
         SocialPostComment::create([
             'social_post_id' => $socialPost->id,
-            'author_name' => $validated['name'],
+            'author_name' => $name,
             'role' => 'APPROVER',
             'body' => $was === SocialPostApproval::Approved ? 'Approval taken back.' : 'Request for changes taken back.',
         ]);
+        ApproverGate::record($request, $link, $socialPost, SocialApprovalDecision::RETRACTED, $approver, $name);
         ProductEvents::approvalDecision($link, $socialPost, 'retracted');
 
         return response()->json(['data' => $this->postArray($socialPost->fresh(['targets.account', 'comments.replies']))]);
@@ -384,6 +413,38 @@ class PublicApprovalController extends Controller
         ]);
 
         return response()->json(['data' => $comment->toPublicArray()], 201);
+    }
+
+    /**
+     * Sign in by email: a one-time link (15 minutes, single use) that signs
+     * in — or creates — the account for that address and returns to the
+     * approval page. Sent only when the address is the link's approver
+     * (any address on an old, still unbound link). Always 202 with the same
+     * words, so the endpoint never says whether an address matched.
+     */
+    public function emailLink(Request $request, string $token): JsonResponse
+    {
+        $link = $this->resolve($token);
+        if ($link instanceof JsonResponse) {
+            return $link;
+        }
+
+        $validated = $request->validate(['email' => ['required', 'string', 'email:rfc', 'max:254']]);
+        $email = mb_strtolower(trim($validated['email']));
+
+        ApproverSignIn::send($link, $email);
+
+        return response()->json([
+            'message' => 'If that address can approve this link, a sign-in link is on its way. It works once, for 15 minutes.',
+        ], 202);
+    }
+
+    /** What the approver typed, else their account name. */
+    private static function displayName(?string $typed, User $approver): string
+    {
+        $typed = trim((string) $typed);
+
+        return $typed !== '' ? $typed : ($approver->name ?: $approver->email);
     }
 
     private function resolve(string $token): SocialApprovalLink|JsonResponse

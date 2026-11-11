@@ -108,7 +108,7 @@ describe('link tokens are looked up by their hash', function () {
         $post = p1HeldPost($owner, 'client');
         $link = p1Link($post);
 
-        $this->postJson("/api/v1/a/{$link->token}/posts/{$post->ulid}/comments", ['body' => 'Looks good', 'name' => 'Andi'])
+        asApprover($this)->postJson("/api/v1/a/{$link->token}/posts/{$post->ulid}/comments", ['body' => 'Looks good', 'name' => 'Andi'])
             ->assertCreated();
     });
 });
@@ -204,7 +204,7 @@ describe('team members act on the owner\'s approvals and feed', function () {
         $this->actingAs($member)->getJson("/api/v1/social-posts/{$held->ulid}/comments")->assertOk();
         $this->actingAs($member)->postJson("/api/v1/social-posts/{$held->ulid}/comments", ['body' => 'Tweak the opener'])->assertCreated();
 
-        $made = $this->actingAs($member)->postJson('/api/v1/social-approval-links', ['post_ids' => [$toShare->ulid]])
+        $made = $this->actingAs($member)->postJson('/api/v1/social-approval-links', ['approver_email' => 'client@example.test', 'post_ids' => [$toShare->ulid]])
             ->assertCreated()->json('data.id');
         expect(SocialApprovalLink::query()->where('ulid', $made)->value('user_id'))->toBe($owner->id);
 
@@ -222,7 +222,7 @@ describe('team members act on the owner\'s approvals and feed', function () {
         $this->actingAs($viewer)->postJson("/api/v1/social-posts/{$held->ulid}/approve")->assertForbidden();
         $this->actingAs($viewer)->deleteJson("/api/v1/social-approval-links/{$link->ulid}")->assertForbidden();
         $this->actingAs($viewer)->postJson("/api/v1/social-posts/{$held->ulid}/comments", ['body' => 'x'])->assertForbidden();
-        $this->actingAs($viewer)->postJson('/api/v1/social-approval-links', ['post_ids' => [$held->ulid]])->assertForbidden();
+        $this->actingAs($viewer)->postJson('/api/v1/social-approval-links', ['approver_email' => 'client@example.test', 'post_ids' => [$held->ulid]])->assertForbidden();
     });
 
     it('still refuses someone outside the workspace', function () {

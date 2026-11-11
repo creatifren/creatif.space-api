@@ -29,6 +29,16 @@ return Application::configure(basePath: dirname(__DIR__))
     ->withMiddleware(function (Middleware $middleware): void {
         $middleware->statefulApi();
 
+        // Approval-link decisions use the session (the signed-in approver)
+        // but may arrive by navigator.sendBeacon, which cannot send the
+        // X-XSRF-TOKEN header. SameSite=Lax + Sanctum's own-origin check
+        // keep cross-site requests unauthenticated instead. See routes/api/v1.php.
+        $middleware->validateCsrfTokens(except: [
+            'api/v1/a/*/posts/*/decision',
+            'api/v1/a/*/posts/*/retract',
+            'api/v1/a/*/approve-all',
+        ]);
+
         // The visitor's IP may come only from our app server (TRUSTED_PROXIES),
         // only via X-Forwarded-For. See TrustAppServer.
         $middleware->replace(TrustProxies::class, TrustAppServer::class);

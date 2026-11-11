@@ -118,3 +118,18 @@ function bearer(TestCase $test, string $token): TestCase
 
 // Media v2 test helpers (mediaUser, mediaFile, postWith, …).
 require_once __DIR__.'/Feature/Media/MediaHelpers.php';
+
+/**
+ * Act as the invited approver of an approval link (signed-in web session,
+ * verified email). Links the API creates in tests use this address by
+ * default; an old link without one binds to it on the first decision.
+ */
+function asApprover(TestCase $test, string $email = 'client@example.test'): TestCase
+{
+    // Re-read from the database: under Model::shouldBeStrict a factory
+    // instance lacks column defaults (status, password) the guard reads.
+    $user = User::query()->where('email', $email)->first()
+        ?? User::query()->findOrFail(User::factory()->create(['email' => $email])->id);
+
+    return $test->actingAs($user, 'web');
+}

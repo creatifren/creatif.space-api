@@ -95,7 +95,7 @@ function lfCreates(): int
 
 function lfDecide($test, SocialApprovalLink $link, SocialPost $post)
 {
-    return $test->postJson("/api/v1/a/{$link->token}/posts/{$post->ulid}/decision", ['name' => 'Andi', 'decision' => 'approve']);
+    return asApprover($test)->postJson("/api/v1/a/{$link->token}/posts/{$post->ulid}/decision", ['name' => 'Andi', 'decision' => 'approve']);
 }
 
 describe('P2 — scheduling horizon: the owner hears it when scheduling', function () {
@@ -140,12 +140,12 @@ describe('P2 — scheduling horizon: the owner hears it when scheduling', functi
         $far = SocialPost::factory()->for($owner)->create(['status' => 'scheduled', 'approval' => 'awaiting', 'provider_post_id' => null, 'scheduled_at' => now()->addDays(75)]);
         $near = SocialPost::factory()->for($owner)->create(['status' => 'scheduled', 'approval' => 'awaiting', 'provider_post_id' => null, 'scheduled_at' => now()->addDays(5)]);
 
-        $this->actingAs($owner)->postJson('/api/v1/social-approval-links', ['post_ids' => [$far->ulid]])
+        $this->actingAs($owner)->postJson('/api/v1/social-approval-links', ['approver_email' => 'client@example.test', 'post_ids' => [$far->ulid]])
             ->assertUnprocessable()
             ->assertJsonPath('code', 'schedule_horizon')
             ->assertJsonValidationErrors('post_ids');
 
-        $link = $this->actingAs($owner)->postJson('/api/v1/social-approval-links', ['post_ids' => [$near->ulid]])->assertCreated()->json('data.id');
+        $link = $this->actingAs($owner)->postJson('/api/v1/social-approval-links', ['approver_email' => 'client@example.test', 'post_ids' => [$near->ulid]])->assertCreated()->json('data.id');
         $this->actingAs($owner)->patchJson("/api/v1/social-approval-links/{$link}", ['add_post_ids' => [$far->ulid]])
             ->assertUnprocessable()->assertJsonPath('code', 'schedule_horizon');
     });

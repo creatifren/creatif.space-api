@@ -1,4 +1,4 @@
-﻿<?php
+<?php
 
 use App\Enums\ActivityAction;
 use App\Models\Activity;
