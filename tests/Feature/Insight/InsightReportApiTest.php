@@ -66,6 +66,21 @@ it('refuses Free with 402 plan_required, feature insight', function () {
     expect(InsightReport::count())->toBe(0);
 });
 
+it('refuses Free on the clients list and on a report it made before downgrading', function () {
+    ['owner' => $owner] = InsightFixture::workspace('free');
+    $report = InsightReport::create([
+        'user_id' => $owner->id, 'owner_id' => $owner->id, 'client_id' => $owner->ulid,
+        'format' => 'deck', 'locale' => 'en', 'period_from' => '2026-10-01', 'period_to' => '2026-10-31',
+        'options' => ['period_kind' => 'month', 'channel_ids' => [], 'show_logo' => false, 'hide_branding' => false, 'next_month_notes' => null],
+        'status' => 'done', 'file_name' => 'x.pdf', 'path' => 'insight-reports/x.pdf', 'expires_at' => now()->addHour(),
+    ]);
+
+    $this->actingAs($owner)->getJson('/api/v1/insight/clients')
+        ->assertStatus(402)->assertJsonPath('feature', 'insight');
+    $this->actingAs($owner)->getJson("/api/v1/insight/reports/{$report->ulid}")
+        ->assertStatus(402)->assertJsonPath('feature', 'insight')->assertJsonMissingPath('download_url');
+});
+
 it('accepts Pro and Max, queues the build and answers 202', function (string $plan) {
     Queue::fake();
     ['owner' => $owner, 'accounts' => $accounts] = InsightFixture::workspace($plan);

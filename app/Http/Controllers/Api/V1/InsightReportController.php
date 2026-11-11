@@ -24,6 +24,8 @@ class InsightReportController extends Controller
 {
     public function clients(Request $request): JsonResponse
     {
+        PlanQuota::requireFeature($request->user(), 'insight');
+
         return response()->json(['data' => InsightClients::for($request->user())]);
     }
 
@@ -98,6 +100,9 @@ class InsightReportController extends Controller
     {
         // Anyone in the workspace may fetch it; nobody else learns it exists.
         abort_unless($insightReport->owner_id === Workspace::owner($request->user())->id, 404);
+        // Every Insight read is gated (InsightGateTest): a workspace that
+        // dropped to Free keeps the row but not the numbers.
+        PlanQuota::requireFeature($request->user(), 'insight');
 
         return response()->json($this->body($insightReport));
     }
