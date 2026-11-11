@@ -2,9 +2,12 @@
 
 namespace App\Providers;
 
+use App\Contracts\AiCaptionProvider;
 use App\Contracts\SocialProvider;
 use App\Mcp\McpTokenResolver;
 use App\Models\User;
+use App\Services\Ai\FakeAiCaptionProvider;
+use App\Services\Ai\OpenAiCaptionProvider;
 use App\Services\ErrorTracking;
 use App\Support\SocialProviders;
 use Carbon\CarbonImmutable;
@@ -34,6 +37,11 @@ class AppServiceProvider extends ServiceProvider
         // The relay for new accounts and posts; rows that exist ask
         // SocialProviders::for() for the one that holds them.
         $this->app->bind(SocialProvider::class, fn ($app) => $app->make(SocialProviders::class)->current());
+
+        // AI captions: OpenAI, or the fake (AI_CAPTION_PROVIDER=fake).
+        $this->app->singleton(AiCaptionProvider::class, fn ($app) => config('ai.caption.provider') === 'fake'
+            ? $app->make(FakeAiCaptionProvider::class)
+            : $app->make(OpenAiCaptionProvider::class));
 
         // OAuth routes are declared in routes/web.php and routes/oauth.php:
         // only the authorization-code flow, with PKCE enforced. Must be set
