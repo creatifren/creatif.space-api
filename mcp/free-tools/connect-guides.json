@@ -307,7 +307,7 @@
       "flow": "bluesky",
       "requirements": [
         {
-          "text": "Your Bluesky handle and an app password (not your main password). Bluesky has no sign-in page to send you to.",
+          "text": "Your Bluesky handle and an app password. Bluesky has no sign-in page to send you to.",
           "evidence": [
             "app/Http/Controllers/Api/V1/SocialAccountController.php:103-105",
             "app/Http/Controllers/Api/V1/SocialAccountController.php:115-117",
