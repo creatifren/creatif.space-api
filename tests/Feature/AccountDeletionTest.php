@@ -149,7 +149,15 @@ describe('the grace period', function () {
 
         $this->postJson('/auth/login', ['email' => 'rina@studio.test', 'password' => 'secret-pass-123'])->assertSuccessful();
 
-        foreach (['/api/v1/me', '/api/v1/social-posts', '/api/v1/credits', '/api/v1/me/api-keys'] as $url) {
+        // /me answers, with the pending state, so the app can offer to keep the account.
+        $this->getJson('/api/v1/me')
+            ->assertOk()
+            ->assertJsonPath('data.status', 'pending_deletion')
+            ->assertJsonPath('data.deletion_requested_at', '2026-11-12T09:00:00+00:00')
+            ->assertJsonPath('data.purge_at', '2026-12-12T09:00:00+00:00')
+            ->assertJsonPath('data.capabilities.account_deletion', true);
+
+        foreach (['/api/v1/social-posts', '/api/v1/credits', '/api/v1/me/api-keys', '/api/v1/me/profile'] as $url) {
             $this->getJson($url)
                 ->assertStatus(423)
                 ->assertJsonPath('reason', 'account_pending_deletion')
@@ -159,7 +167,8 @@ describe('the grace period', function () {
         $this->postJson('/api/v1/me/deletion/cancel')->assertOk()->assertJsonPath('data.status', 'active');
         expect($user->fresh()->status)->toBe(UserStatus::Active)->and($user->fresh()->deletion_requested_at)->toBeNull();
         Notification::assertSentTo($user, AccountDeletionCancelled::class);
-        $this->getJson('/api/v1/me')->assertOk();
+        $this->getJson('/api/v1/me')->assertOk()->assertJsonPath('data.purge_at', null)->assertJsonPath('data.deletion_requested_at', null);
+        $this->getJson('/api/v1/credits')->assertOk();
         $this->postJson('/api/v1/me/deletion/cancel')->assertStatus(409);
     });
 });
@@ -279,4 +288,12 @@ describe('the purge', function () {
             ->first(fn ($e) => str_contains((string) $e->command, 'accounts:purge-deleted'));
         expect($event?->expression)->toBe('25 3 * * *');
     });
+});
+
+it('advertises the capability on /me for every account', function () {
+    $this->actingAs(adUser()->fresh())->getJson('/api/v1/me')
+        ->assertOk()
+        ->assertJsonPath('data.capabilities.account_deletion', true)
+        ->assertJsonPath('data.deletion_requested_at', null)
+        ->assertJsonPath('data.purge_at', null);
 });

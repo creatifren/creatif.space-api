@@ -15,8 +15,8 @@ use Symfony\Component\HttpFoundation\Response;
  */
 class EnsureNotPendingDeletion
 {
-    /** Routes a pending account may still reach. */
-    public const ALLOWED = ['api.v1.me.deletion.cancel', 'api.v1.me.destroy'];
+    /** Routes a pending account may still reach: who am I (with purge_at), and cancel. */
+    public const ALLOWED = ['api.v1.me', 'api.v1.me.deletion.cancel', 'api.v1.me.destroy'];
 
     public function handle(Request $request, Closure $next): Response
     {
