@@ -56,14 +56,17 @@ class BuildInsightReport implements ShouldQueue
         $data = $collector->collect($owner, $accounts, $period);
 
         $thumbnails = [];
-        foreach ($data['thumbnail_urls'] as $url) {
-            $thumbnails[$url] = $images->thumbnail($url);
+        foreach ($data['thumbnail_sources'] as $key => $candidates) {
+            $thumbnails[$key] = $images->firstImage($candidates);
         }
 
         $view = InsightView::build($data, [
             'client_name' => InsightClients::name($owner),
             'locale' => $report->locale,
-            'logo' => $options['show_logo'] ? $images->thumbnail($owner->avatar_url, 200) : null,
+            // The API holds no workspace logo yet, and an avatar is not a
+            // logo: the slot stays empty (hidden) until one exists, whatever
+            // show_logo says.
+            'logo' => null,
             'branding' => ! $options['hide_branding'],
             'notes' => $options['next_month_notes'],
             'generated_at' => now(),

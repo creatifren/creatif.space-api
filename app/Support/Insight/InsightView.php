@@ -42,6 +42,34 @@ final class InsightView
         $comparable = ($prev['posts'] ?? 0) > 0;
         $delta = fn ($a, $b) => $comparable ? InsightFormat::delta($a, $b, $locale) : null;
 
+        // Deck summary's one line: the first of reach / engagement / posts
+        // that both periods have, e.g. "Reach up 70.8% vs September".
+        $headline = null;
+        if ($comparable) {
+            $previousPeriod = InsightPeriod::fromDates(
+                CarbonImmutable::parse($data['previous']['from']),
+                CarbonImmutable::parse($data['previous']['to']),
+                $data['period']['kind'],
+            );
+            $vs = $previousPeriod->kind === InsightPeriod::MONTH
+                ? $previousPeriod->from->locale($locale)->translatedFormat('F')
+                : $t('previous_period');
+            foreach (['reach' => 'reach', 'engagement' => 'engagement', 'posts' => 'posts_published'] as $metric => $label) {
+                $change = InsightFormat::delta($cur[$metric], $prev[$metric], $locale);
+                if ($change === null) {
+                    continue;
+                }
+                $headline = $change['dir'] === 'flat'
+                    ? $t('headline_flat', ['metric' => $t($label), 'previous' => $vs])
+                    : $t('headline_'.$change['dir'], [
+                        'metric' => $t($label),
+                        'pct' => str_replace(["\u{25B2} ", "\u{25BC} "], '', $change['text']),
+                        'previous' => $vs,
+                    ]);
+                break;
+            }
+        }
+
         $kpis = [
             // Orange is the publish colour.
             ['tone' => 'orange', 'label' => $t('posts_published'), 'value' => $n($cur['posts']),
@@ -139,6 +167,7 @@ final class InsightView
             )->label($locale),
             'generated' => $t('generated', ['date' => $context['generated_at']->locale($locale)->translatedFormat('j M Y')]),
             'empty' => $empty,
+            'headline' => $headline,
             'kpis' => $kpis,
             'weekly' => $weekly,
             'channels' => $channels,

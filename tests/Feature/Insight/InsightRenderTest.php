@@ -9,6 +9,7 @@ use App\Support\Insight\InsightRenderer;
 use App\Support\Insight\InsightView;
 use App\Support\Workspace;
 use Carbon\CarbonImmutable;
+use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Storage;
 use Tests\Support\InsightFixture;
 
@@ -35,12 +36,13 @@ function insightPdf(string $format, string $locale = 'en', ?string $notes = null
 
     $data = app(InsightCollector::class)->collect($owner, collect(array_values($accounts)), InsightPeriod::month(InsightFixture::MONTH));
     $images = app(InsightImages::class);
-    $thumbs = collect($data['thumbnail_urls'])->mapWithKeys(fn ($u) => [$u => $images->thumbnail($u)])->all();
+    $thumbs = collect($data['thumbnail_sources'])->map(fn ($urls) => $images->firstImage($urls))->all();
 
     $view = InsightView::build($data, [
         'client_name' => 'Kopi Senja',
         'locale' => $locale,
-        'logo' => $images->thumbnail('https://img.example.test/logo.png', 200),
+        // No workspace logo exists in the API (an avatar is not a logo).
+        'logo' => null,
         'branding' => true,
         'notes' => $notes,
         'generated_at' => now(),
@@ -134,4 +136,54 @@ it('builds through the queued job and stores a PDF under its file name', functio
         ->and($report->expires_at)->not->toBeNull();
     Storage::disk('s3')->assertExists($report->path);
     expect(Storage::disk('s3')->get($report->path))->toStartWith('%PDF-');
+});
+
+it('leads the deck summary with one comparison line', function () {
+    $en = insightPdf('deck', sample: false);
+    expect($en['view']['headline'])->toBe('Reach up 70.8% vs September')
+        ->and(view('insight.deck', $en['view'])->render())->toContain('Reach up 70.8% vs September');
+});
+
+it('writes the deck headline in Indonesian', function () {
+    expect(insightPdf('deck', 'id', sample: false)['view']['headline'])->toBe('Jangkauan naik 70,8% dibanding September');
+});
+
+it('has no headline when there is nothing to compare with', function () {
+    expect(insightPdf('deck', 'en', null, false, false)['view']['headline'])->toBeNull();
+});
+
+it('never fills the logo slot from the avatar, whatever show_logo says', function () {
+    Storage::fake('s3');
+    ['owner' => $owner, 'accounts' => $accounts] = InsightFixture::workspace();
+    $report = InsightReport::create([
+        'user_id' => $owner->id, 'owner_id' => $owner->id, 'client_id' => $owner->ulid,
+        'format' => 'deck', 'locale' => 'en', 'period_from' => '2026-10-01', 'period_to' => '2026-10-31',
+        'options' => ['period_kind' => 'month', 'channel_ids' => collect($accounts)->pluck('ulid')->values()->all(),
+            'show_logo' => true, 'hide_branding' => false, 'next_month_notes' => null],
+        'status' => 'queued', 'file_name' => 'kopi-senja-2026-10-deck.pdf',
+    ]);
+
+    dispatch_sync(new BuildInsightReport($report));
+
+    expect($report->fresh()->status)->toBe('done');
+    Http::assertNotSent(fn ($request) => str_contains($request->url(), 'img.example.test'));
+});
+
+it('cover-crops thumbnails to a square and skips media that is not an image', function () {
+    $images = app(InsightImages::class);
+
+    $wide = imagecreatetruecolor(800, 400);
+    ob_start();
+    imagejpeg($wide);
+    $uri = $images->shrink((string) ob_get_clean());
+    $size = getimagesizefromstring(base64_decode(substr((string) $uri, strlen('data:image/jpeg;base64,'))));
+    expect([$size[0], $size[1]])->toBe([360, 360]);
+
+    Http::fake([
+        'video.example.test/*' => Http::response('not an image', 200, ['Content-Type' => 'video/mp4']),
+        'pic.example.test/*' => Http::response(InsightFixture::jpeg(1), 200, ['Content-Type' => 'image/jpeg']),
+    ]);
+    expect($images->firstImage(['https://video.example.test/a.mp4', 'https://pic.example.test/b.jpg']))
+        ->toStartWith('data:image/jpeg;base64,')
+        ->and($images->firstImage(['https://video.example.test/a.mp4']))->toBeNull();
 });

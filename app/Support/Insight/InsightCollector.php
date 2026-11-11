@@ -88,8 +88,13 @@ final class InsightCollector
             ],
             'weekly_reach' => $this->weeklyTotal($channels, count($period->weeks())),
             'top_posts' => $top,
-            // Every picture the layouts can show: each channel's top posts.
-            'thumbnail_urls' => array_values(array_unique(array_filter(array_column($posts, 'thumb_url')))),
+            // Every picture the layouts can show (each channel's top posts):
+            // thumb_url => the post's media, first image wins.
+            'thumbnail_sources' => array_column(
+                array_filter($posts, fn (array $p) => $p['thumb_url'] !== null),
+                'thumb_candidates',
+                'thumb_url',
+            ),
             'workflow' => [
                 'current' => $this->workflow($owner, $accounts, $period, $feeds),
                 'previous' => $this->workflow($owner, $accounts, $previous, $feeds),
@@ -195,6 +200,8 @@ final class InsightCollector
                 'caption' => InsightFormat::caption($p['caption']),
                 'url' => $p['url'],
                 'thumb_url' => $p['media'][0] ?? null,
+                // The first item may be a video: up to four to find an image in.
+                'thumb_candidates' => array_slice($p['media'], 0, 4),
                 'engagement' => self::engagement($p['metrics']),
                 'reach' => $p['metrics']['reach'],
                 'views' => $p['metrics']['views'],

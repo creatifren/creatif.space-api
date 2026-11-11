@@ -41,7 +41,10 @@ body { font-size: 16px; }
 <div class="slide {{ $n === $slides ? 'last' : '' }}">
     <div class="inner">
         <div class="title">{{ $strings['summary'] }}</div>
-        <table style="width: 100%; margin-top: 30px; table-layout: fixed;">
+        @if ($headline)
+            <div class="serif" style="font-size: 24px; margin-top: 10px;">{{ $headline }}</div>
+        @endif
+        <table style="width: 100%; margin-top: {{ $headline ? 22 : 30 }}px; table-layout: fixed;">
             <tr>
                 @foreach ($kpis as $i => $kpi)
                     <td style="padding-right: {{ $i < 3 ? 16 : 0 }}px; vertical-align: top;">
@@ -157,8 +160,8 @@ body { font-size: 16px; }
                     @foreach ($top as $post)
                         <td style="vertical-align: top; padding-right: 18px;">
                             <div class="tile" style="padding: 18px;">
-                                <div class="thumb" style="width: 330px; height: 250px;">
-                                    @if ($post['thumb'])<img src="{{ $post['thumb'] }}" style="width: 330px; height: 250px;" alt="">@endif
+                                <div class="thumb" style="width: 300px; height: 300px;">
+                                    @if ($post['thumb'])<img src="{{ $post['thumb'] }}" style="width: 300px; height: 300px;" alt="">@endif
                                 </div>
                                 <div class="muted" style="font-size: 13px; margin-top: 12px;">{{ $post['network'] }} · {{ $post['date'] }}</div>
                                 <div style="font-size: 15px; margin-top: 6px; height: 44px; line-height: 1.4;">{{ $post['caption'] }}</div>

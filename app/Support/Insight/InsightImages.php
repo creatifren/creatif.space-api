@@ -16,9 +16,28 @@ class InsightImages
 {
     public const MAX_SOURCE_BYTES = 8 * 1024 * 1024;
 
+    /** Thumbnails are square: cover-cropped from the centre. */
     public const MAX_EDGE = 360;
 
     public const QUALITY = 72;
+
+    /**
+     * The first of $urls that is a still image we can read, as a square
+     * thumbnail (a post's media may open with a video).
+     *
+     * @param  iterable<mixed>  $urls
+     */
+    public function firstImage(iterable $urls, int $edge = self::MAX_EDGE): ?string
+    {
+        foreach ($urls as $url) {
+            $thumb = is_string($url) ? $this->thumbnail($url, $edge) : null;
+            if ($thumb !== null) {
+                return $thumb;
+            }
+        }
+
+        return null;
+    }
 
     public function thumbnail(?string $url, int $edge = self::MAX_EDGE): ?string
     {
@@ -41,7 +60,7 @@ class InsightImages
         return $this->shrink($body, $edge);
     }
 
-    /** Bytes of any image GD can read, as a JPEG data URI at most $edge px wide or high. */
+    /** Bytes of any image GD can read, cover-cropped to a square JPEG data URI of at most $edge px. */
     public function shrink(string $bytes, int $edge = self::MAX_EDGE): ?string
     {
         if (! function_exists('imagecreatefromstring')) {
@@ -53,16 +72,16 @@ class InsightImages
             return null;
         }
 
+        // Cover: the largest centred square, scaled down to $edge.
         $w = imagesx($image);
         $h = imagesy($image);
-        $scale = min(1, $edge / max($w, $h, 1));
-        $nw = max(1, (int) round($w * $scale));
-        $nh = max(1, (int) round($h * $scale));
+        $side = max(1, min($w, $h));
+        $size = max(1, min($edge, $side));
 
-        $canvas = imagecreatetruecolor($nw, $nh);
+        $canvas = imagecreatetruecolor($size, $size);
         // Transparent PNGs land on paper, not black.
         imagefill($canvas, 0, 0, (int) imagecolorallocate($canvas, 0xFA, 0xFA, 0xF8));
-        imagecopyresampled($canvas, $image, 0, 0, 0, 0, $nw, $nh, $w, $h);
+        imagecopyresampled($canvas, $image, 0, 0, intdiv($w - $side, 2), intdiv($h - $side, 2), $size, $size, $side, $side);
 
         ob_start();
         imagejpeg($canvas, null, self::QUALITY);
