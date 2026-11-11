@@ -3,6 +3,8 @@
 namespace App\Filament\Resources\Users\Tables;
 
 use App\Enums\UserStatus;
+use App\Models\User;
+use App\Support\AccountDeletion;
 use Filament\Actions\EditAction;
 use Filament\Tables\Columns\IconColumn;
 use Filament\Tables\Columns\TextColumn;
@@ -23,7 +25,15 @@ class UsersTable
                     ->label('Email address')
                     ->searchable(),
                 TextColumn::make('status')
-                    ->badge(),
+                    ->badge()
+                    ->color(fn ($state) => $state === UserStatus::PendingDeletion ? 'danger' : null),
+                // Account deletion: when the 30-day grace ends and the purge runs.
+                TextColumn::make('purge_at')
+                    ->label('Purge on')
+                    ->state(fn (User $record) => AccountDeletion::purgeAt($record))
+                    ->dateTime()
+                    ->placeholder('—')
+                    ->toggleable(),
                 IconColumn::make('is_staff')
                     ->label('Staff')
                     ->boolean(),

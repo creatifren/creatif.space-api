@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Api\V1;
 
 use App\Enums\SocialPostApproval;
 use App\Enums\SocialPostStatus;
+use App\Enums\UserStatus;
 use App\Exceptions\AccountReconnectRequired;
 use App\Exceptions\NotEnoughCredits;
 use App\Exceptions\PublishPreflightFailed;
@@ -451,7 +452,8 @@ class PublicApprovalController extends Controller
     {
         $link = SocialApprovalLink::query()->where('token_hash', SocialApprovalLink::hashToken($token))->with('user')->first();
 
-        if ($link === null) {
+        // An owner whose account is being deleted is gone to the public.
+        if ($link === null || $link->user === null || $link->user->status === UserStatus::PendingDeletion) {
             abort(404);
         }
         if ($link->revoked_at !== null) {

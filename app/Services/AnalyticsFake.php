@@ -19,6 +19,14 @@ class AnalyticsFake extends Analytics
         return true;
     }
 
+    /** @var list<string> */
+    public array $deletedPersons = [];
+
+    public function deletePerson(string $distinctId): void
+    {
+        $this->deletedPersons[] = $distinctId;
+    }
+
     protected function dispatch(array $message, bool $afterCommit = true): void
     {
         $this->sent[] = $message;

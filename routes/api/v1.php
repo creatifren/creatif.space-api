@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\Api\V1\AccountDeletionController;
 use App\Http\Controllers\Api\V1\AffiliateController;
 use App\Http\Controllers\Api\V1\AnalyticsController;
 use App\Http\Controllers\Api\V1\ApiKeyController;
@@ -47,6 +48,7 @@ use App\Http\Middleware\AcceptBeaconJson;
 use App\Http\Middleware\CapTokenSends;
 use App\Http\Middleware\EnforceTokenScope;
 use App\Http\Middleware\EnsureInboxEnabled;
+use App\Http\Middleware\EnsureNotPendingDeletion;
 use App\Http\Middleware\MarketingSiteOrigin;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
@@ -212,7 +214,16 @@ Route::post('/spaces/{space}/events', SpaceEventController::class)
     ->name('api.v1.spaces.events');
 
 // Session only (Sanctum SPA cookie): a bearer token never manages tokens.
-Route::middleware('auth:sanctum')->group(function () {
+Route::middleware(['auth:sanctum', EnsureNotPendingDeletion::class])->group(function () {
+    // Account deletion (Play Store requirement): the signed-in person only,
+    // never a token. A pending account may reach these two and nothing else.
+    Route::delete('/me', [AccountDeletionController::class, 'destroy'])
+        ->middleware('throttle:5,1')
+        ->name('api.v1.me.destroy');
+    Route::post('/me/deletion/cancel', [AccountDeletionController::class, 'cancel'])
+        ->middleware('throttle:10,1')
+        ->name('api.v1.me.deletion.cancel');
+
     // Settings → API keys (personal keys for MCP clients)
     Route::get('/me/api-keys', [ApiKeyController::class, 'index'])->name('api.v1.me.api-keys.index');
     Route::post('/me/api-keys', [ApiKeyController::class, 'store'])
@@ -235,7 +246,7 @@ Route::post('/billing/google/verify', [GooglePlayBillingController::class, 'veri
 
 // Authenticated: Sanctum SPA cookie, or a bearer token (OAuth access token
 // or personal API key) — which EnforceTokenScope fences to config('mcp.routes').
-Route::middleware(['auth:sanctum,mcp', EnforceTokenScope::class])->group(function () {
+Route::middleware(['auth:sanctum,mcp', EnforceTokenScope::class, EnsureNotPendingDeletion::class])->group(function () {
     Route::get('/me', MeController::class)->name('api.v1.me');
     Route::post('/me/tour', TourController::class)->name('api.v1.me.tour');
     Route::post('/handles', [HandleController::class, 'claim'])
