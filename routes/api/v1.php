@@ -22,6 +22,7 @@ use App\Http\Controllers\Api\V1\InboxCommentController;
 use App\Http\Controllers\Api\V1\InboxController;
 use App\Http\Controllers\Api\V1\InboxFeedController;
 use App\Http\Controllers\Api\V1\InsightExportController;
+use App\Http\Controllers\Api\V1\InsightReportController;
 use App\Http\Controllers\Api\V1\McpActivityController;
 use App\Http\Controllers\Api\V1\McpApprovalController;
 use App\Http\Controllers\Api\V1\MeController;
@@ -513,6 +514,13 @@ Route::middleware(['auth:sanctum,mcp', EnforceTokenScope::class, EnsureNotPendin
     Route::get('/insight/export.csv', InsightExportController::class)
         ->middleware('throttle:10,1')
         ->name('api.v1.insight.export');
+
+    // Insight → Export PDF (design pick #8). Pro / Max; POST queues a build.
+    Route::get('/insight/clients', [InsightReportController::class, 'clients'])->name('api.v1.insight.clients');
+    Route::post('/insight/reports', [InsightReportController::class, 'store'])
+        ->middleware('throttle:10,1')
+        ->name('api.v1.insight.reports.store');
+    Route::get('/insight/reports/{insightReport}', [InsightReportController::class, 'show'])->name('api.v1.insight.reports.show');
 
     // Proof of delivery. Deliberately not gated on a plan: "on every plan"
     // is what the screen promises, and evidence is not an upsell.
