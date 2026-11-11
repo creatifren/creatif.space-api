@@ -62,7 +62,7 @@ class SocialComment extends Model implements WorkspaceOwned
 
     public function workspaceUserId(): ?int
     {
-        return $this->user_id === null ? null : (int) $this->user_id;
+        return $this->user_id;
     }
 
     public function getRouteKeyName(): string

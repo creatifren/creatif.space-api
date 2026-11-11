@@ -78,7 +78,7 @@ class TeamMember extends Model implements WorkspaceOwned
 
     public function workspaceUserId(): ?int
     {
-        return $this->owner_id === null ? null : (int) $this->owner_id;
+        return $this->owner_id;
     }
 
     public function getRouteKeyName(): string
