@@ -18,12 +18,14 @@
   "dependencies": {
     "@modelcontextprotocol/sdk": "1.32.2",
     "express": "5.1.0",
+    "twitter-text": "3.1.0",
     "zod": "4.1.12"
   },
   "devDependencies": {
     "@eslint/js": "9.38.0",
     "@types/express": "5.0.3",
     "@types/node": "22.18.12",
+    "@types/twitter-text": "3.1.10",
     "eslint": "9.38.0",
     "typescript": "5.9.3",
     "typescript-eslint": "8.46.2",

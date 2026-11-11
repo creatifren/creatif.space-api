@@ -2,7 +2,7 @@ import express, { type Request, type Response } from 'express';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
 import type { AuthInfo } from '@modelcontextprotocol/sdk/server/auth/types.js';
-import type { Analytics } from './analytics.js';
+import { noopAnalytics, type Analytics, type FreeAnalytics } from './analytics.js';
 import { bearerAuth, metadataUrls, protectedResourceMetadata, type CallerAuth } from './auth/middleware.js';
 import type { FetchLike, Introspector } from './auth/introspection.js';
 import { TokenRateLimiter } from './rateLimit.js';
@@ -12,7 +12,8 @@ import { m2Tools } from './tools/m2.js';
 import { mediaTools } from './tools/media.js';
 import { engageTools } from './tools/engage.js';
 import { V1Client } from './v1.js';
-import { DEFAULT_GLAMA_CLAIM } from './config.js';
+import { DEFAULT_FREE_RATE_LIMIT, DEFAULT_GLAMA_CLAIM } from './config.js';
+import { mountFree } from './free/server.js';
 
 export const SERVER_INFO = { name: 'creatif.space', version: '0.2.0' };
 
@@ -34,6 +35,11 @@ export interface AppDeps {
   /** Defaults to DEFAULT_GLAMA_CLAIM. */
   glamaClaim?: string;
   fetchImpl?: FetchLike;
+  /** The no-auth /free endpoint's events. Defaults to none. */
+  freeAnalytics?: FreeAnalytics;
+  /** /free calls per IP per minute. */
+  freeRateLimiter?: TokenRateLimiter;
+  freeRateLimitPerMinute?: number;
 }
 
 export function buildMcpServer(auth: CallerAuth, deps: AppDeps): McpServer {
@@ -74,6 +80,15 @@ export function createApp(deps: AppDeps) {
   const where = metadataUrls(deps.resourceUrl);
   app.get(where.rootPath, serveMetadata);
   if (where.pathFormPath !== where.rootPath) app.get(where.pathFormPath, serveMetadata);
+
+  // The free tools: no auth, per-IP limit, their own McpServer. Mounted on
+  // exact /free paths only, so nothing below changes for /mcp.
+  const freePerMinute = deps.freeRateLimitPerMinute ?? DEFAULT_FREE_RATE_LIMIT;
+  mountFree(app, {
+    analytics: deps.freeAnalytics ?? noopAnalytics,
+    perMinute: freePerMinute,
+    limiter: deps.freeRateLimiter ?? new TokenRateLimiter(freePerMinute),
+  });
 
   const limiter = deps.rateLimiter ?? new TokenRateLimiter(60);
   const auth = bearerAuth(deps.introspector, deps.resourceUrl);

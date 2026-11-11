@@ -1,0 +1,27 @@
+{
+  "general": {
+    "checklist": [
+      "Names and spellings",
+      "Prices, dates and offers",
+      "Photos you're happy to show",
+      "Links",
+      "Anything legal or sensitive for your business"
+    ],
+    "friendly": {
+      "subject": "{posts} for {period} — ready for your review",
+      "message": "Hi {client_name}, {posts} for {period} are ready for your review. Please check each one and reply \"approve\" or tell me what to change by {deadline}. If I don't hear back by then, I'll hold the posts — nothing goes out without your yes.",
+      "follow_up_message": "Hi {client_name}, a quick reminder: {posts} for {period} are still waiting for your review. Please reply \"approve\" or tell me what to change by {deadline}. Until I hear back, I'll hold the posts — nothing goes out without your yes."
+    },
+    "formal": {
+      "subject": "For your approval: {posts} for {period}",
+      "message": "Dear {client_name}, {posts} for {period} are ready for your review. Please review each one and reply \"approve\", or let me know what should change, by {deadline}. If I have not heard from you by then, I will hold the posts. Nothing will be published without your approval.",
+      "follow_up_message": "Dear {client_name}, this is a reminder that {posts} for {period} are still awaiting your review. Please reply \"approve\", or let me know what should change, by {deadline}. Until I hear from you, the posts remain on hold. Nothing will be published without your approval."
+    }
+  },
+  "restaurants": { "use": "general" },
+  "real_estate": { "use": "general" },
+  "clinics": { "use": "general" },
+  "ecommerce": { "use": "general" },
+  "hotels": { "use": "general" },
+  "fitness": { "use": "general" }
+}

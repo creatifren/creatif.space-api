@@ -1,0 +1,126 @@
+{
+  "checked": "2026-11-12",
+  "networks": {
+    "instagram": {
+      "limit": 2200,
+      "unit": "characters",
+      "hashtag_limit": 30,
+      "mention_limit": 20,
+      "notes": ["Limits are for the caption sent through Instagram's publishing API."],
+      "source_url": "https://developers.facebook.com/docs/instagram-platform/instagram-graph-api/reference/ig-user/media"
+    },
+    "tiktok": {
+      "limit": 2200,
+      "unit": "utf16_units",
+      "hashtag_limit": null,
+      "mention_limit": null,
+      "notes": [
+        "TikTok does not state a hashtag limit in its API docs.",
+        "TikTok does not state a mention limit in its API docs.",
+        "In Direct Post the caption is sent as the video title."
+      ],
+      "source_url": "https://developers.tiktok.com/doc/content-posting-api-reference-direct-post"
+    },
+    "linkedin": {
+      "limit": null,
+      "unit": "characters",
+      "hashtag_limit": null,
+      "mention_limit": null,
+      "notes": ["LinkedIn does not publish a limit in its API docs"],
+      "source_url": "https://learn.microsoft.com/en-us/linkedin/marketing/community-management/shares/posts-api"
+    },
+    "facebook": {
+      "limit": null,
+      "unit": "characters",
+      "hashtag_limit": null,
+      "mention_limit": null,
+      "notes": ["Facebook does not publish a limit in its API docs"],
+      "source_url": "https://developers.facebook.com/docs/graph-api/reference/page/feed"
+    },
+    "youtube_title": {
+      "limit": 100,
+      "unit": "characters",
+      "hashtag_limit": null,
+      "mention_limit": null,
+      "notes": [
+        "YouTube does not state a hashtag limit for titles in its API docs.",
+        "YouTube does not state a mention limit for titles in its API docs."
+      ],
+      "source_url": "https://developers.google.com/youtube/v3/docs/videos"
+    },
+    "youtube_description": {
+      "limit": 5000,
+      "unit": "utf8_bytes",
+      "hashtag_limit": null,
+      "mention_limit": null,
+      "notes": [
+        "Links are clickable only for channels that meet YouTube's requirements.",
+        "YouTube does not state a hashtag limit for descriptions in its API docs.",
+        "YouTube does not state a mention limit for descriptions in its API docs."
+      ],
+      "source_url": "https://developers.google.com/youtube/v3/docs/videos"
+    },
+    "x": {
+      "limit": 280,
+      "unit": "weighted",
+      "hashtag_limit": null,
+      "mention_limit": null,
+      "url_weight": 23,
+      "notes": [
+        "Weighted count for a standard account: each URL counts as 23.",
+        "X does not state a hashtag limit in its counting docs.",
+        "X does not state a mention limit in its counting docs."
+      ],
+      "source_url": "https://developer.x.com/en/docs/counting-characters"
+    },
+    "threads": {
+      "limit": 500,
+      "unit": "characters_emoji_as_utf8_bytes",
+      "hashtag_limit": 1,
+      "mention_limit": null,
+      "unique_link_limit": 5,
+      "notes": [
+        "Emoji count as their UTF-8 byte length.",
+        "One topic tag per post.",
+        "Threads does not state a mention limit in its API docs."
+      ],
+      "source_url": "https://developers.facebook.com/docs/threads/posts"
+    },
+    "pinterest_title": {
+      "limit": 100,
+      "unit": "characters",
+      "hashtag_limit": null,
+      "mention_limit": null,
+      "notes": [
+        "Pinterest does not state a hashtag limit in its API spec.",
+        "Pinterest does not state a mention limit in its API spec."
+      ],
+      "source_url": "https://raw.githubusercontent.com/pinterest/api-description/main/v5/openapi.yaml"
+    },
+    "pinterest_description": {
+      "limit": 800,
+      "unit": "characters",
+      "hashtag_limit": null,
+      "mention_limit": null,
+      "notes": [
+        "The Pin's link is a separate field (max 2048 characters); alt text is separate too (max 500).",
+        "Pinterest does not state a hashtag limit in its API spec.",
+        "Pinterest does not state a mention limit in its API spec."
+      ],
+      "source_url": "https://raw.githubusercontent.com/pinterest/api-description/main/v5/openapi.yaml"
+    },
+    "bluesky": {
+      "limit": 300,
+      "unit": "graphemes",
+      "byte_limit": 3000,
+      "hashtag_limit": null,
+      "mention_limit": null,
+      "notes": [
+        "At most 300 graphemes and at most 3000 UTF-8 bytes.",
+        "The post's separate tags field takes at most 8 tags; the lexicon states no limit for hashtags in the text.",
+        "Bluesky does not state a mention limit in its lexicon."
+      ],
+      "source_url": "https://github.com/bluesky-social/atproto/blob/main/lexicons/app/bsky/feed/post.json"
+    }
+  }
+}

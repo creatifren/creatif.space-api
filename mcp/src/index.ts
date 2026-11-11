@@ -9,12 +9,15 @@ const config = loadConfig();
 const inner =
   config.authMode === 'stub' ? new StubIntrospector() : new HttpIntrospector(config.v1ApiUrl, config.introspectSecret);
 
+const analytics = analyticsFrom(config.posthogKey, config.posthogHost);
+
 const app = createApp({
   v1ApiUrl: config.v1ApiUrl,
   resourceUrl: config.resourceUrl,
   authorizationServer: config.authorizationServer,
   introspector: new CachedIntrospector(inner, config.introspectionTtlMs),
-  analytics: analyticsFrom(config.posthogKey, config.posthogHost),
+  analytics,
+  freeAnalytics: analytics,
   rateLimiter: new TokenRateLimiter(config.rateLimitPerMinute),
   glamaClaim: config.glamaClaim,
 });

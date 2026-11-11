@@ -17,6 +17,7 @@ No business logic lives here.
 | `GET /mcp/.well-known/glama.json` | Glama connector claim, no auth (also HEAD) |
 | `GET /.well-known/oauth-protected-resource` | RFC 9728 metadata: `resource: "https://mcp.creatif.space/mcp"`, `authorization_servers: ["https://api.creatif.space"]` |
 | `GET /.well-known/oauth-protected-resource/mcp` | the same document at the RFC 9728 path form |
+| `POST /free` | **Creatif Space Free Tools** — a separate MCP server, **no auth**, 30 calls/min per IP |
 
 No / invalid token → `401` with
 `WWW-Authenticate: Bearer resource_metadata="https://mcp.creatif.space/.well-known/oauth-protected-resource/mcp"` (RFC 9728 path form, built from the origin; the root well-known serves the same document).
@@ -118,6 +119,18 @@ Errors come back as tool results with `isError: true` and
 
 Each call emits PostHog `mcp_tool_called` `{tool, client_name, ok, ms}` (plus
 `error` code on failure) — never content. Skipped when `POSTHOG_KEY` is unset.
+
+## Free Tools (`/free`)
+
+A second, stateless MCP server on the same process: `check_caption`,
+`approval_request_template`, `connect_guide`. No sign-in, no user data
+stored; each call sends PostHog `free_tool_called {tool, network}` (no
+caption text) with the existing `POSTHOG_KEY`. Copy and limits live in
+`free-tools/*.json` (`caption-rules.json`, `approval-templates.json` keyed by
+niche, `connect-guides.json` with `file:line` evidence that is never sent to
+callers). Registry entry `free-tools/server.json`
+(`io.github.creatifren/creatif-space-tools`) is **not published** by the
+registry workflow, which only publishes `mcp/server.json`.
 
 ## Environment
 
