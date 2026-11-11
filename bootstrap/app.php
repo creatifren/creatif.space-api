@@ -11,6 +11,8 @@ use Illuminate\Http\Exceptions\ThrottleRequestsException;
 use Illuminate\Http\Middleware\TrustProxies;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
+use Symfony\Component\HttpKernel\Exception\HttpException;
+use Symfony\Component\HttpKernel\Exception\HttpExceptionInterface;
 
 return Application::configure(basePath: dirname(__DIR__))
     ->withRouting(
@@ -85,6 +87,14 @@ return Application::configure(basePath: dirname(__DIR__))
                 'retry_after' => $seconds,
             ], 429, $e->getHeaders());
         });
+
+        // A deliberate 5xx (abort(502) "the AI did not answer", abort(503)
+        // "not set up") is a failure someone must see, but Laravel never
+        // reports HttpException. Report those; every 4xx stays quiet.
+        $exceptions->stopIgnoring(HttpException::class);
+        $exceptions->dontReportWhen(
+            fn (Throwable $e) => $e instanceof HttpExceptionInterface && $e->getStatusCode() < 500,
+        );
 
         // Refusals the person is told about (plan, format, preflight,
         // Credits, horizon) are not errors: info / warning, not ERROR.
