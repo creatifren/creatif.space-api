@@ -47,27 +47,7 @@ class GoogleIdToken
      */
     public function verify(string $token): GoogleIdentity
     {
-        $header = $this->header($token);
-
-        if (($header['alg'] ?? null) !== 'RS256') {
-            throw new InvalidGoogleIdToken('alg is not RS256');
-        }
-        $kid = $header['kid'] ?? null;
-        if (! is_string($kid) || $kid === '') {
-            throw new InvalidGoogleIdToken('no kid');
-        }
-
-        $cached = Cache::get(self::CACHE_KEY);
-        $jwks = is_array($cached) ? $cached : $this->fetchKeySet();
-        // Google rotated its keys since we cached them: refresh once.
-        if (is_array($cached) && ! $this->holds($jwks, $kid) && Cache::add(self::FORCED_REFRESH_KEY, true, self::FORCED_REFRESH_SECONDS)) {
-            $jwks = $this->fetchKeySet();
-        }
-        if (! $this->holds($jwks, $kid)) {
-            throw new InvalidGoogleIdToken('unknown kid');
-        }
-
-        $claims = $this->decode($token, $jwks);
+        $claims = $this->claims($token);
 
         if (! in_array($claims['iss'] ?? null, self::ISSUERS, true)) {
             throw new InvalidGoogleIdToken('wrong iss');
@@ -110,6 +90,41 @@ class GoogleIdToken
             name: is_string($name) && $name !== '' ? $name : null,
             avatar: is_string($picture) && $picture !== '' ? $picture : null,
         );
+    }
+
+    /**
+     * A Google-signed JWT's claims: RS256 signature by a published `kid`,
+     * and the library's exp/nbf/iat checks. Nothing about iss/aud/email —
+     * each caller checks the claims its token type must carry.
+     *
+     * @return array<string, mixed>
+     *
+     * @throws InvalidGoogleIdToken
+     * @throws RuntimeException Google's key set could not be fetched
+     */
+    public function claims(string $token): array
+    {
+        $header = $this->header($token);
+
+        if (($header['alg'] ?? null) !== 'RS256') {
+            throw new InvalidGoogleIdToken('alg is not RS256');
+        }
+        $kid = $header['kid'] ?? null;
+        if (! is_string($kid) || $kid === '') {
+            throw new InvalidGoogleIdToken('no kid');
+        }
+
+        $cached = Cache::get(self::CACHE_KEY);
+        $jwks = is_array($cached) ? $cached : $this->fetchKeySet();
+        // Google rotated its keys since we cached them: refresh once.
+        if (is_array($cached) && ! $this->holds($jwks, $kid) && Cache::add(self::FORCED_REFRESH_KEY, true, self::FORCED_REFRESH_SECONDS)) {
+            $jwks = $this->fetchKeySet();
+        }
+        if (! $this->holds($jwks, $kid)) {
+            throw new InvalidGoogleIdToken('unknown kid');
+        }
+
+        return $this->decode($token, $jwks);
     }
 
     /** @return list<string> */

@@ -719,9 +719,9 @@ describe('billing', function () {
         aeCreem($replay)->assertOk();
         aeCreem($paid('tran_2', '2026-11-30T00:00:00Z', '2026-12-30T00:00:00Z'))->assertOk(); // renewal
 
-        $m = ae()->assertCapturedWithKeys('subscription_started', ['plan', 'period', 'amount_usd']);
+        $m = ae()->assertCapturedWithKeys('subscription_started', ['plan', 'period', 'amount_usd', 'provider']);
         expect($m['distinct_id'])->toBe($sub->user->ulid)
-            ->and($m['properties'])->toBe(['plan' => 'pro', 'period' => 'monthly', 'amount_usd' => 9.99])
+            ->and($m['properties'])->toBe(['plan' => 'pro', 'period' => 'monthly', 'amount_usd' => 9.99, 'provider' => 'creem'])
             ->and(ae()->setFor($sub->user->ulid))->toBe([['plan' => 'pro']]);
     });
 

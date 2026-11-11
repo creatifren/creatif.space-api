@@ -37,6 +37,10 @@ class UserResource extends JsonResource
             // values themselves: both columns stay $hidden.
             'has_google' => $this->google_id !== null,
             'has_password' => $this->password !== null,
+            // Where the current paid plan is managed: creem (web), google
+            // (Play Store), or null on Free — the app shows "Manage
+            // subscription on Google Play" for google.
+            'billing_provider' => $this->activeSubscription()?->provider,
             'onboarded_at' => $this->onboarded_at,
             // Null until the dashboard tour is finished or skipped (RF-004).
             'tour_seen_at' => $this->tour_seen_at,

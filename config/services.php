@@ -40,6 +40,24 @@ return [
         'native_extra_audiences' => env('GOOGLE_NATIVE_EXTRA_AUDIENCES', ''),
     ],
 
+    // Google Play Billing for the Android app (package space.creatif.app).
+    // The service account JSON is a FILE on the server, never committed and
+    // never logged; the RTDN push is a Pub/Sub OIDC token checked against
+    // the audience and service account set on the push subscription.
+    'google_play' => [
+        'package_name' => env('GOOGLE_PLAY_PACKAGE_NAME', 'space.creatif.app'),
+        'service_account_json_path' => env('GOOGLE_PLAY_SERVICE_ACCOUNT_JSON'),
+        // Play product id => the plan and period it sells.
+        'products' => [
+            env('GOOGLE_PLAY_PRODUCT_PRO_MONTHLY', 'pro_monthly') => ['plan' => 'pro', 'period' => 'monthly'],
+            env('GOOGLE_PLAY_PRODUCT_PRO_YEARLY', 'pro_yearly') => ['plan' => 'pro', 'period' => 'yearly'],
+            env('GOOGLE_PLAY_PRODUCT_MAX_MONTHLY', 'max_monthly') => ['plan' => 'max', 'period' => 'monthly'],
+            env('GOOGLE_PLAY_PRODUCT_MAX_YEARLY', 'max_yearly') => ['plan' => 'max', 'period' => 'yearly'],
+        ],
+        'rtdn_audience' => env('GOOGLE_PLAY_RTDN_AUDIENCE'),
+        'rtdn_service_account_email' => env('GOOGLE_PLAY_RTDN_SA_EMAIL'),
+    ],
+
     // Payments — Creem is the merchant of record: hosted checkout for plans
     // and Credits, and a signed webhook. Test-mode keys only work against
     // the test host, so test_mode and the key must agree. Product ids differ

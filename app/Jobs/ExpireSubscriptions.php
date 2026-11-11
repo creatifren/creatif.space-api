@@ -11,7 +11,7 @@ use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Queue\Queueable;
 use Illuminate\Support\Facades\Log;
 
-/** A missed-webhook safety net; Creem, not our clock, owns billing state. */
+/** A missed-webhook safety net; Creem and Google Play, not our clock, own billing state. */
 class ExpireSubscriptions implements ShouldQueue
 {
     use Queueable;
@@ -42,6 +42,23 @@ class ExpireSubscriptions implements ShouldQueue
         $trialUsers = User::query()->whereIn('id', (clone $endedTrials)->select('user_id'))->get();
         $endedTrials->update(['status' => SubscriptionStatus::Expired]);
         $trialUsers->each(fn (User $u) => ProductEvents::planChanged($u));
+
+        // Google Play: notifications move these rows, so this is the net for
+        // one that never arrived. A cancelled Play plan ends with its period;
+        // any other ends once the period plus the grace window is over (a
+        // renewal would have moved current_period_end). Past-due Play rows
+        // close with the grace block above, like Creem's.
+        $playEnded = Subscription::query()
+            ->where('provider', Subscription::PROVIDER_GOOGLE)
+            ->whereNotNull('current_period_end')
+            ->where(fn ($q) => $q
+                ->where(fn ($q) => $q->where('status', SubscriptionStatus::Cancelled)
+                    ->where('current_period_end', '<=', now()))
+                ->orWhere(fn ($q) => $q->whereIn('status', [SubscriptionStatus::Active, SubscriptionStatus::Trialing])
+                    ->where('current_period_end', '<=', now()->subDays(Subscription::GRACE_DAYS))));
+        $playUsers = User::query()->whereIn('id', (clone $playEnded)->select('user_id'))->get();
+        $playEnded->update(['status' => SubscriptionStatus::Expired, 'grace_ends_at' => null]);
+        $playUsers->each(fn (User $u) => ProductEvents::planChanged($u));
 
         Subscription::query()
             ->whereIn('status', SubscriptionStatus::entitled())
