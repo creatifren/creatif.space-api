@@ -21,6 +21,7 @@ use App\Support\CreemProducts;
 use App\Support\CreemTrial;
 use App\Support\ProductEvents;
 use App\Support\Wallet;
+use App\Support\WebhookEventTime;
 use Carbon\CarbonImmutable;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -49,7 +50,7 @@ class CreemWebhookController extends Controller
             if (! DB::table('webhook_events')->insertOrIgnore([
                 'source' => 'creem', 'event_id' => $event['id'], 'type' => $event['eventType'],
                 'payload' => json_encode($event, JSON_THROW_ON_ERROR),
-                'created_at' => now(), 'updated_at' => now(),
+                ...WebhookEventTime::stamp(),
             ])) {
                 return;
             }

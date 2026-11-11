@@ -8,6 +8,7 @@ use App\Enums\SocialPlatform;
 use App\Models\SocialAccount;
 use App\Support\InboxEvents;
 use App\Support\SocialProviders;
+use App\Support\WebhookEventTime;
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\DB;
 use Throwable;
@@ -51,7 +52,7 @@ class ReprocessInboxWebhooks extends Command
             ->where('type', 'like', 'inbox.%')
             ->where(fn ($q) => $q->whereNull('outcome')->orWhere('outcome', 'dropped:unknown_account'))
             ->orderBy('id')
-            ->get(['id', 'type', 'outcome', 'payload']);
+            ->get(['id', 'type', 'outcome', 'payload', 'created_at', 'created_at_utc']);
 
         $this->info(($force ? '' : '[dry run] ').$rows->count().' stored event(s) to replay.');
         $results = [];
@@ -64,6 +65,13 @@ class ReprocessInboxWebhooks extends Command
                 $results['skipped:bad_payload'] = ($results['skipped:bad_payload'] ?? 0) + 1;
 
                 continue;
+            }
+
+            // A replay files the event at its original time: the payload's
+            // own, else when the webhook first arrived — never now.
+            $received = WebhookEventTime::receivedAt($row);
+            if ($received !== null) {
+                $data['received_at'] ??= $received->toIso8601ZuluString();
             }
 
             if (! $force) {
