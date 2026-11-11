@@ -15,6 +15,7 @@ use App\Http\Controllers\Api\V1\FolderController;
 use App\Http\Controllers\Api\V1\GooglePlayBillingController;
 use App\Http\Controllers\Api\V1\GooglePlayWebhookController;
 use App\Http\Controllers\Api\V1\HandleController;
+use App\Http\Controllers\Api\V1\HealthController;
 use App\Http\Controllers\Api\V1\InboxCommentController;
 use App\Http\Controllers\Api\V1\InboxController;
 use App\Http\Controllers\Api\V1\McpActivityController;
@@ -59,7 +60,15 @@ Route::post('/oauth/introspect', IntrospectionController::class)
     ->middleware('throttle:600,1')
     ->name('api.v1.oauth.introspect');
 
-Route::get('/plans', [SubscriptionController::class, 'plans'])->name('api.v1.plans');
+Route::get('/plans', [SubscriptionController::class, 'plans'])
+    ->middleware('throttle:60,1')
+    ->name('api.v1.plans');
+
+// For an external uptime monitor: every dependency, behind HEALTH_TOKEN
+// (404 when unset). /up stays the cheap public liveness probe.
+Route::get('/health/deep', [HealthController::class, 'deep'])
+    ->middleware('throttle:30,1')
+    ->name('api.v1.health.deep');
 
 // Enterprise is contact-sales only. Auth optional; the honeypot and the
 // throttle keep it from being a spam relay to the sales inbox.
@@ -96,7 +105,7 @@ Route::get('/webhooks/postforme', function (Request $request) {
     $query = http_build_query(['social' => $failed ? 'failed' : 'connected'] + $request->only(['isSuccess', 'error']));
 
     return redirect(config('app.frontend_url').'/social/connect?'.$query);
-})->name('api.v1.webhooks.postforme.return');
+})->middleware('throttle:30,1')->name('api.v1.webhooks.postforme.return');
 
 // Outstand calls this on post and account events: no auth, the
 // X-Outstand-Signature HMAC of the raw body is the authentication.
@@ -126,9 +135,12 @@ Route::get('/waitlist/status', [WaitlistController::class, 'status'])
 Route::get('/handles/availability', [HandleController::class, 'availability'])
     ->middleware('throttle:30,1')
     ->name('api.v1.handles.availability');
+// Public pages: generous, since one visitor's browsing is many reads.
 Route::get('/profiles/{handle}', [PublicProfileController::class, 'show'])
+    ->middleware('throttle:300,1')
     ->name('api.v1.profiles.show');
 Route::get('/profiles/{handle}/spaces/{slug}', [PublicSpaceController::class, 'show'])
+    ->middleware('throttle:300,1')
     ->name('api.v1.profiles.spaces.show');
 Route::get('/profiles/{handle}/spaces/{slug}/items/{item}/download', [PublicSpaceController::class, 'download'])
     ->middleware('throttle:60,1')

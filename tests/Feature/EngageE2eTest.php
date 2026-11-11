@@ -175,9 +175,10 @@ describe('(B) comments on posts published outside Creatif Space', function () {
 
         e2eHook($this, 'comment.received', ['accountId' => 'beUgT', 'commentId' => 'c2', 'text' => 'secret words', 'network' => 'instagram'])->assertOk();
 
+        // Each line carries the request id (AssignRequestId) before its own fields.
         expect(file_get_contents($log))
-            ->toContain('webhook.event {"provider":"outstand","type":"comment","account":"beUgT"}')
-            ->toContain('inbox.outcome {"provider":"outstand","type":"comment","outcome":"filed"}')
+            ->toMatch('/webhook\.event \{"request_id":"[0-9A-Z]{26}","provider":"outstand","type":"comment","account":"beUgT"\}/')
+            ->toMatch('/inbox\.outcome \{"request_id":"[0-9A-Z]{26}","provider":"outstand","type":"comment","outcome":"filed"\}/')
             ->not->toContain('secret words');
     });
 
@@ -186,7 +187,7 @@ describe('(B) comments on posts published outside Creatif Space', function () {
 
         e2eHook($this, 'comment.received', ['accountId' => 'beUgT', 'commentId' => 'c3'], 'wrong_secret')->assertForbidden();
 
-        expect(file_get_contents($log))->toContain('webhook.signature_rejected {"provider":"outstand","event":"comment.received"}');
+        expect(file_get_contents($log))->toMatch('/webhook\.signature_rejected \{"request_id":"[0-9A-Z]{26}","provider":"outstand","event":"comment\.received"\}/');
     });
 });
 

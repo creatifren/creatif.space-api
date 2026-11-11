@@ -140,6 +140,15 @@ return [
         'webhook_secret' => env('POSTFORME_WEBHOOK_SECRET'),
     ],
 
+    // Ops: the daily failed-jobs / failed-publishes mail, and the token an
+    // external uptime monitor sends to GET /api/v1/health/deep (empty = off).
+    'ops' => [
+        'alert_email' => env('OPS_ALERT_EMAIL', 'halo@creatif.space'),
+        'health_token' => env('HEALTH_TOKEN', ''),
+        // Oldest waiting job older than this (seconds) = queue check fails.
+        'queue_max_lag' => (int) env('HEALTH_QUEUE_MAX_LAG', 600),
+    ],
+
     // Where Enterprise "Contact sales" requests are emailed.
     'enterprise' => [
         'contact_email' => env('ENTERPRISE_CONTACT_EMAIL', 'halo@creatif.space'),

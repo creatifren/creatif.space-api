@@ -137,6 +137,7 @@ class ErrorTracking
 
         $route = self::route();
         $job = $context['job'] ?? self::$job;
+        $user = self::distinctId();
 
         return array_filter([
             '$exception_list' => $list,
@@ -145,6 +146,10 @@ class ErrorTracking
             'source' => $route !== null ? 'http' : ($job !== null ? 'queue' : 'console'),
             'route' => $route,
             'method' => $route !== null ? request()->method() : null,
+            // Correlates with the log lines and the X-Request-Id the caller got.
+            'request_id' => $route !== null ? self::requestId() : null,
+            // The only identity sent: the user's public ulid, never email or name.
+            'user_ulid' => $user !== 'server' ? $user : null,
             'status' => self::status($e, $route !== null),
             'job' => $job,
             'environment' => (string) config('app.env'),
@@ -235,6 +240,17 @@ class ErrorTracking
         }
 
         return 'server';
+    }
+
+    private static function requestId(): ?string
+    {
+        try {
+            $id = request()->attributes->get('request_id');
+
+            return is_string($id) ? $id : null;
+        } catch (Throwable) {
+            return null;
+        }
     }
 
     /** The route template (api/v1/spaces/{space}), never the filled-in URL. */
