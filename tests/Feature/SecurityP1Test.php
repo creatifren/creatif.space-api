@@ -5,6 +5,7 @@ use App\Models\SocialAccount;
 use App\Models\SocialApprovalLink;
 use App\Models\SocialPlanLink;
 use App\Models\SocialPost;
+use App\Models\SocialPostComment;
 use App\Models\Subscription;
 use App\Models\TeamMember;
 use App\Models\User;
@@ -134,13 +135,14 @@ describe('Google login never links a staff account by email', function () {
         expect($staff->fresh()->google_id)->toBeNull();
     });
 
-    it('refuses a staff address whose google_id is a different one', function () {
-        User::factory()->create(['email' => 'admin@creatif.space', 'is_staff' => true, 'google_id' => 'g-real']);
+    it('refuses a staff address whose google_id is a different one, and does not relink it', function () {
+        $staff = User::factory()->create(['email' => 'admin@creatif.space', 'is_staff' => true, 'google_id' => 'g-real']);
         p1Google('g-other', 'admin@creatif.space');
 
         $this->get('/auth/google/callback?code=abc')
             ->assertRedirect('https://app.test/login?error=google_not_linked');
         $this->assertGuest();
+        expect($staff->fresh()->google_id)->toBe('g-real');
     });
 
     it('signs staff in when the google_id matches', function () {
@@ -232,10 +234,11 @@ describe('team members act on the owner\'s approvals and feed', function () {
         $link = p1Link(p1HeldPost($owner, 'client'));
         $account = SocialAccount::factory()->for($owner)->create();
 
-        $this->actingAs($outsider)->getJson("/api/v1/social-approval-links/{$link->ulid}")->assertForbidden();
-        $this->actingAs($outsider)->postJson("/api/v1/social-posts/{$held->ulid}/approve")->assertForbidden();
+        // Not 403: another workspace's post, link or feed does not exist to them.
+        $this->actingAs($outsider)->getJson("/api/v1/social-approval-links/{$link->ulid}")->assertNotFound();
+        $this->actingAs($outsider)->postJson("/api/v1/social-posts/{$held->ulid}/approve")->assertNotFound();
         $this->actingAs($outsider)->getJson('/api/v1/social-approval-links')->assertOk()->assertJsonCount(0, 'data');
-        $this->actingAs($outsider)->getJson("/api/v1/social-accounts/{$account->ulid}/feed")->assertForbidden();
+        $this->actingAs($outsider)->getJson("/api/v1/social-accounts/{$account->ulid}/feed")->assertNotFound();
     });
 
     it('lets a member read the owner\'s account feed', function () {
@@ -246,5 +249,55 @@ describe('team members act on the owner\'s approvals and feed', function () {
 
         $status = $this->actingAs($member)->getJson("/api/v1/social-accounts/{$account->ulid}/feed")->status();
         expect($status)->not->toBe(403);
+    });
+});
+
+describe('ownership: every approval and feed action is scoped to the caller\'s workspace', function () {
+    /** Every action on another workspace's post, link, comment or feed. */
+    function p1OutsiderCalls(SocialPost $held, SocialApprovalLink $link, SocialPostComment $comment, SocialAccount $account): array
+    {
+        return [
+            ['postJson', "/api/v1/social-posts/{$held->ulid}/approve", []],
+            ['getJson', "/api/v1/social-posts/{$held->ulid}/comments", []],
+            ['postJson', "/api/v1/social-posts/{$held->ulid}/comments", ['body' => 'x']],
+            ['getJson', "/api/v1/social-posts/{$held->ulid}/approval-link", []],
+            ['postJson', "/api/v1/social-comments/{$comment->ulid}/resolve", []],
+            ['postJson', "/api/v1/social-comments/{$comment->ulid}/apply", []],
+            ['getJson', "/api/v1/social-approval-links/{$link->ulid}", []],
+            ['patchJson', "/api/v1/social-approval-links/{$link->ulid}", ['title' => 'x']],
+            ['postJson', "/api/v1/social-approval-links/{$link->ulid}/approve", []],
+            ['deleteJson', "/api/v1/social-approval-links/{$link->ulid}", []],
+            ['getJson', "/api/v1/social-accounts/{$account->ulid}/feed", []],
+        ];
+    }
+
+    it('answers 404 to someone outside the workspace on every action, and changes nothing', function () {
+        [$owner] = p1Team('editor');
+        $held = p1HeldPost($owner, 'awaiting');
+        $link = p1Link(p1HeldPost($owner, 'client'));
+        $comment = SocialPostComment::create(['social_post_id' => $held->id, 'user_id' => $owner->id, 'author_name' => 'Owner', 'role' => 'EDITOR', 'body' => 'Note']);
+        $account = SocialAccount::factory()->for($owner)->create();
+        $outsider = User::factory()->create();
+        Workspace::forget();
+
+        foreach (p1OutsiderCalls($held, $link, $comment, $account) as [$method, $url, $body]) {
+            $this->actingAs($outsider)->{$method}($url, $body)->assertNotFound();
+        }
+
+        expect($held->fresh()->approval->value)->toBe('awaiting')
+            ->and($link->fresh()->revoked_at)->toBeNull()
+            ->and($link->fresh()->title)->toBe('Nov')
+            ->and($comment->fresh()->resolved_at)->toBeNull()
+            ->and(SocialPostComment::query()->count())->toBe(1);
+    });
+
+    it('keeps 403 for a viewer inside the workspace (they may read, not act)', function () {
+        [$owner, $viewer] = p1Team('viewer');
+        $held = p1HeldPost($owner, 'awaiting');
+        $comment = SocialPostComment::create(['social_post_id' => $held->id, 'user_id' => $owner->id, 'author_name' => 'Owner', 'role' => 'EDITOR', 'body' => 'Note']);
+
+        $this->actingAs($viewer)->getJson("/api/v1/social-posts/{$held->ulid}/comments")->assertOk();
+        $this->actingAs($viewer)->postJson("/api/v1/social-comments/{$comment->ulid}/resolve")->assertForbidden();
+        $this->actingAs($viewer)->postJson("/api/v1/social-posts/{$held->ulid}/approve")->assertForbidden();
     });
 });
