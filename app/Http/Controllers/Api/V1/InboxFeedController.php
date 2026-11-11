@@ -268,7 +268,9 @@ class InboxFeedController extends Controller
     /**
      * Rows strictly after the cursor in (time desc, rank desc, id desc).
      *
-     * @param  Builder<SocialConversation>|Builder<SocialComment>  $q
+     * @template TModel of \Illuminate\Database\Eloquent\Model
+     *
+     * @param  Builder<TModel>  $q
      * @param  array{0: string, 1: int, 2: int}  $cursor
      */
     private static function after(Builder $q, string $at, int $rank, array $cursor): void
