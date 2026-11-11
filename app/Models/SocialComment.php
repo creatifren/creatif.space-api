@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Models\Contracts\WorkspaceOwned;
 use Carbon\CarbonImmutable;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -31,7 +32,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
  * @property CarbonImmutable|null $private_replied_at
  * @property int|null $private_reply_conversation_id
  */
-class SocialComment extends Model
+class SocialComment extends Model implements WorkspaceOwned
 {
     /** Instagram allows one private reply per comment, within 7 days of it. */
     public const PRIVATE_REPLY_DAYS = 7;
@@ -57,6 +58,11 @@ class SocialComment extends Model
         static::creating(function (self $c): void {
             $c->ulid ??= (string) str()->ulid();
         });
+    }
+
+    public function workspaceUserId(): ?int
+    {
+        return $this->user_id === null ? null : (int) $this->user_id;
     }
 
     public function getRouteKeyName(): string

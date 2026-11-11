@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Models\Contracts\WorkspaceOwned;
 use App\Support\Media\FileSignature;
 use Carbon\CarbonImmutable;
 use Database\Factories\FileFactory;
@@ -42,7 +43,7 @@ use Illuminate\Support\Facades\Storage;
  * @property CarbonImmutable|null $kept_at
  * @property CarbonImmutable|null $created_at
  */
-class File extends Model
+class File extends Model implements WorkspaceOwned
 {
     /** @use HasFactory<FileFactory> */
     use HasFactory;
@@ -132,6 +133,11 @@ class File extends Model
         static::creating(function (self $file): void {
             $file->ulid ??= (string) str()->ulid();
         });
+    }
+
+    public function workspaceUserId(): ?int
+    {
+        return $this->user_id === null ? null : (int) $this->user_id;
     }
 
     public function getRouteKeyName(): string

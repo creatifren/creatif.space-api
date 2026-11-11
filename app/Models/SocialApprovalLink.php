@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Models\Contracts\WorkspaceOwned;
 use Carbon\CarbonImmutable;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
@@ -34,7 +35,7 @@ use Illuminate\Support\Str;
  * @property CarbonImmutable|null $revoked_at
  * @property CarbonImmutable|null $created_at
  */
-class SocialApprovalLink extends Model
+class SocialApprovalLink extends Model implements WorkspaceOwned
 {
     protected $fillable = ['user_id', 'token', 'title', 'client_name', 'approver_email', 'approver_bound_at', 'expires_at', 'extended_at', 'revoked_at'];
 
@@ -99,6 +100,11 @@ class SocialApprovalLink extends Model
         }
 
         return static::query()->where('token_hash', self::hashToken($token))->first();
+    }
+
+    public function workspaceUserId(): ?int
+    {
+        return $this->user_id === null ? null : (int) $this->user_id;
     }
 
     public function getRouteKeyName(): string

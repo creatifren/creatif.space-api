@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Models\Contracts\WorkspaceOwned;
 use Carbon\CarbonImmutable;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -28,7 +29,7 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
  * @property string $status
  * @property CarbonImmutable|null $messages_synced_at
  */
-class SocialConversation extends Model
+class SocialConversation extends Model implements WorkspaceOwned
 {
     public const OPEN = 'open';
 
@@ -59,6 +60,11 @@ class SocialConversation extends Model
         static::creating(function (self $c): void {
             $c->ulid ??= (string) str()->ulid();
         });
+    }
+
+    public function workspaceUserId(): ?int
+    {
+        return $this->user_id === null ? null : (int) $this->user_id;
     }
 
     public function getRouteKeyName(): string

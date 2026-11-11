@@ -4,6 +4,7 @@ namespace App\Models;
 
 use App\Enums\SocialAccountStatus;
 use App\Enums\SocialPlatform;
+use App\Models\Contracts\WorkspaceOwned;
 use Carbon\CarbonImmutable;
 use Database\Factories\SocialAccountFactory;
 use Illuminate\Database\Eloquent\Attributes\Scope;
@@ -34,7 +35,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
  * @property CarbonImmutable|null $messages_scope_at
  * @property CarbonImmutable|null $inbox_synced_at
  */
-class SocialAccount extends Model
+class SocialAccount extends Model implements WorkspaceOwned
 {
     /** @use HasFactory<SocialAccountFactory> */
     use HasFactory;
@@ -84,6 +85,11 @@ class SocialAccount extends Model
             // Which relay holds it; ids mean nothing to the other one.
             $account->provider ??= (string) config('services.social.provider');
         });
+    }
+
+    public function workspaceUserId(): ?int
+    {
+        return $this->user_id === null ? null : (int) $this->user_id;
     }
 
     public function getRouteKeyName(): string

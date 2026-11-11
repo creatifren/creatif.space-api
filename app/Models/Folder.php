@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Models\Contracts\WorkspaceOwned;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
@@ -16,7 +17,7 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
  * @property int|null $parent_id
  * @property string $name
  */
-class Folder extends Model
+class Folder extends Model implements WorkspaceOwned
 {
     protected $fillable = [
         'ulid',
@@ -30,6 +31,11 @@ class Folder extends Model
         static::creating(function (self $folder): void {
             $folder->ulid ??= (string) str()->ulid();
         });
+    }
+
+    public function workspaceUserId(): ?int
+    {
+        return $this->user_id === null ? null : (int) $this->user_id;
     }
 
     public function getRouteKeyName(): string

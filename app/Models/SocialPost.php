@@ -6,6 +6,7 @@ use App\Casts\UtcDateTime;
 use App\Enums\SocialPostApproval;
 use App\Enums\SocialPostStatus;
 use App\Enums\SocialPostTargetStatus;
+use App\Models\Contracts\WorkspaceOwned;
 use App\Notifications\SocialPostFailed;
 use App\Support\Media\MediaLinks;
 use Carbon\CarbonImmutable;
@@ -35,7 +36,7 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
  * @property string|null $approval_by
  * @property CarbonImmutable|null $approval_at
  */
-class SocialPost extends Model
+class SocialPost extends Model implements WorkspaceOwned
 {
     /** @use HasFactory<SocialPostFactory> */
     use HasFactory;
@@ -121,6 +122,11 @@ class SocialPost extends Model
                 MediaLinks::sync($post);
             }
         });
+    }
+
+    public function workspaceUserId(): ?int
+    {
+        return $this->user_id === null ? null : (int) $this->user_id;
     }
 
     public function getRouteKeyName(): string

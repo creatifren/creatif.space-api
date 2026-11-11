@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Models\Contracts\WorkspaceOwned;
 use Carbon\CarbonImmutable;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -27,7 +28,7 @@ use Illuminate\Support\Str;
  * @property CarbonImmutable|null $resolved_at
  * @property CarbonImmutable|null $created_at
  */
-class SocialPostComment extends Model
+class SocialPostComment extends Model implements WorkspaceOwned
 {
     protected $fillable = [
         'social_post_id', 'parent_id', 'user_id', 'author_name', 'role', 'body', 'suggestion', 'resolved_at',
@@ -46,6 +47,14 @@ class SocialPostComment extends Model
         static::creating(function (self $comment): void {
             $comment->ulid ??= (string) Str::ulid();
         });
+    }
+
+    public function workspaceUserId(): ?int
+    {
+        // A comment lives in its post's workspace, whoever wrote it.
+        $id = $this->post()->value('user_id');
+
+        return $id === null ? null : (int) $id;
     }
 
     public function getRouteKeyName(): string

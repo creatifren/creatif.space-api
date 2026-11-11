@@ -152,7 +152,7 @@ describe('R9 deleting a published post', function () {
         $post = lrPublished(User::factory()->create(), 'p3');
         Http::fake();
 
-        $this->actingAs(User::factory()->create())->deleteJson("/api/v1/social-posts/{$post->ulid}")->assertForbidden();
+        $this->actingAs(User::factory()->create())->deleteJson("/api/v1/social-posts/{$post->ulid}")->assertNotFound();
         Http::assertNothingSent();
     });
 });

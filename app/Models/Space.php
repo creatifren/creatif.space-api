@@ -5,6 +5,7 @@ namespace App\Models;
 use App\Enums\SpaceStatus;
 use App\Enums\SpaceViewMode;
 use App\Enums\SpaceVisibility;
+use App\Models\Contracts\WorkspaceOwned;
 use Carbon\CarbonImmutable;
 use Database\Factories\SpaceFactory;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
@@ -37,7 +38,7 @@ use Illuminate\Support\Str;
  * @property CarbonImmutable|null $created_at
  * @property CarbonImmutable|null $updated_at
  */
-class Space extends Model
+class Space extends Model implements WorkspaceOwned
 {
     /** @use HasFactory<SpaceFactory> */
     use HasFactory, SoftDeletes;
@@ -92,6 +93,11 @@ class Space extends Model
         static::creating(function (self $space): void {
             $space->ulid ??= (string) str()->ulid();
         });
+    }
+
+    public function workspaceUserId(): ?int
+    {
+        return $this->user_id === null ? null : (int) $this->user_id;
     }
 
     public function getRouteKeyName(): string

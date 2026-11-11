@@ -352,12 +352,12 @@ describe('listing and cancelling', function () {
         Http::assertNothingSent();
     });
 
-    it("forbids cancelling another user's post", function () {
+    it("hides another user's post from cancelling (404, not 403)", function () {
         $post = SocialPost::factory()->create();
 
         $this->actingAs(User::factory()->create())
             ->deleteJson("/api/v1/social-posts/{$post->ulid}")
-            ->assertForbidden();
+            ->assertNotFound();
     });
 
     it('reschedules via a full PUT that keeps destinations and overrides', function () {
@@ -402,12 +402,12 @@ describe('listing and cancelling', function () {
         Http::assertNothingSent();
     });
 
-    it("forbids changing another user's post", function () {
+    it("hides another user's post from changing (404, not 403)", function () {
         $post = SocialPost::factory()->create();
 
         $this->actingAs(User::factory()->create())
             ->patchJson("/api/v1/social-posts/{$post->ulid}", ['caption' => 'Mine now.'])
-            ->assertForbidden();
+            ->assertNotFound();
     });
 
     it('rejects guests', function () {
