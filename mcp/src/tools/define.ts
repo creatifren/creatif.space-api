@@ -3,7 +3,7 @@ import type { CallToolResult, ToolAnnotations } from '@modelcontextprotocol/sdk/
 import { z } from 'zod';
 import type { Analytics } from '../analytics.js';
 import type { CallerAuth } from '../auth/middleware.js';
-import { ToolError, toToolError } from '../errors.js';
+import { ToolError, toToolError, type NotFound } from '../errors.js';
 import type { V1Client } from '../v1.js';
 
 export type Scope = 'read' | 'draft' | 'approve' | 'publish';
@@ -29,8 +29,8 @@ export interface ToolDef<S extends z.ZodRawShape> {
     idempotentHint: boolean;
     openWorldHint: boolean;
   };
-  /** What a 404 refers to, for the not_found message. */
-  notFound?: string;
+  /** What a 404 refers to, and where to get a valid id instead. */
+  notFound?: NotFound;
   run: (args: z.infer<z.ZodObject<S>>, ctx: ToolContext) => Promise<unknown>;
 }
 
@@ -68,7 +68,7 @@ export function registerTool(server: McpServer, def: ToolDef<any>, deps: Registe
           throw new ToolError(
             'scope_missing',
             `This tool needs the "${def.scope}" permission, which this connection was not granted.`,
-            `Reconnect the creatif.space connector and allow "${def.scope}".`,
+            `Ask the user to reconnect the creatif.space connector and allow "${def.scope}", then call again. Tools that only need the granted permissions still work.`,
             { required: def.scope, granted: deps.auth.scopes },
           );
         }
@@ -77,9 +77,9 @@ export function registerTool(server: McpServer, def: ToolDef<any>, deps: Registe
         ok = true;
         return result(out);
       } catch (e) {
-        const err = toToolError(e, def.notFound);
+        const err = unsure(toToolError(e, def.notFound), def);
         errorCode = err.code;
-        return result(err.toJSON(), true);
+        return result(err.toJSON(def.name), true);
       } finally {
         deps.analytics.toolCalled(deps.auth.extra.userUlid, {
           tool: def.name,
@@ -91,4 +91,77 @@ export function registerTool(server: McpServer, def: ToolDef<any>, deps: Registe
       }
     },
   );
+}
+
+/**
+ * A failed call to a tool that creates or sends something may still have
+ * gone through: never tell the model to simply call it again.
+ */
+function unsure(err: ToolError, def: ToolDef<z.ZodRawShape>): ToolError {
+  if (def.annotations.idempotentHint || def.annotations.readOnlyHint) return err;
+  if (err.code !== 'upstream_unavailable' && err.code !== 'internal_error') return err;
+  return new ToolError(
+    err.code,
+    err.message,
+    `It is not certain whether ${def.name} went through. Check first (list_posts, get_post or list_files) and call again only if nothing was created or sent.`,
+    { ...err.details, retryable: false, verify_first: true },
+  );
+}
+
+/** The SDK's own refusals, e.g. "Input validation error: Invalid arguments for tool x: Required at caption". */
+const SDK_INVALID = /^(?:MCP error -?\d+: )?Input validation error: Invalid arguments for tool (\S+): ([\s\S]*)$/;
+const SDK_UNKNOWN = /^(?:MCP error -?\d+: )?Tool (\S+) (not found|disabled)$/;
+
+/** "Invalid input: expected string, received undefined at post_ids.0" → { field, problem }. */
+function issues(text: string) {
+  return text.split('\n').filter(Boolean).map((line) => {
+    const m = /^(.*) at ([\w.[\]-]+)$/.exec(line);
+    return m ? { field: m[2], problem: m[1] } : { field: null, problem: line };
+  });
+}
+
+/**
+ * The SDK answers bad arguments and unknown tool names itself, as bare
+ * text. Turn those into the same envelope every tool error uses. The
+ * SDK version is pinned; test/errors.test.ts fails if this hook moves.
+ */
+export function structureSdkErrors(server: McpServer, toolNames: string[]): void {
+  const target = server as unknown as { createToolError?: (message: string) => CallToolResult };
+  if (typeof target.createToolError !== 'function') throw new Error('MCP SDK changed: createToolError hook is gone');
+  target.createToolError = (message: string) => {
+    const invalid = SDK_INVALID.exec(message);
+    if (invalid) {
+      const tool = invalid[1]!;
+      return result(
+        new ToolError(
+          'invalid_input',
+          `The arguments for ${tool} do not match its input schema; nothing was done.`,
+          'Fix each field in details.issues (types, required fields, limits as described in the tool’s inputSchema) and call again.',
+          { issues: issues(invalid[2]!) },
+        ).toJSON(tool),
+        true,
+      );
+    }
+    const unknown = SDK_UNKNOWN.exec(message);
+    if (unknown) {
+      return result(
+        new ToolError(
+          'unknown_tool',
+          `There is no tool named "${unknown[1]}" on creatif.space.`,
+          'Call one of the tools in details.available_tools (tools/list has their inputs).',
+          { requested: unknown[1], available_tools: toolNames },
+        ).toJSON(),
+        true,
+      );
+    }
+    return result(
+      new ToolError(
+        'internal_error',
+        'The creatif.space connector could not run this call.',
+        'Call again once. If the same error comes back, tell the user to do this step in creatif.space.',
+        { retryable: true, reason: message.slice(0, 200) },
+      ).toJSON(),
+      true,
+    );
+  };
 }

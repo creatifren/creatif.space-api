@@ -238,7 +238,7 @@ describe('publish_post', () => {
     const res = await call('publish_post', { post_id: POST }, {
       [`GET /social-posts/${POST}/send-preview`]: () => ({ body: previewBody({ sendable: false, status: 'published' }) }),
     });
-    expect(payload(res).error).toMatchObject({ code: 'invalid_input' });
+    expect(payload(res).error).toMatchObject({ code: 'not_draft', details: { status: expect.any(String) } });
   });
 
   it('with confirm: true sends now with the preview’s confirm_token (no scheduled_at)', async () => {
@@ -301,7 +301,7 @@ describe('plan and Credit limits are passed on verbatim', () => {
     expect(payload(res).error).toMatchObject({
       code: 'plan_required',
       message: TRIAL,
-      hint: expect.stringMatching(/as it is/),
+      next_step: expect.stringMatching(/as it is/),
       details: { reason: 'plan_required', feature: 'approval_clients', required_plan: 'pro', limit: 1, billing_url: BILLING },
     });
   });
@@ -351,7 +351,7 @@ describe('plan and Credit limits are passed on verbatim', () => {
       message: msg,
       details: { needed: 600, available: 1, topup_url: 'https://creatif.space/credits' },
     });
-    expect(payload(res).error.hint).toMatch(/Nothing was charged/);
+    expect(payload(res).error.next_step).toMatch(/Nothing was charged/);
   });
 
   it('quota_exceeded → the reset date', async () => {

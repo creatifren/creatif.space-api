@@ -195,18 +195,18 @@ describe('over quota', () => {
       message: 'Your media storage is full (1 GB on Free). Upgrade to Pro for more.',
       details: { feature: 'media_quota', next_step: 'upgrade_pro', billing_url: BILLING, files_url: FILES },
     });
-    expect(error.hint).toContain(FILES);
-    expect(error.hint).toContain('emptying the Trash');
-    expect(error.hint).toContain(`upgrade to Pro: ${BILLING}`);
-    expect(error.hint).toMatch(/Do not retry/);
+    expect(error.next_step).toContain(FILES);
+    expect(error.next_step).toContain('emptying the Trash');
+    expect(error.next_step).toContain(`upgrade to Pro: ${BILLING}`);
+    expect(error.next_step).toMatch(/Do not retry/);
   });
 
   it('Max Keep quota full → storage_full that says to contact creatif.space, no upgrade link', async () => {
     const { client } = await setup(fakeLibrary({ tier: 'max' }));
     const { error } = payload(await client.callTool({ name: 'request_media_upload', arguments: JPEG }));
     expect(error.code).toBe('storage_full');
-    expect(error.hint).toContain('un-Keep');
-    expect(error.hint).toContain('contact creatif.space');
+    expect(error.next_step).toContain('un-Keep');
+    expect(error.next_step).toContain('contact creatif.space');
     expect(error.details.billing_url).toBeUndefined();
   });
 
@@ -214,7 +214,7 @@ describe('over quota', () => {
     const { client } = await setup(fakeLibrary({ imageCap: 10 * 1024 * 1024 }));
     const { error } = payload(await client.callTool({ name: 'request_media_upload', arguments: { ...JPEG, size_bytes: 10 * 1024 * 1024 + 1 } }));
     expect(error).toMatchObject({ code: 'file_too_large', details: { max_bytes: 10 * 1024 * 1024 } });
-    expect(error.hint).toMatch(/compress/);
+    expect(error.next_step).toMatch(/compress/);
   });
 
   it('the internal upload limit → upload_limit, not a generic rate limit', async () => {
@@ -222,7 +222,7 @@ describe('over quota', () => {
     const client = await app.connect(TOKEN_ALL);
     const { error } = payload(await client.callTool({ name: 'request_media_upload', arguments: JPEG }));
     expect(error).toMatchObject({ code: 'upload_limit', message: 'Upload limit reached, try again tomorrow' });
-    expect(error.hint).toMatch(/Do not retry today/);
+    expect(error.next_step).toMatch(/Do not retry today/);
   });
 });
 
@@ -231,7 +231,7 @@ describe('wrong format', () => {
     const { client } = await setup();
     const { error } = payload(await client.callTool({ name: 'request_media_upload', arguments: { filename: 'a.zip', mime: 'application/zip', size_bytes: 10 } }));
     expect(error).toMatchObject({ code: 'unsupported_format', message: REFUSED_FORMAT });
-    expect(error.hint).toMatch(/Convert the file to JPEG, PNG, WebP or GIF/);
+    expect(error.next_step).toMatch(/Convert the file to JPEG, PNG, WebP or GIF/);
   });
 
   it('bytes that are not the declared format → unsupported_format at confirm, and the id is dead', async () => {
@@ -244,7 +244,7 @@ describe('wrong format', () => {
     expect(lib.files.get(file_id)!.status).toBe('failed');
 
     const again = payload(await client.callTool({ name: 'confirm_media_upload', arguments: { file_id } }));
-    expect(again.error).toMatchObject({ code: 'invalid_input', hint: expect.stringMatching(/request_media_upload/) });
+    expect(again.error).toMatchObject({ code: 'invalid_input', next_step: expect.stringMatching(/request_media_upload/) });
   });
 
   it('confirm before the PUT → upload_incomplete, and confirms once the bytes arrive', async () => {
@@ -253,7 +253,7 @@ describe('wrong format', () => {
 
     const early = payload(await client.callTool({ name: 'confirm_media_upload', arguments: { file_id } }));
     expect(early.error).toMatchObject({ code: 'upload_incomplete', message: 'The upload never arrived — try again.' });
-    expect(early.error.hint).toMatch(/PUT the file bytes/);
+    expect(early.error.next_step).toMatch(/PUT the file bytes/);
 
     lib.put(file_id);
     const ok = await client.callTool({ name: 'confirm_media_upload', arguments: { file_id } });
@@ -271,7 +271,7 @@ describe('unconfirmed uploads in posts', () => {
     expect(res.isError).toBe(true);
     const { error } = payload(res);
     expect(error.code).toBe('file_not_ready');
-    expect(error.hint).toMatch(/call confirm_media_upload first/);
+    expect(error.next_step).toMatch(/call confirm_media_upload first/);
   });
 
   it('update_post with an unconfirmed file id → file_not_ready', async () => {
@@ -314,7 +314,7 @@ describe('another workspace', () => {
 
     const stranger = await connect(TOKEN_OTHER);
     const res = await stranger.callTool({ name: 'confirm_media_upload', arguments: { file_id } });
-    expect(payload(res).error).toMatchObject({ code: 'not_found', message: 'That upload was not found.' });
+    expect(payload(res).error).toMatchObject({ code: 'not_found', message: 'That upload was not found in this workspace.' });
     expect(lib.files.get(file_id)!.status).toBe('pending');
 
     await client.callTool({ name: 'confirm_media_upload', arguments: { file_id } });
