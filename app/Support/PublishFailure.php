@@ -37,7 +37,9 @@ final class PublishFailure
         'content_rejected' => 'content',
         'platform_unavailable' => 'platform_unavailable',
         'other' => 'other',
-        'unknown' => 'unknown',
+        // A refusal that says nothing. The coarse code stays "unknown", as
+        // PostHog has always had it.
+        'network_rejected' => 'unknown',
     ];
 
     /** Specific patterns first: "quota" before a generic limit, a missing board before "media". */
@@ -54,7 +56,7 @@ final class PublishFailure
         'media_spec' => '/\b(aspect ratio|resolution|duration|too (large|big|short|long) (file|video|image)|file size|unsupported (format|codec|media|file)|invalid (media|image|video)|codec|bitrate|frame ?rate|dimensions?)\b/i',
         'content_too_long' => '/\b(too long|exceeds? (the )?(maximum|max|character)|character limit|max(imum)? length)\b/i',
         'content_rejected' => '/\b(spam|policy|violat(es|ion)|community guidelines|not allowed|inappropriate)\b/i',
-        'platform_unavailable' => '/\b(timeout|timed out|unavailable|server error|internal error|5\d\d|bad gateway|service error)\b/i',
+        'platform_unavailable' => '/\b(timeout|timed out|unavailable|server error|internal error|5\d\d|bad gateway|service error|connection (refused|reset|closed)|could not resolve host|ECONNRESET|ECONNREFUSED|ETIMEDOUT|socket hang up|cURL error (6|7|28|35|52|56))\b/i',
     ];
 
     /**
@@ -63,7 +65,7 @@ final class PublishFailure
     public static function classify(?string $raw, ?string $network = null): array
     {
         $raw = trim((string) $raw);
-        $code = 'unknown';
+        $code = 'network_rejected';
 
         if ($raw !== '' && $raw !== 'the platform refused it') {
             $code = 'other';
@@ -128,7 +130,7 @@ final class PublishFailure
             'content_too_long' => "The caption is too long for {$n}. Shorten it and send again.",
             'content_rejected' => "{$n} refused the content under its rules.",
             'platform_unavailable' => "{$n} was unavailable. Try again in a few minutes.",
-            'unknown' => "{$n} refused it without saying why. Try again, or contact support.",
+            'network_rejected' => "{$n} refused it without saying why. Try again, or contact support.",
             default => "{$n} refused it. Try again, or contact support with the post link.",
         };
     }

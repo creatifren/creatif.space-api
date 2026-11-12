@@ -85,6 +85,9 @@ return [
         'api.v1.social-posts.send-preview' => 'read',
         // CapTokenSends holds bearer callers to 20 sends a day.
         'api.v1.social-posts.send' => 'publish',
+        // retry_post: the preview reads; the retry spends Credits like a send.
+        'api.v1.social-posts.retry-preview' => 'read',
+        'api.v1.social-posts.retry' => 'publish',
         'api.v1.social-approval-links.store' => 'approve',
         'api.v1.social-approval-links.show' => 'read',
         // get_approval_audit: the owner's own link, as CSV.

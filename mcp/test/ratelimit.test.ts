@@ -28,6 +28,7 @@ const ARGS: Record<string, Record<string, unknown>> = {
   update_post: { post_id: ID, caption: 'New caption' },
   schedule_post: { post_id: ID, scheduled_at: '2099-01-01T09:00:00Z' },
   publish_post: { post_id: ID },
+  retry_post: { post_id: ID },
   request_media_upload: { filename: 'a.jpg', mime: 'image/jpeg', size_bytes: 10 },
   confirm_media_upload: { file_id: ID },
   list_conversations: {},

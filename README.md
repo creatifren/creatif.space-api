@@ -26,6 +26,7 @@ in [mcp/README.md](mcp/README.md).
 | Posts | `discard_draft` | Delete a draft (preview first) | All |
 | Posts | `schedule_post` | Schedule a draft after a preview | All, spends Credits |
 | Posts | `publish_post` | Publish a draft now after a preview | All, spends Credits |
+| Posts | `retry_post` | Send a post's failed channels again after a preview | All, spends Credits |
 | Posts | `suggest_caption` | AI caption + hashtags in the user's style | Pro / Max |
 | Approvals | `create_approval_link` | Approval link for posts or a Content Plan | All (Free: one client) |
 | Approvals | `create_content_plan` | Content Plan for a date range, emailed to the approver after a preview | All (Free: one client) |

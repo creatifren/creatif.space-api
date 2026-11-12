@@ -23,6 +23,7 @@ export const FIRST_LINES: Record<string, string> = {
   discard_draft: 'Use when the user wants a draft deleted for good; previews first, confirm: true deletes.',
   schedule_post: 'Use when the user wants a draft sent later; previews channels and Credits, confirm: true schedules.',
   publish_post: 'Use when the user wants a draft public now; previews channels and Credits, confirm: true publishes.',
+  retry_post: 'Use when a post failed on some channels and the user wants to try again; previews reasons and Credits.',
 
   // Approvals
   create_approval_link: 'Use to get client approval on posts or a period; the send_for_approval prompt makes the link with it.',

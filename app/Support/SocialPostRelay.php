@@ -9,17 +9,21 @@ use App\Enums\SocialPostStatus;
 use App\Enums\SocialPostTargetStatus;
 use App\Exceptions\AccountReconnectRequired;
 use App\Exceptions\NotEnoughCredits;
+use App\Exceptions\PostNotRetryable;
 use App\Exceptions\PublishPreflightFailed;
 use App\Exceptions\ScheduleBeyondHorizon;
+use App\Models\PublishAttempt;
 use App\Models\SocialAccount;
 use App\Models\SocialPost;
 use App\Models\SocialPostTarget;
 use App\Models\User;
 use Carbon\CarbonImmutable;
 use Carbon\CarbonInterface;
+use Illuminate\Database\Eloquent\Collection as EloquentCollection;
 use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
 use Throwable;
@@ -395,6 +399,9 @@ class SocialPostRelay
                         ?? null),
                     'provider_result_id' => $data['id'] ?? null,
                 ]);
+                if ($before !== SocialPostTargetStatus::Published) {
+                    PublishAttempt::record($target, 'published', $source, providerPostId: $resultPost !== '' ? $resultPost : null);
+                }
             } else {
                 $failure = PublishFailure::classify($raw, $network);
 
@@ -407,6 +414,7 @@ class SocialPostRelay
                         'retry_at' => self::retryAt($failure['reason_code'], $target->attempts, $raw),
                         'provider_result_id' => $data['id'] ?? null,
                     ]);
+                    PublishAttempt::record($target, 'retrying', $source, $failure['reason_code'], $failure['reason'], $resultPost !== '' ? $resultPost : null);
 
                     return;
                 }
@@ -425,6 +433,9 @@ class SocialPostRelay
                     'retry_at' => null,
                     'provider_result_id' => $data['id'] ?? null,
                 ]);
+                if ($before === SocialPostTargetStatus::Pending) {
+                    PublishAttempt::record($target, 'failed', $source, $failure['reason_code'], $failure['reason'], $resultPost !== '' ? $resultPost : null);
+                }
             }
 
             $post->recomputeFromTargets();
@@ -532,6 +543,119 @@ class SocialPostRelay
             'retry_at' => null,
             'retry_provider_post_id' => (string) $remote['id'],
         ]);
+    }
+
+    /**
+     * The owner's "try again" on a post with failed destinations: each
+     * failed one goes to the provider once more on its own (retryTarget),
+     * and its result arrives like any other. Paid like any send — a failed
+     * destination was paid back, so chargeSend charges it again — and
+     * checked first like one: usable accounts, enough Credits. The rest of
+     * the post (published or still waiting) is left as it is.
+     *
+     * Locked per post and re-read inside the lock: a double tap must not
+     * send — and charge — twice.
+     *
+     * @return int how many destinations went out again
+     *
+     * @throws PostNotRetryable nothing failed, or another relay sent it
+     * @throws AccountReconnectRequired when a failed destination's account is not usable
+     * @throws NotEnoughCredits when the Credits do not cover it
+     * @throws ValidationException when the charge itself is refused
+     */
+    public function retryFailed(SocialPost $post): int
+    {
+        return Cache::lock("social-post:{$post->id}:retry", 60)->block(10, function () use ($post): int {
+            $post->refresh();
+            $failed = self::failedTargets($post);
+
+            self::requireRetryable($post, $failed);
+
+            DB::transaction(function () use ($post, $failed): void {
+                SocialPostTarget::query()->whereKey($failed->pluck('id'))->update([
+                    'status' => SocialPostTargetStatus::Pending,
+                    'fail_reason' => null,
+                    'fail_code' => null,
+                    'retry_at' => null,
+                ]);
+                if ($post->status === SocialPostStatus::Failed) {
+                    $post->update(['status' => SocialPostStatus::Scheduled, 'fail_reason' => null]);
+                }
+            });
+
+            // Only Pending, unpaid destinations are charged: the ones above.
+            Credits::chargeSend($post);
+
+            $sent = 0;
+            foreach ($failed as $target) {
+                $target->refresh();
+                $account = $target->account()->firstOrFail();
+                PublishAttempt::record($target, 'retry_requested', 'owner', attempt: $target->attempts + 1);
+
+                try {
+                    $this->retryTarget($target);
+                    $sent++;
+                } catch (Throwable $e) {
+                    Log::warning('social.publish_manual_retry_failed', ['target' => $target->id, 'error' => $e->getMessage()]);
+
+                    // This attempt counts; its refusal is read like a
+                    // platform's: a network error waits and retries,
+                    // anything else fails again and is paid back.
+                    $target->update(['attempts' => $target->attempts + 1]);
+                    self::applyResult($post, $account, ['success' => false, 'error' => $e->getMessage()], 'job');
+                }
+            }
+
+            return $sent;
+        });
+    }
+
+    /**
+     * @return EloquentCollection<int, SocialPostTarget>
+     */
+    public static function failedTargets(SocialPost $post): EloquentCollection
+    {
+        return $post->targets()->where('status', SocialPostTargetStatus::Failed)->with('account')->orderBy('id')->get();
+    }
+
+    /**
+     * What a retry of these destinations would be refused for, before
+     * anything is charged.
+     *
+     * @param  iterable<SocialPostTarget>  $failed
+     *
+     * @throws PostNotRetryable
+     * @throws AccountReconnectRequired
+     * @throws NotEnoughCredits
+     */
+    public static function requireRetryable(SocialPost $post, iterable $failed): void
+    {
+        $failed = collect($failed);
+        if ($failed->isEmpty()) {
+            throw PostNotRetryable::notFailed();
+        }
+        if ($post->provider !== (string) config('services.social.provider')) {
+            throw PostNotRetryable::otherRelay();
+        }
+
+        AccountReconnectRequired::unlessUsable($failed->pluck('account')->filter());
+
+        $need = Credits::sendPrice($post->user, self::retryDestinations($post, $failed));
+        if (Credits::balance($post->user) < $need) {
+            throw NotEnoughCredits::for($post->user, $need + Credits::monthlyBalance($post->user));
+        }
+    }
+
+    /**
+     * @param  iterable<SocialPostTarget>  $targets
+     * @return list<array{0: SocialPlatform|null, 1: string|null}>
+     */
+    public static function retryDestinations(SocialPost $post, iterable $targets): array
+    {
+        return collect($targets)
+            ->map(fn (SocialPostTarget $t) => [$t->account?->platform, (string) ($t->configuration['caption'] ?? $post->caption)])
+            ->values()
+            ->all();
     }
 
     /**
