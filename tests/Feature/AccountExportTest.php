@@ -9,10 +9,12 @@ use App\Models\SocialAccount;
 use App\Models\SocialApprovalDecision;
 use App\Models\SocialApprovalLink;
 use App\Models\SocialPost;
+use App\Models\Space;
 use App\Models\TeamMember;
 use App\Models\User;
 use App\Notifications\AccountExportReady;
 use App\Support\Workspace;
+use Carbon\CarbonImmutable;
 use Illuminate\Support\Facades\Crypt;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Notification;
@@ -93,7 +95,7 @@ it('builds the ZIP with every section and emails a 24-hour signed link', functio
     $files = axUnzip($export);
     expect(array_keys($files))->toEqualCanonicalizing([
         'README.txt', 'account.json', 'workspace.json', 'channels.json', 'posts.json', 'approvals.json',
-        'approval_audit.json', 'insight_share_links.json', 'notification_settings.json', 'files.json',
+        'approval_audit.json', 'insight_share_links.json', 'notification_settings.json', 'spaces.json', 'files.json',
     ]);
 
     $posts = json_decode($files['posts.json'], true);
@@ -156,6 +158,43 @@ it('includes Insight share links, notification settings and the approval audit �
     foreach ([$tokenHash, 'SHARE_TOKEN_PLAIN', 'recipient_token', '198.51.100.4', 'OtherAgent'] as $secret) {
         expect($all)->not->toContain($secret);
     }
+});
+
+it('includes each link\'s posts — a Content Plan\'s by its dates and channels — and Spaces metadata, never file bytes or a password', function () {
+    $owner = axWorkspace('a.test');
+    $ig = SocialAccount::query()->where('user_id', $owner->id)->firstOrFail();
+    $other = SocialAccount::factory()->for($owner)->create(['username' => 'other_channel']);
+    $plan = SocialApprovalLink::create([
+        'user_id' => $owner->id, 'title' => 'December plan', 'approver_email' => 'client@a.test',
+        'scope_from' => '2026-12-01', 'scope_to' => '2026-12-31', 'scope_timezone' => 'UTC',
+        'scope_starts_at' => CarbonImmutable::parse('2026-12-01 00:00:00', 'UTC'),
+        'scope_ends_at' => CarbonImmutable::parse('2027-01-01 00:00:00', 'UTC'),
+        'scope_account_ids' => [$ig->id],
+    ]);
+    $inPlan = SocialPost::factory()->for($owner)->create(['status' => 'scheduled', 'approval' => 'client', 'scheduled_at' => CarbonImmutable::parse('2026-12-10 09:00:00', 'UTC')]);
+    $inPlan->targets()->create(['social_account_id' => $ig->id, 'status' => 'pending']);
+    $otherChannel = SocialPost::factory()->for($owner)->create(['status' => 'scheduled', 'approval' => 'client', 'scheduled_at' => CarbonImmutable::parse('2026-12-11 09:00:00', 'UTC')]);
+    $otherChannel->targets()->create(['social_account_id' => $other->id, 'status' => 'pending']);
+
+    $file = File::query()->where('user_id', $owner->id)->firstOrFail();
+    $space = Space::factory()->for($owner)->create(['title' => 'Lookbook', 'password_hash' => bcrypt('space-secret')]);
+    $space->items()->create(['file_id' => $file->id, 'sort_order' => 0, 'section' => 'Hero', 'caption' => 'Cover shot']);
+
+    $files = axUnzip(axRun($this, $owner));
+
+    $links = collect(json_decode($files['approvals.json'], true))->keyBy('title');
+    expect(collect($links['December plan']['items'])->pluck('post_id')->all())->toBe([$inPlan->ulid])
+        ->and($links['December plan']['items'][0])->toMatchArray(['status' => 'scheduled', 'approval' => 'client'])
+        ->and(collect($links['Link of a.test']['items'])->pluck('post_id')->all())
+        ->toBe([SocialPost::query()->where('caption', 'Caption of a.test')->value('ulid')]);
+
+    $spaces = json_decode($files['spaces.json'], true);
+    expect($spaces)->toHaveCount(1)
+        ->and($spaces[0])->toMatchArray(['id' => $space->ulid, 'title' => 'Lookbook', 'password_protected' => true])
+        ->and($spaces[0]['items'])->toBe([[
+            'file_id' => $file->ulid, 'file_name' => 'photo-of-a.test.jpg', 'section' => 'Hero', 'caption' => 'Cover shot', 'position' => 0,
+        ]]);
+    expect($files['spaces.json'])->not->toContain('password_hash')->not->toContain('$2y$');
 });
 
 it('never includes tokens, secrets, provider ids, IPs or user agents', function () {
