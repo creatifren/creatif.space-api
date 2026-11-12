@@ -13,7 +13,7 @@ No business logic lives here.
 | Path | What |
 | --- | --- |
 | `POST /mcp` (and `POST /`) | MCP JSON-RPC (bearer required) |
-| `GET /health` | Liveness, no auth |
+| `GET /health` | Liveness, no auth: `{ok, name, version}` — the same version as `serverInfo` (from `package.json`; see `CHANGELOG.md`) |
 | `GET /.well-known/glama.json` | Glama connector claim, no auth (also HEAD); same document at `GET /mcp/.well-known/glama.json` |
 | `GET /.well-known/oauth-protected-resource` | RFC 9728 metadata: `resource: "https://mcp.creatif.space/mcp"`, `authorization_servers: ["https://api.creatif.space"]` |
 | `GET /.well-known/oauth-protected-resource/mcp` | the same document at the RFC 9728 path form |

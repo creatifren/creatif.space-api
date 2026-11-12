@@ -1,4 +1,5 @@
 import type { FetchLike } from './auth/introspection.js';
+import { VERSION } from './version.js';
 
 /** A non-2xx answer from the V1 API. */
 export class V1Error extends Error {
@@ -70,7 +71,7 @@ export class V1Client {
           Accept: 'application/json',
           Authorization: `Bearer ${this.token}`,
           ...(body !== undefined ? { 'Content-Type': 'application/json' } : {}),
-          'User-Agent': 'creatif-mcp/0.2',
+          'User-Agent': `creatif-mcp/${VERSION}`,
           ...this.extraHeaders,
         },
         ...(body !== undefined ? { body: JSON.stringify(body) } : {}),

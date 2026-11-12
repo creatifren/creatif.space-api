@@ -146,7 +146,7 @@ describe('the authenticated server is unchanged', () => {
   it('/mcp lists no free tools and keeps its own identity', async () => {
     app = await startApp();
     const client = await app.connect();
-    expect(client.getServerVersion()).toMatchObject({ name: 'creatif.space', version: '0.2.0' });
+    expect(client.getServerVersion()).toMatchObject({ name: 'creatif.space', version: '0.3.0' });
     const names = (await client.listTools()).tools.map((t) => t.name);
     expect(names).not.toContain('check_caption');
     expect(names).not.toContain('connect_guide');
