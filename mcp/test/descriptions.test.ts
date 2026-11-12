@@ -57,3 +57,34 @@ describe('tool descriptions for agents', () => {
     for (const name of ['list_spaces', 'create_space_from_files', 'publish_space']) expect(d[name], name).toMatch(/plan_required → /);
   });
 });
+
+describe('402 / 403 / 404 and the Free limits in every description', () => {
+  const errorsLine = (d: string) => d.split('\n').find((l) => l.startsWith('Errors → next step: '))!;
+
+  it('every tool names plan_required, forbidden and not_found, each with a next step', async () => {
+    const list = await tools();
+    for (const t of list) {
+      const errors = errorsLine(t.description!);
+      for (const code of ['plan_required', 'forbidden', 'not_found']) {
+        expect(errors, `${t.name} ${code}`).toMatch(new RegExp(`${code}[^→;]* → \\S`));
+      }
+    }
+  });
+
+  it('the default 402 step spells out the Free limits (7 days, 10 queued posts, one client)', async () => {
+    const d = (await tools()).find((t) => t.name === 'list_channels')!.description!;
+    expect(errorsLine(d)).toMatch(/plan_required \(402\) → .*7 days ahead.*10 queued posts.*one client/);
+  });
+
+  it('a tool’s own step for a code wins over the default, and no code is listed twice', async () => {
+    const list = await tools();
+    const keep = list.find((t) => t.name === 'keep_file')!.description!;
+    expect(errorsLine(keep)).toMatch(/plan_required → Keep is on Pro and Max/);
+    expect(errorsLine(keep)).not.toMatch(/plan_required \(402\)/);
+    for (const t of list) {
+      // "code → step" pairs; a step may itself contain "; ", so match codes right before "→".
+      const codes = [...errorsLine(t.description!).matchAll(/(?:: |; )([a-z_]+)(?: \(\d{3}\))? → /g)].map((m) => m[1]!);
+      expect(codes.filter((c, i) => codes.indexOf(c) !== i), t.name).toEqual([]);
+    }
+  });
+});

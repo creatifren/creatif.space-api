@@ -424,3 +424,27 @@ describe('Engage errors (list_conversations / reply_to_conversation)', () => {
     expect(e.next_step).toMatch(/list_conversations/);
   });
 });
+
+describe('402 next steps per Free limit', () => {
+  const plan = (feature: string) =>
+    fail('get_post', { post_id: POST }, { [GET_POST]: v1(402, { code: 'plan_required', message: 'That is past the Free plan limit.', feature }) });
+
+  it('schedule_window → a date within 7 days, or upgrade', async () => {
+    const e = await plan('schedule_window');
+    expect(e).toMatchObject({ code: 'plan_required', message: 'That is past the Free plan limit.', details: { feature: 'schedule_window' } });
+    expect(e.next_step).toMatch(/7 days ahead/);
+    expect(e.next_step).toMatch(/Do not retry/);
+  });
+
+  it('queue_limit → wait for queued posts, or upgrade', async () => {
+    expect((await plan('queue_limit')).next_step).toMatch(/10 posts can be queued.*list_posts status "scheduled"/);
+  });
+
+  it('approval_clients → same client, or upgrade', async () => {
+    expect((await plan('approval_clients')).next_step).toMatch(/one client at a time.*same approver_email/);
+  });
+
+  it('any other feature → get_credits, with the Free limits named', async () => {
+    expect((await plan('insight')).next_step).toMatch(/get_credits.*7 days ahead, 10 queued posts, approval links for one client/);
+  });
+});

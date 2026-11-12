@@ -81,6 +81,14 @@ const DEFAULT_NOT_FOUND: NotFound = {
 
 const PLAN_MESSAGE = /part of (Pro|Max)|upgrade/i;
 
+/** Per limit, what the user can do without upgrading (Free: 7 days ahead, 10 queued posts, one approval client). */
+const PLAN_NEXT: Record<string, string> = {
+  schedule_window: 'On Free a post can be scheduled at most 7 days ahead: offer a date within 7 days, or upgrading.',
+  queue_limit: 'On Free at most 10 posts can be queued (scheduled or waiting for approval): offer to wait until some go out (list_posts status "scheduled" shows the queue), or upgrading.',
+  approval_clients: 'On Free approval links are for one client at a time: offer to put these posts on a link for the same client (the same approver_email), or upgrading.',
+  default: 'get_credits shows the plan and its limits (Free: posts up to 7 days ahead, 10 queued posts, approval links for one client).',
+};
+
 const pick = (body: Record<string, unknown>, keys: string[]): Record<string, unknown> =>
   Object.fromEntries(keys.filter((k) => body[k] !== undefined).map((k) => [k, body[k]]));
 
@@ -128,7 +136,7 @@ export function toToolError(e: unknown, notFound: NotFound = DEFAULT_NOT_FOUND):
     return new ToolError(
       'plan_required',
       message,
-      'Tell the user this message as it is (it names the plan limit and includes the trial/upgrade link). Do not retry; get_credits shows the plan and its limits.',
+      `Tell the user this message as it is (it names the limit and has the trial/upgrade link). ${PLAN_NEXT[typeof body.feature === 'string' ? body.feature : ''] ?? PLAN_NEXT.default} Do not retry the same call.`,
       { reason: 'plan_limit', ...pick(body, ['reason', 'feature', 'required_plan', 'limit', 'billing_url']) },
     );
   }
