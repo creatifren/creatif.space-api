@@ -12,6 +12,7 @@ use App\Http\Controllers\Api\V1\CreditsController;
 use App\Http\Controllers\Api\V1\CreemWebhookController;
 use App\Http\Controllers\Api\V1\DeliveryLogController;
 use App\Http\Controllers\Api\V1\EnterpriseContactController;
+use App\Http\Controllers\Api\V1\FeedbackController;
 use App\Http\Controllers\Api\V1\FileController;
 use App\Http\Controllers\Api\V1\FileVersionController;
 use App\Http\Controllers\Api\V1\FolderController;
@@ -293,6 +294,10 @@ Route::post('/billing/google/verify', [GooglePlayBillingController::class, 'veri
 Route::middleware(['auth:sanctum,mcp', EnforceTokenScope::class, EnsureNotPendingDeletion::class, ScopeToWorkspace::class])->group(function () {
     Route::get('/me', MeController::class)->name('api.v1.me');
     Route::post('/me/tour', TourController::class)->name('api.v1.me.tour');
+    // Tester feedback to the team inbox (MCP send_feedback): 10 an hour per user.
+    Route::post('/feedback', FeedbackController::class)
+        ->middleware('throttle:10,60')
+        ->name('api.v1.feedback.store');
     Route::post('/handles', [HandleController::class, 'claim'])
         ->middleware('throttle:10,1')
         ->name('api.v1.handles.claim');
