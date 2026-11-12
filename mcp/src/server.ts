@@ -12,6 +12,7 @@ import { m2Tools } from './tools/m2.js';
 import { mediaTools } from './tools/media.js';
 import { engageTools } from './tools/engage.js';
 import { housekeepingTools } from './tools/housekeeping.js';
+import { approverTools } from './tools/approver.js';
 import { V1Client } from './v1.js';
 import { mcpCors } from './cors.js';
 import { DEFAULT_FREE_RATE_LIMIT, DEFAULT_GLAMA_CLAIM } from './config.js';
@@ -47,7 +48,7 @@ export interface AppDeps {
 export function buildMcpServer(auth: CallerAuth, deps: AppDeps): McpServer {
   const server = new McpServer(SERVER_INFO, { instructions: INSTRUCTIONS });
   const v1 = new V1Client(deps.v1ApiUrl, auth.token, deps.fetchImpl);
-  const tools = [...m1Tools, ...m2Tools, ...mediaTools, ...engageTools, ...housekeepingTools];
+  const tools = [...m1Tools, ...m2Tools, ...mediaTools, ...engageTools, ...housekeepingTools, ...approverTools];
   for (const tool of tools) {
     registerTool(server, tool, { auth, v1, analytics: deps.analytics });
   }

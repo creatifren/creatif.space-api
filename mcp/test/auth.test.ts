@@ -40,7 +40,7 @@ describe('health and metadata', () => {
       expect(await res.json()).toMatchObject({
         resource: RESOURCE,
         authorization_servers: ['https://api.creatif.space'],
-        scopes_supported: ['read', 'draft', 'approve', 'publish'],
+        scopes_supported: ['read', 'draft', 'approve', 'publish', 'approvals:decide'],
       });
     }
   });
@@ -95,6 +95,7 @@ describe('401 flow', () => {
         'request_media_upload', 'confirm_media_upload',
         'list_conversations', 'reply_to_conversation',
         'discard_draft', 'list_approval_links',
+        'list_waiting_approvals', 'decide_approval',
       ].sort(),
     );
     for (const tool of tools) {

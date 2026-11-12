@@ -40,7 +40,7 @@ Tokens (Passport OAuth 2.1 access tokens or `cs_live_…` API keys) are checked 
 Answers are cached 60 s (never past `exp`). The same bearer is then forwarded
 to V1 routes (guard `mcp`, built in the OAuth PR).
 
-Scopes (`scopes_supported`): `read`, `draft`, `approve`, `publish` — the same
+Scopes (`scopes_supported`): `read`, `draft`, `approve`, `publish`, `approvals:decide` — the same
 names as `config/mcp.php` on the API. Every V1 call carries `X-MCP-Tool` and
 `X-MCP-Client` for the API's audit log (never content).
 Rate limit: 60 requests / minute / token (429 + `Retry-After`).
@@ -66,6 +66,8 @@ Rate limit: 60 requests / minute / token (429 + `Retry-After`).
 | `reply_to_conversation` (conversation_id, text, confirm) — DM into the thread, or public reply under a comment | publish | preview `GET /inbox/feed/{id}`; `confirm: true` → `POST /inbox/feed/{id}/reply` |
 | `discard_draft` (post_id, confirm) — deletes a draft only; preview first, `confirm: true` deletes; scheduled / published / failed → `not_draft` with the next step | draft | `GET /social-posts/{id}`, then `DELETE /social-posts/{id}/draft` |
 | `list_approval_links` (status active\|expired\|revoked\|all, limit) — status, approver email, post count, approved/waiting/revision | read | `GET /social-approval-links` |
+| `list_waiting_approvals` — posts other users sent to this user for approval | approvals:decide | `GET /me/approvals/waiting` |
+| `decide_approval` (link, post_id, decision approve\|revise, reason, confirm) — the approver side; same rules as the approval page, audited as `mcp` | approvals:decide | preview `GET /me/approvals/{post}/preview`; `confirm: true` → `POST /me/approvals/{post}/decision` |
 
 **Media upload.** `request_media_upload` → the client PUTs the exact bytes to
 the URL (Content-Type and Content-Length are signed) → `confirm_media_upload`

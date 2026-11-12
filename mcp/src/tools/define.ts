@@ -6,7 +6,7 @@ import type { CallerAuth } from '../auth/middleware.js';
 import { ToolError, toToolError, type NotFound } from '../errors.js';
 import type { V1Client } from '../v1.js';
 
-export type Scope = 'read' | 'draft' | 'approve' | 'publish';
+export type Scope = 'read' | 'draft' | 'approve' | 'publish' | 'approvals:decide';
 
 export interface ToolContext {
   v1: V1Client;
