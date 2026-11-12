@@ -9,6 +9,7 @@ use App\Models\User;
 use App\Services\Ai\FakeAiCaptionProvider;
 use App\Services\Ai\OpenAiCaptionProvider;
 use App\Services\ErrorTracking;
+use App\Support\Insight\InsightCache;
 use App\Support\SocialProviders;
 use Carbon\CarbonImmutable;
 use Illuminate\Auth\Notifications\ResetPassword;
@@ -65,6 +66,9 @@ class AppServiceProvider extends ServiceProvider
         }
 
         Vite::useAggressivePrefetching();
+
+        // New follower readings, posts and approvals retire cached Insight answers.
+        InsightCache::register();
 
         $this->configureMcpAuth();
 

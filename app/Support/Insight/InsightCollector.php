@@ -33,8 +33,20 @@ use Throwable;
  */
 final class InsightCollector
 {
-    /** Feed pages read per account at most (25 posts each). */
-    public const MAX_PAGES = 20;
+    /**
+     * Feed pages read per account at most (25 posts each): 1,000 posts, the
+     * same ceiling as the CSV export — enough for four posts a day across a
+     * 92-day period and the 92 days before it.
+     */
+    public const MAX_PAGES = 40;
+
+    /**
+     * Accounts whose feed hit MAX_PAGES before reaching back far enough:
+     * id => the oldest post time read.
+     *
+     * @var array<int, CarbonImmutable>
+     */
+    private array $cutShort = [];
 
     public const PAGE_SIZE = 25;
 
@@ -46,11 +58,24 @@ final class InsightCollector
     public function __construct(private SocialProviders $providers) {}
 
     /**
+     * collect(), through the Insight cache (5 minutes per workspace + period
+     * + channels, retired when new numbers land). Every reader uses this.
+     *
+     * @param  Collection<int, SocialAccount>  $accounts
+     * @return array<string, mixed>
+     */
+    public function collectCached(User $owner, Collection $accounts, InsightPeriod $period): array
+    {
+        return InsightCache::remember($owner, $accounts, $period, fn () => $this->collect($owner, $accounts, $period));
+    }
+
+    /**
      * @param  Collection<int, SocialAccount>  $accounts
      * @return array<string, mixed>
      */
     public function collect(User $owner, Collection $accounts, InsightPeriod $period): array
     {
+        $this->cutShort = [];
         $previous = $period->previous();
         $channels = [];
         $footnotes = [];
@@ -145,6 +170,10 @@ final class InsightCollector
                 if ($cursor === null || ($oldest !== null && $oldest->lessThan($since))) {
                     break;
                 }
+                if ($page === self::MAX_PAGES - 1 && $items !== []) {
+                    // Out of pages with more to read: say how far back we got.
+                    $this->cutShort[$account->id] = min(array_column($items, 'posted_at'));
+                }
             }
         } catch (Throwable $e) {
             Log::warning('insight.feed_failed', ['account' => $account->ulid, 'error' => $e->getMessage()]);
@@ -166,6 +195,18 @@ final class InsightCollector
 
         $inPeriod = $feed === null ? null : array_values(array_filter($feed, fn ($p) => $period->contains($p['posted_at'])));
         $inPrevious = $feed === null ? null : array_values(array_filter($feed, fn ($p) => $previous->contains($p['posted_at'])));
+
+        // A feed cut short at MAX_PAGES: a previous period read only in part
+        // is no comparison at all, and a current one read in part says so.
+        $reached = $this->cutShort[$account->id] ?? null;
+        if ($reached !== null) {
+            if ($reached->greaterThan($previous->from)) {
+                $inPrevious = null;
+            }
+            if ($reached->greaterThan($period->from)) {
+                $notes[] = ['key' => 'feed_truncated', 'params' => ['network' => $network, 'count' => (string) count($feed ?? [])]];
+            }
+        }
 
         $current = $this->metrics($inPeriod);
         $before = $this->metrics($inPrevious);
