@@ -110,7 +110,7 @@ class BuildAccountExport implements ShouldQueue
         $posts = SocialPost::query()->whereIn('user_id', $ids)->with('targets', 'user:id,ulid,name')->orderBy('id')->get();
         $postUlid = $posts->pluck('ulid', 'id');
 
-        $links = SocialApprovalLink::query()->whereIn('user_id', $ids)->orderBy('id')->get();
+        $links = SocialApprovalLink::query()->whereIn('user_id', $ids)->with('user')->orderBy('id')->get();
         $decisions = SocialApprovalDecision::query()->whereIn('social_approval_link_id', $links->pluck('id'))->orderBy('id')->get()->groupBy('social_approval_link_id');
 
         // Decisions this person made as an approver on other people's links:
