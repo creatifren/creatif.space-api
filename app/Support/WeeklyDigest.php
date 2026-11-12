@@ -64,7 +64,7 @@ final class WeeklyDigest
             ->map(fn (SocialPost $p) => [
                 'post_id' => $p->ulid,
                 'caption' => str($p->caption)->squish()->limit(60)->toString(),
-                'reason' => (string) ($p->targets->first()?->fail_reason ?? $p->fail_reason ?? 'It was not published.'),
+                'reason' => (string) ($p->targets->first()->fail_reason ?? $p->fail_reason ?? 'It was not published.'),
                 'url' => config('app.frontend_url').'/social?post='.$p->ulid,
             ])->all());
 
