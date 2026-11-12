@@ -9,7 +9,7 @@ Two entries, both in the `io.github.creatifren/*` namespace (GitHub account
 | File | Registry name | Remote | Auth | Entry version |
 | --- | --- | --- | --- | --- |
 | `mcp/server.json` | `io.github.creatifren/creatif-space` | `https://mcp.creatif.space/mcp` | OAuth (`api.creatif.space`) | `1.2.2` |
-| `mcp/free-tools/server.json` | `io.github.creatifren/creatif-space-tools` | `https://mcp.creatif.space/free` | none | `1.1.0` |
+| `mcp/free-tools/server.json` | `io.github.creatifren/creatif-space-free-tools` | `https://mcp.creatif.space/free` | none | `1.1.0` |
 
 The registry refuses a version it already has: bump `version` in the file
 before publishing it again.
@@ -59,7 +59,7 @@ then says you are logged in.
 curl -fsS "https://registry.modelcontextprotocol.io/v0/servers?search=creatif" | jq '.servers[] | {name: .server.name, version: .server.version, latest: ._meta["io.modelcontextprotocol.registry/official"].isLatest}'
 ```
 
-Expect `creatif-space` at `1.2.2` and `creatif-space-tools` at `1.1.0`, both
+Expect `creatif-space` at `1.2.2` and `creatif-space-free-tools` at `1.1.0`, both
 `latest: true`.
 
 ## 6. Sign out on a shared machine

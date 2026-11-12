@@ -400,7 +400,7 @@ are quoted and marked as data. Defined in `src/prompts.ts`.
 ## Registry metadata
 
 - `mcp/server.json`: the official MCP registry entry (`io.github.creatifren/creatif-space`, remote `https://mcp.creatif.space/mcp`, entry version `1.2.2`). Its publisher-provided `_meta` lists the OAuth details (authorization server, protected-resource metadata, scopes), every tool, every prompt and the server version.
-- `mcp/free-tools/server.json`: the free tools entry (`io.github.creatifren/creatif-space-tools`, remote `https://mcp.creatif.space/free`, no auth, its three tools, entry version `1.1.0`).
+- `mcp/free-tools/server.json`: the free tools entry (`io.github.creatifren/creatif-space-free-tools`, remote `https://mcp.creatif.space/free`, no auth, its three tools, entry version `1.1.0`).
 - `glama.json` (repo root): Glama maintainers, the same owner as the registry namespace.
 - `test/registry.test.ts` keeps all of these in step with the server: the same tools, prompts, scopes and version; the same tool count in the README Tools table; only schema fields.
 - **Publishing is manual and not done here:** `.github/workflows/mcp-registry.yml` runs only on `workflow_dispatch`. Publishing is a public act, done by Rizal: the exact commands for both entries are in [`docs/registry-publish.md`](docs/registry-publish.md).
@@ -428,7 +428,7 @@ niche, `connect-guides.json` with `file:line` evidence that is never sent to
 callers). `connect_guide` also returns `account_type`: each item is
 `confirmed` (cites the code) or `check in app` (the code does not prove it,
 so nothing is guessed). Registry entry `free-tools/server.json`
-(`io.github.creatifren/creatif-space-tools`) is **not published** by the
+(`io.github.creatifren/creatif-space-free-tools`) is **not published** by the
 registry workflow, which only publishes `mcp/server.json`.
 
 ## Environment
