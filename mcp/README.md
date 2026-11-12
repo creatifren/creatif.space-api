@@ -8,6 +8,24 @@ It is a thin layer: every tool calls the existing **V1 API** with the caller's
 own bearer token, so ownership, plans, Credits and validation stay in Laravel.
 No business logic lives here.
 
+## Try it in 60 seconds (Claude)
+
+1. In Claude, open **Settings → Connectors → Add custom connector**, name it
+   `creatif.space` and paste the connector URL:
+   **`https://mcp.creatif.space/mcp`**
+2. Click **Connect**, sign in to creatif.space and allow access. Claude now sees
+   your channels, drafts and approval links. Nothing is posted without your OK:
+   every send shows a preview first.
+3. Ask one of these — each runs a ready-made prompt (also in Claude’s
+   prompts menu):
+   - **“Plan next week: 5 Instagram posts about our winter launch.”** →
+     `plan_week` drafts the posts on your channel. Drafts only, nothing goes out.
+   - **“Send my drafts to rani@client.com for approval.”** →
+     `send_for_approval` makes an approval link for your client to approve or
+     ask for changes.
+   - **“Make last month’s report and give me a share link.”** →
+     `monthly_report` sums up the month and makes a link anyone can open.
+
 ## Endpoints
 
 | Path | What |
