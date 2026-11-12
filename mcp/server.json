@@ -37,6 +37,7 @@
         "discard_draft",
         "draft_post",
         "get_approval_audit",
+        "get_approval_history",
         "get_connect_link",
         "get_credits",
         "get_insight_report_link",
