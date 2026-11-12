@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { ToolError } from '../errors.js';
 import { V1Error } from '../v1.js';
+import { pageInput, pageOf } from './paging.js';
 import { defineTool, describeTool, type ToolContext } from './define.js';
 import { PreviewTokens } from './m2.js';
 
@@ -107,7 +108,7 @@ export const listSpaces = defineTool({
   input: {
     status: z.enum(['draft', 'published', 'archived']).optional().describe('Only Spaces in this state (default: drafts and published, not archived)'),
     search: z.string().trim().max(255).optional().describe('Match on the Space title'),
-    limit: z.number().int().min(1).max(100).default(50).describe('At most this many Spaces (1–100, default 50)'),
+    ...pageInput(100, 50, 'Spaces'),
   },
   annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
   run: async (args, { v1 }) => {
@@ -115,8 +116,10 @@ export const listSpaces = defineTool({
       tab: args.status === 'archived' ? 'archived' : 'all',
       search: args.search,
     });
-    const spaces = data.filter((s) => !args.status || s.status === args.status).slice(0, args.limit).map(shapeSpace);
-    return { count: spaces.length, spaces };
+    const matching = data.filter((s) => !args.status || s.status === args.status);
+    const { page, next_cursor } = pageOf('list_spaces', { status: args.status, search: args.search }, matching, args.limit, args.cursor);
+    const spaces = page.map(shapeSpace);
+    return { count: spaces.length, spaces, next_cursor };
   },
 });
 

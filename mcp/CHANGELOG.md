@@ -26,6 +26,7 @@ Prompts (new): `plan_week`, `send_for_approval`, `monthly_report` (`prompts/list
 
 Changed:
 
+- Every `list_*` tool takes `limit` + `cursor` and returns `next_cursor` (null at the end).
 - The 10 most-used read tools declare an `outputSchema` and return `structuredContent` (text block kept).
 
 - `get_credits` adds this cycle's spend by action (`spend`) and days until renewal (`renewal`).

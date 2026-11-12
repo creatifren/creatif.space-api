@@ -2,6 +2,7 @@ import { z } from 'zod';
 import { ToolError } from '../errors.js';
 import { defineTool, describeTool } from './define.js';
 import { shapePost, type V1Post } from './shape.js';
+import { decodeCursor, encodeCursor, pageInput, pageOf } from './paging.js';
 
 const READ_ONLY = { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false } as const;
 
@@ -22,11 +23,12 @@ export const listChannels = defineTool({
     ],
   }),
   scope: 'read',
-  input: {},
+  input: pageInput(100, 50, 'channels'),
   annotations: READ_ONLY,
-  run: async (_args, { v1 }) => {
+  run: async (args, { v1 }) => {
     const res = await v1.get<{ data: Record<string, unknown>[] }>('/social-accounts');
-    const channels = res.data.map((a) => {
+    const { page, next_cursor } = pageOf('list_channels', {}, res.data, args.limit, args.cursor);
+    const channels = page.map((a) => {
       const reconnect = a.reconnect_required === true || a.status !== 'connected';
       return {
         id: a.id,
@@ -45,6 +47,7 @@ export const listChannels = defineTool({
     const needs = channels.filter((c) => c.reconnect_required).map((c) => c.id);
     return {
       channels,
+      next_cursor,
       ...(needs.length
         ? {
             needs_reconnect: needs,
@@ -86,19 +89,30 @@ export const listPosts = defineTool({
     from: z.iso.datetime({ offset: true }).optional().describe('Window start, ISO 8601 (e.g. 2026-11-01T00:00:00Z)'),
     to: z.iso.datetime({ offset: true }).optional().describe('Window end, ISO 8601'),
     channel_id: ulid('Channel').optional().describe('Only posts going to this channel (id from list_channels)'),
-    limit: z.number().int().min(1).max(100).default(25).describe('At most this many posts (1–100, default 25)'),
+    ...pageInput(100, 25, 'posts'),
   },
   annotations: READ_ONLY,
   notFound: { what: 'That channel', next: 'Call list_channels for valid channel ids, or call list_posts without channel_id.' },
   run: async (args, { v1 }) => {
+    const filters = { status: args.status, from: args.from, to: args.to, channel_id: args.channel_id };
+    const { o } = decodeCursor('list_posts', filters, args.cursor);
+    // One extra row says whether another page exists (the API caps a page at 100).
+    const ask = Math.min(args.limit + 1, 100);
     const res = await v1.get<{ data: V1Post[] }>('/social-posts', {
       status: args.status,
       from: args.from,
       to: args.to,
       account_id: args.channel_id,
-      limit: args.limit,
+      limit: ask,
+      offset: o || undefined,
     });
-    return { count: res.data.length, posts: res.data.map((p) => shapePost(p)) };
+    const page = res.data.slice(0, args.limit);
+    const more = res.data.length > args.limit || (ask === args.limit && res.data.length === ask);
+    return {
+      count: page.length,
+      posts: page.map((p) => shapePost(p)),
+      next_cursor: more ? encodeCursor('list_posts', filters, { o: o + args.limit }) : null,
+    };
   },
 });
 
@@ -143,18 +157,26 @@ export const listFiles = defineTool({
     search: z.string().trim().max(255).optional().describe('Match on file name'),
     type: z.enum(['image', 'video', 'pdf']).optional(),
     folder_id: ulid('Folder').optional().describe('Only files directly in this folder'),
-    limit: z.number().int().min(1).max(60).default(30).describe('At most this many files (1–60, default 30)'),
+    ...pageInput(60, 30, 'files'),
   },
   annotations: READ_ONLY,
   notFound: { what: 'That folder', next: 'Call list_files without folder_id to see the whole library.' },
   run: async (args, { v1 }) => {
+    // The API pages by page number: the cursor keeps the page and the page size it started with.
+    const filters = { search: args.search, type: args.type, folder_id: args.folder_id };
+    const at = decodeCursor('list_files', filters, args.cursor);
+    const perPage = at.n ?? args.limit;
+    const pageNo = at.o + 1;
     const res = await v1.get<{ data: Record<string, unknown>[]; meta?: Record<string, unknown> }>('/files', {
       search: args.search,
       type: args.type,
       folder_id: args.folder_id,
-      per_page: args.limit,
+      per_page: perPage,
+      ...(pageNo > 1 ? { page: pageNo } : {}),
     });
+    const last = typeof res.meta?.last_page === 'number' ? res.meta.last_page : pageNo;
     return {
+      next_cursor: pageNo < last ? encodeCursor('list_files', filters, { o: pageNo, n: perPage }) : null,
       total: res.meta?.total ?? res.data.length,
       files: res.data.map((f) => ({
         id: f.id,
