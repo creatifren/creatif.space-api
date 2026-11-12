@@ -31,6 +31,7 @@ use Spatie\Permission\Traits\HasRoles;
  * @property string $theme
  * @property UserStatus $status
  * @property bool $is_staff
+ * @property bool $is_directory_reviewer
  * @property CarbonImmutable|null $email_verified_at
  * @property CarbonImmutable|null $onboarded_at
  * @property CarbonImmutable|null $tour_seen_at
@@ -103,6 +104,7 @@ class User extends Authenticatable implements FilamentUser
             'suspended_at' => 'datetime',
             'deletion_requested_at' => 'datetime',
             'is_staff' => 'boolean',
+            'is_directory_reviewer' => 'boolean',
             'insight_monthly_email' => 'boolean',
             'storage_blocks' => 'integer',
             'storage_rental_ended_at' => 'datetime',

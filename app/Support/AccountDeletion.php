@@ -230,7 +230,7 @@ final class AccountDeletion
 
         $user->handle()->delete();
         $user->profile()->delete();
-        foreach (['notification_preferences', 'activity_log', 'media_upload_flags', 'mcp_audit_logs'] as $table) {
+        foreach (['notification_preferences', 'activity_log', 'media_upload_flags', 'mcp_audit_logs', 'directory_reviewer_logins'] as $table) {
             DB::table($table)->where('user_id', $user->id)->delete();
         }
         DB::table('notifications')->where('notifiable_type', $user->getMorphClass())->where('notifiable_id', $user->id)->delete();
