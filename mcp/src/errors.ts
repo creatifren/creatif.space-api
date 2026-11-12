@@ -102,9 +102,9 @@ const pick = (body: Record<string, unknown>, keys: string[]): Record<string, unk
   Object.fromEntries(keys.filter((k) => body[k] !== undefined).map((k) => [k, body[k]]));
 
 /** V1 answers → specific, actionable tool errors. */
-export function toToolError(e: unknown, notFound: NotFound = DEFAULT_NOT_FOUND): ToolError {
+export function toToolError(e: unknown, notFound: NotFound = DEFAULT_NOT_FOUND, stateTool?: string): ToolError {
   if (e instanceof ToolError) return e;
-  const err = classify(e, notFound);
+  const err = classify(e, notFound, stateTool);
   if (e instanceof V1Error) err.httpStatus = e.status;
   return err;
 }
@@ -154,7 +154,7 @@ const NEUTRAL_MESSAGE: Partial<Record<ErrorCode, string>> = {
   file_too_large: 'The file is larger than this account allows.',
 };
 
-function classify(e: unknown, notFound: NotFound): ToolError {
+function classify(e: unknown, notFound: NotFound, stateTool?: string): ToolError {
 
   if (e instanceof V1Unavailable) {
     return new ToolError(
@@ -348,7 +348,9 @@ function classify(e: unknown, notFound: NotFound): ToolError {
       return new ToolError(
         'invalid_input',
         message || 'The item changed state, so this cannot be done now.',
-        'Fetch it again (get_post or the matching list tool) to see its current state, then decide whether to call again.',
+        stateTool
+          ? `It changed while this ran, so nothing was done: call ${stateTool} to see where it stands now, then ask the user before trying again.`
+          : 'Fetch it again (get_post or the matching list tool) to see its current state, then decide whether to call again.',
         { reason: 'conflict' },
       );
     case 422: {

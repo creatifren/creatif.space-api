@@ -14,7 +14,8 @@
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
-    "contract": "vitest run -c vitest.contract.config.ts"
+    "contract": "vitest run -c vitest.contract.config.ts",
+    "docs:tools": "UPDATE_TOOLS_DOC=1 vitest run test/tools-doc.test.ts"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "1.32.2",

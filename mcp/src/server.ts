@@ -38,6 +38,9 @@ import { mcpCors } from './cors.js';
 import { DEFAULT_FREE_RATE_LIMIT, DEFAULT_GLAMA_CLAIM } from './config.js';
 import { mountFree } from './free/server.js';
 
+/** Every tool, in the order it is registered (and listed). */
+export const ALL_TOOLS = [...m1Tools, ...m2Tools, ...mediaTools, ...engageTools, ...aiTools, ...storageTools, ...housekeepingTools, ...approverTools, ...insightTools, ...insightReportTools, ...spaceTools, ...auditTools, ...connectTools, ...feedbackTools, ...insightShareTools, ...calendarTools, ...contentPlanTools, ...accountSummaryTools, ...retryTools, ...notificationTools, ...scheduleBatchTools, ...failedPostsTools];
+
 /** The Pen Rocket, as listed in server.json for the MCP Registry (served by the web app). */
 export const SERVER_ICONS = [{ src: 'https://creatif.space/icons/icon-512.png', mimeType: 'image/png', sizes: ['512x512'] }];
 /** Public pages: serverInfo carries websiteUrl (MCP Implementation); privacy and terms are in the RFC 9728 metadata. */
@@ -84,13 +87,12 @@ export interface AppDeps {
 export function buildMcpServer(auth: CallerAuth, deps: AppDeps): McpServer {
   const server = new McpServer(SERVER_INFO, { instructions: INSTRUCTIONS });
   const v1 = new V1Client(deps.v1ApiUrl, auth.token, deps.fetchImpl);
-  const tools = [...m1Tools, ...m2Tools, ...mediaTools, ...engageTools, ...aiTools, ...storageTools, ...housekeepingTools, ...approverTools, ...insightTools, ...insightReportTools, ...spaceTools, ...auditTools, ...connectTools, ...feedbackTools, ...insightShareTools, ...calendarTools, ...contentPlanTools, ...accountSummaryTools, ...retryTools, ...notificationTools, ...scheduleBatchTools, ...failedPostsTools];
-  for (const tool of tools) {
+  for (const tool of ALL_TOOLS) {
     registerTool(server, tool, { auth, v1, analytics: deps.analytics });
   }
   registerPrompts(server);
   registerResources(server, auth, v1);
-  structureSdkErrors(server, tools.map((t) => t.name));
+  structureSdkErrors(server, ALL_TOOLS.map((t) => t.name));
   return server;
 }
 

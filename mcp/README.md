@@ -313,7 +313,9 @@ post publicly (a social network or the public web) are `openWorldHint`:
 `retry_post`, `publish_space`. One line per tool, for directory review forms,
 is in [`docs/tool-justifications.md`](docs/tool-justifications.md).
 `test/annotations.test.ts` checks these rules and that file, and pins every
-tool's hints in a snapshot.
+tool's hints in a snapshot. The full reference — every tool's scope, hints, description and
+inputs — is [`docs/mcp-tools.md`](docs/mcp-tools.md), generated from the served
+tool list by `npm run docs:tools`; `test/tools-doc.test.ts` fails CI when it is stale.
 
 ## Plan errors and ChatGPT
 

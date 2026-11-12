@@ -4,6 +4,7 @@ import { z } from 'zod';
 import { clientSurface, type Analytics } from '../analytics.js';
 import type { CallerAuth } from '../auth/middleware.js';
 import { forChatGpt, ToolError, toToolError, type NotFound } from '../errors.js';
+import { NOT_FOUND_FOR, STATE_TOOL } from './errorSteps.js';
 import type { V1Client } from '../v1.js';
 import { FIRST_LINES } from './firstLines.js';
 import { OUTPUT_SCHEMAS } from './outputs.js';
@@ -118,7 +119,7 @@ export function registerTool(server: McpServer, def: ToolDef<any>, deps: Registe
         // Tools with an outputSchema also return structuredContent; the text block stays for older clients.
         return OUTPUT_SCHEMAS[def.name] ? { ...result(out), structuredContent: out as Record<string, unknown> } : result(out);
       } catch (e) {
-        const classified = unsure(toToolError(e, def.notFound), def);
+        const classified = unsure(toToolError(e, def.notFound ?? NOT_FOUND_FOR[def.name], STATE_TOOL[def.name]), def);
         const err = deps.auth.extra.surface === 'chatgpt' ? forChatGpt(classified) : classified;
         errorCode = err.code;
         return result(err.toJSON(def.name), true);
