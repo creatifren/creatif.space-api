@@ -1,4 +1,5 @@
 import { createHash } from 'node:crypto';
+import { SCOPES } from './scopes.js';
 
 /** The contract with the Laravel side: POST /api/v1/oauth/introspect. */
 export interface Introspection {
@@ -66,12 +67,21 @@ export class HttpIntrospector implements Introspector {
 export class StubIntrospector implements Introspector {
   async introspect(token: string): Promise<Introspection> {
     // stub:<user>:<scope,scope>[:<client>] — a scope may itself hold a
-    // colon (approvals:decide), so the client is the last part only when
-    // there are more than three.
+    // colon (approvals:decide). The last part is the client name unless it
+    // completes such a scope: `stub:u:read,approvals:decide` has no client.
     const parts = token.split(':');
     const [prefix, user] = parts;
-    const client = parts.length > 3 ? parts[parts.length - 1] : undefined;
-    const scopes = parts.slice(2, parts.length > 3 ? -1 : undefined).join(':');
+    const rest = parts.slice(2);
+    let client: string | undefined;
+    if (rest.length > 1) {
+      const last = rest[rest.length - 1]!;
+      const tail = rest[rest.length - 2]!.split(',').pop() ?? '';
+      if (!(SCOPES as readonly string[]).includes(`${tail}:${last}`)) {
+        client = last;
+        rest.pop();
+      }
+    }
+    const scopes = rest.join(':');
     if (prefix !== 'stub' || !user) {
       return { active: false };
     }
