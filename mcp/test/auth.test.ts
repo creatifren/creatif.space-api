@@ -103,6 +103,7 @@ describe('401 flow', () => {
         'list_spaces', 'create_space_from_files', 'publish_space',
         'get_approval_audit',
         'get_connect_link',
+        'send_feedback',
       ].sort(),
     );
     for (const tool of tools) {

@@ -122,6 +122,8 @@ return [
         'api.v1.me.approvals.decide' => 'approvals:decide',
         // list_shared_with_me: Content Plans sent to this account's email.
         'api.v1.me.reports.shared' => 'approvals:decide',
+        // send_feedback: a note to the team, nothing public, no Credits.
+        'api.v1.feedback.store' => 'draft',
 
         // Spaces (list_spaces / create_space_from_files / publish_space).
         // Creating makes a Draft+Private Space, never a published one;
