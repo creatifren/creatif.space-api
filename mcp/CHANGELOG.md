@@ -33,6 +33,7 @@ Changed:
 - `serverInfo.icons` and the registry entry's `icons`: the Pen Rocket, 512×512 PNG at `https://creatif.space/icons/icon-512.png` (registry entry 1.2.0).
 - Every tool description opens with a “Use …” line (≤ 120 chars) saying when to use it, naming the prompt (`plan_week`, `send_for_approval`, `monthly_report`) that walks through it.
 - Registry entry 1.2.1: `repository` → `https://github.com/creatifren/creatif.space-api` (subfolder `mcp`). Not published from here: the registry workflow is Rizal's to run.
+- Confirms of `publish_post`, `schedule_post` and `retry_post`, and `create_approval_link`, send an `Idempotency-Key` (one per confirm), so a double submit sends, charges or creates once.
 - Every `list_*` tool takes `limit` + `cursor` and returns `next_cursor` (null at the end).
 - The 10 most-used read tools declare an `outputSchema` and return `structuredContent` (text block kept).
 - `/free` `connect_guide` returns `account_type` per network: `confirmed` from the code, or `check in app` where the code does not prove it.

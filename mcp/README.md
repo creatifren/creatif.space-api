@@ -283,6 +283,22 @@ Every tool turns an API 429 into the same envelope:
 
 Two 429s keep their own codes: `upload_limit` (uploads paused for today) and `daily_cap_reached` (20 sends a day from connected apps). `test/ratelimit.test.ts` sends a 429 to every tool.
 
+## Idempotency (double submit)
+
+The API runs a `POST` that carries an `Idempotency-Key` once per user and
+key for 24 hours. A repeat gets the first answer back (with
+`Idempotent-Replayed: true`) and does nothing again. This applies to
+publish/schedule (`/send`), `/retry` and approval-link create. The server
+sends one key per confirm:
+
+- `publish_post`, `schedule_post` and `retry_post` derive the key from the
+  confirmed preview's token. A confirm sent twice is one send and one charge.
+- `create_approval_link` derives the key from its arguments within a
+  10-minute window. Asking for the same link twice makes it once.
+
+The key is a hash: it never carries the token or the arguments. Only a 2xx
+answer is kept, so a refused confirm can be sent again once its cause is fixed.
+
 ## Pagination
 
 Every `list_*` tool pages the same way. It takes `limit` and `cursor`, and
