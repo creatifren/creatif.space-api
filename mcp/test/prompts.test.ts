@@ -19,11 +19,16 @@ const IG = '01JACCTACCTACCTACCTACCTIG1';
 const text = (r: { messages: { content: { type: string; text?: string } }[] }) => r.messages[0]!.content.text!;
 
 describe('prompts/list', () => {
-  it('lists plan_week, send_for_approval and monthly_report with titles, descriptions and arguments', async () => {
+  it('lists exactly Plan next week, Send to client for approval and Weekly results, with descriptions and arguments', async () => {
     const c = await client();
     expect(c.getServerCapabilities()?.prompts).toBeDefined();
     const { prompts } = await c.listPrompts();
-    expect(prompts.map((p) => p.name).sort()).toEqual(['monthly_report', 'plan_week', 'send_for_approval']);
+    expect(prompts.map((p) => p.name).sort()).toEqual(['plan_week', 'send_for_approval', 'weekly_results']);
+    expect(Object.fromEntries(prompts.map((p) => [p.name, p.title]))).toEqual({
+      plan_week: 'Plan next week',
+      send_for_approval: 'Send to client for approval',
+      weekly_results: 'Weekly results',
+    });
     const by = Object.fromEntries(prompts.map((p) => [p.name, p]));
     for (const p of prompts) {
       expect(p.title, p.name).toEqual(expect.any(String));
@@ -32,7 +37,7 @@ describe('prompts/list', () => {
     const args = (n: string) => Object.fromEntries((by[n]!.arguments ?? []).map((a) => [a.name, a.required ?? false]));
     expect(args('plan_week')).toEqual({ channel_id: true, week_start: false, theme: false, posts: false });
     expect(args('send_for_approval')).toEqual({ approver_email: true, post_ids: false, client_name: false });
-    expect(args('monthly_report')).toEqual({ month: false, share: false });
+    expect(args('weekly_results')).toEqual({ month: false, share: false });
   });
 
   it('is there whatever scopes the connection has (prompts call no API)', async () => {
@@ -69,21 +74,30 @@ describe('prompts/get', () => {
     expect(without).toMatch(/list_posts with status "draft"/);
   });
 
-  it('monthly_report: summary then a share link, or no link when share=no', async () => {
+  it('weekly_results: the last 7 days by default, then a share link; a month when given; no link when share=no', async () => {
     const c = await client();
-    const t = text(await c.getPrompt({ name: 'monthly_report', arguments: { month: '2026-10' } }));
-    expect(t).toContain('"2026-10"');
-    expect(t).toMatch(/get_insight_summary.*create_insight_share_link/s);
-    const noShare = text(await c.getPrompt({ name: 'monthly_report', arguments: { share: 'no' } }));
-    expect(noShare).toMatch(/last month/);
+    const week = text(await c.getPrompt({ name: 'weekly_results', arguments: {} }));
+    expect(week).toMatch(/last 7 days/);
+    expect(week).toMatch(/period \{ "from": the day 7 days ago, "to": yesterday \}/);
+    expect(week).toMatch(/get_insight_summary.*create_insight_share_link/s);
+    const month = text(await c.getPrompt({ name: 'weekly_results', arguments: { month: '2026-10' } }));
+    expect(month).toContain('"2026-10"');
+    expect(month).toMatch(/period \{ "month": … \}/);
+    const noShare = text(await c.getPrompt({ name: 'weekly_results', arguments: { share: 'no' } }));
     expect(noShare).not.toMatch(/create_insight_share_link/);
+    expect(app!.v1.calls).toHaveLength(0);
+  });
+
+  it('monthly_report is gone: weekly_results covers a month', async () => {
+    const c = await client();
+    await expect(c.getPrompt({ name: 'monthly_report', arguments: {} })).rejects.toThrow();
   });
 
   it('refuses a missing required argument or a bad value', async () => {
     const c = await client();
     await expect(c.getPrompt({ name: 'plan_week', arguments: {} })).rejects.toThrow();
     await expect(c.getPrompt({ name: 'send_for_approval', arguments: { approver_email: 'not-an-email' } })).rejects.toThrow();
-    await expect(c.getPrompt({ name: 'monthly_report', arguments: { month: '2026-13' } })).rejects.toThrow();
+    await expect(c.getPrompt({ name: 'weekly_results', arguments: { month: '2026-13' } })).rejects.toThrow();
     await expect(c.getPrompt({ name: 'nope', arguments: {} })).rejects.toThrow();
   });
 
@@ -98,7 +112,7 @@ describe('prompts/get', () => {
     const samples: Record<string, Record<string, string>[]> = {
       plan_week: [{ channel_id: IG }],
       send_for_approval: [{ approver_email: 'client@example.com', post_ids: 'A' }, { approver_email: 'client@example.com' }],
-      monthly_report: [{}],
+      weekly_results: [{}, { month: '2026-10' }],
     };
     for (const [prompt, named] of Object.entries(PROMPT_TOOLS)) {
       expect(named.filter((n) => !tools.has(n)), prompt).toEqual([]);

@@ -26,13 +26,13 @@ Added (36):
 
 Resources (new): `creatif://channels`, `creatif://schedule/next-7-days` (read-only, scope `read`).
 
-Prompts (new): `plan_week`, `send_for_approval`, `monthly_report` (`prompts/list`, `prompts/get`).
+Prompts (new): `plan_week` (“Plan next week”), `send_for_approval` (“Send to client for approval”), `weekly_results` (“Weekly results”: the last 7 days, or a month; replaces `monthly_report`) (`prompts/list`, `prompts/get`).
 
 Changed:
 
 - `MCP_PUBLIC_DISCOVERY` (off by default): `initialize` and `tools/list` without a token; `tools/call` stays behind OAuth (401 + `WWW-Authenticate`).
 - `serverInfo.icons` and the registry entry's `icons`: the Pen Rocket, 512×512 PNG at `https://creatif.space/icons/icon-512.png` (registry entry 1.2.0).
-- Every tool description opens with one verb-led sentence (≤ 120 chars) saying what the tool does for the user, naming the prompt (`plan_week`, `send_for_approval`, `monthly_report`) that walks through it.
+- Every tool description opens with one verb-led sentence (≤ 120 chars) saying what the tool does for the user, naming the prompt (`plan_week`, `send_for_approval`, `weekly_results`) that walks through it.
 - Registry entry 1.2.1: `repository` → `https://github.com/creatifren/creatif.space-api` (subfolder `mcp`). Not published from here: the registry workflow is Rizal's to run.
 - Confirms of `publish_post`, `schedule_post` and `retry_post`, and `create_approval_link`, send an `Idempotency-Key` (one per confirm), so a double submit sends, charges or creates once.
 - `mcp_tool_called` adds `client_surface` (claude / chatgpt / cursor / vscode / api_key / other), `code` (`ok` or the error code) and `duration_ms`; `ms` and `error` stay. Never user text.

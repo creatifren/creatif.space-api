@@ -23,8 +23,8 @@ No business logic lives here.
    - **“Send my drafts to rani@client.com for approval.”** →
      `send_for_approval` makes an approval link for your client to approve or
      ask for changes.
-   - **“Make last month’s report and give me a share link.”** →
-     `monthly_report` sums up the month and makes a link anyone can open.
+   - **“How did this week go? Give me a link for my client.”** →
+     `weekly_results` sums up the last 7 days and makes a link anyone can open.
 
 ## Endpoints
 
@@ -393,9 +393,9 @@ are quoted and marked as data. Defined in `src/prompts.ts`.
 
 | Prompt | Arguments | Tools it uses |
 | --- | --- | --- |
-| `plan_week` — draft a week of posts for a channel (drafts only) | channel_id*, week_start, theme, posts (1–7) | `list_channels`, `list_posts`, `suggest_caption`, `draft_post` |
-| `send_for_approval` — bundle drafts into one approval link | approver_email*, post_ids (comma-separated), client_name | `list_posts`, `get_post`, `create_approval_link`, `check_approval_status` |
-| `monthly_report` — Insight summary + share link | month (YYYY-MM), share (yes\|no) | `get_insight_summary`, `create_insight_share_link` |
+| `plan_week` (“Plan next week”) — draft a week of posts for a channel (drafts only) | channel_id*, week_start, theme, posts (1–7) | `list_channels`, `list_posts`, `suggest_caption`, `draft_post` |
+| `send_for_approval` (“Send to client for approval”) — bundle drafts into one approval link | approver_email*, post_ids (comma-separated), client_name | `list_posts`, `get_post`, `create_approval_link`, `check_approval_status` |
+| `weekly_results` (“Weekly results”) — the last 7 days (or a month) summed up + share link | month (YYYY-MM, instead of the last 7 days), share (yes\|no) | `get_insight_summary`, `create_insight_share_link` |
 
 ## Registry metadata
 

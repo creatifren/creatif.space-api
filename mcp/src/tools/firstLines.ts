@@ -2,7 +2,7 @@
  * The first line of every tool description: in one sentence of at most 120
  * characters, starting with a verb ("Shows", "Saves", "Schedules"…), WHAT
  * the tool does for the user. Where a ready-made prompt walks through the
- * tool, the line names it (plan_week, send_for_approval, monthly_report), so
+ * tool, the line names it (plan_week, send_for_approval, weekly_results), so
  * an agent finds the workflow from the tool. registerTool puts it above the
  * describeTool text; test/firstlines.test.ts holds every line to these rules
  * and in a snapshot. A new tool without a line here fails that test.
@@ -50,12 +50,12 @@ export const FIRST_LINES: Record<string, string> = {
   unkeep_file: 'Lets a library file be deleted automatically again, freeing the user\'s Keep space.',
 
   // Insight
-  get_insight_summary: 'Shows the user\'s numbers for a period, like reach and engagement, as the monthly_report prompt starts with.',
+  get_insight_summary: 'Shows the user\'s numbers for a period, like reach and engagement, as the weekly_results prompt starts with.',
   get_best_times: 'Tells the user the best weekday and hour to post on each channel, from their own posts.',
   list_top_posts: 'Shows the user\'s five best posts in a period by engagement, with links.',
   get_insight_csv_link: 'Gives the user a 24-hour link to download their post numbers as a spreadsheet.',
-  get_insight_report_link: 'Gives the user a download link to their Insight PDF report, a monthly_report alternative to sharing.',
-  create_insight_share_link: 'Shares a report with the user\'s client as a link that needs no account, as monthly_report ends with.',
+  get_insight_report_link: 'Gives the user a download link to their Insight PDF report, a weekly_results alternative to sharing.',
+  create_insight_share_link: 'Shares a report with the user\'s client as a link that needs no account, as weekly_results ends with.',
   revoke_insight_share_link: 'Turns off a shared Insight report link at once for everyone who has it.',
 
   // Spaces
@@ -84,7 +84,7 @@ export const FIRST_LINE_PROMPTS: Record<string, string[]> = {
   create_content_plan: ['send_for_approval'],
   check_approval_status: ['send_for_approval'],
   send_approval_reminder: ['send_for_approval'],
-  get_insight_summary: ['monthly_report'],
-  get_insight_report_link: ['monthly_report'],
-  create_insight_share_link: ['monthly_report'],
+  get_insight_summary: ['weekly_results'],
+  get_insight_report_link: ['weekly_results'],
+  create_insight_share_link: ['weekly_results'],
 };
