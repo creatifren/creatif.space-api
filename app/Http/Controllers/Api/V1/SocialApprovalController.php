@@ -524,7 +524,7 @@ class SocialApprovalController extends Controller
                 'message' => 'A reminder went out less than '.self::REMIND_EVERY_HOURS.' hours ago.',
                 'code' => 'reminder_too_soon',
                 'next_reminder_at' => $next?->toIso8601String(),
-            ], 429, $next ? ['Retry-After' => (string) max(1, $now->diffInSeconds($next, true))] : []);
+            ], 429, $next ? ['Retry-After' => (string) max(1, (int) ceil($now->diffInSeconds($next, true)))] : []);
         }
 
         Notification::route('mail', $link->approver_email)->notify(new ApprovalReminder($link->fresh() ?? $link, $waiting));

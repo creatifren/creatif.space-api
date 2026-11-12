@@ -39,6 +39,7 @@ use Illuminate\Support\Str;
  * @property list<int>|null $scope_account_ids
  * @property CarbonImmutable|null $expires_at
  * @property CarbonImmutable|null $extended_at
+ * @property CarbonImmutable|null $last_reminded_at
  * @property CarbonImmutable|null $revoked_at
  * @property CarbonImmutable|null $created_at
  */
