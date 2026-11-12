@@ -94,7 +94,8 @@ it('schedules every post of the batch', function () {
     $before = Credits::total($user);
 
     $res = sbSend($this, $user, sbItems($this, $user, $posts));
-    expect($res->status(), (string) $res->getContent())->toBe(200);
+    // The body first, so a refusal shows its code and reason.
+    expect((string) $res->getContent())->toContain('"scheduled"');
     $res->assertJsonCount(3, 'data.scheduled');
 
     foreach ($posts as $p) {
@@ -109,8 +110,9 @@ it('partial failure rolls back: the posts already handed over are recalled, refu
     $posts = [sbDraft($user), sbDraft($user), sbDraft($user)];
     $before = Credits::total($user);
 
-    sbSend($this, $user, sbItems($this, $user, $posts))
-        ->assertStatus(409)
+    $res = sbSend($this, $user, sbItems($this, $user, $posts));
+    expect([$res->json('code'), $res->json('failed_post_id') === $posts[1]->ulid ? 'second' : $res->json('reason')])->toBe(['batch_failed', 'second']);
+    $res->assertStatus(409)
         ->assertJsonPath('code', 'batch_failed')
         ->assertJsonPath('failed_post_id', $posts[1]->ulid)
         ->assertJsonPath('rolled_back', [$posts[0]->ulid])
