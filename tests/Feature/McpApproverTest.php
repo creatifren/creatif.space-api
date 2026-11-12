@@ -226,3 +226,37 @@ it('keeps the /a page audited as web', function () {
 
     expect(SocialApprovalDecision::query()->sole()->source)->toBe('web');
 });
+
+it('B3: a post with no time cannot be approved — nothing is published, the sender must set a time', function () {
+    [, $post, $link] = maLink();
+    $post->update(['scheduled_at' => null]);
+    $key = maKey($this);
+
+    $preview = maPreview($this, $key, $link, $post)->assertOk()
+        ->assertJsonPath('data.needs_time', true)
+        ->assertJsonPath('data.confirm_token', null)
+        ->json('data');
+    expect($preview['effect'])->toContain('no time yet');
+
+    // Even with a token minted earlier (e.g. before the time was cleared), the decision path refuses.
+    $token = ApprovalConfirmation::issue(User::query()->where('email', 'rani@client.test')->firstOrFail(), $link, $post, 'approve', null);
+    maDecide($this, $key, $link, $post, $token)
+        ->assertUnprocessable()
+        ->assertJsonPath('reason', 'needs_time');
+
+    expect($post->fresh()->approval->value)->toBe('client')
+        ->and($post->fresh()->provider_post_id)->toBeNull();
+    Http::assertNothingSent();
+});
+
+it('B3: a post with a time is approved and keeps its planned time (not sent as "now")', function () {
+    [, $post, $link] = maLink();
+    $key = maKey($this);
+    $token = maPreview($this, $key, $link, $post)->assertOk()
+        ->assertJsonPath('data.needs_time', false)
+        ->json('data.confirm_token');
+
+    maDecide($this, $key, $link, $post, $token)->assertOk()->assertJsonPath('data.approval', 'approved');
+
+    Http::assertSent(fn ($r) => str_contains($r->url(), 'api.postforme.test') && ($r['scheduled_at'] ?? null) === '2026-11-22T03:00:00+00:00');
+});

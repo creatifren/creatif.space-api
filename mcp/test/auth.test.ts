@@ -96,7 +96,7 @@ describe('401 flow', () => {
         'list_conversations', 'reply_to_conversation',
         'suggest_caption',
         'get_storage_usage', 'keep_file', 'unkeep_file',
-        'discard_draft', 'list_approval_links',
+        'discard_draft', 'list_approval_links', 'revoke_approval_link',
         'list_waiting_approvals', 'decide_approval', 'list_shared_with_me',
         'get_insight_summary', 'list_top_posts', 'get_best_times', 'get_insight_csv_link',
         'get_insight_report_link',

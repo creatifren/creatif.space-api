@@ -3,6 +3,7 @@
 use App\Http\Controllers\OAuth\ClientRegistrationController;
 use App\Http\Controllers\OAuth\MetadataController;
 use App\Http\Controllers\OAuth\RevocationController;
+use App\Http\Middleware\OAuthFailureLimit;
 use App\Http\Middleware\RefreshTokenErrors;
 use App\Http\Middleware\ResolveClientMetadataDocument;
 use App\OAuth\OAuthRateLimits;
@@ -27,11 +28,11 @@ Route::get('/.well-known/oauth-protected-resource/mcp', [MetadataController::cla
 
 Route::prefix('oauth')->group(function () {
     Route::post('/token', [AccessTokenController::class, 'issueToken'])
-        ->middleware(['throttle:'.OAuthRateLimits::TOKEN, ResolveClientMetadataDocument::class, RefreshTokenErrors::class])
+        ->middleware([OAuthFailureLimit::class, 'throttle:'.OAuthRateLimits::TOKEN, ResolveClientMetadataDocument::class, RefreshTokenErrors::class])
         ->name('passport.token');
 
     Route::post('/register', ClientRegistrationController::class)
-        ->middleware('throttle:'.OAuthRateLimits::REGISTER)
+        ->middleware([OAuthFailureLimit::class, 'throttle:'.OAuthRateLimits::REGISTER])
         ->name('oauth.register');
 
     Route::post('/revoke', RevocationController::class)

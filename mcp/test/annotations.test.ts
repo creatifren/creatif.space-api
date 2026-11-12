@@ -16,7 +16,7 @@ import { startApp, TOKEN_FULL } from './helpers.js';
  */
 
 const READ_PREFIXES = /^(list|get|check)_/;
-const DESTRUCTIVE = ['publish_post', 'schedule_post', 'schedule_posts', 'reply_to_conversation', 'discard_draft', 'unkeep_file', 'decide_approval', 'revoke_insight_share_link', 'publish_space', 'retry_post'];
+const DESTRUCTIVE = ['publish_post', 'schedule_post', 'schedule_posts', 'reply_to_conversation', 'discard_draft', 'unkeep_file', 'decide_approval', 'revoke_approval_link', 'revoke_insight_share_link', 'publish_space', 'retry_post'];
 const OPEN_WORLD = ['publish_post', 'schedule_post', 'schedule_posts', 'reply_to_conversation', 'publish_space', 'retry_post'];
 const HINTS = ['readOnlyHint', 'destructiveHint', 'idempotentHint', 'openWorldHint'] as const;
 

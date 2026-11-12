@@ -54,6 +54,7 @@ export const STATE_TOOL: Record<string, string> = {
   check_approval_status: 'check_approval_status',
   send_approval_reminder: 'check_approval_status',
   list_approval_links: 'list_approval_links',
+  revoke_approval_link: 'list_approval_links',
   get_approval_audit: 'get_approval_audit',
   get_approval_history: 'get_approval_history',
   get_plan_calendar_link: 'check_approval_status',

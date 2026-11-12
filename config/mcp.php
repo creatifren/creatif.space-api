@@ -49,6 +49,10 @@ return [
         'revoke' => 60,
         'register' => 30,
         'authorize' => 60,
+        // All clients from one address together on /oauth/token.
+        'token_ip' => 600,
+        // Refused requests (400 / 401) per address on token, register and authorize.
+        'failures' => 20,
     ],
 
     // Public pages named on the consent screen and in OAuth discovery
@@ -162,6 +166,9 @@ return [
         // the links list, read like the single link above.
         'api.v1.social-posts.discard' => 'draft',
         'api.v1.social-approval-links.index' => 'read',
+        // revoke_approval_link: DELETE /social-approval-links/{id} revokes for
+        // good; posts the client had not answered go back to the owner.
+        'api.v1.social-approval-links.destroy' => 'approve',
         // Approver side (decide_approval / list_waiting_approvals): only
         // links whose approver_email is this account's verified email.
         'api.v1.me.approvals.waiting' => 'approvals:decide',

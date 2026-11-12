@@ -85,5 +85,5 @@ it('keeps Passport\'s own OAuth errors as they are', function () {
 it('ships the documented default limits', function () {
     $defaults = require base_path('config/mcp.php');
 
-    expect($defaults['oauth_rate_limits'])->toBe(['token' => 120, 'revoke' => 60, 'register' => 30, 'authorize' => 60]);
+    expect($defaults['oauth_rate_limits'])->toBe(['token' => 120, 'revoke' => 60, 'register' => 30, 'authorize' => 60, 'token_ip' => 600, 'failures' => 20]);
 });

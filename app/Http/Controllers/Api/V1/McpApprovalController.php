@@ -47,6 +47,14 @@ class McpApprovalController extends Controller
         $state = PlanScope::state($socialPost);
         $already = ($validated['decision'] === 'approve' && $state === PlanScope::STATE_APPROVED)
             || ($validated['decision'] === 'revise' && $state === PlanScope::STATE_CHANGES);
+        // A post with no time cannot be approved: a yes would publish it at
+        // once. The sender sets a time first (PublicApprovalController).
+        $needsTime = $validated['decision'] === 'approve' && ! $already && $socialPost->scheduled_at === null;
+        $effect = match (true) {
+            $needsTime => 'This post has no time yet, so it cannot be approved: '.$link->user->name.' has to set one first. Nothing is published.',
+            $validated['decision'] === 'approve' => 'The post is approved and goes out at its scheduled time ('.$socialPost->scheduled_at?->toIso8601String().') on these channels, not at once.',
+            default => 'The post goes back to '.$link->user->name.' with your reason as a comment; nothing is published.',
+        };
 
         return response()->json(['data' => [
             'link' => ['id' => $link->ulid, 'title' => $link->title, 'editor' => $link->user->name],
@@ -67,10 +75,9 @@ class McpApprovalController extends Controller
             'decidable_from' => $window['decidable_from'],
             // Already decided this way: confirming changes nothing.
             'already' => $already,
-            'effect' => $validated['decision'] === 'approve'
-                ? 'The post is approved and goes out at its scheduled time on these channels.'
-                : 'The post goes back to '.$link->user->name.' with your reason as a comment; nothing is published.',
-            'confirm_token' => $window['decidable'] || $already
+            'needs_time' => $needsTime,
+            'effect' => $effect,
+            'confirm_token' => ($window['decidable'] && ! $needsTime) || $already
                 ? ApprovalConfirmation::issue($user, $link, $socialPost, $validated['decision'], $validated['reason'] ?? null)
                 : null,
             'confirm_expires_at' => now()->addMinutes(ApprovalConfirmation::TTL_MINUTES)->toIso8601String(),
