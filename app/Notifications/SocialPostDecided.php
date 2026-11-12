@@ -72,10 +72,10 @@ class SocialPostDecided extends Notification implements ShouldQueue
             $mail->line($this->reason);
         }
 
-        return $mail->action(
+        return ApprovalMailFooter::on($mail->action(
             'Open the approval link',
             config('app.frontend_url').'/post/approvals?link='.$this->link->ulid,
-        );
+        ));
     }
 
     /**

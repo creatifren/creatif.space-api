@@ -29,10 +29,10 @@ class ApproverSignInLink extends Notification
     {
         $editor = $this->link->user->name;
 
-        return (new MailMessage)
+        return ApprovalMailFooter::on((new MailMessage)
             ->subject("Sign in to review {$editor}’s posts")
             ->line("{$editor} asked you to review posts on creatif.space.")
             ->action('Sign in and review', $this->url)
-            ->line('This link works once and expires in 15 minutes. If you did not ask for it, ignore this email.');
+            ->line('This link works once and expires in 15 minutes. If you did not ask for it, ignore this email.'));
     }
 }
