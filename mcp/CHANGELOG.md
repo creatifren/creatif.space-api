@@ -37,6 +37,7 @@ Changed:
 - Confirms of `publish_post`, `schedule_post` and `retry_post`, and `create_approval_link`, send an `Idempotency-Key` (one per confirm), so a double submit sends, charges or creates once.
 - `mcp_tool_called` adds `client_surface` (claude / chatgpt / cursor / vscode / api_key / other), `code` (`ok` or the error code) and `duration_ms`; `ms` and `error` stay. Never user text.
 - `test/in-step.test.ts`: the served tools are the one source of truth for the CHANGELOG count, the README Tools table, `server.json`, `docs/tool-justifications.md` and the first lines; every read-only tool has an `outputSchema` or is in `UNSTRUCTURED` on purpose.
+- `get_account_summary` adds `failed_posts` (the `list_failed_posts` count, last 30 days) and `approvals` {waiting, changes_requested}, each with a next step.
 - Registry text (Growth, not published): main entry description "Get content approved & published faster: draft posts, send client approval links, publish from AI."; the free tools entry is `io.github.creatifren/creatif-space-free-tools` (websiteUrl `https://creatif.space/free-tools`). Both descriptions ≤ 100 characters, pinned by `test/registry-text.test.ts`.
 - Registry prep (not published): `server.json` 1.2.2 with the current tool list; `free-tools/server.json` 1.1.0 with icon, repository, its three tools and no auth; `docs/registry-publish.md` has Rizal's publish commands.
 - Every `list_*` tool takes `limit` + `cursor` and returns `next_cursor` (null at the end).
