@@ -68,6 +68,8 @@ export class PostHogAnalytics implements Analytics, FreeAnalytics {
       network: event.network,
       $lib: 'creatif-mcp',
       $process_person_profile: false,
+      // No location from the caller's IP (CTO q1550): /free has no user.
+      $geoip_disable: true,
     });
   }
 
