@@ -61,6 +61,12 @@ class PublicInsightController extends Controller
 
             return $c;
         }, $summary['channels']);
+        // Our post and channel ids are for the owner's tools, not a public page.
+        $summary['top_posts'] = array_map(function (array $p): array {
+            unset($p['post_id'], $p['channel_id']);
+
+            return $p;
+        }, $summary['top_posts'] ?? []);
 
         return $summary;
     }
