@@ -197,7 +197,7 @@ describe('user_signed_up', function () {
         ])->assertStatus(202);
 
         $user = User::query()->sole();
-        $m = ae()->assertCapturedWithKeys('user_signed_up', ['method', 'plan', 'platform', 'ref', 'utm_source', 'utm_campaign']);
+        $m = ae()->assertCapturedWithKeys('user_signed_up', ['is_staff', 'signup_source', 'method', 'plan', 'platform', 'ref', 'utm_source', 'utm_campaign']);
         expect($m['distinct_id'])->toBe($user->ulid)
             ->and($m['properties'])->toMatchArray(['method' => 'email', 'plan' => 'free', 'ref' => 'RANI10', 'utm_source' => 'instagram'])
             ->and(ae()->setFor($user->ulid)[0])->toMatchArray(['plan' => 'free', 'signup_method' => 'email', 'is_internal' => false])
@@ -212,7 +212,7 @@ describe('user_signed_up', function () {
         $this->postJson('/auth/register', ['email' => 'secret@example.com', 'password' => 'long-enough-1'])->assertStatus(202);
 
         expect(json_encode(ae()->sent))->not->toContain('secret@example.com');
-        ae()->assertCapturedWithKeys('user_signed_up', ['method', 'plan', 'platform']);
+        ae()->assertCapturedWithKeys('user_signed_up', ['is_staff', 'signup_source', 'method', 'plan', 'platform']);
     });
 
     it('fires once for a Google signup, not for the login after', function () {
@@ -229,10 +229,92 @@ describe('user_signed_up', function () {
         $this->get('/auth/google/callback?code=abc')->assertRedirect();
 
         $user = User::query()->sole();
-        $m = ae()->assertCapturedWithKeys('user_signed_up', ['method', 'plan', 'platform', 'ref', 'utm_source', 'utm_medium']);
+        $m = ae()->assertCapturedWithKeys('user_signed_up', ['is_staff', 'signup_source', 'method', 'plan', 'platform', 'ref', 'utm_source', 'utm_medium']);
         expect($m['distinct_id'])->toBe($user->ulid)
             ->and($m['properties']['method'])->toBe('google')
             ->and(ae()->setFor($user->ulid)[0]['is_internal'])->toBeFalse();
+    });
+});
+
+describe('user_signed_up: is_staff, signup_source, plan, exactly once (CS signup funnel, 12 Nov)', function () {
+    it('names the source: utm_source, else referral, else the entry, else direct', function (array $attribution, string $expected) {
+        expect(ProductEvents::signupSource($attribution))->toBe($expected);
+    })->with([
+        'utm wins' => [['utm_source' => 'instagram', 'ref' => 'RANI10', 'entry' => 'tpl-base'], 'instagram'],
+        'referral' => [['ref' => 'RANI10', 'entry' => 'tpl-base'], 'referral'],
+        'entry' => [['entry' => 'tpl-restaurants'], 'tpl-restaurants'],
+        'nothing' => [[], 'direct'],
+        'empty values' => [['utm_source' => '', 'ref' => ''], 'direct'],
+    ]);
+
+    it('sends is_staff, signup_source and the plan on a Google signup from a campaign', function () {
+        $this->get('/auth/google/redirect?ref=RANI10&utm_source=newsletter&utm_campaign=nov');
+
+        aeGoogleCallback();
+        $this->get('/auth/google/callback?code=abc')->assertRedirect();
+
+        $m = ae()->assertCapturedWithKeys('user_signed_up', ['is_staff', 'signup_source', 'method', 'plan', 'platform', 'ref', 'utm_source', 'utm_campaign']);
+        expect($m['properties'])->toMatchArray([
+            'method' => 'google',
+            'plan' => 'free',
+            'is_staff' => false,
+            'signup_source' => 'newsletter',
+            'ref' => 'RANI10',
+        ]);
+    });
+
+    it('says referral or direct when there is no campaign', function () {
+        $this->postJson('/auth/register', ['email' => 'a@example.com', 'password' => 'long-enough-1', 'ref' => 'RANI10'])->assertStatus(202);
+        $this->postJson('/auth/register', ['email' => 'b@example.com', 'password' => 'long-enough-1'])->assertStatus(202);
+
+        $sources = array_map(fn (array $m) => $m['properties']['signup_source'], ae()->captured('user_signed_up'));
+        expect($sources)->toBe(['referral', 'direct']);
+    });
+
+    it('is sent once per user, however often signedUp runs for them', function () {
+        $user = User::factory()->create(['email' => 'once@example.com']);
+
+        ProductEvents::signedUp($user, 'google');
+        ProductEvents::signedUp($user, 'google');
+        ProductEvents::signedUp($user, 'email');
+
+        ae()->assertCapturedOnce('user_signed_up');
+        expect(ae()->captured('user_signed_up')[0]['distinct_id'])->toBe($user->ulid);
+    });
+
+    it('is sent once for an email signup that later signs in with Google', function () {
+        $this->postJson('/auth/register', ['email' => 'rani@example.com', 'password' => 'long-enough-1'])->assertStatus(202);
+
+        aeGoogleCallback();
+        $this->get('/auth/google/callback?code=abc')->assertRedirect();
+        auth()->logout();
+        $this->get('/auth/google/callback?code=abc')->assertRedirect();
+
+        expect(User::query()->count())->toBe(1);
+        ae()->assertCapturedOnce('user_signed_up');
+        expect(ae()->captured('user_signed_up')[0]['properties']['method'])->toBe('email');
+    });
+
+    it('two users each get their own', function () {
+        ProductEvents::signedUp(User::factory()->create(['email' => 'x@example.com']), 'email');
+        ProductEvents::signedUp(User::factory()->create(['email' => 'y@example.com']), 'email');
+
+        expect(ae()->captured('user_signed_up'))->toHaveCount(2);
+    });
+
+    it('sends nothing for internal accounts: staff or an internal address', function () {
+        ProductEvents::signedUp(User::factory()->create(['email' => 'ops@example.com', 'is_staff' => true]), 'google');
+        ProductEvents::signedUp(User::factory()->create(['email' => 'hello@creatif.space']), 'google');
+
+        ae()->assertNotCaptured('user_signed_up');
+    });
+
+    it('still sends when the cache is down (the call sites already run once per new row)', function () {
+        Cache::shouldReceive('add')->andThrow(new RuntimeException('cache down'));
+
+        ProductEvents::signedUp(User::factory()->create(['email' => 'nocache@example.com']), 'email');
+
+        ae()->assertCapturedOnce('user_signed_up');
     });
 });
 
@@ -255,7 +337,7 @@ describe('user_signed_up entry and utm_term/utm_content', function () {
         ])->assertStatus(202);
 
         $m = ae()->assertCapturedWithKeys('user_signed_up', [
-            'method', 'plan', 'platform', 'utm_source', 'utm_medium', 'utm_campaign', 'utm_term', 'utm_content', 'entry', '$set_once',
+            'is_staff', 'signup_source', 'method', 'plan', 'platform', 'utm_source', 'utm_medium', 'utm_campaign', 'utm_term', 'utm_content', 'entry', '$set_once',
         ]);
         expect($m['properties'])->toMatchArray([
             'utm_term' => 'client approval',
@@ -273,7 +355,7 @@ describe('user_signed_up entry and utm_term/utm_content', function () {
         aeGoogleCallback();
         $this->get('/auth/google/callback?code=abc')->assertRedirect();
 
-        $m = ae()->assertCapturedWithKeys('user_signed_up', ['method', 'plan', 'platform', 'utm_term', 'utm_content', 'entry', '$set_once']);
+        $m = ae()->assertCapturedWithKeys('user_signed_up', ['is_staff', 'signup_source', 'method', 'plan', 'platform', 'utm_term', 'utm_content', 'entry', '$set_once']);
         expect($m['properties'])->toMatchArray([
             'method' => 'google',
             'entry' => 'mcp-page',
@@ -286,7 +368,7 @@ describe('user_signed_up entry and utm_term/utm_content', function () {
             'email' => 'andi@example.com', 'password' => 'long-enough-1', 'entry' => $entry,
         ])->assertStatus(202);
 
-        ae()->assertCapturedWithKeys('user_signed_up', ['method', 'plan', 'platform']);
+        ae()->assertCapturedWithKeys('user_signed_up', ['is_staff', 'signup_source', 'method', 'plan', 'platform']);
     })->with([
         'uppercase' => 'Pricing',
         'space' => 'pricing hero',
@@ -302,7 +384,7 @@ describe('user_signed_up entry and utm_term/utm_content', function () {
         aeGoogleCallback();
         $this->get('/auth/google/callback?code=abc')->assertRedirect();
 
-        ae()->assertCapturedWithKeys('user_signed_up', ['method', 'plan', 'platform']);
+        ae()->assertCapturedWithKeys('user_signed_up', ['is_staff', 'signup_source', 'method', 'plan', 'platform']);
     });
 
     it('never treats entry as a referral code', function () {
