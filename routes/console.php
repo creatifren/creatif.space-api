@@ -6,6 +6,7 @@ use App\Jobs\BackfillFileChecksums;
 use App\Jobs\ExpireSubscriptions;
 use App\Jobs\NotifyKeptFilesDowngrade;
 use App\Jobs\PruneActivityLog;
+use App\Jobs\PruneInsightReports;
 use App\Jobs\PruneMcpAuditLogs;
 use App\Jobs\PruneSpaceArchives;
 use App\Jobs\PruneSpaceEvents;
@@ -15,6 +16,7 @@ use App\Jobs\ReleaseCommissions;
 use App\Jobs\RenewMonthlyCredits;
 use App\Jobs\RetryRateLimitedPublishes;
 use App\Jobs\SendApprovedHeldPosts;
+use App\Jobs\SnapshotFollowerCounts;
 use App\Jobs\SyncInboxes;
 use Illuminate\Foundation\Inspiring;
 use Illuminate\Support\Facades\Artisan;
@@ -98,6 +100,18 @@ Schedule::job(new NotifyKeptFilesDowngrade)->dailyAt('09:10');
  * open again.
  */
 Schedule::job(new PruneSpaceArchives)->dailyAt('01:50');
+
+/*
+ * Insight PDF reports live 24 hours, like the archives above.
+ */
+Schedule::job(new PruneInsightReports)->dailyAt('01:52');
+
+/*
+ * One follower count a day per account: the relay only knows "now", and an
+ * Insight report needs where a period started. Goes through the ordinary
+ * per-account refresh, so its 6-hour guard and the X skip still hold.
+ */
+Schedule::job(new SnapshotFollowerCounts)->dailyAt('00:20');
 
 /*
  * Fills in checksums for files stored before the upload path recorded one.

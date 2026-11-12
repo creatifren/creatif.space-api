@@ -4,6 +4,7 @@ namespace App\Jobs;
 
 use App\Contracts\SocialProvider;
 use App\Enums\SocialPlatform;
+use App\Models\FollowerSnapshot;
 use App\Models\SocialAccount;
 use App\Models\User;
 use Illuminate\Contracts\Queue\ShouldQueue;
@@ -79,5 +80,11 @@ class RefreshFollowerCount implements ShouldQueue
         }
 
         $account->forceFill($fields)->save();
+
+        // The relay only knows "now": keep one number a day so an Insight
+        // report can say where a period started.
+        if (isset($fields['followers_count'])) {
+            FollowerSnapshot::record($account, $fields['followers_count']);
+        }
     }
 }

@@ -5,6 +5,7 @@ use App\Models\Contracts\WorkspaceOwned;
 use App\Models\File;
 use App\Models\FileVersion;
 use App\Models\Folder;
+use App\Models\InsightReport;
 use App\Models\Plan;
 use App\Models\SocialAccount;
 use App\Models\SocialApprovalLink;
@@ -150,6 +151,12 @@ function wsiMake(string $class, User $owner, array $made): WorkspaceOwned
         ]),
         Space::class => Space::factory()->for($owner)->create(),
         TeamMember::class => TeamMember::factory()->create(['owner_id' => $owner->id]),
+        InsightReport::class => InsightReport::query()->create([
+            'user_id' => $owner->id, 'owner_id' => $owner->id, 'client_id' => $owner->ulid,
+            'format' => 'deck', 'locale' => 'en', 'period_from' => '2026-10-01', 'period_to' => '2026-10-31',
+            'options' => ['period_kind' => 'month', 'channel_ids' => [], 'show_logo' => false, 'hide_branding' => false, 'next_month_notes' => null],
+            'status' => 'queued', 'file_name' => 'theirs.pdf',
+        ]),
         default => throw new RuntimeException("No fixture for {$class}: add one to wsiMake() so its routes are checked."),
     };
 }
