@@ -47,6 +47,10 @@ export class V1Client {
     return this.request<T>('POST', path, body);
   }
 
+  delete<T = unknown>(path: string): Promise<T> {
+    return this.request<T>('DELETE', path);
+  }
+
   private async request<T>(method: string, path: string, body?: unknown, query?: Query): Promise<T> {
     const url = new URL(this.baseUrl + path);
     for (const [k, v] of Object.entries(query ?? {})) {

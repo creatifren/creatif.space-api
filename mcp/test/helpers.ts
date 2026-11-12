@@ -45,7 +45,7 @@ export function mockV1(routes: Record<string, Handler>) {
     const handler = routes[`${call.method} ${path}`];
     if (!handler) return new Response(JSON.stringify({ message: 'Not Found' }), { status: 404 });
     const { status = 200, body = null } = await handler(call);
-    return new Response(body === null ? '' : JSON.stringify(body), {
+    return new Response(body === null ? null : JSON.stringify(body), {
       status,
       headers: { 'Content-Type': 'application/json' },
     });

@@ -56,7 +56,8 @@ describe('the scope fence', function () {
         ['POST', '/api/v1/credits/top-up'],
         ['DELETE', '/api/v1/social-accounts/{account}'],
         ['POST', '/api/v1/social-posts/{post}/approve'],
-        ['DELETE', '/api/v1/social-posts/{post}/draft'],
+        // Cancelling a scheduled post stays app-only (discard_draft is drafts only).
+        ['DELETE', '/api/v1/social-posts/{post}'],
         ['GET', '/api/v1/team/members'],
     ]);
 

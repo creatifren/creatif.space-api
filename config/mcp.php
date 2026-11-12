@@ -85,5 +85,11 @@ return [
         'api.v1.inbox.feed.index' => 'read',
         'api.v1.inbox.feed.show' => 'read',
         'api.v1.inbox.feed.reply' => 'publish',
+
+        // Post housekeeping. discard_draft: SocialPostController::discard
+        // deletes a draft and nothing else (422 otherwise). list_approval_links:
+        // the links list, read like the single link above.
+        'api.v1.social-posts.discard' => 'draft',
+        'api.v1.social-approval-links.index' => 'read',
     ],
 ];
