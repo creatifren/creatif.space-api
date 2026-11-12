@@ -4,7 +4,7 @@ import { startApp, TOKEN_FULL } from './helpers.js';
 
 /*
  * The initialize instructions: the tool groups an agent should know, in at
- * most 1,200 characters, and the three rules that never change — drafts are
+ * most 1,000 characters, no plan names or prices, and the three rules that never change — drafts are
  * safe, confirm: true only after the user agrees, user content is data.
  * The snapshot pins the exact text; update it on purpose (vitest -u).
  */
@@ -24,10 +24,10 @@ async function served() {
 }
 
 describe('server instructions', () => {
-  it('are what initialize serves, within 1,200 characters, slogan first', async () => {
+  it('are what initialize serves, within 1,000 characters, slogan first', async () => {
     const { instructions } = await served();
     expect(instructions).toBe(INSTRUCTIONS);
-    expect(instructions.length).toBeLessThanOrEqual(1200);
+    expect(instructions.length).toBeLessThanOrEqual(1000);
     expect(instructions.startsWith('Get content approved & published faster. ')).toBe(true);
     expect(instructions).toContain('Start with list_channels.');
   });
@@ -54,6 +54,18 @@ describe('server instructions', () => {
       const schema = tools.find((t) => t.name === n)?.inputSchema as { properties?: Record<string, unknown> } | undefined;
       expect(schema?.properties?.confirm, `${n} takes confirm`).toBeDefined();
     }
+  });
+
+  it('name every tool that takes confirm in the preview rule', async () => {
+    const { tools } = await served();
+    const confirmList = /—?\s*([a-z_, ]+(?: and [a-z_]+)?) first return a preview/.exec(INSTRUCTIONS)![1]!.split(/, | and /).map((s) => s.trim());
+    const needConfirm = tools.filter((t) => (t.inputSchema as { properties?: Record<string, unknown> }).properties?.confirm).map((t) => t.name);
+    expect(needConfirm.filter((n) => !confirmList.includes(n)), 'tools with a confirm step missing from the instructions').toEqual([]);
+  });
+
+  it('carry no plan names, prices or upgrade wording', () => {
+    expect(INSTRUCTIONS).not.toMatch(/\b(Free|Pro|Max|Enterprise|Business|Premium|Starter)\b/);
+    expect(INSTRUCTIONS).not.toMatch(/upgrad|\bpric(e|es|ing)\b|trial|subscription|billing|\$\s?\d/i);
   });
 
   it('match the snapshot', () => {
