@@ -208,7 +208,7 @@ export const replyToConversation = defineTool({
       .default(false)
       .describe('Leave false first: you get a preview and nothing is sent. Set true only after the user explicitly agreed to that preview.'),
   },
-  annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: true },
+  annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: false, openWorldHint: true },
   notFound: { what: 'That conversation', next: 'Call list_conversations again and use an id from there (dm_… or comment_…).' },
   run: async (args, ctx) => {
     const id = args.conversation_id;

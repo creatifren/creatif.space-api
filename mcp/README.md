@@ -251,6 +251,16 @@ And on the owner's side, later:
 > and approved "Launch day…" at 03:10 UTC, both from an AI chat. Want the
 > CSV?
 
+## Tool annotations
+
+Every tool sets the four MCP hints. `list_*`, `get_*` and `check_*` are
+`readOnlyHint`. Anything that goes public or removes something is
+`destructiveHint`: `publish_post`, `schedule_post`, `reply_to_conversation`,
+`discard_draft`, `publish_space`, `revoke_insight_share_link`. Tools that
+reach outside creatif.space (platforms, the client's inbox, public links) are
+`openWorldHint`. `test/annotations.test.ts` checks these rules and pins every
+tool's hints in a snapshot.
+
 ## Prompts
 
 `prompts/list` / `prompts/get` offer three ready-made workflows. Each is one
