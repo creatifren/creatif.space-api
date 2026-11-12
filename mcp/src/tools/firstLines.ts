@@ -64,6 +64,8 @@ export const FIRST_LINES: Record<string, string> = {
 
   // Feedback
   send_feedback: 'Use when the user reports a bug or an idea for creatif.space.',
+  get_notification_settings: 'Use when the user asks which creatif.space emails they get, or before changing one.',
+  update_notification_settings: 'Use when the user wants to stop or start a creatif.space email (failed posts, approvals, weekly digest).',
 };
 
 /** Which prompt each tool's first line must name (tools a prompt walks through). */

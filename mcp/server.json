@@ -58,6 +58,7 @@
         "get_credits",
         "get_insight_report_link",
         "get_insight_summary",
+        "get_notification_settings",
         "get_plan_calendar_link",
         "get_post",
         "get_storage_usage",
@@ -82,6 +83,7 @@
         "send_feedback",
         "suggest_caption",
         "unkeep_file",
+        "update_notification_settings",
         "update_post"
       ],
       "prompts": [

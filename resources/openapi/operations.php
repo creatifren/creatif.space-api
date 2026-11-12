@@ -193,4 +193,6 @@ return [
     'api.v1.me.notifications.read' => 'Mark notifications read',
     'api.v1.me.notification-preferences' => 'Notification preferences',
     'api.v1.me.notification-preferences.update' => 'Update notification preferences',
+    'api.v1.me.notification-settings' => 'Email settings: publish_failed, approval_decided, weekly_digest',
+    'api.v1.me.notification-settings.update' => 'Turn the publish_failed, approval_decided or weekly_digest email on or off',
 ];

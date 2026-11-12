@@ -87,6 +87,10 @@ return [
         'api.v1.social-posts.send-preview' => 'read',
         // CapTokenSends holds bearer callers to 20 sends a day.
         'api.v1.social-posts.send' => 'publish',
+        // get_notification_settings / update_notification_settings: the
+        // user's own three email switches.
+        'api.v1.me.notification-settings' => 'read',
+        'api.v1.me.notification-settings.update' => 'draft',
         // retry_post: the preview reads; the retry spends Credits like a send.
         'api.v1.social-posts.retry-preview' => 'read',
         'api.v1.social-posts.retry' => 'publish',

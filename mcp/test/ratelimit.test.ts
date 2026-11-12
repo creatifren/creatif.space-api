@@ -53,6 +53,8 @@ const ARGS: Record<string, Record<string, unknown>> = {
   get_plan_calendar_link: { link_id: ID },
   get_connect_link: { network: 'instagram' },
   send_feedback: { kind: 'idea', message: 'More filters please' },
+  get_notification_settings: {},
+  update_notification_settings: { weekly_digest: false },
   create_insight_share_link: { from: '2026-10-01', to: '2026-10-31' },
   revoke_insight_share_link: { share_id: ID },
 };

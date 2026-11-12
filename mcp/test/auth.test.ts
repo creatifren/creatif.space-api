@@ -105,6 +105,7 @@ describe('401 flow', () => {
         'get_approval_history',
         'get_connect_link',
         'send_feedback',
+        'get_notification_settings', 'update_notification_settings',
         'create_insight_share_link', 'revoke_insight_share_link',
         'get_plan_calendar_link',
       ].sort(),

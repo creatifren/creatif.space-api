@@ -18,6 +18,7 @@ exports[`tool first lines > match the snapshot 1`] = `
   "get_credits": "Use when the user asks what they can afford or why a send was refused: plan, limits, Credits, prices.",
   "get_insight_report_link": "Use when the user wants the Insight PDF; a monthly_report alternative to the share link.",
   "get_insight_summary": "Use for a period’s numbers (reach, engagement, top posts); the monthly_report prompt starts with it.",
+  "get_notification_settings": "Use when the user asks which creatif.space emails they get, or before changing one.",
   "get_plan_calendar_link": "Use when the user wants a Content Plan in their or their client’s calendar app (ICS feed).",
   "get_post": "Use for one post’s full detail and review thread; send_for_approval prompt checks each post with it.",
   "get_storage_usage": "Use before a big upload or when the user asks what will be deleted and when.",
@@ -42,6 +43,7 @@ exports[`tool first lines > match the snapshot 1`] = `
   "send_feedback": "Use when the user reports a bug or an idea for creatif.space.",
   "suggest_caption": "Use when the user wants a caption written in their style; the plan_week prompt drafts with it.",
   "unkeep_file": "Use to free Keep quota: the file goes back under the automatic-deletion rules.",
+  "update_notification_settings": "Use when the user wants to stop or start a creatif.space email (failed posts, approvals, weekly digest).",
   "update_post": "Use to change a draft or a post waiting for approval: caption, time, labels or media.",
 }
 `;
