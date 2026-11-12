@@ -7,6 +7,8 @@ export interface V1Target {
   account: { id: string; platform: string; username: string | null };
   status: string;
   fail_reason: string | null;
+  /** PublishFailure's reason code, when it failed. */
+  fail_code?: string | null;
   platform_url: string | null;
 }
 

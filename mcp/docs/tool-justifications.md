@@ -16,6 +16,7 @@ is destructive previews first and acts only on `confirm: true`.
 | `get_connect_link` | Get a link to connect a channel | yes | no | no | Returns a creatif.space link; the user connects the network themselves. |
 | `get_credits` | Get plan, limits and Credits | yes | no | no | Reads plan limits and Credit balance. |
 | `list_posts` | List posts | yes | no | no | Reads the workspace's posts. |
+| `list_failed_posts` | List failed posts | yes | no | no | Reads the user's own posts that failed to publish in the last 30 days, with each failure's reason. |
 | `get_post` | Get a post | yes | no | no | Reads one post and its review thread. |
 | `suggest_caption` | Suggest a caption | yes | no | no | Generates caption text; saves and sends nothing. |
 | `draft_post` | Draft a post | no | no | no | Saves a private draft in creatif.space; never sends or spends Credits. |

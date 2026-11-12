@@ -51,6 +51,7 @@ Rate limit: 60 requests / minute / token (429 + `Retry-After`).
 | --- | --- | --- |
 | `list_channels` — channels that need reconnecting carry `reconnect` {reason, next_step} and are listed in `needs_reconnect` | read | `GET /social-accounts` |
 | `list_posts` (status, from, to, channel_id, limit) | read | `GET /social-posts?status&from&to&account_id&limit` |
+| `list_failed_posts` (limit, cursor) — last 30 days, per channel `failure_code` + `reason`; partly-published posts list only their failed channels | read | `GET /social-posts?status=failed` + `?status=published` (from/to = last 30 days) |
 | `get_post` | read | `GET /social-posts/{id}` |
 | `list_files` (search, type, folder_id, limit) | read | `GET /files` |
 | `draft_post` (caption, channel_ids, file_ids, media_urls, captions_by_channel, type) | draft | `POST /social-posts` with `draft: true` |

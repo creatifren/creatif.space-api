@@ -68,6 +68,7 @@
         "list_approval_links",
         "list_channels",
         "list_conversations",
+        "list_failed_posts",
         "list_files",
         "list_posts",
         "list_shared_with_me",
