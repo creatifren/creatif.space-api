@@ -17,7 +17,8 @@ const tools = async () => {
 describe('tool descriptions for agents', () => {
   it('every tool: a "Use …" line, one line on what it does, when to use it, an example call, errors with next steps', async () => {
     const list = await tools();
-    expect(list).toHaveLength(47);
+    // The count itself is pinned once, against every list, in test/in-step.test.ts.
+    expect(list.length).toBeGreaterThan(0);
     for (const t of list) {
       const lines = t.description!.split('\n');
       expect(lines[0], t.name).toMatch(/^Use /);

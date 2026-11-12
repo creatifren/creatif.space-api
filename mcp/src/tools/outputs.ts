@@ -91,3 +91,27 @@ export const OUTPUT_SCHEMAS: Record<string, z.ZodRawShape> = {
     next_step: str.optional(),
   },
 };
+
+/**
+ * Read-only tools that answer without an outputSchema, on purpose: free-form
+ * or link-shaped answers no client renders as a table. Every other
+ * read-only tool must have an entry in OUTPUT_SCHEMAS (test/in-step.test.ts):
+ * a new read tool is a decision, not an omission.
+ */
+export const UNSTRUCTURED = new Set([
+  'list_conversations',
+  'suggest_caption',
+  'list_approval_links',
+  'list_shared_with_me',
+  'list_top_posts',
+  'get_best_times',
+  'get_insight_report_link',
+  'get_insight_csv_link',
+  'get_approval_audit',
+  'get_approval_history',
+  'get_connect_link',
+  'get_plan_calendar_link',
+  'get_account_summary',
+  'get_notification_settings',
+  'list_failed_posts',
+]);
