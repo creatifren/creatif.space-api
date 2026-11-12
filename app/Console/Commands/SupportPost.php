@@ -4,11 +4,16 @@ namespace App\Console\Commands;
 
 use App\Models\PublishAttempt;
 use App\Models\SocialApprovalDecision;
+use App\Models\SocialApprovalLink;
 use App\Models\SocialPost;
 use App\Models\SocialPostTarget;
+use App\Models\User;
 use App\Support\ApproverGate;
+use App\Support\PlanScope;
+use App\Support\Workspace;
 use Carbon\CarbonInterface;
 use Illuminate\Console\Command;
+use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Support\Str;
 
 /**
@@ -42,6 +47,7 @@ class SupportPost extends Command
         }
 
         $post->load(['user:id,ulid,email', 'targets.account:id,platform,username']);
+        $links = self::links($post);
 
         $this->line("<options=bold>Post {$post->ulid}</>");
         $this->table(['', ''], [
@@ -52,10 +58,11 @@ class SupportPost extends Command
             ['Scheduled (UTC)', self::utc($post->scheduled_at) ?? 'now / none'],
             ['Relay', $post->provider],
             ['Outstand post id', $post->provider_post_id ?? '—'],
+            ['Approval links', $links->isEmpty() ? 'none' : $links->map(fn (SocialApprovalLink $l) => $l->ulid.' ('.($l->isScoped() ? 'plan' : 'list').')')->implode(', ')],
         ]);
 
         $this->line('<options=bold>Timeline (UTC)</>');
-        $this->table(['When', 'What', 'Detail'], self::timeline($post));
+        $this->table(['When', 'What', 'Detail'], self::timeline($post, $links));
 
         $this->line('<options=bold>Channels now</>');
         $this->table(['Channel', 'Status', 'Code', 'Reason', 'Retries', 'Outstand ids'], $post->targets->map(fn (SocialPostTarget $t) => [
@@ -78,11 +85,52 @@ class SupportPost extends Command
     }
 
     /**
+     * The approval links the post is on: fixed lists it was put on, and
+     * Content Plans whose dates and channels cover it.
+     *
+     * @return Collection<int, SocialApprovalLink>
+     */
+    private static function links(SocialPost $post): Collection
+    {
+        $lists = $post->approvalLinks()->get();
+        // A full row: the eager-loaded user carries three columns only.
+        $author = User::withTrashed()->find($post->user_id);
+        if ($author === null) {
+            return $lists;
+        }
+        $plans = SocialApprovalLink::query()
+            ->whereIn('user_id', Workspace::memberIds(Workspace::owner($author)))
+            ->whereNotNull('scope_from')
+            // PlanScope reads each plan's user; strict mode forbids the lazy load.
+            ->with('user')
+            ->orderBy('id')
+            ->get()
+            ->filter(fn (SocialApprovalLink $l) => PlanScope::posts($l)->whereKey($post->id)->exists());
+
+        return $lists->merge($plans)->sortBy('id')->values();
+    }
+
+    /**
+     * @param  Collection<int, SocialApprovalLink>  $links
      * @return list<array{0: string, 1: string, 2: string}>
      */
-    private static function timeline(SocialPost $post): array
+    private static function timeline(SocialPost $post, Collection $links): array
     {
         $rows = [[$post->created_at, 0, 'drafted', '']];
+
+        // Each link: when it was made, and its reminders (the owner's last
+        // manual one, and a Content Plan's automatic one). Ids only — no
+        // approver address.
+        foreach ($links as $l) {
+            $kind = $l->isScoped() ? 'plan' : 'list';
+            $rows[] = [$l->created_at, 1, 'approval link created', "link {$l->ulid} · {$kind}"];
+            if ($l->last_reminded_at !== null) {
+                $rows[] = [$l->last_reminded_at, 2, 'last reminder sent', "link {$l->ulid} · by the owner"];
+            }
+            if ($l->reminded_at !== null) {
+                $rows[] = [$l->reminded_at, 2, 'plan reminder sent', "link {$l->ulid} · automatic, before the plan starts"];
+            }
+        }
 
         if ($post->review_requested_at !== null) {
             $rows[] = [$post->review_requested_at, 1, 'sent for approval', ''];

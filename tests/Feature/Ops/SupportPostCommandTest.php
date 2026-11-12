@@ -107,6 +107,49 @@ it('never prints a token, a secret, the approver’s address, IP or user agent, 
         ->not->toContain('raw relay text');
 });
 
+it('lists the approval links the post is on — a fixed list and a Content Plan covering it — with each one\'s reminders, by id only', function () {
+    $post = spStory();
+    $post->forceFill(['scheduled_at' => CarbonImmutable::parse('2026-11-20 10:00:00', 'UTC')])->save();
+    $account = $post->targets()->firstOrFail()->social_account_id;
+
+    $list = SocialApprovalLink::query()->where('user_id', $post->user_id)->firstOrFail();
+    $list->posts()->attach($post->id);
+    test()->travelTo(CarbonImmutable::parse('2026-11-11 08:00:00', 'UTC'));
+    $list->forceFill(['last_reminded_at' => now()])->save();
+
+    $plan = SocialApprovalLink::create([
+        'user_id' => $post->user_id, 'title' => 'November plan', 'approver_email' => 'plan-approver@client.test',
+        'scope_from' => '2026-11-01', 'scope_to' => '2026-11-30', 'scope_timezone' => 'UTC',
+        'scope_starts_at' => CarbonImmutable::parse('2026-11-01 00:00:00', 'UTC'),
+        'scope_ends_at' => CarbonImmutable::parse('2026-12-01 00:00:00', 'UTC'),
+        'scope_account_ids' => [$account],
+    ]);
+    // A datetime column holds app-timezone wall time.
+    $plan->forceFill(['reminded_at' => CarbonImmutable::parse('2026-11-11 09:30:00', 'UTC')->setTimezone(config('app.timezone'))])->save();
+    // A plan for another month does not cover it.
+    $december = SocialApprovalLink::create([
+        'user_id' => $post->user_id, 'title' => 'December plan',
+        'scope_from' => '2026-12-01', 'scope_to' => '2026-12-31', 'scope_timezone' => 'UTC',
+        'scope_starts_at' => CarbonImmutable::parse('2026-12-01 00:00:00', 'UTC'),
+        'scope_ends_at' => CarbonImmutable::parse('2027-01-01 00:00:00', 'UTC'),
+        'scope_account_ids' => [$account],
+    ]);
+
+    [$code, $out] = spOutput($post->ulid);
+
+    expect($code)->toBe(0)
+        ->and($out)->toContain("{$list->ulid} (list)")
+        ->toContain("{$plan->ulid} (plan)")
+        ->not->toContain($december->ulid)
+        ->toContain('approval link created')
+        ->toContain('last reminder sent')
+        ->toContain('2026-11-11 08:00:00')
+        ->toContain('plan reminder sent')
+        ->toContain('2026-11-11 09:30:00')
+        ->not->toContain('plan-approver@client.test')
+        ->not->toContain('andi@client.test');
+});
+
 it('finds the post by its Outstand id or its retry\'s', function () {
     $post = spStory();
 
