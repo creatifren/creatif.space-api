@@ -195,6 +195,17 @@ MCP_AUTH_MODE=stub npm start   # local only
    - `journalctl -u creatif-mcp -n 20` shows `listening on http://127.0.0.1:3010 (auth: real)`
 8. In Claude: Settings → Connectors → Add custom connector → `https://mcp.creatif.space/mcp`, sign in, run `list_channels`.
 
+## Usage report (daily launch check)
+
+On the API host: `php artisan mcp:usage --days=7` (1–90; add `--json` for a
+machine-readable copy). From `mcp_audit_logs`: API calls per tool, errors
+(HTTP ≥ 400), error rate and the top error codes (status mapped to the MCP
+code the model sees: 402 → `plan_required`, 404 → `not_found`, 5xx →
+`upstream_unavailable`…). Aggregates only — no user, token, IP or client
+name. It counts API requests, not tool calls (one tool can make several),
+and calls refused inside this server (bad arguments, missing scope) never
+reach the API, so they are not in it.
+
 ## Run in production
 
 Build once per deploy: `npm ci && npm run build` (then `npm prune --omit=dev`).
