@@ -95,6 +95,7 @@ describe('401 flow', () => {
         'request_media_upload', 'confirm_media_upload',
         'list_conversations', 'reply_to_conversation',
         'list_waiting_approvals', 'decide_approval',
+        'list_spaces', 'create_space_from_files', 'publish_space',
       ].sort(),
     );
     for (const tool of tools) {
@@ -111,6 +112,9 @@ describe('401 flow', () => {
     expect(ann('draft_post')).toMatchObject({ readOnlyHint: false, destructiveHint: false, openWorldHint: false });
     expect(ann('list_posts')).toMatchObject({ readOnlyHint: true, destructiveHint: false });
     expect(ann('publish_post')).toMatchObject({ readOnlyHint: false, destructiveHint: true, openWorldHint: true });
+    expect(ann('list_spaces')).toMatchObject({ readOnlyHint: true, destructiveHint: false, idempotentHint: true });
+    expect(ann('create_space_from_files')).toMatchObject({ readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false });
+    expect(ann('publish_space')).toMatchObject({ readOnlyHint: false, destructiveHint: true, openWorldHint: true });
   });
 
   it('answers 405 to GET with a valid token (stateless)', async () => {
