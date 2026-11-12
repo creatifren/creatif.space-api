@@ -28,6 +28,7 @@ Prompts (new): `plan_week`, `send_for_approval`, `monthly_report` (`prompts/list
 
 Changed:
 
+- `MCP_PUBLIC_DISCOVERY` (off by default): `initialize` and `tools/list` without a token; `tools/call` stays behind OAuth (401 + `WWW-Authenticate`).
 - `serverInfo.icons` and the registry entry's `icons`: the Pen Rocket, 512×512 PNG at `https://creatif.space/icons/icon-512.png` (registry entry 1.2.0).
 - Every `list_*` tool takes `limit` + `cursor` and returns `next_cursor` (null at the end).
 - The 10 most-used read tools declare an `outputSchema` and return `structuredContent` (text block kept).

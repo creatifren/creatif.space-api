@@ -20,6 +20,7 @@ const app = createApp({
   freeAnalytics: analytics,
   rateLimiter: new TokenRateLimiter(config.rateLimitPerMinute),
   glamaClaim: config.glamaClaim,
+  publicDiscovery: config.publicDiscovery,
 });
 
 const server = app.listen(config.port, config.host, () => {
