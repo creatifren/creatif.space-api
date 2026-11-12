@@ -5,6 +5,7 @@ import type { Analytics } from '../analytics.js';
 import type { CallerAuth } from '../auth/middleware.js';
 import { ToolError, toToolError, type NotFound } from '../errors.js';
 import type { V1Client } from '../v1.js';
+import { OUTPUT_SCHEMAS } from './outputs.js';
 
 export type Scope = 'read' | 'draft' | 'approve' | 'publish' | 'approvals:decide';
 
@@ -92,6 +93,7 @@ export function registerTool(server: McpServer, def: ToolDef<any>, deps: Registe
       title: def.title,
       description: `${def.description}\n\n${DATA_NOTICE}`,
       inputSchema: def.input,
+      ...(OUTPUT_SCHEMAS[def.name] ? { outputSchema: OUTPUT_SCHEMAS[def.name] } : {}),
       annotations: { title: def.title, ...def.annotations },
     },
     async (args: unknown) => {
@@ -110,7 +112,8 @@ export function registerTool(server: McpServer, def: ToolDef<any>, deps: Registe
         const v1 = deps.v1.forTool(def.name, deps.auth.extra.clientName);
         const out = await def.run(args as never, { v1, auth: deps.auth });
         ok = true;
-        return result(out);
+        // Tools with an outputSchema also return structuredContent; the text block stays for older clients.
+        return OUTPUT_SCHEMAS[def.name] ? { ...result(out), structuredContent: out as Record<string, unknown> } : result(out);
       } catch (e) {
         const err = unsure(toToolError(e, def.notFound), def);
         errorCode = err.code;
