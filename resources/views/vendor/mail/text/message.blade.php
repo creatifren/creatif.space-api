@@ -1,4 +1,4 @@
-@props(['approvalFooter' => false])
+@props(['approvalFooter' => false, 'footerLink' => true])
 <x-mail::layout>
     {{-- Header --}}
     <x-slot:header>
@@ -23,7 +23,9 @@
     <x-slot:footer>
         @if ($approvalFooter)
 {{ config('app.slogan') }}
+@if ($footerLink)
 {{ \App\Notifications\ApprovalMailFooter::LINK }} {{ \App\Notifications\ApprovalMailFooter::URL }}
+@endif
 
         @endif
         <x-mail::footer>

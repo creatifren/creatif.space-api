@@ -6,6 +6,7 @@ use App\Enums\UserStatus;
 use App\Http\Controllers\Controller;
 use App\Models\User;
 use App\Support\AutoHandle;
+use App\Support\Onboarding;
 use App\Support\ProductEvents;
 use App\Support\ReferralAttribution;
 use App\Support\SafePath;
@@ -170,6 +171,12 @@ class PasswordAuthController extends Controller
 
         $user->markEmailAsVerified();
         $this->signIn($request, $user);
+
+        // An email signup's account is ready once its address is: the welcome
+        // email, once (not for a client on their way to an approval).
+        if (! Onboarding::isClientLanding($user->signup_next_path)) {
+            Onboarding::welcome($user);
+        }
 
         /* Where the signup asked to land, checked again on the way out —
            a stored value is only as safe as what was put in it. Used once. */
