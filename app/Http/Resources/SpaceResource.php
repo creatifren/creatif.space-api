@@ -28,6 +28,8 @@ class SpaceResource extends JsonResource
             'view_mode' => $this->view_mode,
             'has_password' => $this->password_hash !== null,
             'expires_at' => $this->expires_at,
+            // Where it opens (or will once published); null without a handle.
+            'public_url' => $this->publicUrl(),
             'design' => $this->design,
             'settings' => $this->settings,
             'seo' => $this->seo,

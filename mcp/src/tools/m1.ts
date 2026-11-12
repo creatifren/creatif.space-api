@@ -13,8 +13,8 @@ export const listChannels = defineTool({
   title: 'List connected channels',
   description: describeTool({
     does: "Lists the social channels (Instagram, Facebook, TikTok, LinkedIn, X, Threads, YouTube, Pinterest, Bluesky…) connected to the user’s creatif.space workspace, with each channel’s id and whether it can be posted to.",
-    when: "first, before draft_post, list_posts by channel or any send — it is the only source of channel ids. A channel with reconnect_required=true (or status other than \"connected\") cannot be posted to until the user reconnects it in creatif.space → Channels.",
-    example: "list_channels {} → { channels: [{ id: \"01JD…\", platform: \"instagram\", username: \"studio\", status: \"connected\", reconnect_required: false }] }",
+    when: "first, before draft_post, list_posts by channel or any send — it is the only source of channel ids. A channel with reconnect_required=true (or status other than \"connected\") cannot be posted to until the user reconnects it: such channels carry a reconnect block, and needs_reconnect lists them — call get_connect_link with the channel’s platform for the link to send the user. To add a new network, use get_connect_link too.",
+    example: "list_channels {} → { channels: [{ id: \"01JD…\", platform: \"instagram\", username: \"studio\", status: \"connected\", reconnect_required: false }, { id: \"01JE…\", platform: \"x\", status: \"expired\", reconnect_required: true, reconnect: { reason, next_step } }], needs_reconnect: [\"01JE…\"] }",
     errors: [
       ["scope_missing", "reconnect and allow \"read\""],
       ["unauthorized", "ask the user to reconnect the creatif.space connector"],
@@ -26,18 +26,45 @@ export const listChannels = defineTool({
   annotations: READ_ONLY,
   run: async (_args, { v1 }) => {
     const res = await v1.get<{ data: Record<string, unknown>[] }>('/social-accounts');
-    return {
-      channels: res.data.map((a) => ({
+    const channels = res.data.map((a) => {
+      const reconnect = a.reconnect_required === true || a.status !== 'connected';
+      return {
         id: a.id,
         platform: a.platform,
         username: a.username,
         status: a.status,
-        reconnect_required: a.reconnect_required === true || a.status !== 'connected',
+        reconnect_required: reconnect,
         connected_at: a.connected_at,
-      })),
+        ...(reconnect ? { reconnect: reconnectHint(a) } : {}),
+        // Posting works; replying to DMs needs a fresh sign-in with messages allowed.
+        ...(!reconnect && a.needs_reconnect_for_messages === true
+          ? { reconnect_for_messages: { next_step: `Posting works. To reply to DMs, the user reconnects it and allows messages: get_connect_link { "network": "${String(a.platform)}" }.` } }
+          : {}),
+      };
+    });
+    const needs = channels.filter((c) => c.reconnect_required).map((c) => c.id);
+    return {
+      channels,
+      ...(needs.length
+        ? {
+            needs_reconnect: needs,
+            next_step: 'Channels in needs_reconnect cannot be posted to. Tell the user which ones, and give them the link from get_connect_link for each platform; do not draft or send to them until they show as connected.',
+          }
+        : {}),
     };
   },
 });
+
+/** Why a channel needs reconnecting, in words the user understands, and the one next step. */
+function reconnectHint(a: Record<string, unknown>) {
+  const reason =
+    a.reconnect_required === true && a.status === 'disconnected'
+      ? 'It was connected through an older connection that no longer works; it has to be connected again.'
+      : a.status === 'expired'
+        ? 'The platform sign-in expired or was revoked.'
+        : 'The channel is not connected right now.';
+  return { reason, next_step: `Ask the user to reconnect it: get_connect_link { "network": "${String(a.platform)}" } gives the link.` };
+}
 
 export const listPosts = defineTool({
   name: 'list_posts',

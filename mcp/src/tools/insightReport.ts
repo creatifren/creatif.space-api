@@ -1,0 +1,50 @@
+import { z } from 'zod';
+import { defineTool, describeTool } from './define.js';
+
+/** Reads only: making a link changes nothing in the workspace. */
+const READ_ONLY = { readOnlyHint: true, destructiveHint: false, idempotentHint: false, openWorldHint: false } as const;
+
+const day = (what: string) => z.iso.date().describe(`${what}, YYYY-MM-DD (whole days in the app's timezone)`);
+
+export const getInsightReportLink = defineTool({
+  name: 'get_insight_report_link',
+  title: 'Get an Insight PDF link',
+  description: describeTool({
+    does: 'Makes a short-lived (15 minute) signed download link to the Insight PDF report for a date range of up to 92 days: one page, a 16:9 deck, or the detailed report.',
+    when: 'when the user wants the report as a file to open, download or forward. The link works without signing in until it expires, so hand it to the user rather than posting it anywhere public. For the numbers themselves use get_insight_summary. channel_ids (from list_channels) limits the report to some channels; by default all connected channels.',
+    example: 'get_insight_report_link { "from": "2026-10-01", "to": "2026-10-31", "format": "deck" } → { url: "https://api.creatif.space/api/v1/insight/export.pdf/signed?…", expires_at, file_name: "studio-2026-10-deck.pdf" }',
+    errors: [
+      ['plan_required', 'Insight is on Pro and Max: tell the user the message as it is (it has the upgrade link); do not retry'],
+      ['invalid_input', 'fix the dates (at most 92 days, not in the future), the format or the channel ids and call again'],
+      ['scope_missing', 'reconnect and allow "read"'],
+      ['unauthorized', 'ask the user to reconnect the creatif.space connector'],
+      ['upstream_unavailable', 'wait a minute and call again'],
+    ],
+  }),
+  scope: 'read',
+  input: {
+    from: day('First day'),
+    to: day('Last day'),
+    format: z.enum(['onepage', 'deck', 'details']).default('onepage').describe('onepage (A4, one page), deck (16:9 slides) or details (A4, a page per channel)'),
+    channel_ids: z.array(z.string().trim().min(10).max(26)).min(1).max(50).optional().describe('Only these channels (ids from list_channels)'),
+    locale: z.enum(['en', 'id']).optional().describe('Language of the report; default the user’s own'),
+  },
+  annotations: READ_ONLY,
+  run: async ({ from, to, format, channel_ids, locale }, { v1 }) => {
+    const res = await v1.post<{ url: string; expires_at: string; file_name: string }>('/insight/export-link', {
+      from,
+      to,
+      format,
+      ...(channel_ids ? { channels: channel_ids.join(',') } : {}),
+      ...(locale ? { locale } : {}),
+    });
+    return {
+      url: res.url,
+      expires_at: res.expires_at,
+      file_name: res.file_name,
+      note: 'The link downloads the PDF without signing in and stops working at expires_at. Give it to the user; do not post it publicly.',
+    };
+  },
+});
+
+export const insightReportTools = [getInsightReportLink];

@@ -121,9 +121,11 @@ final class ApproverGate
     }
 
     /** Write one audit row. */
-    public static function record(Request $request, SocialApprovalLink $link, SocialPost $post, string $decision, User $user, ?string $name, string $source = 'web'): void
+    public static function record(Request $request, SocialApprovalLink $link, SocialPost $post, string $decision, User $user, ?string $name, string $source = 'web', ?string $comment = null): void
     {
         SocialApprovalDecision::create([
+            // The approver's reason ("request changes"), for the audit export.
+            'comment' => $comment === null ? null : mb_substr($comment, 0, 5000),
             // Where the decision was made: the /a page, or an MCP client.
             'source' => $source,
             'social_approval_link_id' => $link->id,

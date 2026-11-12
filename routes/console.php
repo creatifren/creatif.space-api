@@ -16,6 +16,8 @@ use App\Jobs\ReleaseCommissions;
 use App\Jobs\RenewMonthlyCredits;
 use App\Jobs\RetryRateLimitedPublishes;
 use App\Jobs\SendApprovedHeldPosts;
+use App\Jobs\SendContentPlanReminders;
+use App\Jobs\SendMonthlyInsightReports;
 use App\Jobs\SnapshotFollowerCounts;
 use App\Jobs\SyncInboxes;
 use Illuminate\Foundation\Inspiring;
@@ -156,3 +158,17 @@ Schedule::command('accounts:purge-deleted')->dailyAt('03:25')->withoutOverlappin
  * logged as a warning (health.selfcheck_failed) naming the failed checks.
  */
 Schedule::command('health:selfcheck')->everyFiveMinutes()->withoutOverlapping();
+
+/*
+ * The monthly Insight email: on the 1st at 09:00 workspace time (the app's
+ * timezone), last month's one-page PDF to every Pro / Max owner who
+ * switched it on in Settings → Insight.
+ */
+Schedule::job(new SendMonthlyInsightReports)->monthlyOn(1, '09:00')->timezone(config('app.timezone'));
+
+/*
+ * Content Plan reminders: one email to the approver when posts still wait
+ * and the first goes out within 24 hours (once per link, opt-out per link).
+ * Every 15 minutes, so the email lands close to the 24-hour mark.
+ */
+Schedule::job(new SendContentPlanReminders)->everyFifteenMinutes()->withoutOverlapping();
