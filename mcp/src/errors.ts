@@ -294,13 +294,16 @@ export function toToolError(e: unknown, notFound: NotFound = DEFAULT_NOT_FOUND):
             { reason: 'refused' },
           );
     }
-    case 429:
+    case 429: {
+      // The API says how long (bootstrap/app.php: {message, retry_after}).
+      const after = typeof body.retry_after === 'number' && body.retry_after > 0 ? Math.ceil(body.retry_after) : 60;
       return new ToolError(
         'rate_limited',
         'creatif.space is rate limiting these requests.',
-        'Wait a minute before calling again; do not loop.',
-        { retryable: true, retry_after_seconds: 60 },
+        `Wait ${after} seconds (details.retry_after_seconds) before calling again; do not loop.`,
+        { retryable: true, retry_after_seconds: after },
       );
+    }
     default:
       return new ToolError(
         'upstream_unavailable',
