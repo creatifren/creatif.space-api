@@ -92,7 +92,7 @@ it('renders the two-line footer in every approval email, matching the snapshot',
         ->and($sloganLine)->toBe(APPROVAL_SLOGAN)
         ->and($url)->toBe(ApprovalMailFooter::URL);
 
-    // Line 1: live text (no image), 30px, Lora 600 with a web-safe stack ending in serif.
+    // Line 1: live text (no image), 30px, Lora 600, then Georgia (Gmail/Outlook drop web fonts), ending in serif.
     preg_match('/<div class="approval-slogan" style="([^"]*)">(.*?)<\/div>/s', $block, $slogan);
     preg_match_all('/font-family:\s*([^;]+);/', $slogan[1], $families);
     expect($block)->not->toContain('<img')
@@ -100,17 +100,18 @@ it('renders the two-line footer in every approval email, matching the snapshot',
         ->and($slogan[1])->toContain('font-weight: 600')
         ->and($slogan[1])->toContain('letter-spacing: -0.02em')
         ->and($slogan[1])->toContain('color: #0F172A')
-        ->and(trim((string) end($families[1])))->toBe("'Lora', Georgia, 'Times New Roman', Times, serif")
+        ->and(trim((string) end($families[1])))->toBe("Lora, Georgia, 'Times New Roman', serif")
         ->and($slogan[2])->toMatch('/approved(&nbsp;|&#160;|\x{00A0})&amp;/u');
 
     // "published" on orange with ink text, radius .08em, cloned across lines.
     preg_match('/<span style="([^"]*)">published<\/span>/', $slogan[2], $mark);
     preg_match_all('/font-family:\s*([^;]+);/', $mark[1], $markFamilies);
     expect($mark[1])->toContain('background-color: #FF9F43')
+        ->and($mark[1])->toContain('font-weight: 600')
         ->and($mark[1])->toContain('color: #0F172A')
         ->and($mark[1])->toContain('border-radius: 0.08em')
         ->and($mark[1])->toContain('box-decoration-break: clone')
-        ->and(trim((string) end($markFamilies[1])))->toBe("'Lora', Georgia, 'Times New Roman', Times, serif");
+        ->and(trim((string) end($markFamilies[1])))->toBe("Lora, Georgia, 'Times New Roman', serif");
 
     // Line 2: the link, with the UTM.
     preg_match('/<a class="approval-link" href="([^"]*)"[^>]*>(.*?)<\/a>/s', $block, $link);
