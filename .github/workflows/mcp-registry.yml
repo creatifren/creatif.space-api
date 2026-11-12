@@ -11,13 +11,14 @@ permissions:
   contents: read
 
 concurrency:
-  group: mcp-registry
-  cancel-in-progress: false
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
 
 jobs:
   publish:
     name: Publish mcp/server.json
     runs-on: ubuntu-24.04
+    timeout-minutes: 10
     env:
       # Pinned and signature-checked, as the registry's own guide asks;
       # bump deliberately rather than following releases/latest.

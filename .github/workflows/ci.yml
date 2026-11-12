@@ -1,26 +1,78 @@
 name: CI
 
+# Pull requests run the minimum that proves them correct: PHP 8.4 on sqlite
+# (PHPStan + Pest) and the MCP server on Node 22. The full matrix (PHP 8.5
+# and 8.4 on sqlite, PHP 8.5 on MySQL 8) runs on push to main and in the
+# merge queue, if one is turned on. A PR runs only the side it touches:
+# mcp/** -> MCP job; anything else but docs/markdown -> PHP jobs; a change
+# to this file -> both. Skipped jobs still report, so checks do not hang.
 on:
   pull_request:
   push:
     branches: [main]
+  merge_group:
 
+# One run per branch / PR: a new push cancels the older run, never on main.
 concurrency:
-  group: ci-${{ github.ref }}
-  cancel-in-progress: true
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
 
 permissions:
   contents: read
 
 jobs:
+  # What changed, and how much to run (no checkout, a few seconds).
+  changes:
+    name: Changed paths
+    runs-on: ubuntu-24.04
+    timeout-minutes: 3
+    permissions:
+      contents: read
+      pull-requests: read
+    outputs:
+      php: ${{ steps.filter.outputs.php }}
+      mcp: ${{ steps.filter.outputs.mcp }}
+      full: ${{ steps.filter.outputs.full }}
+    steps:
+      - name: Filter
+        id: filter
+        env:
+          GH_TOKEN: ${{ github.token }}
+          EVENT: ${{ github.event_name }}
+          REF: ${{ github.ref }}
+          PR: ${{ github.event.pull_request.number }}
+        run: |
+          if [ "$EVENT" = merge_group ] || { [ "$EVENT" = push ] && [ "$REF" = refs/heads/main ]; }; then
+            echo "full=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "full=false" >> "$GITHUB_OUTPUT"
+          fi
+          if [ "$EVENT" != pull_request ]; then
+            { echo "php=true"; echo "mcp=true"; } >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          files=$(gh api --paginate "repos/$GITHUB_REPOSITORY/pulls/$PR/files" --jq '.[].filename')
+          printf '%s\n' "$files"
+          ci=$(printf '%s\n' "$files" | grep -E '^\.github/workflows/ci\.yml$' || true)
+          # mcp/** includes its README (mcp/test/readme.test.ts reads it).
+          mcp=$(printf '%s\n' "$files" | grep -E '^mcp/' || true)
+          # The PHP app: everything but mcp/, docs, markdown and the
+          # manual-only registry workflow.
+          php=$(printf '%s\n' "$files" | grep -Ev '^(mcp/|docs/)|\.md$|^\.github/workflows/mcp-registry\.yml$' || true)
+          if [ -n "$php$ci" ]; then echo "php=true"; else echo "php=false"; fi >> "$GITHUB_OUTPUT"
+          if [ -n "$mcp$ci" ]; then echo "mcp=true"; else echo "mcp=false"; fi >> "$GITHUB_OUTPUT"
+
   tests:
     name: Tests (PHP ${{ matrix.php }}, sqlite)
+    needs: changes
+    if: needs.changes.outputs.php == 'true'
     runs-on: ubuntu-24.04
+    timeout-minutes: 20
     strategy:
       fail-fast: false
       matrix:
-        # Production runs 8.5; 8.4 keeps the floor honest.
-        php: ['8.5', '8.4']
+        # Production runs 8.5; 8.4 keeps the floor honest. PRs: 8.4 only.
+        php: ${{ fromJSON(needs.changes.outputs.full == 'true' && '["8.5", "8.4"]' || '["8.4"]') }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
@@ -58,9 +110,13 @@ jobs:
       - name: Pest
         run: php -d memory_limit=2G vendor/bin/pest
 
+  # Main and the merge queue only.
   mysql:
     name: Tests (PHP 8.5, MySQL 8)
+    needs: changes
+    if: needs.changes.outputs.php == 'true' && needs.changes.outputs.full == 'true'
     runs-on: ubuntu-24.04
+    timeout-minutes: 20
     services:
       mysql:
         image: mysql:8.0
@@ -120,7 +176,10 @@ jobs:
 
   mcp:
     name: MCP server (Node 22)
+    needs: changes
+    if: needs.changes.outputs.mcp == 'true'
     runs-on: ubuntu-24.04
+    timeout-minutes: 10
     defaults:
       run:
         working-directory: mcp
