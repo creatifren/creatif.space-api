@@ -69,6 +69,7 @@
         "list_posts",
         "list_shared_with_me",
         "list_spaces",
+        "list_top_posts",
         "list_waiting_approvals",
         "publish_post",
         "publish_space",

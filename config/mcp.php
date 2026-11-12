@@ -69,6 +69,8 @@ return [
         'api.v1.me.subscription' => 'read',
         // get_insight_summary: Pro / Max (402 plan_required on Free).
         'api.v1.insight.summary' => 'read',
+        // list_top_posts: the top five posts by engagement (Pro / Max).
+        'api.v1.insight.top-posts' => 'read',
         // get_insight_report_link: a 15-minute signed PDF link (Pro / Max).
         'api.v1.insight.export-link' => 'read',
         // create_insight_share_link / revoke_insight_share_link: sharing with

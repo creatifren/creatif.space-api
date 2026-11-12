@@ -48,6 +48,7 @@ export const FIRST_LINES: Record<string, string> = {
 
   // Insight
   get_insight_summary: 'Use for a period’s numbers (reach, engagement, top posts); the monthly_report prompt starts with it.',
+  list_top_posts: 'Use when the user asks which posts did best in a period: the top five by engagement, with links.',
   get_insight_report_link: 'Use when the user wants the Insight PDF; a monthly_report alternative to the share link.',
   create_insight_share_link: 'Use to share a report with a client, no account needed; the monthly_report prompt ends with it.',
   revoke_insight_share_link: 'Use when a shared Insight report link must stop working now.',

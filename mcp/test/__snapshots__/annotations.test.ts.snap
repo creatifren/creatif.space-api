@@ -164,6 +164,12 @@ exports[`tool annotations > match the snapshot 1`] = `
     "openWorld": false,
     "readOnly": true,
   },
+  "list_top_posts": {
+    "destructive": false,
+    "idempotent": true,
+    "openWorld": false,
+    "readOnly": true,
+  },
   "list_waiting_approvals": {
     "destructive": false,
     "idempotent": true,
