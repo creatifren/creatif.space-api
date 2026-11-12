@@ -97,6 +97,7 @@ describe('401 flow', () => {
         'suggest_caption',
         'list_waiting_approvals', 'decide_approval',
         'get_insight_summary',
+        'get_insight_report_link',
       ].sort(),
     );
     for (const tool of tools) {

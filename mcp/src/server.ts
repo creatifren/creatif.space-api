@@ -9,6 +9,7 @@ import { TokenRateLimiter } from './rateLimit.js';
 import { registerTool, structureSdkErrors } from './tools/define.js';
 import { m1Tools } from './tools/m1.js';
 import { insightTools } from './tools/insight.js';
+import { insightReportTools } from './tools/insightReport.js';
 import { m2Tools } from './tools/m2.js';
 import { mediaTools } from './tools/media.js';
 import { engageTools } from './tools/engage.js';
@@ -49,7 +50,7 @@ export interface AppDeps {
 export function buildMcpServer(auth: CallerAuth, deps: AppDeps): McpServer {
   const server = new McpServer(SERVER_INFO, { instructions: INSTRUCTIONS });
   const v1 = new V1Client(deps.v1ApiUrl, auth.token, deps.fetchImpl);
-  const tools = [...m1Tools, ...m2Tools, ...mediaTools, ...engageTools, ...aiTools, ...approverTools, ...insightTools];
+  const tools = [...m1Tools, ...m2Tools, ...mediaTools, ...engageTools, ...aiTools, ...approverTools, ...insightTools, ...insightReportTools];
   for (const tool of tools) {
     registerTool(server, tool, { auth, v1, analytics: deps.analytics });
   }
