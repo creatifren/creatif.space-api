@@ -127,6 +127,17 @@ it('has no Insight read route outside the gated list (new ones must be added her
         ->values()
         ->all();
 
-    // Each is gated on `insight`; the export's gate is in InsightExportTest.
-    expect($insightReads)->toBe(['api.v1.me.analytics', 'api.v1.insight.export']);
+    // Each is gated on `insight`; the export's gate is in InsightExportTest,
+    // the PDF report's in tests/Feature/Insight/InsightReportApiTest.php.
+    expect($insightReads)->toEqualCanonicalizing([
+        'api.v1.me.analytics',
+        'api.v1.insight.export',
+        'api.v1.insight.clients',
+        'api.v1.insight.reports.show',
+        // tests/Feature/Insight/InsightSummaryApiTest.php: 402 on Free.
+        'api.v1.insight.summary',
+        // tests/Feature/Insight/InsightPdfExportTest.php: 402 on Free.
+        'api.v1.insight.export.pdf',
+        'api.v1.insight.export.signed',
+    ]);
 });
