@@ -36,7 +36,7 @@ class InboxCommentController extends Controller
         ]);
         InboxController::firstSync($request->user());
 
-        $rows = SocialComment::query()
+        $rows = Inbox::liveChannels(SocialComment::query())
             ->whereIn('user_id', Inbox::userIds($request->user()))
             ->with(['account', 'post', 'privateReplyConversation'])
             ->when(isset($validated['account']), fn ($q) => $q->whereHas('account', fn ($a) => $a->where('ulid', $validated['account'])))

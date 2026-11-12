@@ -52,6 +52,12 @@ class InboxStore
                 $account = self::liveTwin($account) ?? $account;
             }
 
+            // A disconnected channel takes nothing new into Engage (P1):
+            // its data was deleted and must not grow back from a webhook.
+            if ($account->status === SocialAccountStatus::Disconnected) {
+                return [null, null];
+            }
+
             return [$account, null];
         }
 

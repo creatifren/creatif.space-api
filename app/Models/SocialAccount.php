@@ -5,6 +5,7 @@ namespace App\Models;
 use App\Enums\SocialAccountStatus;
 use App\Enums\SocialPlatform;
 use App\Models\Contracts\WorkspaceOwned;
+use App\Support\InboxPurge;
 use Carbon\CarbonImmutable;
 use Database\Factories\SocialAccountFactory;
 use Illuminate\Database\Eloquent\Attributes\Scope;
@@ -84,6 +85,14 @@ class SocialAccount extends Model implements WorkspaceOwned
             $account->ulid ??= (string) str()->ulid();
             // Which relay holds it; ids mean nothing to the other one.
             $account->provider ??= (string) config('services.social.provider');
+        });
+
+        // A channel that becomes disconnected takes its Engage data with it
+        // (P1 privacy): its DMs and comments are deleted at once.
+        static::updated(function (self $account): void {
+            if ($account->wasChanged('status') && $account->status === SocialAccountStatus::Disconnected) {
+                InboxPurge::account($account);
+            }
         });
     }
 

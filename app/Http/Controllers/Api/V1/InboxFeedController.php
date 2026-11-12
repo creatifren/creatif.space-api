@@ -73,7 +73,7 @@ class InboxFeedController extends Controller
         $ids = Inbox::userIds($user);
 
         $filter = function (Builder $q, string $at, string $kind) use ($validated, $since, $cursor, $ids): void {
-            $q->whereIn('user_id', $ids)
+            Inbox::liveChannels($q)->whereIn('user_id', $ids)
                 ->with('account')
                 ->select('*')
                 ->selectRaw("{$at} as feed_at")
@@ -156,7 +156,7 @@ class InboxFeedController extends Controller
             $query = $m[1] === self::DM
                 ? SocialConversation::query()->with('account')
                 : SocialComment::query()->with(['account', 'post', 'privateReplyConversation']);
-            $row = $query->whereIn('user_id', Inbox::userIds($user))->where('ulid', $m[2])->first();
+            $row = Inbox::liveChannels($query)->whereIn('user_id', Inbox::userIds($user))->where('ulid', $m[2])->first();
         }
 
         if ($row === null) {
