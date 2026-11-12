@@ -235,10 +235,10 @@ export const listSharedWithMe = defineTool({
   name: 'list_shared_with_me',
   title: 'List reports shared with you',
   description: describeTool({
-    does: 'Lists what OTHER creatif.space users shared with this user to look at ("Reports shared with you"): Content Plans sent to the user’s verified email (and Insight reports, once those can be shared).',
+    does: 'Lists what OTHER creatif.space users shared with this user to look at ("Reports shared with you"): Content Plans sent to the user’s verified email, and Insight reports shared with that email.',
     when: 'when the user asks what has been shared with them, which plans they were invited to review, or for the link to a plan someone sent. To see only posts that still need the user’s decision, use list_waiting_approvals instead.',
     example: 'list_shared_with_me {} → { shared: [{ id, kind: "content_plan", title, period: { from, to, timezone }, from, url, posts, waiting }] }',
-    rules: 'Read-only. Expired or revoked plans are left out. To decide on posts in a plan, get the ids from list_waiting_approvals and call decide_approval.',
+    rules: 'Read-only. kind is content_plan or insight. Expired or revoked links are left out. To decide on posts in a plan, get the ids from list_waiting_approvals and call decide_approval.',
     errors: [
       ['scope_missing', 'reconnect and allow "approvals:decide"'],
       ['unauthorized', 'reconnect creatif.space'],
