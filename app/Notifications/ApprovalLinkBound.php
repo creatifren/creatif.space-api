@@ -38,11 +38,11 @@ class ApprovalLinkBound extends Notification implements ShouldQueue
             ? "Approved by {$this->email}"
             : "Changes requested by {$this->email}";
 
-        return (new MailMessage)
+        return ApprovalMailFooter::on((new MailMessage)
             ->subject($subject)
             ->greeting('Hi '.$notifiable->name.',')
             ->line($subject.($this->link->title ? " on “{$this->link->title}”" : '').'.')
             ->line("This link is now tied to {$this->email}: only someone signed in with that address can decide on it. If that is not your client, revoke the link and send a new one.")
-            ->action('Open the approval link', config('app.frontend_url').'/post/approvals?link='.$this->link->ulid);
+            ->action('Open the approval link', config('app.frontend_url').'/post/approvals?link='.$this->link->ulid));
     }
 }

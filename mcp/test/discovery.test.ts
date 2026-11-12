@@ -32,7 +32,7 @@ describe('Claude-style OAuth discovery from a 401 (RFC 9728)', () => {
     expect(meta.resource).toBe(RESOURCE);
     expect(meta.resource).toBe('https://mcp.creatif.space/mcp');
     expect(meta.authorization_servers).toEqual(['https://api.creatif.space']);
-    expect(meta.scopes_supported).toEqual(['read', 'draft', 'approve', 'publish']);
+    expect(meta.scopes_supported).toEqual(['read', 'draft', 'approve', 'publish', 'approvals:decide']);
   });
 
   it('builds the challenge from the origin, whatever path the resource has', async () => {

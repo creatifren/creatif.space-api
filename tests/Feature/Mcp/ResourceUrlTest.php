@@ -26,7 +26,7 @@ it('advertises it at the root and the RFC 9728 path form', function (string $pat
     $this->getJson($path)
         ->assertOk()
         ->assertJsonPath('resource', 'https://mcp.creatif.space/mcp')
-        ->assertJsonPath('scopes_supported', ['read', 'draft', 'approve', 'publish']);
+        ->assertJsonPath('scopes_supported', ['read', 'draft', 'approve', 'publish', 'approvals:decide']);
 })->with([
     '/.well-known/oauth-protected-resource',
     '/.well-known/oauth-protected-resource/mcp',

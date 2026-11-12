@@ -24,6 +24,13 @@ return [
         'draft' => 'Save draft posts and upload media to your library (never sends or schedules them)',
         'approve' => 'Create client approval links for your posts (Free: one client, posts up to 7 days ahead)',
         'publish' => 'Schedule and publish your drafts (at most 20 a day) and reply to comments and DMs, spending Credits',
+        // The approver side: posts other people sent you for approval.
+        'approvals:decide' => 'Approve or request changes on posts sent to you',
+    ],
+
+    // Consent-screen titles where ucfirst(id) would read badly.
+    'scope_labels' => [
+        'approvals:decide' => 'Decide approvals',
     ],
 
     'default_scopes' => ['read'],
@@ -90,5 +97,10 @@ return [
         // like writing a draft; AI_CAPTION_ENABLED and the plan gate stay in
         // AiCaptionController (404 while off, 402 on Free).
         'api.v1.ai.caption' => 'draft',
+        // Approver side (decide_approval / list_waiting_approvals): only
+        // links whose approver_email is this account's verified email.
+        'api.v1.me.approvals.waiting' => 'approvals:decide',
+        'api.v1.me.approvals.preview' => 'approvals:decide',
+        'api.v1.me.approvals.decide' => 'approvals:decide',
     ],
 ];

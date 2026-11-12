@@ -233,6 +233,23 @@ export function toToolError(e: unknown, notFound: NotFound = DEFAULT_NOT_FOUND):
   if (code === 'inbox_disabled') {
     return new ToolError('forbidden', message, 'Engage is not enabled for this account yet. Tell the user; do not retry.', { reason: 'inbox_disabled' });
   }
+  // Approver side (decide_approval): the API's `reason`.
+  if (body.reason === 'approver_mismatch') {
+    return new ToolError(
+      'forbidden',
+      message,
+      'This approval link was sent to a different email than this account’s (expected_hint shows which). Tell the user; they can decide only on links sent to their own address.',
+      pick(body, ['expected_hint']),
+    );
+  }
+  if (body.reason === 'outside_window') {
+    return new ToolError(
+      'invalid_input',
+      message,
+      'Tell the user this post can be decided from decidable_from (the sender’s plan allows deciding 7 days ahead). Do not retry before then.',
+      pick(body, ['decidable_from']),
+    );
+  }
   if (code === 'scope_missing' || code === 'insufficient_scope') {
     return new ToolError(
       'scope_missing',

@@ -27,7 +27,7 @@ describe('discovery', function () {
             ->assertJsonPath('revocation_endpoint', 'https://api.creatif.space/oauth/revoke')
             ->assertJsonPath('code_challenge_methods_supported', ['S256'])
             ->assertJsonPath('grant_types_supported', ['authorization_code', 'refresh_token'])
-            ->assertJsonPath('scopes_supported', ['read', 'draft', 'approve', 'publish']);
+            ->assertJsonPath('scopes_supported', ['read', 'draft', 'approve', 'publish', 'approvals:decide']);
     });
 
     it('publishes RFC 9728 protected resource metadata for the MCP server', function (string $path) {

@@ -5,6 +5,7 @@ use App\Models\Contracts\WorkspaceOwned;
 use App\Models\File;
 use App\Models\FileVersion;
 use App\Models\Folder;
+use App\Models\InsightReport;
 use App\Models\Plan;
 use App\Models\SocialAccount;
 use App\Models\SocialApprovalLink;
@@ -48,6 +49,10 @@ const WSI_NOT_WORKSPACE_MODELS = [
     // Engage feed (MCP): a typed id, dm_<ulid> or comment_<ulid>, looked up
     // only in the caller's workspace by InboxFeedController (404 otherwise).
     'item' => 'Engage feed id (dm_ / comment_)',
+    // Approver side (MCP): a post someone else sent the caller, reached only
+    // through a live link addressed to the caller's verified email (`link`;
+    // none or unknown answers 404).
+    'post' => 'post on an approval link addressed to the caller',
 ];
 
 beforeEach(function () {
@@ -146,6 +151,12 @@ function wsiMake(string $class, User $owner, array $made): WorkspaceOwned
         ]),
         Space::class => Space::factory()->for($owner)->create(),
         TeamMember::class => TeamMember::factory()->create(['owner_id' => $owner->id]),
+        InsightReport::class => InsightReport::query()->create([
+            'user_id' => $owner->id, 'owner_id' => $owner->id, 'client_id' => $owner->ulid,
+            'format' => 'deck', 'locale' => 'en', 'period_from' => '2026-10-01', 'period_to' => '2026-10-31',
+            'options' => ['period_kind' => 'month', 'channel_ids' => [], 'show_logo' => false, 'hide_branding' => false, 'next_month_notes' => null],
+            'status' => 'queued', 'file_name' => 'theirs.pdf',
+        ]),
         default => throw new RuntimeException("No fixture for {$class}: add one to wsiMake() so its routes are checked."),
     };
 }
@@ -158,6 +169,7 @@ function wsiValue(string $name, User $owner): string
         'apiKey' => (string) $owner->createToken('theirs')->accessToken->getKey(),
         'clientId' => (string) str()->uuid(),
         'item' => 'dm_'.wsiMake(SocialConversation::class, $owner, [])->getRouteKey(),
+        'post' => wsiMake(SocialPost::class, $owner, [])->getRouteKey(),
         default => throw new RuntimeException("No value for {$name}."),
     };
 }
