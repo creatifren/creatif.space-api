@@ -3,6 +3,7 @@
 use App\Http\Middleware\AssignRequestId;
 use App\Http\Middleware\EnsureRateLimitHeaders;
 use App\Http\Middleware\ScopeToWorkspace;
+use App\Http\Middleware\SecurityHeaders;
 use App\Http\Middleware\ThrottlePerRoute;
 use App\Http\Middleware\TrustAppServer;
 use App\Services\ErrorTracking;
@@ -70,6 +71,8 @@ return Application::configure(basePath: dirname(__DIR__))
 
         // Every request gets an id: logs, error tracking, X-Request-Id back.
         $middleware->prepend(AssignRequestId::class);
+        // HSTS and nosniff on every answer (blackbox B13).
+        $middleware->append(SecurityHeaders::class);
 
         // Workspace scope needs the bound models: always after binding.
         $middleware->appendToPriorityList(SubstituteBindings::class, ScopeToWorkspace::class);

@@ -1,4 +1,4 @@
-import express, { type Request, type Response } from 'express';
+import express, { type NextFunction, type Request, type Response } from 'express';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
 import type { AuthInfo } from '@modelcontextprotocol/sdk/server/auth/types.js';
@@ -101,6 +101,13 @@ export function createApp(deps: AppDeps) {
   const app = express();
   app.disable('x-powered-by');
   app.set('trust proxy', 'loopback');
+
+  // HSTS and nosniff on every answer, errors included (blackbox B13).
+  app.use((_req: Request, res: Response, next: NextFunction) => {
+    res.setHeader('Strict-Transport-Security', 'max-age=31536000; includeSubDomains');
+    res.setHeader('X-Content-Type-Options', 'nosniff');
+    next();
+  });
 
   // Before every route, so the preflight never reaches auth and 401/429
   // answers carry the headers too.
