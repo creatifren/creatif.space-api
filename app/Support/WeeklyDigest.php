@@ -8,8 +8,14 @@ use App\Enums\SocialPostTargetStatus;
 use App\Models\SocialApprovalLink;
 use App\Models\SocialPost;
 use App\Models\User;
+use App\Support\Insight\InsightClients;
+use App\Support\Insight\InsightCollector;
+use App\Support\Insight\InsightPeriod;
+use App\Support\Insight\InsightSummary;
 use Carbon\CarbonImmutable;
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Support\Facades\Log;
+use Throwable;
 
 /**
  * What a user's Monday email says about last week (Monday 00:00 to
@@ -36,7 +42,7 @@ final class WeeklyDigest
     }
 
     /**
-     * @return array{week: array{from: string, to: string, timezone: string}, published: int, waiting: int, failed: list<array{post_id: string, caption: string, reason: string, url: string}>, failed_total: int}
+     * @return array{week: array{from: string, to: string, timezone: string}, published: int, waiting: int, failed: list<array{post_id: string, caption: string, reason: string, url: string}>, failed_total: int, insight: array<string, mixed>|null}
      */
     public static function for(User $user, CarbonImmutable $localMonday): array
     {
@@ -76,12 +82,77 @@ final class WeeklyDigest
             'waiting' => $waiting,
             'failed' => $failed,
             'failed_total' => $failedQuery->count(),
+            'insight' => self::insight($user, $from, $to->subDay()),
         ];
     }
 
-    /** @param  array{published: int, waiting: int, failed_total: int}  $digest */
+    /** Best time to post reads this many days back (as GET /insight/best-times). */
+    public const BEST_TIME_DAYS = 90;
+
+    /**
+     * Last week in Insight's own numbers (Pro / Max only): reach and
+     * engagement with their change against the week before, the week's top
+     * post, and the best time to post from the user's own posts. Null on
+     * Free, with no channel, or when the networks could not be read — the
+     * digest goes out without it, never with a guess.
+     *
+     * @return array{reach: int|null, reach_change: float|null, engagement: int|null, engagement_change: float|null, top_post: array{network: string, caption: string, url: string|null, engagement: int}|null, best_time: array{label: string, network: string}|null}|null
+     */
+    public static function insight(User $user, CarbonImmutable $from, CarbonImmutable $to): ?array
+    {
+        try {
+            if (! PlanQuota::hasFeature($user, 'insight')) {
+                return null;
+            }
+            $owner = Workspace::owner($user);
+            $accounts = InsightClients::accounts($owner);
+            if ($accounts->isEmpty()) {
+                return null;
+            }
+            $collector = app(InsightCollector::class);
+            $week = InsightSummary::present($collector->collectCached($owner, $accounts,
+                InsightPeriod::fromDates($from, $to, InsightPeriod::RANGE)));
+
+            $best = $collector->collectCached($owner, $accounts,
+                InsightPeriod::fromDates($to->subDays(self::BEST_TIME_DAYS - 1), $to, InsightPeriod::RANGE));
+            /** @var list<array<string, mixed>> $channels */
+            $channels = $best['channels'];
+            $slots = [];
+            foreach ($channels as $c) {
+                if (($c['best_times']['status'] ?? null) === 'ok') {
+                    $slots[] = ['label' => (string) $c['best_times']['slots'][0]['label'], 'network' => (string) $c['network'], 'avg' => (float) $c['best_times']['slots'][0]['avg_engagement']];
+                }
+            }
+            usort($slots, fn (array $a, array $b) => $b['avg'] <=> $a['avg']);
+
+            $top = $week['top_posts'][0] ?? null;
+
+            return [
+                'reach' => $week['totals']['reach'],
+                'reach_change' => $week['change_pct']['reach'],
+                'engagement' => $week['totals']['engagement'],
+                'engagement_change' => $week['change_pct']['engagement'],
+                'top_post' => $top === null ? null : [
+                    'network' => (string) $top['network'],
+                    'caption' => str((string) $top['caption'])->squish()->limit(80)->toString(),
+                    'url' => $top['url'],
+                    'engagement' => (int) $top['engagement'],
+                ],
+                'best_time' => $slots === [] ? null : ['label' => $slots[0]['label'], 'network' => $slots[0]['network']],
+            ];
+        } catch (Throwable $e) {
+            Log::warning('weekly_digest.insight_failed', ['user' => $user->id, 'error' => $e->getMessage()]);
+
+            return null;
+        }
+    }
+
+    /** @param  array{published: int, waiting: int, failed_total: int, insight?: array<string, mixed>|null}  $digest */
     public static function isEmpty(array $digest): bool
     {
-        return $digest['published'] === 0 && $digest['waiting'] === 0 && $digest['failed_total'] === 0;
+        $insight = $digest['insight'] ?? null;
+
+        return $digest['published'] === 0 && $digest['waiting'] === 0 && $digest['failed_total'] === 0
+            && ($insight === null || ($insight['reach'] === null && $insight['engagement'] === null));
     }
 }
