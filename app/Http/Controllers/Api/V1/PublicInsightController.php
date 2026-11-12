@@ -9,14 +9,14 @@ use App\Support\Insight\InsightPdfBuilder;
 use App\Support\Insight\InsightSummary;
 use App\Support\PlanQuota;
 use Illuminate\Http\JsonResponse;
-use Illuminate\Support\Facades\Cache;
 
 /**
  * GET /api/v1/public/insight/{token} — the shareable Insight page's data,
  * for {frontend}/report/{token}. No sign-in: the token is the credential.
  *
  * Only the report: period, totals, per-channel numbers (network and public
- * handle, no ids), weekly reach, top posts, workflow, notes. Never the
+ * handle, no ids), weekly reach, top posts, workflow, notes (through the
+ * Insight cache, 5 minutes). Never the
  * workspace, its owner, plan, account ids, other periods or channels.
  *
  * 410 {expired: true} after 30 days (the page shows its "expired" state);
@@ -25,8 +25,6 @@ use Illuminate\Support\Facades\Cache;
  */
 class PublicInsightController extends Controller
 {
-    public const CACHE_MINUTES = 10;
-
     public function __invoke(string $token, InsightCollector $collector): JsonResponse
     {
         $link = InsightShareLink::findByToken($token);
@@ -39,15 +37,11 @@ class PublicInsightController extends Controller
             return response()->json(['expired' => true, 'message' => 'This report link has expired.'], 410);
         }
 
-        $report = Cache::remember('insight-share:'.$link->id, now()->addMinutes(self::CACHE_MINUTES), function () use ($link, $collector) {
-            $summary = InsightSummary::present($collector->collect(
-                $link->owner,
-                InsightPdfBuilder::accounts($link->owner, $link->channel_ids),
-                $link->period(),
-            ));
-
-            return self::publicView($summary);
-        });
+        $report = self::publicView(InsightSummary::present($collector->collectCached(
+            $link->owner,
+            InsightPdfBuilder::accounts($link->owner, $link->channel_ids),
+            $link->period(),
+        )));
 
         return response()->json(['data' => $report + [
             'expires_at' => $link->expires_at->utc()->toIso8601String(),

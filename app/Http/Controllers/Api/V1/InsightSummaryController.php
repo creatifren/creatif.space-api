@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Api\V1;
 
 use App\Http\Controllers\Controller;
+use App\Support\Insight\InsightCache;
 use App\Support\Insight\InsightClients;
 use App\Support\Insight\InsightCollector;
 use App\Support\Insight\InsightPeriod;
@@ -11,7 +12,6 @@ use App\Support\PlanQuota;
 use App\Support\Workspace;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Cache;
 use Illuminate\Validation\ValidationException;
 
 /**
@@ -28,7 +28,8 @@ use Illuminate\Validation\ValidationException;
  */
 class InsightSummaryController extends Controller
 {
-    public const CACHE_MINUTES = 10;
+    /** The Insight cache's lifetime (InsightCache): new numbers retire it sooner. */
+    public const CACHE_MINUTES = InsightCache::TTL_MINUTES;
 
     public function __invoke(Request $request, InsightCollector $collector): JsonResponse
     {
@@ -61,12 +62,7 @@ class InsightSummaryController extends Controller
             throw ValidationException::withMessages(['channel_ids' => 'Connect a channel first: there is nothing to report on.']);
         }
 
-        $key = 'insight-summary:'.$owner->id.':'.$period->kind.':'.$period->from->toDateString().':'.$period->to->toDateString()
-            .':'.sha1($accounts->pluck('ulid')->sort()->implode(','));
-
-        $data = Cache::remember($key, now()->addMinutes(self::CACHE_MINUTES), fn () => InsightSummary::present(
-            $collector->collect($owner, $accounts, $period),
-        ));
+        $data = InsightSummary::present($collector->collectCached($owner, $accounts, $period));
 
         return response()->json(['data' => $data]);
     }

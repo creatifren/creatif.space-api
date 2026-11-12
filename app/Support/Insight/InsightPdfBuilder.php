@@ -54,7 +54,7 @@ class InsightPdfBuilder
      */
     public function build(User $owner, Collection $accounts, InsightPeriod $period, string $format, array $options, ?float $thumbnailBudget = null): array
     {
-        $data = $this->collector->collect($owner, $accounts, $period);
+        $data = $this->collector->collectCached($owner, $accounts, $period);
 
         $started = microtime(true);
         $thumbnails = [];
