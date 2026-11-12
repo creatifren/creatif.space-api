@@ -74,6 +74,7 @@
         "publish_space",
         "reply_to_conversation",
         "request_media_upload",
+        "retry_post",
         "revoke_insight_share_link",
         "schedule_post",
         "send_approval_reminder",

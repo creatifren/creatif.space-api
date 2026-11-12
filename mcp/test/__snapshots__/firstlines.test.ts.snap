@@ -34,6 +34,7 @@ exports[`tool first lines > match the snapshot 1`] = `
   "publish_space": "Use when the user wants a draft Space open to anyone with its link; previews first.",
   "reply_to_conversation": "Use to answer a comment or DM on the platform; previews first, confirm: true sends.",
   "request_media_upload": "Use to add a NEW image or video you hold the bytes of: step 1, gives the upload URL.",
+  "retry_post": "Use when a post failed on some channels and the user wants to try again; previews reasons and Credits.",
   "revoke_insight_share_link": "Use when a shared Insight report link must stop working now.",
   "schedule_post": "Use when the user wants a draft sent later; previews channels and Credits, confirm: true schedules.",
   "send_approval_reminder": "Use when the client has not answered: emails the approver once more (send_for_approval follow-up).",

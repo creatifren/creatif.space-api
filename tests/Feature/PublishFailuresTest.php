@@ -104,7 +104,7 @@ describe('classifying a refusal', function () {
         'expired token' => ['Access token has expired', 'auth', 'auth'],
         'too long' => ['Caption is too long', 'content', 'content_too_long'],
         'duplicate' => ['Duplicate content', 'duplicate', 'duplicate'],
-        'empty' => [null, 'unknown', 'unknown'],
+        'empty' => [null, 'unknown', 'network_rejected'],
         'odd' => ['Something odd', 'other', 'other'],
     ]);
 

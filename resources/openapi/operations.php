@@ -87,6 +87,8 @@ return [
     'api.v1.social-posts.comments.store' => 'Comment on a post',
     'api.v1.social-comments.resolve' => 'Resolve a comment',
     'api.v1.social-comments.apply' => 'Apply a comment\'s suggested caption',
+    'api.v1.social-posts.retry-preview' => 'Preview retrying a failed publish: why each destination failed, and the price',
+    'api.v1.social-posts.retry' => 'Retry the failed destinations of a post (409 not_failed when none failed)',
     'api.v1.social-posts.approval-audit' => 'Every approval decision on a post (approver email masked)',
     'api.v1.social-posts.approval-link' => 'The approval link a post is on',
     'api.v1.social-approval-links.index' => 'List approval links and Content Plans',
