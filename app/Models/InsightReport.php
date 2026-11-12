@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Models\Contracts\WorkspaceOwned;
 use Carbon\CarbonImmutable;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -29,7 +30,7 @@ use Illuminate\Support\Facades\Storage;
  * @property CarbonImmutable|null $expires_at
  * @property CarbonImmutable|null $created_at
  */
-class InsightReport extends Model
+class InsightReport extends Model implements WorkspaceOwned
 {
     public const STATUS_QUEUED = 'queued';
 
@@ -89,6 +90,12 @@ class InsightReport extends Model
         static::creating(function (self $report): void {
             $report->ulid ??= (string) str()->ulid();
         });
+    }
+
+    /** The workspace a report belongs to is its owner's (ScopeToWorkspace). */
+    public function workspaceUserId(): ?int
+    {
+        return $this->owner_id;
     }
 
     public function getRouteKeyName(): string
