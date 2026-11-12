@@ -401,14 +401,6 @@ final class InsightCollector
     }
 
     /**
-     * Approvals and punctuality, from our own records, for posts that went
-     * (or were meant to go) to the report's channels.
-     *
-     * @param  Collection<int, SocialAccount>  $accounts
-     * @param  array<int, list<array<string, mixed>>|null>  $feeds
-     * @return array{approved: int, avg_approval_seconds: int|null, on_time: int, on_time_known: int, on_time_rate: float|null}
-     */
-    /**
      * Our post id for a feed item, as the Insight CSV names it: the
      * external id the relay echoes back when it is one of the workspace's
      * posts, else the workspace post with that relay post id. Most feeds
@@ -417,7 +409,7 @@ final class InsightCollector
      * elsewhere. One query per channel, for the items in the period only.
      *
      * @param  list<array{provider_post_id: string, external_post_id: string|null}>  $items
-     * @return \Closure(array): ?string
+     * @return \Closure(array<string, mixed>): ?string
      */
     private function ourPostIds(User $owner, array $items): \Closure
     {
@@ -439,6 +431,14 @@ final class InsightCollector
             : $byProvider->get((string) ($p['provider_post_id'] ?? ''));
     }
 
+    /**
+     * Approvals and punctuality, from our own records, for posts that went
+     * (or were meant to go) to the report's channels.
+     *
+     * @param  Collection<int, SocialAccount>  $accounts
+     * @param  array<int, list<array<string, mixed>>|null>  $feeds
+     * @return array{approved: int, avg_approval_seconds: int|null, on_time: int, on_time_known: int, on_time_rate: float|null}
+     */
     private function workflow(User $owner, Collection $accounts, InsightPeriod $period, array $feeds): array
     {
         $accountIds = $accounts->pluck('id')->all();
