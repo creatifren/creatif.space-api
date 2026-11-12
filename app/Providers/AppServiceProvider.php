@@ -5,6 +5,7 @@ namespace App\Providers;
 use App\Contracts\AiCaptionProvider;
 use App\Contracts\SocialProvider;
 use App\Mcp\McpTokenResolver;
+use App\OAuth\OAuthRateLimits;
 use App\Models\User;
 use App\Services\Ai\FakeAiCaptionProvider;
 use App\Services\Ai\OpenAiCaptionProvider;
@@ -56,6 +57,7 @@ class AppServiceProvider extends ServiceProvider
     public function boot(): void
     {
         Date::use(CarbonImmutable::class);
+        OAuthRateLimits::register();
 
         Model::shouldBeStrict(! $this->app->isProduction());
 

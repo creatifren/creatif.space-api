@@ -16,6 +16,7 @@ use Illuminate\Routing\Middleware\SubstituteBindings;
 use Illuminate\Support\Facades\Route;
 use Symfony\Component\HttpKernel\Exception\HttpException;
 use Symfony\Component\HttpKernel\Exception\HttpExceptionInterface;
+use Symfony\Component\HttpKernel\Exception\MethodNotAllowedHttpException;
 
 return Application::configure(basePath: dirname(__DIR__))
     ->withRouting(
@@ -96,6 +97,32 @@ return Application::configure(basePath: dirname(__DIR__))
         $exceptions->shouldRenderJsonWhen(
             fn (Request $request) => $request->is('api/*') || $request->expectsJson(),
         );
+
+        // OAuth endpoints answer like OAuth (RFC 6749 §5.2 shape) even when the
+        // framework, not Passport, refuses: a throttle is 429
+        // {error: temporarily_unavailable, error_description} with
+        // Retry-After, a wrong method 405 {error: invalid_request}.
+        $exceptions->render(function (Throwable $e, Request $request) {
+            if (! ($request->is('oauth/*') || $request->is('.well-known/oauth-*'))) {
+                return null;
+            }
+            if ($e instanceof ThrottleRequestsException) {
+                $seconds = max(1, (int) ($e->getHeaders()['Retry-After'] ?? 60));
+
+                return response()->json([
+                    'error' => 'temporarily_unavailable',
+                    'error_description' => "Too many requests. Try again in {$seconds} seconds.",
+                ], 429, $e->getHeaders() + ['Cache-Control' => 'no-store']);
+            }
+            if ($e instanceof MethodNotAllowedHttpException) {
+                return response()->json([
+                    'error' => 'invalid_request',
+                    'error_description' => 'This endpoint does not accept '.$request->method().'.',
+                ], 405, $e->getHeaders() + ['Cache-Control' => 'no-store']);
+            }
+
+            return null;
+        });
 
         // A throttled request says how long to wait, in words a person reads,
         // not Laravel's raw "Too Many Attempts.". JSON callers only; the

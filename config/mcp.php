@@ -42,6 +42,15 @@ return [
     // Requests per minute, per token (OAuth access token or API key).
     'rate_limit_per_minute' => (int) env('MCP_RATE_LIMIT_PER_MINUTE', 120),
 
+    // OAuth endpoint limits, per minute (App\OAuth\OAuthRateLimits): token
+    // and revoke per client_id + IP, register and authorize per IP.
+    'oauth_rate_limits' => [
+        'token' => 120,
+        'revoke' => 60,
+        'register' => 30,
+        'authorize' => 60,
+    ],
+
     // Public pages named on the consent screen and in OAuth discovery
     // (RFC 8414 op_policy_uri / op_tos_uri, RFC 9728 resource_*_uri).
     'website_url' => 'https://creatif.space',
