@@ -98,5 +98,7 @@ return [
         'api.v1.me.approvals.waiting' => 'approvals:decide',
         'api.v1.me.approvals.preview' => 'approvals:decide',
         'api.v1.me.approvals.decide' => 'approvals:decide',
+        // list_shared_with_me: Content Plans sent to this account's email.
+        'api.v1.me.reports.shared' => 'approvals:decide',
     ],
 ];
