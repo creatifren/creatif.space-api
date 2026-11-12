@@ -22,6 +22,8 @@ Added (24):
 - **Engage:** `list_conversations`, `reply_to_conversation`
 - **Feedback:** `send_feedback`
 
+Resources (new): `creatif://channels`, `creatif://schedule/next-7-days` (read-only, scope `read`).
+
 Prompts (new): `plan_week`, `send_for_approval`, `monthly_report` (`prompts/list`, `prompts/get`).
 
 Changed:
