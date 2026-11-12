@@ -251,6 +251,19 @@ And on the owner's side, later:
 > and approved "Launch day…" at 03:10 UTC, both from an AI chat. Want the
 > CSV?
 
+## Prompts
+
+`prompts/list` / `prompts/get` offer three ready-made workflows. Each is one
+user message that walks the model through existing tools only (every send
+still goes through the tool's own preview + `confirm`); user-typed arguments
+are quoted and marked as data. Defined in `src/prompts.ts`.
+
+| Prompt | Arguments | Tools it uses |
+| --- | --- | --- |
+| `plan_week` — draft a week of posts for a channel (drafts only) | channel_id*, week_start, theme, posts (1–7) | `list_channels`, `list_posts`, `suggest_caption`, `draft_post` |
+| `send_for_approval` — bundle drafts into one approval link | approver_email*, post_ids (comma-separated), client_name | `list_posts`, `get_post`, `create_approval_link`, `check_approval_status` |
+| `monthly_report` — Insight summary + share link | month (YYYY-MM), share (yes\|no) | `get_insight_summary`, `create_insight_share_link` |
+
 ## Free Tools (`/free`)
 
 A second, stateless MCP server on the same process: `check_caption`,
