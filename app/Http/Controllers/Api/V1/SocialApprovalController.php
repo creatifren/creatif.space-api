@@ -10,6 +10,7 @@ use App\Exceptions\PublishPreflightFailed;
 use App\Exceptions\ScheduleBeyondHorizon;
 use App\Http\Controllers\Controller;
 use App\Http\Resources\SocialPostResource;
+use App\Models\InsightShareLink;
 use App\Models\SocialAccount;
 use App\Models\SocialApprovalLink;
 use App\Models\SocialPost;
@@ -816,16 +817,17 @@ class SocialApprovalController extends Controller
     /**
      * GET /me/reports/shared — "Reports shared with you": what other people
      * shared with this user to look at, newest first. Each row is
-     * {report_id, kind, title, period: {from, to}, owner: {name}, url, …}.
+     * {report_id, kind, title, period: {from, to, …}, owner: {name}, url, …}.
      *
-     * kind "content_plan": a live Content Plan (a scoped approval link)
-     * whose approver_email is this user's verified email — the same rule
-     * as "Waiting your approval". kind "insight" is reserved: Insight share
-     * links (insight_share_links) are token-only and addressed to nobody, so
-     * there is no one to list them for until they gain a recipient.
+     *  - kind "content_plan": a live Content Plan (a scoped approval link)
+     *    whose approver_email is this user's verified email — the same rule
+     *    as "Waiting your approval".
+     *  - kind "insight": a live Insight share link made with this user's
+     *    verified email as recipient_email. Links without a recipient are
+     *    token-only and addressed to nobody, so they are never listed.
      *
-     * Reached across workspaces only through the approver email, never by
-     * id, so ScopeToWorkspace has nothing to check here.
+     * Reached across workspaces only through the email, never by id, so
+     * ScopeToWorkspace has nothing to check here.
      */
     public function sharedReports(Request $request): JsonResponse
     {
@@ -833,36 +835,62 @@ class SocialApprovalController extends Controller
         if ($user->email_verified_at === null) {
             return response()->json(['data' => []]);
         }
+        $email = mb_strtolower(trim($user->email));
 
         $plans = SocialApprovalLink::query()
             ->live()
             ->whereNotNull('scope_from')
-            ->where('approver_email', mb_strtolower(trim($user->email)))
+            ->where('approver_email', $email)
             ->with('user:id,name')
             ->latest('id')
             ->limit(100)
-            ->get();
+            ->get()
+            ->map(function (SocialApprovalLink $link) {
+                $counts = PlanScope::counts($link);
 
-        $rows = $plans->map(function (SocialApprovalLink $link) {
-            $counts = PlanScope::counts($link);
+                return [
+                    'report_id' => $link->ulid,
+                    'kind' => 'content_plan',
+                    'title' => $link->title,
+                    'period' => [
+                        'from' => $link->scope_from?->format('Y-m-d'),
+                        'to' => $link->scope_to?->format('Y-m-d'),
+                        'timezone' => PlanScope::timezone($link),
+                    ],
+                    'owner' => ['name' => $link->user->name],
+                    'url' => $link->url(),
+                    'posts' => $counts['total'],
+                    'waiting' => $counts[PlanScope::STATE_WAITING],
+                    'expires_at' => $link->expires_at?->toIso8601String(),
+                    'created_at' => $link->created_at?->toIso8601String(),
+                ];
+            });
 
-            return [
+        $insights = InsightShareLink::query()
+            ->live()
+            ->where('recipient_email', $email)
+            ->with('owner:id,name')
+            ->latest('id')
+            ->limit(100)
+            ->get()
+            ->map(fn (InsightShareLink $link) => [
                 'report_id' => $link->ulid,
-                'kind' => 'content_plan',
-                'title' => $link->title,
+                'kind' => 'insight',
+                'title' => 'Insight report — '.$link->period()->label('en'),
                 'period' => [
-                    'from' => $link->scope_from?->format('Y-m-d'),
-                    'to' => $link->scope_to?->format('Y-m-d'),
-                    'timezone' => PlanScope::timezone($link),
+                    'from' => $link->period_from->toDateString(),
+                    'to' => $link->period_to->toDateString(),
                 ],
-                'owner' => ['name' => $link->user->name],
-                'url' => $link->url(),
-                'posts' => $counts['total'],
-                'waiting' => $counts[PlanScope::STATE_WAITING],
-                'expires_at' => $link->expires_at?->toIso8601String(),
+                'owner' => ['name' => $link->owner?->name],
+                'url' => $link->recipientUrl(),
+                'expires_at' => $link->expires_at->toIso8601String(),
                 'created_at' => $link->created_at?->toIso8601String(),
-            ];
-        })->values()->all();
+            ]);
+
+        $rows = $plans->concat($insights)
+            ->sortByDesc('created_at')
+            ->values()
+            ->all();
 
         return response()->json(['data' => $rows]);
     }

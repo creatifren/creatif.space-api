@@ -24,6 +24,9 @@ use Illuminate\Support\Str;
  * @property CarbonImmutable $period_to
  * @property string $period_kind
  * @property list<string> $channel_ids
+ * @property string|null $recipient_email who it was shared with (lowercased), or null for a plain public link
+ * @property string|null $recipient_token the token, encrypted (recipient links only), to list it back to them
+ * @property CarbonImmutable|null $recipient_notified_at
  * @property CarbonImmutable $expires_at
  * @property CarbonImmutable|null $revoked_at
  * @property CarbonImmutable|null $created_at
@@ -34,8 +37,11 @@ class InsightShareLink extends Model implements WorkspaceOwned
 
     protected $fillable = [
         'owner_id', 'user_id', 'token_hash', 'period_from', 'period_to', 'period_kind',
-        'channel_ids', 'expires_at', 'revoked_at',
+        'channel_ids', 'recipient_email', 'recipient_token', 'recipient_notified_at', 'expires_at', 'revoked_at',
     ];
+
+    /** @var list<string> */
+    protected $hidden = ['token_hash', 'recipient_token'];
 
     /** Set on a link made in this request: the only time the token is known. */
     public ?string $plainToken = null;
@@ -51,6 +57,8 @@ class InsightShareLink extends Model implements WorkspaceOwned
             'channel_ids' => 'array',
             'expires_at' => 'immutable_datetime',
             'revoked_at' => 'immutable_datetime',
+            'recipient_token' => 'encrypted',
+            'recipient_notified_at' => 'immutable_datetime',
         ];
     }
 
@@ -71,9 +79,10 @@ class InsightShareLink extends Model implements WorkspaceOwned
      *
      * @param  list<string>  $channelIds
      */
-    public static function issue(User $owner, User $by, InsightPeriod $period, array $channelIds): self
+    public static function issue(User $owner, User $by, InsightPeriod $period, array $channelIds, ?string $recipientEmail = null): self
     {
         $token = Str::random(43);
+        $recipient = $recipientEmail === null || trim($recipientEmail) === '' ? null : mb_strtolower(trim($recipientEmail));
 
         $link = self::query()->create([
             'owner_id' => $owner->id,
@@ -83,6 +92,9 @@ class InsightShareLink extends Model implements WorkspaceOwned
             'period_to' => $period->to->toDateString(),
             'period_kind' => $period->kind,
             'channel_ids' => $channelIds,
+            'recipient_email' => $recipient,
+            // Only a recipient link can be listed back, so only it keeps the token (encrypted).
+            'recipient_token' => $recipient === null ? null : $token,
             'expires_at' => now()->addDays(self::TTL_DAYS),
         ]);
         $link->plainToken = $token;
@@ -119,6 +131,14 @@ class InsightShareLink extends Model implements WorkspaceOwned
     public function period(): InsightPeriod
     {
         return InsightPeriod::fromDates($this->period_from, $this->period_to, $this->period_kind);
+    }
+
+    /** The page URL for the recipient, from the encrypted token; null for a plain link. */
+    public function recipientUrl(): ?string
+    {
+        $token = $this->recipient_email === null ? null : $this->recipient_token;
+
+        return $token === null ? null : self::url($token);
     }
 
     /** The public page in the app. */

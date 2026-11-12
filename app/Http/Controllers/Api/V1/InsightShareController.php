@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Api\V1;
 
 use App\Http\Controllers\Controller;
 use App\Models\InsightShareLink;
+use App\Notifications\InsightReportShared;
 use App\Support\Insight\InsightClients;
 use App\Support\Insight\InsightPeriod;
 use App\Support\PlanQuota;
@@ -11,13 +12,14 @@ use App\Support\Workspace;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response;
+use Illuminate\Support\Facades\Notification;
 use Illuminate\Validation\ValidationException;
 
 /**
  * Shareable Insight links (Pro / Max): a read-only page of the workspace's
  * numbers for one period, for a client who has no account.
  *
- *   POST   /api/v1/insight/share {from, to, channels?} → 201 {id, url, token, expires_at, …}
+ *   POST   /api/v1/insight/share {from, to, channels?, recipient_email?} → 201 {id, url, token, expires_at, …}
  *   GET    /api/v1/insight/share                      → the workspace's links (no tokens)
  *   DELETE /api/v1/insight/share/{id}                 → 204, revoked
  *
@@ -36,6 +38,9 @@ class InsightShareController extends Controller
             'from' => ['required', 'date_format:Y-m-d'],
             'to' => ['required', 'date_format:Y-m-d'],
             'channels' => ['sometimes', 'nullable', 'string', 'max:2000'],
+            // Optional: who it is for. They get one email and see it under
+            // "Reports shared with you"; without it, a plain public link.
+            'recipient_email' => ['sometimes', 'nullable', 'string', 'email:rfc', 'max:254'],
         ]);
 
         $owner = Workspace::owner($user);
@@ -51,7 +56,13 @@ class InsightShareController extends Controller
             throw ValidationException::withMessages(['channels' => 'Connect a channel first: there is nothing to share.']);
         }
 
-        $link = InsightShareLink::issue($owner, $user, $period, $channels);
+        $link = InsightShareLink::issue($owner, $user, $period, $channels, $v['recipient_email'] ?? null);
+        $url = InsightShareLink::url((string) $link->plainToken);
+
+        if ($link->recipient_email !== null) {
+            Notification::route('mail', $link->recipient_email)->notify(new InsightReportShared($link, $url, $owner->name));
+            $link->forceFill(['recipient_notified_at' => now()])->save();
+        }
 
         return response()->json(['data' => $this->body($link) + [
             'token' => $link->plainToken,
@@ -94,6 +105,7 @@ class InsightShareController extends Controller
                 'label' => $link->period()->label('en'),
             ],
             'channel_ids' => $link->channel_ids,
+            'recipient_email' => $link->recipient_email,
             'status' => $link->revoked() ? 'revoked' : ($link->expired() ? 'expired' : 'active'),
             'expires_at' => $link->expires_at->utc()->toIso8601String(),
             'revoked_at' => $link->revoked_at?->utc()->toIso8601String(),

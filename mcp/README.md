@@ -63,7 +63,7 @@ Rate limit: 60 requests / minute / token (429 + `Retry-After`).
 | `publish_post` (post_id, confirm) | publish | same, sends now |
 | `get_insight_summary` (period: {month} \| {from, to} ≤ 92 days, channel_ids) — Pro / Max; Free → `plan_required` | read | `GET /insight/summary?month \| from&to&channel_ids` |
 | `get_insight_report_link` (from, to ≤ 92 days, format onepage\|deck\|details, channel_ids, locale) — a 15-minute signed download link to the Insight PDF (one page, 16:9 deck or detailed); Pro / Max | read | `POST /insight/export-link` |
-| `create_insight_share_link` (from, to ≤ 92 days, channel_ids) — a read-only web link to an Insight report, open without an account for 30 days | approve | `POST /insight/share` |
+| `create_insight_share_link` (from, to ≤ 92 days, channel_ids, recipient_email) — a read-only web link to an Insight report, open without an account for 30 days; with `recipient_email` that person is emailed once and sees it in `list_shared_with_me` | approve | `POST /insight/share` |
 | `revoke_insight_share_link` (share_id) — turns a shared Insight link off at once | approve | `DELETE /insight/share/{id}` |
 | `request_media_upload` (filename, mime, size_bytes, folder_id) | draft | `POST /files/presign` → file_id + presigned PUT URL (15 min) |
 | `confirm_media_upload` (file_id) | draft | `POST /files/{id}/complete` (409 → `GET /files/{id}`: already ready is returned) |
@@ -83,7 +83,7 @@ Rate limit: 60 requests / minute / token (429 + `Retry-After`).
 | `get_plan_calendar_link` (link_id) — ICS feed URL of a Content Plan (scheduled posts, first 60 characters of the caption); read-only, stable URL | read | `GET /social-approval-links/{id}/calendar` |
 | `get_approval_audit` (link_id) — every decision on one of the user's links: who, post, when, decision, comment; rows and CSV | read | `GET /social-approval-links/{id}/audit.csv` |
 | `send_feedback` (kind bug\|idea\|other, message, page) — to the creatif.space team; nothing public, no Credits; 10 an hour per user | draft | `POST /feedback` |
-| `list_shared_with_me` — "Reports shared with you": Content Plans other users sent to this user's email | approvals:decide | `GET /me/reports/shared` |
+| `list_shared_with_me` — "Reports shared with you": Content Plans and Insight reports other users shared with this user's email | approvals:decide | `GET /me/reports/shared` |
 | `get_connect_link` (network) — the app's connect page (`https://creatif.space/social/connect?network=…`) with the steps; no token in the response; a new network on a full plan → `plan_required` | read | `GET /social-accounts` + `GET /credits` (never `POST /social-accounts/auth-url`) |
 
 **Media upload.** `request_media_upload` → the client PUTs the exact bytes to
@@ -188,7 +188,7 @@ without opening the approval page.
 
 | Tool | What it does |
 |---|---|
-| `list_shared_with_me` | "Reports shared with you": Content Plans sent to the user's verified email — title, dates, who sent it, link, how many posts wait. |
+| `list_shared_with_me` | "Reports shared with you": Content Plans and Insight reports shared with the user's verified email — title, dates, who sent it, link (and, for plans, how many posts wait). |
 | `list_waiting_approvals` | Every post still waiting on the user's decision, with the link id and post id to decide with. |
 | `decide_approval` | Approve, or request changes with a reason. Always shows a preview first; decides only with `confirm: true` after the user agrees. |
 

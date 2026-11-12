@@ -17,7 +17,7 @@ Added (25):
 - **Approvals:** `send_approval_reminder`, `list_approval_links`, `get_approval_audit`, `get_plan_calendar_link` (Content Plan ICS feed, read-only); approver side `list_waiting_approvals`, `decide_approval`, `list_shared_with_me` (scope `approvals:decide`)
 - **Media:** `request_media_upload`, `confirm_media_upload`, `get_storage_usage`, `keep_file`, `unkeep_file`
 - **Channels:** `get_connect_link` (app link, no token); `list_channels` marks channels to reconnect
-- **Insight:** `get_insight_summary`, `get_insight_report_link`, `create_insight_share_link`, `revoke_insight_share_link` (scope `approve`)
+- **Insight:** `get_insight_summary`, `get_insight_report_link`, `create_insight_share_link` (optional `recipient_email`: emailed, and listed in their `list_shared_with_me`), `revoke_insight_share_link` (scope `approve`)
 - **Spaces:** `list_spaces`, `create_space_from_files`, `publish_space`
 - **Engage:** `list_conversations`, `reply_to_conversation`
 - **Feedback:** `send_feedback`

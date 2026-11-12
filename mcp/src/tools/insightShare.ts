@@ -8,6 +8,7 @@ interface V1ShareLink {
   url?: string;
   period: { from: string; to: string; label: string };
   channel_ids: string[];
+  recipient_email?: string | null;
   status: string;
   expires_at: string;
 }
@@ -18,7 +19,8 @@ export const createInsightShareLink = defineTool({
   description: describeTool({
     does: 'Creates a read-only web link to an Insight report (the numbers for a date range of up to 92 days) that anyone with the link can open without an account, for 30 days.',
     when: 'when the user wants to send a client their report as a page rather than a file (for a PDF use get_insight_report_link; for the numbers in chat use get_insight_summary). The page shows only the report — no workspace, plan or ids. Keep the returned id: revoke_insight_share_link takes it.',
-    example: 'create_insight_share_link { "from": "2026-10-01", "to": "2026-10-31" } → { id: "01JD…", url: "https://app.creatif.space/report/…", expires_at, period: { label: "1 Oct – 31 Oct 2026" } }',
+    example: 'create_insight_share_link { "from": "2026-10-01", "to": "2026-10-31", "recipient_email": "client@example.com" } → { id: "01JD…", url: "https://app.creatif.space/report/…", expires_at, period: { label: "1 Oct – 31 Oct 2026" }, recipient_email }',
+    rules: 'recipient_email is optional. With it, that person gets one email with the link, and the report appears under "Reports shared with you" when they sign in with that email (list_shared_with_me). Without it, the link is shared only by whoever you give it to.',
     errors: [
       ['plan_required', 'Insight is on Pro and Max: tell the user the message as it is (it has the upgrade link); do not retry'],
       ['invalid_input', 'fix the dates (at most 92 days, not in the future) or the channel ids and call again'],
@@ -32,13 +34,15 @@ export const createInsightShareLink = defineTool({
     from: day('First day'),
     to: day('Last day'),
     channel_ids: z.array(z.string().trim().min(10).max(26)).min(1).max(50).optional().describe('Only these channels (ids from list_channels); default all connected channels'),
+    recipient_email: z.string().trim().email().max(254).optional().describe('Optional: who it is for. They get one email with the link and see it under "Reports shared with you".'),
   },
   annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: true },
-  run: async ({ from, to, channel_ids }, { v1 }) => {
+  run: async ({ from, to, channel_ids, recipient_email }, { v1 }) => {
     const { data } = await v1.post<{ data: V1ShareLink }>('/insight/share', {
       from,
       to,
       ...(channel_ids ? { channels: channel_ids.join(',') } : {}),
+      ...(recipient_email ? { recipient_email } : {}),
     });
     return {
       id: data.id,
@@ -46,7 +50,10 @@ export const createInsightShareLink = defineTool({
       expires_at: data.expires_at,
       period: data.period,
       channel_ids: data.channel_ids,
-      note: 'Anyone with this link can see the report until expires_at. Give it to the user to share; revoke it with revoke_insight_share_link and this id.',
+      ...(data.recipient_email ? { recipient_email: data.recipient_email } : {}),
+      note: data.recipient_email
+        ? `Emailed to ${data.recipient_email}; it also shows under their "Reports shared with you". Anyone with the link can see the report until expires_at. Revoke it with revoke_insight_share_link and this id.`
+        : 'Anyone with this link can see the report until expires_at. Give it to the user to share; revoke it with revoke_insight_share_link and this id.',
     };
   },
 });

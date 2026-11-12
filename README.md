@@ -35,7 +35,7 @@ in [mcp/README.md](mcp/README.md).
 | Approvals | `get_plan_calendar_link` | Calendar feed (ICS) URL of a Content Plan | All |
 | Approvals | `list_waiting_approvals` | Posts others sent this user to approve | All (scope `approvals:decide`) |
 | Approvals | `decide_approval` | Approve or request changes (preview first) | All (scope `approvals:decide`) |
-| Approvals | `list_shared_with_me` | Content Plans others shared with this user | All (scope `approvals:decide`) |
+| Approvals | `list_shared_with_me` | Content Plans and Insight reports others shared with this user | All (scope `approvals:decide`) |
 | Media | `request_media_upload` | Step 1: get an upload URL for a new file | All |
 | Media | `confirm_media_upload` | Step 2: check the upload and get the file id | All |
 | Media | `list_files` | Search the file library | All |
@@ -46,7 +46,7 @@ in [mcp/README.md](mcp/README.md).
 | Channels | `get_connect_link` | App link to connect or reconnect a network (no token) | All |
 | Insight | `get_insight_summary` | Insight numbers for a month or up to 92 days | Pro / Max |
 | Insight | `get_insight_report_link` | 15-minute download link to the Insight PDF | Pro / Max |
-| Insight | `create_insight_share_link` | Read-only report link for 30 days | Pro / Max |
+| Insight | `create_insight_share_link` | Read-only report link for 30 days; optional recipient (emailed) | Pro / Max |
 | Insight | `revoke_insight_share_link` | Turn a shared report link off | Pro / Max |
 | Spaces | `list_spaces` | The user's Spaces and their status | Pro / Max |
 | Spaces | `create_space_from_files` | New draft Space from library files | Pro / Max |

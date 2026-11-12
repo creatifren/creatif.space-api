@@ -170,6 +170,24 @@ describe('list_shared_with_me', () => {
     expect(out.note).toMatch(/list_waiting_approvals/);
   });
 
+  it('lists Insight reports shared with the user, without plan-only fields', async () => {
+    const client = await start({
+      'GET /me/reports/shared': () => ({
+        body: { data: [{
+          report_id: '01JINSIGHTINSIGHTINSIGHTIN', kind: 'insight', title: 'Insight report — 1 Oct – 31 Oct 2026',
+          period: { from: '2026-10-01', to: '2026-10-31' }, owner: { name: 'Kopi Senja' },
+          url: 'https://app.creatif.test/report/tok', expires_at: '2026-12-01T00:00:00Z',
+        }] },
+      }),
+    });
+    const out = payload(await client.callTool({ name: 'list_shared_with_me', arguments: {} }));
+    expect(out.shared[0]).toEqual({
+      id: '01JINSIGHTINSIGHTINSIGHTIN', kind: 'insight', title: 'Insight report — 1 Oct – 31 Oct 2026',
+      period: { from: '2026-10-01', to: '2026-10-31' }, from: 'Kopi Senja',
+      url: 'https://app.creatif.test/report/tok', expires_at: '2026-12-01T00:00:00Z',
+    });
+  });
+
   it('says so when nothing is shared', async () => {
     const client = await start({ 'GET /me/reports/shared': () => ({ body: { data: [] } }) });
     expect(payload(await client.callTool({ name: 'list_shared_with_me', arguments: {} })).note).toMatch(/Nothing has been shared/);
