@@ -68,12 +68,23 @@ function reconnectHint(a: Record<string, unknown>) {
   return { reason, next_step: `Ask the user to reconnect it: get_connect_link { "network": "${String(a.platform)}" } gives the link.` };
 }
 
+const DAY = /^\d{4}-\d{2}-\d{2}$/;
+const dateOrTime = z.union([z.iso.date(), z.iso.datetime({ offset: true })]);
+
+/** list_posts statuses that are an approval state of a queued post, not an API status. */
+const APPROVAL_FILTER: Record<string, string[]> = {
+  waiting: ['client', 'awaiting'],
+  changes_requested: ['revision'],
+};
+/** At most this many API pages of 100 are read to fill one page of an approval filter. */
+const MAX_APPROVAL_ROUNDS = 5;
+
 export const listPosts = defineTool({
   name: 'list_posts',
   title: 'List posts',
   description: describeTool({
     does: "Lists the user’s creatif.space posts, newest first — drafts, scheduled, published, failed and cancelled — filtered by status, date window and channel.",
-    when: "to find post ids or see what is planned or out (e.g. status \"draft\" before schedule_post, publish_post or create_approval_link). Comments are omitted here; use get_post for one post’s full detail and review thread. from/to are ISO 8601, matched on the scheduled time (creation time for unscheduled posts).",
+    when: "to find post ids or see what is planned or out (e.g. status \"draft\" before schedule_post, publish_post or create_approval_link). status \"waiting\" is posts held for approval (the client or the user has not said yes yet), \"changes_requested\" the ones a client sent back; both are also in \"scheduled\". Comments are omitted here; use get_post for one post’s full detail and review thread. from/to are a date (YYYY-MM-DD, UTC; to covers the whole day) or an ISO 8601 time, matched on the scheduled time (creation time for unscheduled posts).",
     example: "list_posts { \"status\": \"draft\", \"limit\": 10 } → { count, posts: [{ id, status, caption, scheduled_at, approval, channels }] }",
     errors: [
       ["not_found", "the channel_id is unknown: take one from list_channels or drop the filter"],
@@ -84,9 +95,12 @@ export const listPosts = defineTool({
   }),
   scope: 'read',
   input: {
-    status: z.enum(['draft', 'scheduled', 'published', 'failed', 'cancelled']).optional().describe('Only posts in this state'),
-    from: z.iso.datetime({ offset: true }).optional().describe('Window start, ISO 8601 (e.g. 2026-11-01T00:00:00Z)'),
-    to: z.iso.datetime({ offset: true }).optional().describe('Window end, ISO 8601'),
+    status: z
+      .enum(['draft', 'waiting', 'changes_requested', 'scheduled', 'published', 'failed', 'cancelled'])
+      .optional()
+      .describe('Only posts in this state: waiting = held for approval, changes_requested = sent back by the client'),
+    from: dateOrTime.optional().describe('Window start: a date (YYYY-MM-DD, UTC) or ISO 8601 time, e.g. 2026-11-01'),
+    to: dateOrTime.optional().describe('Window end: a date (the whole day, UTC) or ISO 8601 time, e.g. 2026-11-30'),
     channel_id: ulid('Channel').optional().describe('Only posts going to this channel (id from list_channels)'),
     ...pageInput(100, 25, 'posts'),
   },
@@ -95,12 +109,45 @@ export const listPosts = defineTool({
   run: async (args, { v1 }) => {
     const filters = { status: args.status, from: args.from, to: args.to, channel_id: args.channel_id };
     const { o } = decodeCursor('list_posts', filters, args.cursor);
+    const from = args.from && DAY.test(args.from) ? `${args.from}T00:00:00Z` : args.from;
+    const to = args.to && DAY.test(args.to) ? `${args.to}T23:59:59Z` : args.to;
+    if (from && to && Date.parse(from) > Date.parse(to)) {
+      throw new ToolError('invalid_input', 'from is after to.', 'Swap from and to (from is the earlier one) and call again.', { field: 'from', from: args.from, to: args.to });
+    }
+
+    // Approval states are not an API status: held posts sit in the queue as "scheduled", so
+    // read that and keep the ones in the state asked for. The cursor counts raw rows read.
+    const approval = args.status ? APPROVAL_FILTER[args.status] : undefined;
+    if (approval) {
+      const kept: V1Post[] = [];
+      let at = o;
+      let exhausted = false;
+      for (let round = 0; round < MAX_APPROVAL_ROUNDS && kept.length <= args.limit && !exhausted; round++) {
+        const res = await v1.get<{ data: V1Post[] }>('/social-posts', { status: 'scheduled', from, to, account_id: args.channel_id, limit: 100, offset: at || undefined });
+        for (const p of res.data) {
+          at++;
+          if (approval.includes(p.approval ?? '')) kept.push(p);
+          if (kept.length > args.limit) break;
+        }
+        exhausted = res.data.length < 100;
+      }
+      const more = kept.length > args.limit || !exhausted;
+      const page = kept.slice(0, args.limit);
+      // With one row too many, the next page starts right at that row.
+      const next = kept.length > args.limit ? at - 1 : at;
+      return {
+        count: page.length,
+        posts: page.map((p) => shapePost(p)),
+        next_cursor: more ? encodeCursor('list_posts', filters, { o: next }) : null,
+      };
+    }
+
     // One extra row says whether another page exists (the API caps a page at 100).
     const ask = Math.min(args.limit + 1, 100);
     const res = await v1.get<{ data: V1Post[] }>('/social-posts', {
       status: args.status,
-      from: args.from,
-      to: args.to,
+      from,
+      to,
       account_id: args.channel_id,
       limit: ask,
       offset: o || undefined,

@@ -2,7 +2,7 @@
 
 <!-- Generated from the served tool list by `npm run docs:tools` (in mcp/). Do not edit by hand: test/tools-doc.test.ts fails in CI when this file is out of date. -->
 
-47 tools on `https://mcp.creatif.space/mcp`, in the order `tools/list` gives them. Scope is the OAuth permission a tool needs; the hints are its MCP annotations.
+48 tools on `https://mcp.creatif.space/mcp`, in the order `tools/list` gives them. Scope is the OAuth permission a tool needs; the hints are its MCP annotations.
 
 | Tool | Title | Scope | Read-only | Destructive |
 |---|---|---|---|---|
@@ -53,6 +53,7 @@
 | [`update_notification_settings`](#update_notification_settings) | Turn creatif.space emails on or off | `draft` | no | no |
 | [`schedule_posts`](#schedule_posts) | Schedule several drafts at once | `publish` | no | yes |
 | [`list_failed_posts`](#list_failed_posts) | List failed posts | `read` | yes | no |
+| [`get_onboarding`](#get_onboarding) | Get the setup checklist | `read` | yes | no |
 
 ## list_channels
 
@@ -81,7 +82,7 @@ Finds the user's posts by status, dates or channel; the plan_week and send_for_a
 
 Lists the user’s creatif.space posts, newest first — drafts, scheduled, published, failed and cancelled — filtered by status, date window and channel.
 
-When to use: to find post ids or see what is planned or out (e.g. status "draft" before schedule_post, publish_post or create_approval_link). Comments are omitted here; use get_post for one post’s full detail and review thread. from/to are ISO 8601, matched on the scheduled time (creation time for unscheduled posts).
+When to use: to find post ids or see what is planned or out (e.g. status "draft" before schedule_post, publish_post or create_approval_link). status "waiting" is posts held for approval (the client or the user has not said yes yet), "changes_requested" the ones a client sent back; both are also in "scheduled". Comments are omitted here; use get_post for one post’s full detail and review thread. from/to are a date (YYYY-MM-DD, UTC; to covers the whole day) or an ISO 8601 time, matched on the scheduled time (creation time for unscheduled posts).
 
 Example: list_posts { "status": "draft", "limit": 10 } → { count, posts: [{ id, status, caption, scheduled_at, approval, channels }] }
 
@@ -89,9 +90,9 @@ Errors → next step: not_found → the channel_id is unknown: take one from lis
 
 | Input | Type | Required | Description |
 |---|---|---|---|
-| `status` | "draft" \| "scheduled" \| "published" \| "failed" \| "cancelled" | no | Only posts in this state |
-| `from` | string | no | Window start, ISO 8601 (e.g. 2026-11-01T00:00:00Z) |
-| `to` | string | no | Window end, ISO 8601 |
+| `status` | "draft" \| "waiting" \| "changes_requested" \| "scheduled" \| "published" \| "failed" \| "cancelled" | no | Only posts in this state: waiting = held for approval, changes_requested = sent back by the client |
+| `from` | string or string | no | Window start: a date (YYYY-MM-DD, UTC) or ISO 8601 time, e.g. 2026-11-01 |
+| `to` | string or string | no | Window end: a date (the whole day, UTC) or ISO 8601 time, e.g. 2026-11-30 |
 | `channel_id` | string | no | Only posts going to this channel (id from list_channels) |
 | `limit` | integer | no | At most this many posts per page (1–100, default 25) |
 | `cursor` | string | no | next_cursor from the previous page of this same list (same filters); omit for the first page |
@@ -971,11 +972,11 @@ Errors → next step: not_failed → nothing failed: get_post shows each channel
 
 Shows which creatif.space emails the user gets.
 
-Returns which creatif.space emails the user gets: publish_failed, approval_decided and weekly_digest (true = on; all default on).
+Returns which creatif.space emails the user gets: post_missed_or_failed (“Post missed / failed”), approval_decided and weekly_digest (true = on; all default on).
 
 When to use: when the user asks which emails they get, or before changing one with update_notification_settings.
 
-Example: get_notification_settings {} → { settings: { publish_failed: true, approval_decided: true, weekly_digest: false, timezone: "Asia/Jakarta" }, meaning }
+Example: get_notification_settings {} → { settings: { post_missed_or_failed: true, publish_failed: true, approval_decided: true, weekly_digest: false, timezone: "Asia/Jakarta" }, meaning }
 
 Read-only. Email only: the in-app bell is not part of these. Account and storage emails cannot be turned off and are not listed.
 
@@ -989,19 +990,20 @@ No input.
 
 Turns a creatif.space email on or off for the user, such as failed posts, approvals or the weekly digest.
 
-Turns the user’s publish_failed, approval_decided or weekly_digest email on or off, or sets the timezone of the weekly digest (Monday 08:00 there), and returns all settings.
+Turns the user’s post_missed_or_failed (“Post missed / failed”), approval_decided or weekly_digest email on or off, or sets the weekly digest’s timezone, and returns all settings.
 
-When to use: when the user asks to stop or start one of these emails (e.g. "stop the weekly summary"). To only see them, use get_notification_settings.
+When to use: when the user asks to stop or start one of these emails (e.g. "stop the weekly summary", "tell me when a post misses its time"). To only see them, use get_notification_settings.
 
-Example: update_notification_settings { "weekly_digest": false } → { settings: { publish_failed: true, approval_decided: true, weekly_digest: false } }
+Example: update_notification_settings { "post_missed_or_failed": true } → { settings: { post_missed_or_failed: true, publish_failed: true, approval_decided: true, weekly_digest: false } }
 
-Give at least one of the three as true or false, or timezone (IANA, e.g. "Asia/Jakarta"; null resets it); the rest stay as they are. Only change what the user asked for. Email only: the in-app bell stays. Account and storage emails cannot be turned off.
+Give at least one switch as true or false, or timezone (IANA, e.g. "Asia/Jakarta"; null resets it); the rest stay as they are. post_missed_or_failed and publish_failed are one switch here: give one of them. Only change what the user asked for. Email only: the in-app bell stays. Account and storage emails cannot be turned off.
 
-Errors → next step: invalid_input → pass at least one of publish_failed, approval_decided, weekly_digest as true/false, or a valid IANA timezone; scope_missing → reconnect and allow "draft"; unauthorized → reconnect creatif.space; upstream_unavailable → call again in a minute; plan_required (402) → a plan limit, or a feature this account's plan does not include (on some plans: posts scheduled at most 7 days ahead, at most 10 queued posts, approval links for one client); tell the user it is not available on their plan, and do not retry; forbidden (403) → this seat or connection may not do this (e.g. a viewer, or a permission the connection was not given): the workspace owner or an editor can, or the user does it in creatif.space; do not retry; not_found (404) → the id is not in this workspace: take a fresh id from the matching list tool and call again.
+Errors → next step: invalid_input → pass at least one of post_missed_or_failed, approval_decided, weekly_digest as true/false, or a valid IANA timezone; scope_missing → reconnect and allow "draft"; unauthorized → reconnect creatif.space; upstream_unavailable → call again in a minute; plan_required (402) → a plan limit, or a feature this account's plan does not include (on some plans: posts scheduled at most 7 days ahead, at most 10 queued posts, approval links for one client); tell the user it is not available on their plan, and do not retry; forbidden (403) → this seat or connection may not do this (e.g. a viewer, or a permission the connection was not given): the workspace owner or an editor can, or the user does it in creatif.space; do not retry; not_found (404) → the id is not in this workspace: take a fresh id from the matching list tool and call again.
 
 | Input | Type | Required | Description |
 |---|---|---|---|
-| `publish_failed` | boolean | no | Email when a post fails to publish |
+| `post_missed_or_failed` | boolean | no | “Post missed / failed”: email when a scheduled post misses its time or fails to publish |
+| `publish_failed` | boolean | no | The same switch as post_missed_or_failed (older name) |
 | `approval_decided` | boolean | no | Email when a client approves or asks for changes |
 | `weekly_digest` | boolean | no | The Monday 08:00 weekly summary email |
 | `timezone` | string or null | no | IANA timezone for the weekly digest, e.g. "Asia/Jakarta"; null resets it |
@@ -1047,3 +1049,21 @@ Errors → next step: scope_missing → reconnect and allow "read"; unauthorized
 |---|---|---|---|
 | `limit` | integer | no | At most this many failed posts per page (1–100, default 25) |
 | `cursor` | string | no | next_cursor from the previous page of this same list (same filters); omit for the first page |
+
+## get_onboarding
+
+**Get the setup checklist** · scope `read` · read-only yes · destructive no · idempotent yes · open world no · structured output
+
+Shows which getting-started steps the user has done and the one next step to suggest to them.
+
+Shows the user’s “Get started” checklist in creatif.space — connect a channel, make a post, send one to a client, publish one — which steps are done and when, and the one next step to suggest.
+
+When to use: at the start of a conversation with a new user, or when they ask how to get started or what to do next. Suggest only next.suggest, in your own words; the steps finish themselves when the user does them, here or in the app.
+
+Example: get_onboarding {} → { steps: [{ key: "connect", label, done: true, at }, …], done_count: 1, all_done: false, draft_post_id, next: { step: "draft", tool: "draft_post", suggest } }
+
+Read-only. Counted across the workspace (the owner and its members), from the data itself. at is when the step first happened.
+
+Errors → next step: unauthorized → ask the user to reconnect the creatif.space connector; scope_missing → reconnect with "read" allowed; upstream_unavailable → wait a minute and call again; plan_required (402) → a plan limit, or a feature this account's plan does not include (on some plans: posts scheduled at most 7 days ahead, at most 10 queued posts, approval links for one client); tell the user it is not available on their plan, and do not retry; forbidden (403) → this seat or connection may not do this (e.g. a viewer, or a permission the connection was not given): the workspace owner or an editor can, or the user does it in creatif.space; do not retry; not_found (404) → the id is not in this workspace: take a fresh id from the matching list tool and call again.
+
+No input.

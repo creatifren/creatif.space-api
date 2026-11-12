@@ -84,6 +84,13 @@ export const OUTPUT_SCHEMAS: Record<string, z.ZodRawShape> = {
     count: z.number(),
     spaces: z.array(loose({ id: str, title: opt(str), status: opt(str), url: opt(str) })),
   },
+  get_onboarding: {
+    steps: z.array(loose({ key: str, label: str, done: z.boolean(), at: str.nullable() })),
+    done_count: z.number(),
+    all_done: z.boolean(),
+    draft_post_id: str.nullable(),
+    next: loose({ step: str.nullable(), tool: str.nullable(), suggest: str }),
+  },
   get_storage_usage: {
     tier: str,
     quota: loose({ used_bytes: z.number(), quota_bytes: z.number(), percent_used: opt(z.number()) }),

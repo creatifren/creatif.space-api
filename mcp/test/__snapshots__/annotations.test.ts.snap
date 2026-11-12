@@ -116,6 +116,12 @@ exports[`tool annotations > match the snapshot 1`] = `
     "openWorld": false,
     "readOnly": true,
   },
+  "get_onboarding": {
+    "destructive": false,
+    "idempotent": true,
+    "openWorld": false,
+    "readOnly": true,
+  },
   "get_plan_calendar_link": {
     "destructive": false,
     "idempotent": true,

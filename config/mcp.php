@@ -80,6 +80,7 @@ return [
      */
     'routes' => [
         'api.v1.me' => 'read',
+        'api.v1.me.onboarding' => 'read',
         'api.v1.social-accounts.index' => 'read',
         'api.v1.social-accounts.pinterest-boards' => 'read',
         'api.v1.social-posts.index' => 'read',

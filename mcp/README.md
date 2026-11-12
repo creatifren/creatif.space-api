@@ -77,12 +77,13 @@ redirect_uris, token_endpoint_auth_method: "none"}`. The API fetches it
 | Tool | Scope | V1 endpoint |
 | --- | --- | --- |
 | `list_channels` — channels that need reconnecting carry `reconnect` {reason, next_step} and are listed in `needs_reconnect` | read | `GET /social-accounts` |
-| `list_posts` (status, from, to, channel_id, limit) | read | `GET /social-posts?status&from&to&account_id&limit` |
+| `list_posts` (status: draft, waiting, changes_requested, scheduled, published, failed, cancelled; from/to as a date or time; channel_id, limit) — waiting / changes_requested read `status=scheduled` and keep posts by approval | read | `GET /social-posts?status&from&to&account_id&limit` |
 | `list_failed_posts` (limit, cursor) — last 30 days, per channel `failure_code` + `reason`; partly-published posts list only their failed channels | read | `GET /social-posts?status=failed` + `?status=published` (from/to = last 30 days) |
 | `get_post` | read | `GET /social-posts/{id}` |
 | `list_files` (search, type, folder_id, limit) | read | `GET /files` |
 | `draft_post` (caption, channel_ids, file_ids, media_urls, captions_by_channel, type) | draft | `POST /social-posts` with `draft: true` |
 | `get_account_summary` — onboarding in one call: plan, limits used/left, Credits left, channels connected / needing reconnect, storage used, `failed_posts` (last 30 days), `approvals` {waiting, changes_requested}, next_steps | read | `GET /credits`, `GET /social-accounts`, `GET /files/usage`, `GET /social-posts?status=failed` + `?status=published` (as `list_failed_posts`), `GET /social-posts?status=scheduled` |
+| `get_onboarding` — the “Get started” checklist (connect, draft, send, publish), each `{done, at}`, plus `next` {step, tool, suggest}: the one next step to suggest | read | `GET /me/onboarding` |
 | `get_credits` — plan, limits, Credits; `spend` (this cycle by action: publish, reply, ai) and `renewal` (resets_at, days_until) | read | `GET /credits` (`limits.spend`) |
 | `create_approval_link` (post_ids — or a Content Plan: date_from, date_to, timezone, channel_ids — **approver_email** (required — the client signs in with it to decide), title, client_name, expires_in_hours) — every plan; Free: one client (by approver_email), 7-day window, 10 queued | approve | `POST /social-approval-links` (drafts accepted) |
 | `create_content_plan` (date_from, date_to, timezone, channel_ids, **approver_email**, title, client_name, expires_in_hours, confirm) — preview first; `confirm: true` creates the Content Plan and emails the approver | approve | `GET /social-accounts`, `GET /social-posts?from&to` (preview); `confirm: true` → `POST /social-approval-links` with `notify_approver: true` |
@@ -119,8 +120,8 @@ redirect_uris, token_endpoint_auth_method: "none"}`. The API fetches it
 | `get_plan_calendar_link` (link_id) — ICS feed URL of a Content Plan (scheduled posts, first 60 characters of the caption); read-only, stable URL | read | `GET /social-approval-links/{id}/calendar` |
 | `get_approval_audit` (link_id) — every decision on one of the user's links: who, post, when, decision, comment; rows and CSV | read | `GET /social-approval-links/{id}/audit.csv` |
 | `send_feedback` (kind bug\|idea\|other, message, page) — to the creatif.space team; nothing public, no Credits; 10 an hour per user | draft | `POST /feedback` |
-| `get_notification_settings` — which emails the user gets: publish_failed, approval_decided, weekly_digest | read | `GET /me/notification-settings` |
-| `update_notification_settings` (publish_failed, approval_decided, weekly_digest: true/false; timezone of the Monday 08:00 digest; at least one) | draft | `PATCH /me/notification-settings` |
+| `get_notification_settings` — which emails the user gets: post_missed_or_failed (“Post missed / failed”; the publish_failed switch unless the API serves its own key), approval_decided, weekly_digest | read | `GET /me/notification-settings` |
+| `update_notification_settings` (post_missed_or_failed — or its older name publish_failed —, approval_decided, weekly_digest: true/false; timezone of the Monday 08:00 digest; at least one) | draft | `PATCH /me/notification-settings` |
 | `list_shared_with_me` — "Reports shared with you": Content Plans and Insight reports other users shared with this user's email | approvals:decide | `GET /me/reports/shared` |
 | `get_connect_link` (network) — the app's connect page (`https://creatif.space/social/connect?network=…`) with the steps; no token in the response; a new network on a full plan → `plan_required` | read | `GET /social-accounts` + `GET /credits` (never `POST /social-accounts/auth-url`) |
 

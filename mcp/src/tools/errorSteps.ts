@@ -15,6 +15,7 @@ export const NOT_FOUND_FOR: Record<string, NotFound> = {
   list_channels: { what: 'The channel list', next: 'Call list_channels again without cursor to start from the first page.' },
   get_credits: { what: 'This workspace’s Credits', next: 'Tell the user to open creatif.space and check they are in the right workspace, then call again.' },
   get_storage_usage: { what: 'This workspace’s storage', next: 'Tell the user to open creatif.space and check they are in the right workspace, then call again.' },
+  get_onboarding: { what: 'The setup checklist', next: 'Tell the user to open creatif.space once to see the Get started checklist, then call again.' },
   get_account_summary: { what: 'This workspace', next: 'Tell the user to open creatif.space and check they are in the right workspace, then call again.' },
   get_notification_settings: { what: 'The notification settings', next: 'Tell the user to open creatif.space → Settings → Notifications once, then call again.' },
   update_notification_settings: { what: 'The notification settings', next: 'Call get_notification_settings to see the current settings, then call again with only those fields.' },
@@ -88,6 +89,7 @@ export const STATE_TOOL: Record<string, string> = {
   // Account
   get_credits: 'get_credits',
   get_account_summary: 'get_account_summary',
+  get_onboarding: 'get_onboarding',
   get_notification_settings: 'get_notification_settings',
   update_notification_settings: 'get_notification_settings',
   send_feedback: 'send_feedback',
