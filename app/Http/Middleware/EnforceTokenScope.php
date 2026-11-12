@@ -34,6 +34,7 @@ class EnforceTokenScope
             return $next($request);
         }
 
+        $started = hrtime(true);
         $route = $request->route()?->getName();
         // Route names are dotted: look the name up as a key, not a config path.
         $needed = $route === null ? null : (((array) config('mcp.routes'))[$route] ?? null);
@@ -71,7 +72,7 @@ class EnforceTokenScope
             $response->headers->set('X-RateLimit-Remaining', (string) RateLimiter::remaining($bucket, $limit));
         }
 
-        $this->audit($request, $context, $route, $response->getStatusCode());
+        $this->audit($request, $context, $route, $response->getStatusCode(), intdiv(hrtime(true) - $started, 1_000_000));
 
         return $response;
     }
@@ -107,7 +108,7 @@ class EnforceTokenScope
         ], 429, ['Retry-After' => (string) $retry]);
     }
 
-    private function audit(Request $request, TokenContext $context, ?string $route, int $status): void
+    private function audit(Request $request, TokenContext $context, ?string $route, int $status, int $durationMs): void
     {
         $tool = $request->header('X-MCP-Tool');
         $tool = is_string($tool) && preg_match('/^[a-z0-9_.-]{1,64}$/i', $tool) === 1 ? $tool : null;
@@ -133,6 +134,7 @@ class EnforceTokenScope
                 'route' => $route,
                 'method' => $request->method(),
                 'status' => $status,
+                'duration_ms' => max(0, $durationMs),
                 'ip' => $request->ip(),
             ]);
         } catch (Throwable $e) {

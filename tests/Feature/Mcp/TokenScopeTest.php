@@ -186,6 +186,8 @@ describe('rate limit and audit', function () {
                 'method' => 'POST',
                 'status' => 201,
             ])
+            ->and($rows[0]->duration_ms)->toBeInt()->toBeGreaterThanOrEqual(0)
+            ->and($rows[1]->duration_ms)->toBeInt()->toBeGreaterThanOrEqual(0)
             ->and($rows[1]->status)->toBe(403)
             ->and(json_encode($rows->toArray()))->not->toContain('Secret launch caption');
 
