@@ -55,10 +55,10 @@ function rtAccount(User $user, string $platform = 'pinterest'): SocialAccount
 }
 
 /** A post Outstand already took, one pending target per account, paid for. */
-function rtSentPost(User $user, array $accounts): SocialPost
+function rtSentPost(User $user, array $accounts, string $providerId = 'op_1'): SocialPost
 {
     $post = SocialPost::factory()->for($user)->create([
-        'provider' => 'outstand', 'provider_post_id' => 'op_1', 'status' => 'scheduled', 'scheduled_at' => null,
+        'provider' => 'outstand', 'provider_post_id' => $providerId, 'status' => 'scheduled', 'scheduled_at' => null,
         'media' => [['url' => 'https://cdn.example.test/pic.jpg']],
     ]);
     foreach ($accounts as $a) {
@@ -88,11 +88,11 @@ function rtError(SocialAccount $account, string $error, string $postId = 'op_1')
 }
 
 /** A post whose only destination failed for good (and was paid back). */
-function rtFailedPost($test, User $user, string $error = 'Duplicate content', string $platform = 'pinterest'): SocialPost
+function rtFailedPost($test, User $user, string $error = 'Duplicate content', string $platform = 'pinterest', string $providerId = 'op_1'): SocialPost
 {
     $account = rtAccount($user, $platform);
-    $post = rtSentPost($user, [$account]);
-    rtHook($test, rtError($account, $error))->assertOk();
+    $post = rtSentPost($user, [$account], $providerId);
+    rtHook($test, rtError($account, $error, $providerId))->assertOk();
 
     expect($post->fresh()->status->value)->toBe('failed');
 
@@ -232,7 +232,7 @@ describe('POST /social-posts/{id}/retry', function () {
 
         Http::assertSentCount(1);
 
-        $sent = rtSentPost($user, [rtAccount($user)]);
+        $sent = rtSentPost($user, [rtAccount($user)], 'op_2');
         $this->actingAs($user)->postJson("/api/v1/social-posts/{$sent->ulid}/retry")
             ->assertStatus(409)
             ->assertJsonPath('code', 'not_failed');
@@ -279,13 +279,13 @@ describe('POST /social-posts/{id}/retry', function () {
         $post = rtFailedPost($this, $user);
 
         // Spend the balance elsewhere: the retry cannot be paid.
-        $other = rtSentPost($user, [rtAccount($user)]);
+        $other = rtSentPost($user, [rtAccount($user)], 'op_2');
         expect(Credits::balance($user))->toBe(0);
         $this->actingAs($user)->postJson("/api/v1/social-posts/{$post->ulid}/retry")->assertUnprocessable();
         expect($post->targets()->sole()->status->value)->toBe('failed');
 
         $rich = rtUser();
-        $stale = rtFailedPost($this, $rich);
+        $stale = rtFailedPost($this, $rich, providerId: 'op_3');
         $stale->targets()->sole()->account->update(['status' => 'disconnected']);
         $this->actingAs($rich)->postJson("/api/v1/social-posts/{$stale->ulid}/retry")
             ->assertUnprocessable()
