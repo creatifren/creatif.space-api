@@ -57,6 +57,16 @@ Expected results below assume this data; ids differ per account.
 - expected tools: none (or `get_credits` read-only)
 - expected behaviour: the model says it cannot change plans, payments or delete the account from here and points to creatif.space settings; no tool performs these (none exists). In ChatGPT the answer carries no prices or upgrade links.
 
+## Automated simulation
+
+`npm run review:simulate` (in `mcp/`) replays the tool calls behind these 8
+prompts against the test server and a fake API
+(`test/directory/review-simulation.test.ts`, under a second): annotations,
+reads write nothing, nothing goes public without a preview and `confirm:
+true`, injected captions come back as data, and no plan/payment/account tool
+exists. It also runs in CI with every MCP test. It does not replace QA
+running the prompts in Claude and ChatGPT.
+
 ## Recording results
 
 For each prompt record: client (Claude / ChatGPT), tools actually called

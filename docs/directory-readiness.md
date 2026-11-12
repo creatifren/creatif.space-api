@@ -34,3 +34,11 @@ access. No values belong in this repository.
 4. **Submission** — Claude Connectors Directory and ChatGPT Apps forms. Tool
    justifications: `mcp/docs/tool-justifications.md`.
 5. **Revoke after review** — `php artisan reviewer:grant <email> --revoke`.
+
+## Handover (12 Nov — directory-readiness session closed)
+
+1. **Done and on `main`:** G1–G3, G5, G6, G8–G10 plus follow-ups — no plan/price wording, ChatGPT-neutral 402s, legal links, reviewer login + runbook, smoke script, challenge check (`mcp:check-openai-challenge`), OAuth hardening `d117771`, review simulation (`npm run review:simulate`).
+2. **Guards in CI:** annotations + justification lines, no-upsell lint, ChatGPT 402 over every tool, first-line lint, instructions confirm list, review simulation — a new tool that misses any of these fails the MCP job.
+3. **Rizal-only (CTO submission sheet, 18 Nov):** set `OPENAI_APPS_CHALLENGE` → `mcp:check-openai-challenge` OK; create the reviewer account + `reviewer:grant`; deploy (recommend `LOG_STACK=daily`); submit; `reviewer:grant --revoke` after review.
+4. **QA before submission:** `docs/directory-reviewer-smoke.md` on staging/prod, then the 8 prompts of `mcp/docs/directory-test-pack.md` in Claude and ChatGPT.
+5. **Not in this work stream:** G4 and G7; leftover branch `claude/quirky-gauss-ngkifg-g1` can be deleted.
