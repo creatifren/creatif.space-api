@@ -3,12 +3,72 @@
   "name": "io.github.creatifren/creatif-space",
   "title": "Creatif Space",
   "description": "Get content approved & published faster: draft, send approval links and publish from your AI chat.",
-  "version": "1.0.2",
+  "version": "1.1.0",
   "websiteUrl": "https://creatif.space/mcp",
   "remotes": [
     {
       "type": "streamable-http",
       "url": "https://mcp.creatif.space/mcp"
     }
-  ]
+  ],
+  "_meta": {
+    "io.modelcontextprotocol.registry/publisher-provided": {
+      "server_version": "0.3.0",
+      "auth": {
+        "type": "oauth2",
+        "authorization_server": "https://api.creatif.space",
+        "protected_resource_metadata": "https://mcp.creatif.space/.well-known/oauth-protected-resource/mcp",
+        "scopes": [
+          "read",
+          "draft",
+          "approve",
+          "publish",
+          "approvals:decide"
+        ],
+        "api_keys": "Personal API keys (cs_live_…) from creatif.space → Settings → API keys also work as the Bearer token."
+      },
+      "tools": [
+        "check_approval_status",
+        "confirm_media_upload",
+        "create_approval_link",
+        "create_insight_share_link",
+        "create_space_from_files",
+        "decide_approval",
+        "discard_draft",
+        "draft_post",
+        "get_approval_audit",
+        "get_connect_link",
+        "get_credits",
+        "get_insight_report_link",
+        "get_insight_summary",
+        "get_post",
+        "get_storage_usage",
+        "keep_file",
+        "list_approval_links",
+        "list_channels",
+        "list_conversations",
+        "list_files",
+        "list_posts",
+        "list_shared_with_me",
+        "list_spaces",
+        "list_waiting_approvals",
+        "publish_post",
+        "publish_space",
+        "reply_to_conversation",
+        "request_media_upload",
+        "revoke_insight_share_link",
+        "schedule_post",
+        "send_approval_reminder",
+        "send_feedback",
+        "suggest_caption",
+        "unkeep_file",
+        "update_post"
+      ],
+      "prompts": [
+        "monthly_report",
+        "plan_week",
+        "send_for_approval"
+      ]
+    }
+  }
 }

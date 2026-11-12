@@ -264,6 +264,13 @@ are quoted and marked as data. Defined in `src/prompts.ts`.
 | `send_for_approval` — bundle drafts into one approval link | approver_email*, post_ids (comma-separated), client_name | `list_posts`, `get_post`, `create_approval_link`, `check_approval_status` |
 | `monthly_report` — Insight summary + share link | month (YYYY-MM), share (yes\|no) | `get_insight_summary`, `create_insight_share_link` |
 
+## Registry metadata
+
+- `mcp/server.json`: the official MCP registry entry (`io.github.creatifren/creatif-space`, remote `https://mcp.creatif.space/mcp`, entry version `1.1.0`). Its publisher-provided `_meta` lists the OAuth details (authorization server, protected-resource metadata, scopes), every tool, every prompt and the server version.
+- `glama.json` (repo root): Glama maintainers, the same owner as the registry namespace.
+- `test/registry.test.ts` keeps all of these in step with the server: the same tools, prompts, scopes and version; the same tool count in the README Tools table; only schema fields.
+- **Publishing is manual and not done here:** `.github/workflows/mcp-registry.yml` runs only on `workflow_dispatch`. Publishing is a public act, done by Rizal.
+
 ## Free Tools (`/free`)
 
 A second, stateless MCP server on the same process: `check_caption`,
