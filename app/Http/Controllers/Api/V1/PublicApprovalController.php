@@ -196,7 +196,7 @@ class PublicApprovalController extends Controller
                 'role' => 'APPROVER',
                 'body' => $validated['reason'],
             ]);
-            ApproverGate::record($request, $link, $socialPost, SocialApprovalDecision::CHANGES_REQUESTED, $approver, $name, $source);
+            ApproverGate::record($request, $link, $socialPost, SocialApprovalDecision::CHANGES_REQUESTED, $approver, $name, $source, $validated['reason']);
             $link->user->notify(new SocialPostDecided(
                 $link, SocialPostDecided::REVISE, $name, 1, $socialPost,
                 str($validated['reason'])->limit(200)->toString(),

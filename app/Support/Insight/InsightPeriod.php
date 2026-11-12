@@ -4,6 +4,7 @@ namespace App\Support\Insight;
 
 use Carbon\CarbonImmutable;
 use Carbon\CarbonInterface;
+use Illuminate\Validation\ValidationException;
 
 /**
  * The span a report covers, in the app's timezone (Asia/Jakarta): whole
@@ -52,6 +53,44 @@ final class InsightPeriod
         return $kind === self::MONTH
             ? self::month($from->format('Y-m'))
             : self::range($from->toDateString(), $to->toDateString());
+    }
+
+    /**
+     * A period from already-shaped input ({month} or {from, to}, both
+     * Y-m-d / Y-m strings), with the report rules: not in the future, end
+     * not before start, at most MAX_DAYS days. Errors name $prefix.month /
+     * $prefix.from / $prefix.to.
+     *
+     * @param  array<string, mixed>  $input
+     *
+     * @throws ValidationException
+     */
+    public static function fromInput(array $input, string $prefix = 'period.'): self
+    {
+        $today = CarbonImmutable::now(config('app.timezone'))->startOfDay();
+
+        if (! empty($input['month'])) {
+            $period = self::month((string) $input['month']);
+            if ($period->from->greaterThan($today)) {
+                throw ValidationException::withMessages([$prefix.'month' => 'That month has not started yet.']);
+            }
+
+            return $period;
+        }
+
+        $period = self::range((string) $input['from'], (string) $input['to']);
+
+        if ($period->to->lessThan($period->from)) {
+            throw ValidationException::withMessages([$prefix.'to' => 'The end date is before the start date.']);
+        }
+        if ($period->from->greaterThan($today)) {
+            throw ValidationException::withMessages([$prefix.'from' => 'That period has not started yet.']);
+        }
+        if ($period->days() > self::MAX_DAYS) {
+            throw ValidationException::withMessages([$prefix.'to' => 'A period covers at most '.self::MAX_DAYS.' days.']);
+        }
+
+        return $period;
     }
 
     public function days(): int

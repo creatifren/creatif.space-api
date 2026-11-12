@@ -9,6 +9,15 @@
 <a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/l/laravel/framework" alt="License"></a>
 </p>
 
+## Approve from your AI chat
+
+Clients can review and decide on posts sent to them from Claude or ChatGPT
+through the creatif.space MCP server: `list_shared_with_me`,
+`list_waiting_approvals` and `decide_approval` (scope `approvals:decide`), and
+owners can pull the audit trail with `get_approval_audit`. See
+[mcp/README.md → Approve from your AI chat](mcp/README.md#approve-from-your-ai-chat)
+for the rules and an example conversation.
+
 ## Android app (Capacitor shell)
 
 - **Google sign-in:** `GET /sanctum/csrf-cookie`, then `POST /auth/google/native` with `X-XSRF-TOKEN` and `{"id_token": "<Credential Manager ID token>", "next": "/spaces"}` (`next` optional). Answers `200 {"redirect": "…"}`, `422 invalid_token`, `403 suspended | google_not_linked`, `429`, or `503 google_unavailable`. The token's `aud` must be `GOOGLE_CLIENT_ID` (the web client, used as `serverClientId`) or one of `GOOGLE_NATIVE_EXTRA_AUDIENCES`. Details: `GoogleAuthController::native`.
