@@ -77,7 +77,7 @@ redirect_uris, token_endpoint_auth_method: "none"}`. The API fetches it
 | Tool | Scope | V1 endpoint |
 | --- | --- | --- |
 | `list_channels` — channels that need reconnecting carry `reconnect` {reason, next_step} and are listed in `needs_reconnect` | read | `GET /social-accounts` |
-| `list_posts` (status, from, to, channel_id, limit) | read | `GET /social-posts?status&from&to&account_id&limit` |
+| `list_posts` (status: draft, waiting, changes_requested, scheduled, published, failed, cancelled; from/to as a date or time; channel_id, limit) — waiting / changes_requested read `status=scheduled` and keep posts by approval | read | `GET /social-posts?status&from&to&account_id&limit` |
 | `list_failed_posts` (limit, cursor) — last 30 days, per channel `failure_code` + `reason`; partly-published posts list only their failed channels | read | `GET /social-posts?status=failed` + `?status=published` (from/to = last 30 days) |
 | `get_post` | read | `GET /social-posts/{id}` |
 | `list_files` (search, type, folder_id, limit) | read | `GET /files` |

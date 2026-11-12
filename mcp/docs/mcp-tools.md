@@ -82,7 +82,7 @@ Finds the user's posts by status, dates or channel; the plan_week and send_for_a
 
 Lists the user’s creatif.space posts, newest first — drafts, scheduled, published, failed and cancelled — filtered by status, date window and channel.
 
-When to use: to find post ids or see what is planned or out (e.g. status "draft" before schedule_post, publish_post or create_approval_link). Comments are omitted here; use get_post for one post’s full detail and review thread. from/to are ISO 8601, matched on the scheduled time (creation time for unscheduled posts).
+When to use: to find post ids or see what is planned or out (e.g. status "draft" before schedule_post, publish_post or create_approval_link). status "waiting" is posts held for approval (the client or the user has not said yes yet), "changes_requested" the ones a client sent back; both are also in "scheduled". Comments are omitted here; use get_post for one post’s full detail and review thread. from/to are a date (YYYY-MM-DD, UTC; to covers the whole day) or an ISO 8601 time, matched on the scheduled time (creation time for unscheduled posts).
 
 Example: list_posts { "status": "draft", "limit": 10 } → { count, posts: [{ id, status, caption, scheduled_at, approval, channels }] }
 
@@ -90,9 +90,9 @@ Errors → next step: not_found → the channel_id is unknown: take one from lis
 
 | Input | Type | Required | Description |
 |---|---|---|---|
-| `status` | "draft" \| "scheduled" \| "published" \| "failed" \| "cancelled" | no | Only posts in this state |
-| `from` | string | no | Window start, ISO 8601 (e.g. 2026-11-01T00:00:00Z) |
-| `to` | string | no | Window end, ISO 8601 |
+| `status` | "draft" \| "waiting" \| "changes_requested" \| "scheduled" \| "published" \| "failed" \| "cancelled" | no | Only posts in this state: waiting = held for approval, changes_requested = sent back by the client |
+| `from` | string or string | no | Window start: a date (YYYY-MM-DD, UTC) or ISO 8601 time, e.g. 2026-11-01 |
+| `to` | string or string | no | Window end: a date (the whole day, UTC) or ISO 8601 time, e.g. 2026-11-30 |
 | `channel_id` | string | no | Only posts going to this channel (id from list_channels) |
 | `limit` | integer | no | At most this many posts per page (1–100, default 25) |
 | `cursor` | string | no | next_cursor from the previous page of this same list (same filters); omit for the first page |
