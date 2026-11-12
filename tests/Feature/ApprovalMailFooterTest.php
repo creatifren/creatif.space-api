@@ -63,7 +63,10 @@ function visibleText(string $html): string
 
 function footerBlock(string $html): string
 {
-    $start = strpos($html, 'class="approval-footer"');
+    $marker = strpos($html, 'class="approval-footer"');
+    expect($marker)->not->toBeFalse();
+    // From the opening <table, so no half tag is left over as text.
+    $start = strrpos(substr($html, 0, (int) $marker), '<table');
     expect($start)->not->toBeFalse();
 
     return substr($html, (int) $start, (int) strpos($html, '</table>', (int) $start) - (int) $start);
