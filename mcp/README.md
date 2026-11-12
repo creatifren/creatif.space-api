@@ -337,6 +337,12 @@ name. It counts API requests, not tool calls (one tool can make several),
 and calls refused inside this server (bad arguments, missing scope) never
 reach the API, so they are not in it.
 
+Latency: p50 / p95 per tool for the last 24 hours (plus timed calls and
+errors), from `mcp_audit_logs.duration_ms`. That is the API's own time to
+answer, written by `EnforceTokenScope`. Rows from before that column existed
+have no timing and are left out. Sorted slowest p95 first; in `--json` it is
+`latency_24h`.
+
 ## Run in production
 
 Build once per deploy: `npm ci && npm run build` (then `npm prune --omit=dev`).

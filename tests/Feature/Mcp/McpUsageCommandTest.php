@@ -89,3 +89,27 @@ it('says so when nothing was called, and refuses a bad --days', function () {
     $this->artisan('mcp:usage --days=91')->assertFailed();
     $this->artisan('mcp:usage --days=abc')->assertFailed();
 });
+
+it('reports p50 / p95 per tool over the last 24 h, from timed rows only', function () {
+    $user = User::factory()->create();
+    foreach ([10, 20, 30, 40, 50, 60, 70, 80, 90, 1000] as $ms) {
+        usageRow($user, 'list_posts', 200, ['duration_ms' => $ms]);
+    }
+    usageRow($user, 'list_posts', 404, ['duration_ms' => 5]);
+    usageRow($user, 'list_posts', 200);                                             // no timing: left out
+    usageRow($user, 'list_posts', 200, ['duration_ms' => 9999, 'created_at' => now()->subHours(30)]); // older than 24 h
+    usageRow($user, 'draft_post', 201, ['duration_ms' => 120]);
+
+    $latency = collect(usageJson('--days=7')['latency_24h'])->keyBy('tool');
+
+    expect($latency['list_posts'])->toBe(['tool' => 'list_posts', 'calls' => 11, 'errors' => 1, 'p50_ms' => 50, 'p95_ms' => 1000])
+        ->and($latency['draft_post'])->toBe(['tool' => 'draft_post', 'calls' => 1, 'errors' => 0, 'p50_ms' => 120, 'p95_ms' => 120])
+        ->and(usageJson('--days=7')['latency_24h'][0]['tool'])->toBe('list_posts'); // slowest p95 first
+});
+
+it('says so when nothing was timed in the last 24 h', function () {
+    usageRow(User::factory()->create(), 'list_posts', 200);
+
+    expect(usageJson()['latency_24h'])->toBe([]);
+    $this->artisan('mcp:usage')->expectsOutputToContain('No timed calls in the last 24 h.')->assertSuccessful();
+});
