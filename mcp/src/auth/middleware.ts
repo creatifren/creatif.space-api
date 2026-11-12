@@ -1,6 +1,7 @@
 import type { NextFunction, Request, Response } from 'express';
 import type { AuthInfo } from '@modelcontextprotocol/sdk/server/auth/types.js';
 import { IntrospectionUnavailable, type Introspector } from './introspection.js';
+import { SCOPES } from './scopes.js';
 
 export interface CallerExtra {
   userUlid: string;
@@ -23,8 +24,7 @@ export type CallerAuth = AuthInfo & { extra: CallerExtra };
 
 export const metadataPath = '/.well-known/oauth-protected-resource';
 
-/** Every scope a tool can ask for (must match config/mcp.php on the API). */
-export const SCOPES = ['read', 'draft', 'approve', 'publish', 'approvals:decide'] as const;
+export { SCOPES };
 
 /**
  * Where the metadata lives for a resource URL, always built from its ORIGIN
