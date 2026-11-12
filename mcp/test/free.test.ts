@@ -4,6 +4,7 @@ import { RESOURCE, TOKEN_ALL, startApp } from './helpers.js';
 import { approvalTemplate, MESSAGE_MAX, NICHES } from '../src/free/approval.js';
 import { CONNECT_GUIDES, CONNECT_NETWORKS, connectGuide } from '../src/free/connect.js';
 import { ctaLine } from '../src/free/cta.js';
+import { FREE_SERVER_ICONS } from '../src/free/server.js';
 
 let app: Awaited<ReturnType<typeof startApp>> | undefined;
 afterEach(async () => {
@@ -326,8 +327,25 @@ describe('free-tools/server.json', () => {
   it('names the free server and is not the main one', () => {
     const json = JSON.parse(readFileSync(new URL('../free-tools/server.json', import.meta.url), 'utf8'));
     expect(json.name).toBe('io.github.creatifren/creatif-space-tools');
-    expect(json.version).toBe('1.0.0');
+    expect(json.version).toBe('1.1.0');
     expect(json.description.length).toBeLessThanOrEqual(100);
     expect(json.remotes).toEqual([{ type: 'streamable-http', url: 'https://mcp.creatif.space/free' }]);
+    expect(json.repository).toEqual({ url: 'https://github.com/creatifren/creatif.space-api', source: 'github', subfolder: 'mcp' });
+    expect(json.icons).toEqual(FREE_SERVER_ICONS);
+  });
+
+  it('lists exactly the free tools served on /free, no auth, and the same icon as serverInfo', async () => {
+    const json = JSON.parse(readFileSync(new URL('../free-tools/server.json', import.meta.url), 'utf8'));
+    const meta = json._meta['io.modelcontextprotocol.registry/publisher-provided'];
+    const app = await startApp();
+    try {
+      const client = await app.connectFree();
+      expect(meta.tools).toEqual((await client.listTools()).tools.map((t) => t.name).sort());
+      expect(client.getServerVersion()?.icons).toEqual(FREE_SERVER_ICONS);
+    } finally {
+      await app.close();
+    }
+    expect(meta.auth.type).toBe('none');
+    expect(meta.tools).toHaveLength(3);
   });
 });
