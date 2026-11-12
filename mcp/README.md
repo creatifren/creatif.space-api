@@ -171,6 +171,12 @@ replies `reply_window_closed`, `reply_rejected`, `reply_not_possible`,
 Each call emits PostHog `mcp_tool_called` `{tool, client_name, ok, ms}` (plus
 `error` code on failure) — never content. Skipped when `POSTHOG_KEY` is unset.
 
+**Not an MCP tool, on purpose: the account data export.** `POST /api/v1/me/export`
+(a ZIP of the whole workspace, emailed as a 24-hour link) works only from a
+signed-in creatif.space session. It is not in `mcp.routes`, so an OAuth or API
+token gets 403. A full copy of an account is not something to hand an AI
+client.
+
 ## Approve from your AI chat
 
 For the **client** — the person a creatif.space user sent posts or a Content
