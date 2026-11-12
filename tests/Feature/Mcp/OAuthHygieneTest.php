@@ -1,6 +1,8 @@
 <?php
 
 use App\Models\User;
+use Carbon\CarbonImmutable;
+use Laravel\Passport\Passport;
 use Laravel\Passport\Client;
 use Laravel\Passport\RefreshToken;
 use Tests\TestCase;
@@ -80,10 +82,12 @@ describe('dead refresh tokens → invalid_grant', function () {
     });
 
     it('when expired', function () {
+        // League checks expiry against the real clock (time()), so Carbon
+        // time travel cannot age a token: issue one that is already past
+        // its expiry instead. Set before the token server is first built.
+        Passport::refreshTokensExpireIn(CarbonImmutable::now()->subMinute());
         $client = mcpClient();
         $tokens = oauthTokens($this, User::factory()->create(), $client);
-
-        $this->travel((int) config('mcp.refresh_token_ttl_days') + 1)->days();
 
         assertInvalidGrant(refresh($this, $client, $tokens['refresh_token']));
     });
