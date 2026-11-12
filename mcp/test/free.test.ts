@@ -258,10 +258,55 @@ describe('connect_guide', () => {
     }
   });
 
+  // Per network: what the code proves (confirmed) and what it does not (check in app).
+  const ACCOUNT: Record<(typeof CONNECT_NETWORKS)[number], { confirmed: string[]; check: string[] }> = {
+    instagram: { confirmed: ['Business or Creator account', 'instagram_business_*'], check: ['linked to a Facebook Page'] },
+    facebook: { confirmed: ['A Facebook Page', 'choose the Pages'], check: ['role on the Page'] },
+    linkedin: { confirmed: ['A LinkedIn page', 'choose from the pages'], check: ['role on the page', 'personal profile'] },
+    tiktok: { confirmed: [], check: ['TikTok account types'] },
+    youtube: { confirmed: [], check: ['YouTube channel'] },
+    x: { confirmed: [], check: ['X account types'] },
+    threads: { confirmed: [], check: ['Threads account types'] },
+    pinterest: { confirmed: ['at least one board'], check: ['Pinterest business account'] },
+    bluesky: { confirmed: ['app password'], check: [] },
+  };
+
+  it.each(CONNECT_NETWORKS)('%s: account type is confirmed from the code or marked "check in app"', (network) => {
+    const g = connectGuide({ network });
+    const want = ACCOUNT[network];
+    const confirmed = g.account_type.filter((a) => a.status === 'confirmed').map((a) => a.text).join(' ');
+    const check = g.account_type.filter((a) => a.status === 'check in app').map((a) => a.text).join(' ');
+    for (const phrase of want.confirmed) expect(confirmed).toContain(phrase);
+    for (const phrase of want.check) expect(check).toContain(phrase);
+    if (want.confirmed.length === 0) expect(confirmed).toBe('');
+    if (want.check.length === 0) expect(check).toBe('');
+    expect(g.account_type.length).toBeGreaterThan(0);
+    for (const a of g.account_type) {
+      expect(Object.keys(a).sort()).toEqual(['status', 'text']);
+      expect(['confirmed', 'check in app']).toContain(a.status);
+    }
+  });
+
+  it('a "check in app" item carries no evidence; a confirmed one always does', () => {
+    for (const n of Object.values(CONNECT_GUIDES.networks)) {
+      for (const a of n.account_type) {
+        if (a.status === 'confirmed') expect(a.evidence.length, a.text).toBeGreaterThan(0);
+        else expect('evidence' in a, a.text).toBe(false);
+      }
+    }
+  });
+
+  it('the Instagram scopes it cites are the instagram_business_* defaults in config', () => {
+    const cfg = readFileSync(new URL('../../config/services.php', import.meta.url), 'utf8').split('\n');
+    expect(cfg[116]).toMatch(/'instagram_business_basic,instagram_business_content_publish/);
+    expect(cfg[112]).toContain('Instagram sign-in');
+  });
+
   it('every evidence reference points at a real file and line in this repo', () => {
     const items = [
       ...Object.values(CONNECT_GUIDES.common).flat(),
       ...Object.values(CONNECT_GUIDES.networks).flatMap((n) => [...n.requirements, ...n.common_errors, ...n.notes]),
+      ...Object.values(CONNECT_GUIDES.networks).flatMap((n) => n.account_type.filter((a) => a.status === 'confirmed')),
     ];
     for (const item of items) {
       expect(item.evidence.length, item.text).toBeGreaterThan(0);
