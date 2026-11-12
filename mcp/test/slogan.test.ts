@@ -20,11 +20,11 @@ describe('slogan', () => {
     expect(instructions).toContain('Start with list_channels.');
   });
 
-  it('server.json carries the registry description and version 1.2.0', () => {
+  it('server.json carries the registry description and version 1.2.1', () => {
     const json = JSON.parse(readFileSync(new URL('../server.json', import.meta.url), 'utf8'));
     expect(json.description).toBe('Get content approved & published faster: draft, send approval links and publish from your AI chat.');
     expect(json.description.length).toBeLessThanOrEqual(100);
-    expect(json.version).toBe('1.2.0');
+    expect(json.version).toBe('1.2.1');
   });
 
   it('protected-resource metadata documents the MCP docs page', () => {

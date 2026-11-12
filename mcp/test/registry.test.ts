@@ -70,8 +70,8 @@ describe('mcp/server.json (official MCP registry)', () => {
     }
   });
 
-  it('has no repository link: the source repository is not meant to be listed', () => {
-    expect(server.repository).toBeUndefined();
+  it('links the public source repository, in the mcp/ subfolder', () => {
+    expect(server.repository).toEqual({ url: 'https://github.com/creatifren/creatif.space-api', source: 'github', subfolder: 'mcp' });
   });
 
   it('lists exactly the tools and prompts the server serves, and its version', async () => {
