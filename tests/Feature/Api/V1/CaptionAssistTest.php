@@ -27,7 +27,7 @@ it('returns the endpoint answer as a suggestion', function () {
         ->assertOk()
         ->assertJsonPath('data.text', '#kopi #pagi');
 
-    Http::assertSent(fn ($r) => $r['model'] === 'm' && $r['messages'][1]['content'] === 'Kopi pagi'
+    Http::assertSent(fn ($r) => $r['model'] === 'm' && $r['store'] === false && $r['messages'][1]['content'] === 'Kopi pagi'
         && $r->hasHeader('Authorization', 'Bearer k'));
 });
 

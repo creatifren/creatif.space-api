@@ -147,6 +147,7 @@ describe('OpenAI provider', function () {
             return $r->url() === 'https://ai.test/v1/chat/completions'
                 && $r->hasHeader('Authorization', 'Bearer sk-test')
                 && $r['model'] === 'model-from-config'
+                && $r['store'] === false
                 && $r['response_format'] === ['type' => 'json_object']
                 && $r['messages'][1]['content'] === 'Kopi pagi'
                 && str_contains($system, 'Tone: warm.')

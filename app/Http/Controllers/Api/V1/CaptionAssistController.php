@@ -42,6 +42,8 @@ class CaptionAssistController extends Controller
                 ->timeout(30)
                 ->post(rtrim($config['base_url'], '/').'/chat/completions', [
                     'model' => $config['model'],
+                    // Not kept by OpenAI for later (evals, distillation) — CTO q1550.
+                    'store' => false,
                     'messages' => [
                         ['role' => 'system', 'content' => self::PROMPTS[$validated['mode']]],
                         ['role' => 'user', 'content' => $validated['caption']],

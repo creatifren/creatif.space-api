@@ -34,6 +34,8 @@ class OpenAiCaptionProvider implements AiCaptionProvider
                 ->timeout((int) ($config['timeout'] ?? 30))
                 ->post(rtrim((string) $baseUrl, '/').'/chat/completions', [
                     'model' => $model,
+                    // Not kept by OpenAI for later (evals, distillation) — CTO q1550.
+                    'store' => false,
                     'response_format' => ['type' => 'json_object'],
                     'messages' => [
                         ['role' => 'system', 'content' => $this->system($platform, $style, $count)],
