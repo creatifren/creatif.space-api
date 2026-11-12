@@ -13,6 +13,8 @@ enum NotificationType: string
     // A client approved or asked for changes on an approval link (RF-043).
     case SocialPostDecision = 'social.post.decision';
     case ProductNews = 'product.news';
+    // Monday 08:00 local: last week's posts, waiting approvals, failures (email only).
+    case WeeklyDigest = 'digest.weekly';
     // New DMs and comments in the Inbox — bell only, batched (InboxNotifier).
     // Not on the Settings screen yet: see the open question in the PR.
     case InboxActivity = 'inbox.activity';
@@ -40,6 +42,7 @@ enum NotificationType: string
             self::SocialPostFailed,
             self::SocialPostDecision,
             self::ProductNews,
+            self::WeeklyDigest,
         ];
     }
 }

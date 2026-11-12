@@ -36,6 +36,7 @@ use App\Http\Controllers\Api\V1\McpApprovalController;
 use App\Http\Controllers\Api\V1\MeController;
 use App\Http\Controllers\Api\V1\MyProfileController;
 use App\Http\Controllers\Api\V1\NotificationController;
+use App\Http\Controllers\Api\V1\NotificationSettingsController;
 use App\Http\Controllers\Api\V1\OpenApiController;
 use App\Http\Controllers\Api\V1\OutstandConnectController;
 use App\Http\Controllers\Api\V1\PinterestBoardController;
@@ -709,4 +710,11 @@ Route::middleware(['auth:sanctum,mcp', EnforceTokenScope::class, EnsureNotPendin
     Route::post('/me/notifications/read', [NotificationController::class, 'read'])->name('api.v1.me.notifications.read');
     Route::get('/me/notification-preferences', [NotificationController::class, 'preferences'])->name('api.v1.me.notification-preferences');
     Route::patch('/me/notification-preferences', [NotificationController::class, 'updatePreferences'])->name('api.v1.me.notification-preferences.update');
+    // The three email switches (MCP get/update_notification_settings).
+    Route::get('/me/notification-settings', [NotificationSettingsController::class, 'show'])
+        ->middleware('throttle:60,1')
+        ->name('api.v1.me.notification-settings');
+    Route::patch('/me/notification-settings', [NotificationSettingsController::class, 'update'])
+        ->middleware('throttle:30,1')
+        ->name('api.v1.me.notification-settings.update');
 });
