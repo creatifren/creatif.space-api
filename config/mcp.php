@@ -20,7 +20,7 @@ return [
     'introspection_secret' => env('MCP_INTROSPECT_SECRET', ''),
 
     'scopes' => [
-        'read' => 'Read your channels, posts, files, Spaces, Credits balance and Engage inbox (comments and DMs)',
+        'read' => 'Read your channels, posts, files, Spaces, Credits balance, Engage inbox (comments and DMs) and Insight numbers',
         'draft' => 'Save draft posts and draft Spaces, and upload media to your library (never sends, schedules or publishes them)',
         'approve' => 'Create client approval links for your posts (Free: one client, posts up to 7 days ahead)',
         'publish' => 'Schedule and publish your drafts (at most 20 a day), publish your Spaces, and reply to comments and DMs, spending Credits',
@@ -67,6 +67,10 @@ return [
         'api.v1.files.index' => 'read',
         'api.v1.credits.show' => 'read',
         'api.v1.me.subscription' => 'read',
+        // get_insight_summary: Pro / Max (402 plan_required on Free).
+        'api.v1.insight.summary' => 'read',
+        // get_insight_report_link: a 15-minute signed PDF link (Pro / Max).
+        'api.v1.insight.export-link' => 'read',
         // Drafts only: EnforceTokenScope refuses a body that would send,
         // schedule or ask for approval.
         'api.v1.social-posts.store' => 'draft',
@@ -98,6 +102,8 @@ return [
         'api.v1.me.approvals.waiting' => 'approvals:decide',
         'api.v1.me.approvals.preview' => 'approvals:decide',
         'api.v1.me.approvals.decide' => 'approvals:decide',
+        // list_shared_with_me: Content Plans sent to this account's email.
+        'api.v1.me.reports.shared' => 'approvals:decide',
 
         // Spaces (list_spaces / create_space_from_files / publish_space).
         // Creating makes a Draft+Private Space, never a published one;

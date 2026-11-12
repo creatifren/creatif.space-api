@@ -742,13 +742,56 @@ class SocialApprovalController extends Controller
     }
 
     /**
-     * GET /me/reports/shared — "Reports shared with you". Not built yet:
-     * always empty, in its final shape so the app can render it:
-     * [{report_id, title, period: {from, to}, owner: {name}, url}].
+     * GET /me/reports/shared — "Reports shared with you": what other people
+     * shared with this user to look at, newest first. Each row is
+     * {report_id, kind, title, period: {from, to}, owner: {name}, url, …}.
+     *
+     * kind "content_plan": a live Content Plan (a scoped approval link)
+     * whose approver_email is this user's verified email — the same rule
+     * as "Waiting your approval". kind "insight" is reserved for Insight
+     * share links; the API has none yet, so no such rows exist.
+     *
+     * Reached across workspaces only through the approver email, never by
+     * id, so ScopeToWorkspace has nothing to check here.
      */
     public function sharedReports(Request $request): JsonResponse
     {
-        return response()->json(['data' => []]);
+        $user = $request->user();
+        if ($user->email_verified_at === null) {
+            return response()->json(['data' => []]);
+        }
+
+        $plans = SocialApprovalLink::query()
+            ->live()
+            ->whereNotNull('scope_from')
+            ->where('approver_email', mb_strtolower(trim($user->email)))
+            ->with('user:id,name')
+            ->latest('id')
+            ->limit(100)
+            ->get();
+
+        $rows = $plans->map(function (SocialApprovalLink $link) {
+            $counts = PlanScope::counts($link);
+
+            return [
+                'report_id' => $link->ulid,
+                'kind' => 'content_plan',
+                'title' => $link->title,
+                'period' => [
+                    'from' => $link->scope_from?->format('Y-m-d'),
+                    'to' => $link->scope_to?->format('Y-m-d'),
+                    'timezone' => PlanScope::timezone($link),
+                ],
+                'owner' => ['name' => $link->user->name],
+                'url' => $link->url(),
+                'posts' => $counts['total'],
+                'waiting' => $counts[PlanScope::STATE_WAITING],
+                'expires_at' => $link->expires_at?->toIso8601String(),
+                'created_at' => $link->created_at?->toIso8601String(),
+            ];
+        })->values()->all();
+
+        return response()->json(['data' => $rows]);
     }
 
     /**

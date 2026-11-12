@@ -134,5 +134,13 @@ it('has no Insight read route outside the gated list (new ones must be added her
         'api.v1.insight.export',
         'api.v1.insight.clients',
         'api.v1.insight.reports.show',
+        // tests/Feature/Insight/InsightSummaryApiTest.php: 402 on Free.
+        'api.v1.insight.summary',
+        // tests/Feature/Insight/InsightPdfExportTest.php: 402 on Free.
+        'api.v1.insight.export.pdf',
+        'api.v1.insight.export.signed',
+        // Not Insight data: the monthly-email switch and whether the plan
+        // sends it. Turning it on is gated (402), in InsightMonthlyEmailTest.
+        'api.v1.me.insight-settings.show',
     ]);
 });

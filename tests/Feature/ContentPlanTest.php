@@ -457,7 +457,7 @@ describe('inboxes', function () {
             ->assertJsonPath('data.0.posts.0.decidable', true);
     });
 
-    it('answers "Reports shared with you" with an empty list for now', function () {
+    it('answers "Reports shared with you" with an empty list when nothing is shared (SharedWithMeTest has the rest)', function () {
         asApprover($this, 'rani@client.test')->getJson('/api/v1/me/reports/shared')->assertOk()->assertExactJson(['data' => []]);
         app('auth')->forgetGuards();
         $this->flushSession();

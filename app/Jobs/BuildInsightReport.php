@@ -3,15 +3,9 @@
 namespace App\Jobs;
 
 use App\Models\InsightReport;
-use App\Models\SocialAccount;
-use App\Support\Insight\InsightClients;
-use App\Support\Insight\InsightCollector;
-use App\Support\Insight\InsightImages;
+use App\Support\Insight\InsightPdfBuilder;
 use App\Support\Insight\InsightPeriod;
-use App\Support\Insight\InsightRenderer;
-use App\Support\Insight\InsightView;
 use App\Support\PlanQuota;
-use App\Support\Workspace;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Queue\Queueable;
 use Illuminate\Support\Facades\Log;
@@ -32,7 +26,7 @@ class BuildInsightReport implements ShouldQueue
 
     public function __construct(public InsightReport $report) {}
 
-    public function handle(InsightCollector $collector, InsightRenderer $renderer, InsightImages $images): void
+    public function handle(InsightPdfBuilder $builder): void
     {
         $report = $this->report->fresh();
 
@@ -54,35 +48,13 @@ class BuildInsightReport implements ShouldQueue
         $options = $report->options;
         $period = InsightPeriod::fromDates($report->period_from, $report->period_to, $options['period_kind']);
 
-        // The channels asked for, in the order asked, still in the workspace.
-        $accounts = SocialAccount::query()
-            ->whereIn('user_id', Workspace::memberIds($owner))
-            ->whereIn('ulid', $options['channel_ids'])
-            ->get()
-            ->sortBy(fn (SocialAccount $a) => array_search($a->ulid, $options['channel_ids'], true))
-            ->values();
-
-        $data = $collector->collect($owner, $accounts, $period);
-
-        $thumbnails = [];
-        foreach ($data['thumbnail_sources'] as $key => $candidates) {
-            $thumbnails[$key] = $images->firstImage($candidates);
-        }
-
-        $view = InsightView::build($data, [
-            'client_name' => InsightClients::name($owner),
-            'locale' => $report->locale,
-            // The API holds no workspace logo yet, and an avatar is not a
-            // logo: the slot stays empty (hidden) until one exists, whatever
-            // show_logo says.
-            'logo' => null,
-            'branding' => ! $options['hide_branding'],
-            'notes' => $options['next_month_notes'],
-            'generated_at' => now(),
-            'thumbnails' => $thumbnails,
-        ]);
-
-        $result = $renderer->render($report->format, $view);
+        $result = $builder->build(
+            $owner,
+            InsightPdfBuilder::accounts($owner, $options['channel_ids']),
+            $period,
+            $report->format,
+            ['locale' => $report->locale, 'branding' => ! $options['hide_branding'], 'notes' => $options['next_month_notes']],
+        );
 
         $path = 'insight-reports/'.$owner->ulid.'/'.$report->ulid.'.pdf';
         Storage::disk(InsightReport::DISK)->put($path, $result['pdf'], ['ContentType' => 'application/pdf']);
