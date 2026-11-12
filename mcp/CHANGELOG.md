@@ -35,6 +35,7 @@ Changed:
 - Every tool description opens with a “Use …” line (≤ 120 chars) saying when to use it, naming the prompt (`plan_week`, `send_for_approval`, `monthly_report`) that walks through it.
 - Registry entry 1.2.1: `repository` → `https://github.com/creatifren/creatif.space-api` (subfolder `mcp`). Not published from here: the registry workflow is Rizal's to run.
 - Confirms of `publish_post`, `schedule_post` and `retry_post`, and `create_approval_link`, send an `Idempotency-Key` (one per confirm), so a double submit sends, charges or creates once.
+- `mcp_tool_called` adds `client_surface` (claude / chatgpt / cursor / vscode / api_key / other), `code` (`ok` or the error code) and `duration_ms`; `ms` and `error` stay. Never user text.
 - Every `list_*` tool takes `limit` + `cursor` and returns `next_cursor` (null at the end).
 - The 10 most-used read tools declare an `outputSchema` and return `structuredContent` (text block kept).
 - `/free` `connect_guide` returns `account_type` per network: `confirmed` from the code, or `check in app` where the code does not prove it.
