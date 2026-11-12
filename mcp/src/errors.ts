@@ -94,6 +94,7 @@ const PLAN_NEXT: Record<string, string> = {
   schedule_window: 'On Free a post can be scheduled at most 7 days ahead: offer a date within 7 days, or upgrading.',
   queue_limit: 'On Free at most 10 posts can be queued (scheduled or waiting for approval): offer to wait until some go out (list_posts status "scheduled" shows the queue), or upgrading.',
   approval_clients: 'On Free approval links are for one client at a time: offer to put these posts on a link for the same client (the same approver_email), or upgrading.',
+  insight: 'Insight (numbers, top posts, best times, reports) is not on Free: say that in one line and pass on the upgrade link from the message. Do not quote a price.',
   default: 'get_credits shows the plan and its limits (Free: posts up to 7 days ahead, 10 queued posts, approval links for one client).',
 };
 
