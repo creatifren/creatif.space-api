@@ -20,6 +20,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
  * @property string|null $ip
  * @property string|null $user_agent
  * @property string $source web | mcp
+ * @property string|null $comment the approver's reason, with "request changes"
  * @property CarbonImmutable|null $created_at
  */
 class SocialApprovalDecision extends Model
@@ -34,7 +35,7 @@ class SocialApprovalDecision extends Model
 
     protected $fillable = [
         'social_approval_link_id', 'social_post_id', 'decision',
-        'approver_user_id', 'approver_email', 'client_name', 'ip', 'user_agent', 'source',
+        'approver_user_id', 'approver_email', 'client_name', 'ip', 'user_agent', 'source', 'comment',
     ];
 
     /**
@@ -43,6 +44,14 @@ class SocialApprovalDecision extends Model
     public function link(): BelongsTo
     {
         return $this->belongsTo(SocialApprovalLink::class, 'social_approval_link_id');
+    }
+
+    /**
+     * @return BelongsTo<SocialPost, $this>
+     */
+    public function post(): BelongsTo
+    {
+        return $this->belongsTo(SocialPost::class, 'social_post_id');
     }
 
     /**

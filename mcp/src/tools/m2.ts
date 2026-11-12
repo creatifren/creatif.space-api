@@ -37,7 +37,7 @@ export class PreviewTokens {
 
   constructor(private readonly now: () => number = Date.now) {}
 
-  remember(user: string, postId: string, p: SendPreview): void {
+  remember(user: string, postId: string, p: Pick<SendPreview, 'confirm_token' | 'confirm_expires_at'>): void {
     if (!p.confirm_token) return;
     const expiresAt = p.confirm_expires_at ? Date.parse(p.confirm_expires_at) : this.now() + 10 * 60_000;
     this.tokens.set(`${user}:${postId}`, { token: p.confirm_token, expiresAt });

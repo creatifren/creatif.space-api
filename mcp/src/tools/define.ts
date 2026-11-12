@@ -119,7 +119,7 @@ function unsure(err: ToolError, def: ToolDef<z.ZodRawShape>): ToolError {
   return new ToolError(
     err.code,
     err.message,
-    `It is not certain whether ${def.name} went through. Check first (list_posts, get_post or list_files) and call again only if nothing was created or sent.`,
+    `It is not certain whether ${def.name} went through. Check first (list_posts, get_post, list_files or list_spaces) and call again only if nothing was created or sent.`,
     { ...err.details, retryable: false, verify_first: true },
   );
 }

@@ -2,8 +2,10 @@
 
 namespace App\Http\Middleware;
 
+use App\Exceptions\PlanFeatureRequired;
 use App\Mcp\TokenContext;
 use App\Models\McpAuditLog;
+use App\Support\PlanQuota;
 use Closure;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -17,7 +19,9 @@ use Throwable;
  *
  * A request signed in with the SPA cookie passes straight through. A token
  * request may only reach the routes in config('mcp.routes'), with the scope
- * listed there; draft-scope writes must be drafts. Every token request is
+ * listed there; draft-scope writes must be drafts; a route listed in
+ * config('mcp.route_features') also needs that plan feature (402
+ * plan_required, the same answer as everywhere else). Every token request is
  * rate limited per token and leaves an audit row — route, tool, client,
  * status — never content.
  */
@@ -33,6 +37,7 @@ class EnforceTokenScope
         $route = $request->route()?->getName();
         // Route names are dotted: look the name up as a key, not a config path.
         $needed = $route === null ? null : (((array) config('mcp.routes'))[$route] ?? null);
+        $feature = $route === null ? null : (((array) config('mcp.route_features'))[$route] ?? null);
 
         $limit = max(1, (int) config('mcp.rate_limit_per_minute'));
         $bucket = 'mcp-token:'.$context->key();
@@ -54,6 +59,7 @@ class EnforceTokenScope
                 'draft_only',
                 'Connected apps can only save drafts. Open the draft in Creatif Space to schedule or send it.',
             ),
+            is_string($feature) && ! PlanQuota::hasFeature($context->user, $feature) => PlanFeatureRequired::feature($context->user, $feature)->render(),
             RateLimiter::tooManyAttempts($bucket, $limit) => $this->tooMany($bucket),
             default => null,
         };
