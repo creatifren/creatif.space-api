@@ -101,6 +101,19 @@ it('runs the whole flow with the document URL as client_id: consent, code, token
     Http::assertSentCount(1);
 });
 
+it('accepts a document that also lists grants we do not support, like Claude\'s jwt-bearer, but never grants them', function () {
+    fakeCimd(cimdDocument([
+        'client_name' => 'Claude',
+        'client_uri' => 'https://claude.ai',
+        'grant_types' => ['authorization_code', 'refresh_token', 'urn:ietf:params:oauth:grant-type:jwt-bearer'],
+    ]));
+
+    cimdAuthorize($this, User::factory()->create())['response']->assertOk()->assertSee('Claude');
+
+    $this->post('/oauth/token', ['grant_type' => 'urn:ietf:params:oauth:grant-type:jwt-bearer', 'client_id' => CIMD_URL])
+        ->assertStatus(400);
+});
+
 it('refuses a redirect_uri the document does not list', function () {
     fakeCimd(cimdDocument());
 
