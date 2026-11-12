@@ -15,7 +15,7 @@ interface GuidesFile {
   help_url: string;
   steps: Record<Flow, string[]>;
   common: { requirements: Item[]; oauth_requirements: Item[]; common_errors: Item[]; oauth_common_errors: Item[] };
-  networks: Record<ConnectNetwork, { name: string; flow: Flow; requirements: Item[]; common_errors: Item[] }>;
+  networks: Record<ConnectNetwork, { name: string; flow: Flow; requirements: Item[]; common_errors: Item[]; notes: Item[] }>;
 }
 
 export const CONNECT_GUIDES = readFreeJson<GuidesFile>('connect-guides.json');
@@ -38,6 +38,8 @@ export function connectGuide({ network }: { network: ConnectNetwork }) {
       ...(oauth ? CONNECT_GUIDES.common.oauth_common_errors : []),
       ...CONNECT_GUIDES.common.common_errors,
     ]),
+    /** Good to know, not a connect error (e.g. a network that apps cannot delete posts from). */
+    notes: text(g.notes),
     help_url: CONNECT_GUIDES.help_url,
   };
 }
