@@ -42,8 +42,9 @@ describe('list_channels', () => {
     expect(app!.events).toHaveLength(1);
     const { distinctId, event } = app!.events[0]!;
     expect(distinctId).toBe(USER);
-    expect(Object.keys(event).sort()).toEqual(['client_name', 'ms', 'ok', 'tool']);
-    expect(event).toMatchObject({ tool: 'list_channels', client_name: 'Claude', ok: true });
+    expect(Object.keys(event).sort()).toEqual(['client_name', 'client_surface', 'code', 'duration_ms', 'ms', 'ok', 'tool']);
+    expect(event).toMatchObject({ tool: 'list_channels', client_surface: 'claude', client_name: 'Claude', ok: true, code: 'ok' });
+    expect(event.duration_ms).toBe(event.ms);
   });
 });
 

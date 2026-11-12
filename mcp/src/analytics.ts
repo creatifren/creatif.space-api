@@ -1,9 +1,31 @@
 import type { FetchLike } from './auth/introspection.js';
 
+/** Which kind of client made the call, from the OAuth client name (or an API key). */
+export type ClientSurface = 'claude' | 'chatgpt' | 'cursor' | 'vscode' | 'api_key' | 'other';
+
+export function clientSurface(clientName: string, tokenType: string): ClientSurface {
+  if (tokenType === 'api_key') return 'api_key';
+  const n = clientName.toLowerCase();
+  if (n.includes('claude') || n.includes('anthropic')) return 'claude';
+  if (n.includes('chatgpt') || n.includes('openai')) return 'chatgpt';
+  if (n.includes('cursor')) return 'cursor';
+  if (n.includes('vs code') || n.includes('vscode') || n.includes('visual studio code') || n.includes('copilot')) return 'vscode';
+  return 'other';
+}
+
+/**
+ * mcp_tool_called: metadata only — never arguments, captions, ids or any
+ * text the user wrote. `ms` and `error` are the earlier names of
+ * duration_ms and code, kept so existing dashboards keep working.
+ */
 export interface ToolCallEvent {
   tool: string;
+  client_surface: ClientSurface;
   client_name: string;
   ok: boolean;
+  /** "ok", or the error code the tool answered (scope_missing, rate_limited, …). */
+  code: string;
+  duration_ms: number;
   ms: number;
   /** Error code when ok is false. Never content. */
   error?: string;

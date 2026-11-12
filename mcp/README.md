@@ -180,8 +180,11 @@ the SDK answers itself, get the same envelope. Codes: `reconnect_required`,
 replies `reply_window_closed`, `reply_rejected`, `reply_not_possible`,
 `relay_unavailable`.
 
-Each call emits PostHog `mcp_tool_called` `{tool, client_name, ok, ms}` (plus
-`error` code on failure) — never content. Skipped when `POSTHOG_KEY` is unset.
+Each call emits PostHog `mcp_tool_called` `{tool, client_surface, client_name, ok,
+code, duration_ms}` — `client_surface` is `claude`, `chatgpt`, `cursor`, `vscode`,
+`api_key` or `other` (from the OAuth client name); `code` is `ok` or the error
+code. `ms` and `error` are kept as the earlier names of `duration_ms` and `code`.
+Never arguments, captions, ids or other user text. Skipped when `POSTHOG_KEY` is unset.
 
 **Not an MCP tool, on purpose: the account data export.** `POST /api/v1/me/export`
 (a ZIP of the whole workspace, emailed as a 24-hour link) works only from a

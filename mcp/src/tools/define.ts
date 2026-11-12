@@ -1,7 +1,7 @@
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import type { CallToolResult, ToolAnnotations } from '@modelcontextprotocol/sdk/types.js';
 import { z } from 'zod';
-import type { Analytics } from '../analytics.js';
+import { clientSurface, type Analytics } from '../analytics.js';
 import type { CallerAuth } from '../auth/middleware.js';
 import { forChatGpt, ToolError, toToolError, type NotFound } from '../errors.js';
 import type { V1Client } from '../v1.js';
@@ -123,11 +123,15 @@ export function registerTool(server: McpServer, def: ToolDef<any>, deps: Registe
         errorCode = err.code;
         return result(err.toJSON(def.name), true);
       } finally {
+        const ms = Math.round(performance.now() - started);
         deps.analytics.toolCalled(deps.auth.extra.userUlid, {
           tool: def.name,
+          client_surface: clientSurface(deps.auth.extra.clientName, deps.auth.extra.tokenType),
           client_name: deps.auth.extra.clientName,
           ok,
-          ms: Math.round(performance.now() - started),
+          code: ok ? 'ok' : (errorCode ?? 'internal_error'),
+          duration_ms: ms,
+          ms,
           ...(errorCode ? { error: errorCode } : {}),
         });
       }
