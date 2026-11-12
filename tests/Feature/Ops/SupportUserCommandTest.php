@@ -9,6 +9,7 @@ use App\Models\Subscription;
 use App\Models\TeamMember;
 use App\Models\User;
 use App\Support\Workspace;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Artisan;
 
 /*
@@ -100,7 +101,8 @@ it('fails with a message for an unknown email', function () {
 it('shows when they signed up and their first-touch attribution', function () {
     User::factory()->create([
         'email' => 'touch@example.test',
-        'created_at' => '2026-11-12 09:30:00',
+        // UTC on purpose: the app's zone is Asia/Jakarta, the command prints UTC.
+        'created_at' => Carbon::parse('2026-11-12 09:30:00', 'UTC'),
         'signup_attribution' => [
             'utm_source' => 'instagram', 'utm_medium' => 'bio', 'utm_campaign' => 'nov',
             'referrer_host' => 'l.instagram.com', 'landing_path' => '/pricing', 'signup_source' => 'instagram',

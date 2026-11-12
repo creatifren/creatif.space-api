@@ -111,10 +111,20 @@ final class SignupAttribution
         $user->forceFill(['signup_attribution' => self::of($attribution)])->save();
     }
 
-    /** The user's signup_source, or "unknown" for accounts made before it was kept. */
+    /**
+     * The user's signup_source, or "unknown" for accounts made before it was kept.
+     *
+     * Read raw: the model in hand may be a fresh create() or a partial select
+     * that never loaded the column (strict mode throws on a missing
+     * attribute outside production), so it is read from the row when absent.
+     */
     public static function sourceOf(User $user): string
     {
-        $stored = $user->signup_attribution;
+        $attributes = $user->getAttributes();
+        $raw = array_key_exists('signup_attribution', $attributes)
+            ? $attributes['signup_attribution']
+            : ($user->exists ? User::query()->whereKey($user->getKey())->value('signup_attribution') : null);
+        $stored = is_string($raw) ? json_decode($raw, true) : $raw;
 
         return is_array($stored) && is_string($stored['signup_source'] ?? null) ? $stored['signup_source'] : self::UNKNOWN;
     }

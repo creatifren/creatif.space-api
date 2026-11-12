@@ -282,10 +282,13 @@ final class ProductEvents
             return;
         }
 
+        // created_at read only if loaded: strict mode throws on a partial select.
+        $created = array_key_exists('created_at', $user->getAttributes()) ? $user->created_at : null;
+
         self::capture($user, $event, [
             'plan' => self::planOf($user),
             'signup_source' => SignupAttribution::sourceOf($user),
-            'minutes_since_signup' => $user->created_at === null ? null : (int) $user->created_at->diffInMinutes(now(), true),
+            'minutes_since_signup' => $created === null ? null : (int) $created->diffInMinutes(now(), true),
         ] + $properties);
     }
 
