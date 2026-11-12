@@ -49,6 +49,10 @@ return [
         'revoke' => 60,
         'register' => 30,
         'authorize' => 60,
+        // All clients from one address together on /oauth/token.
+        'token_ip' => 600,
+        // Refused requests (400 / 401) per address on token, register and authorize.
+        'failures' => 20,
     ],
 
     // Public pages named on the consent screen and in OAuth discovery

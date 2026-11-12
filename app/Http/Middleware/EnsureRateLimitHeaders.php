@@ -7,6 +7,7 @@ use Closure;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Routing\Route;
+use Illuminate\Support\Facades\RateLimiter;
 use Symfony\Component\HttpFoundation\Response;
 
 /**
@@ -16,12 +17,42 @@ use Symfony\Component\HttpFoundation\Response;
  * a minute (0 as the limit when the route has no throttle). Sources that
  * know a different limit set it themselves (RateLimitHeaders), and this
  * never overwrites what they set — except Remaining, always 0 on a 429.
+ *
+ * A 401 carries X-RateLimit-Limit / -Remaining of the refused-sign-in
+ * limit below.
  */
 class EnsureRateLimitHeaders
 {
+    /** Refused sign-ins (401) one address may make a minute with one credential (or none). */
+    public const UNAUTHENTICATED_PER_MINUTE = 20;
+
     public function handle(Request $request, Closure $next): Response
     {
         $response = $next($request);
+
+        // Blackbox B5: a 401 carried no limit at all. Refused sign-ins are
+        // counted per address and credential (a shared MCP host sends many
+        // people's tokens; one person's expired token must not block the
+        // rest). Past the limit, the refusal itself becomes a 429 with the
+        // headers; a request that signs in is never held up by it.
+        if ($response->getStatusCode() === 401) {
+            $key = 'api-401|'.$request->ip().'|'.substr(hash('sha256', (string) $request->bearerToken()), 0, 16);
+            RateLimiter::hit($key, 60);
+
+            if (RateLimiter::tooManyAttempts($key, self::UNAUTHENTICATED_PER_MINUTE + 1)) {
+                $retry = RateLimiter::availableIn($key);
+
+                return RateLimitHeaders::apply(response()->json([
+                    'message' => "Too many attempts. Try again in {$retry} seconds.",
+                    'retry_after' => $retry,
+                ], 429), self::UNAUTHENTICATED_PER_MINUTE, $retry);
+            }
+
+            $response->headers->set('X-RateLimit-Limit', (string) self::UNAUTHENTICATED_PER_MINUTE);
+            $response->headers->set('X-RateLimit-Remaining', (string) max(0, self::UNAUTHENTICATED_PER_MINUTE - RateLimiter::attempts($key)));
+
+            return $response;
+        }
 
         if ($response->getStatusCode() !== 429) {
             return $response;
