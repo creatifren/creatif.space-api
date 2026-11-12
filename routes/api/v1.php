@@ -5,6 +5,7 @@ use App\Http\Controllers\Api\V1\AffiliateController;
 use App\Http\Controllers\Api\V1\AiCaptionController;
 use App\Http\Controllers\Api\V1\AnalyticsController;
 use App\Http\Controllers\Api\V1\ApiKeyController;
+use App\Http\Controllers\Api\V1\ApprovalAuditController;
 use App\Http\Controllers\Api\V1\CaptionAssistController;
 use App\Http\Controllers\Api\V1\ConnectedAppController;
 use App\Http\Controllers\Api\V1\CreditsController;
@@ -380,6 +381,10 @@ Route::middleware(['auth:sanctum,mcp', EnforceTokenScope::class, EnsureNotPendin
         ->name('api.v1.social-approval-links.store');
     Route::get('/social-approval-links/{socialApprovalLink}', [SocialApprovalController::class, 'show'])
         ->name('api.v1.social-approval-links.show');
+    // Who decided what, when, and their comment (MCP get_approval_audit).
+    Route::get('/social-approval-links/{socialApprovalLink}/audit.csv', ApprovalAuditController::class)
+        ->middleware('throttle:30,1')
+        ->name('api.v1.social-approval-links.audit');
     Route::patch('/social-approval-links/{socialApprovalLink}', [SocialApprovalController::class, 'update'])
         ->middleware('throttle:30,1')
         ->name('api.v1.social-approval-links.update');

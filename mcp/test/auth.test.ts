@@ -98,6 +98,7 @@ describe('401 flow', () => {
         'get_insight_summary',
         'get_insight_report_link',
         'list_spaces', 'create_space_from_files', 'publish_space',
+        'get_approval_audit',
       ].sort(),
     );
     for (const tool of tools) {

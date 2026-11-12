@@ -47,7 +47,12 @@ export class V1Client {
     return this.request<T>('POST', path, body);
   }
 
-  private async request<T>(method: string, path: string, body?: unknown, query?: Query): Promise<T> {
+  /** A GET whose success body is not JSON (e.g. a CSV export): the raw text. Errors are still JSON. */
+  getText(path: string, query?: Query): Promise<string> {
+    return this.request<string>('GET', path, undefined, query, true);
+  }
+
+  private async request<T>(method: string, path: string, body?: unknown, query?: Query, raw = false): Promise<T> {
     const url = new URL(this.baseUrl + path);
     for (const [k, v] of Object.entries(query ?? {})) {
       if (v !== undefined && v !== null && v !== '') url.searchParams.set(k, String(v));
@@ -72,6 +77,7 @@ export class V1Client {
     }
 
     const text = await res.text();
+    if (raw && res.ok) return text as T;
     let json: unknown = null;
     if (text !== '') {
       try {

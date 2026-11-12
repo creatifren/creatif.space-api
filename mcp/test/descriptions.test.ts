@@ -17,7 +17,7 @@ const tools = async () => {
 describe('tool descriptions for agents', () => {
   it('every tool: one line on what it does, when to use it, an example call, errors with next steps', async () => {
     const list = await tools();
-    expect(list).toHaveLength(23);
+    expect(list).toHaveLength(24);
     for (const t of list) {
       const lines = t.description!.split('\n');
       expect(lines[0], t.name).not.toMatch(/^(When to use|Example|Errors)/);
@@ -44,6 +44,7 @@ describe('tool descriptions for agents', () => {
     expect(d.create_space_from_files).toMatch(/use publish_space/);
     expect(d.publish_space).toMatch(/Two steps: call with confirm false/);
     expect(d.list_shared_with_me).toMatch(/use list_waiting_approvals instead/);
+    expect(d.get_approval_audit).toMatch(/use check_approval_status with link_id instead/);
   });
 
   it('errors named in descriptions use the codes tools return', async () => {
