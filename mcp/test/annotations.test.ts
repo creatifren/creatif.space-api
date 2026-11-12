@@ -1,3 +1,4 @@
+import { readFileSync } from 'node:fs';
 import { afterEach, describe, expect, it } from 'vitest';
 import { startApp, TOKEN_FULL } from './helpers.js';
 
@@ -6,16 +7,29 @@ import { startApp, TOKEN_FULL } from './helpers.js';
  * openWorldHint) on every tool, by rule, and pinned by a snapshot so a
  * change is deliberate (vitest -u).
  *
- * Rules: list_* / get_* / check_* are read-only. Anything that goes public or
- * removes something — publish, schedule, reply, discard, revoke — is
- * destructive. A read-only tool is never destructive. A tool that reaches
- * outside creatif.space (the platforms, the client's inbox, the public web)
- * is open-world.
+ * Rules (directory readiness, G1): list_* / get_* / check_* are read-only.
+ * openWorldHint is true only for tools that post publicly (a social network
+ * or the public web); everything else is false. destructiveHint is true for
+ * tools that post publicly, delete, revoke or record a decision that cannot
+ * be taken back. A read-only tool is never destructive. schedule_posts is
+ * held to the same rule as schedule_post once it is registered.
  */
 
 const READ_PREFIXES = /^(list|get|check)_/;
-const DESTRUCTIVE = ['publish_post', 'schedule_post', 'reply_to_conversation', 'discard_draft', 'publish_space', 'revoke_insight_share_link', 'retry_post'];
-const OPEN_WORLD = ['publish_post', 'schedule_post', 'reply_to_conversation', 'publish_space', 'create_approval_link', 'create_content_plan', 'send_approval_reminder', 'decide_approval', 'create_insight_share_link', 'retry_post'];
+const DESTRUCTIVE = ['publish_post', 'schedule_post', 'schedule_posts', 'reply_to_conversation', 'discard_draft', 'unkeep_file', 'decide_approval', 'revoke_insight_share_link', 'publish_space', 'retry_post'];
+const OPEN_WORLD = ['publish_post', 'schedule_post', 'schedule_posts', 'reply_to_conversation', 'publish_space', 'retry_post'];
+const HINTS = ['readOnlyHint', 'destructiveHint', 'idempotentHint', 'openWorldHint'] as const;
+
+/** The table in docs/tool-justifications.md: name → [title, ro, destructive, open]. */
+function justifications() {
+  const md = readFileSync(new URL('../docs/tool-justifications.md', import.meta.url), 'utf8');
+  const rows = new Map<string, { title: string; readOnly: boolean; destructive: boolean; openWorld: boolean; why: string }>();
+  for (const line of md.split('\n')) {
+    const m = /^\| `([a-z_]+)` \| (.+?) \| (yes|no) \| (yes|no) \| (yes|no) \| (.+?) \|$/.exec(line);
+    if (m) rows.set(m[1]!, { title: m[2]!, readOnly: m[3] === 'yes', destructive: m[4] === 'yes', openWorld: m[5] === 'yes', why: m[6]! });
+  }
+  return rows;
+}
 
 let app: Awaited<ReturnType<typeof startApp>> | undefined;
 afterEach(async () => {
@@ -29,15 +43,13 @@ async function tools() {
 }
 
 describe('tool annotations', () => {
-  it('every tool sets all four hints as booleans, plus a title', async () => {
+  it('every tool has a human title and sets all four hints as explicit booleans', async () => {
     for (const t of await tools()) {
-      expect(t.annotations, t.name).toMatchObject({
-        title: expect.any(String),
-        readOnlyHint: expect.any(Boolean),
-        destructiveHint: expect.any(Boolean),
-        idempotentHint: expect.any(Boolean),
-        openWorldHint: expect.any(Boolean),
-      });
+      expect(typeof t.title, `${t.name} title`).toBe('string');
+      expect(t.title!.trim().length, `${t.name} title`).toBeGreaterThan(3);
+      expect(t.title, `${t.name} title is not the tool name`).not.toBe(t.name);
+      expect(t.annotations?.title, t.name).toBe(t.title);
+      for (const h of HINTS) expect(typeof t.annotations?.[h], `${t.name}.${h}`).toBe('boolean');
     }
   });
 
@@ -48,14 +60,33 @@ describe('tool annotations', () => {
     }
   });
 
-  it('publish, schedule, reply, discard and revoke are destructive — and only they are', async () => {
+  it('public posting, deleting, revoking and deciding are destructive — and only they are', async () => {
     const list = await tools();
-    expect(list.filter((t) => t.annotations!.destructiveHint).map((t) => t.name).sort()).toEqual([...DESTRUCTIVE].sort());
+    const names = new Set(list.map((t) => t.name));
+    expect(list.filter((t) => t.annotations!.destructiveHint).map((t) => t.name).sort()).toEqual(DESTRUCTIVE.filter((n) => names.has(n)).sort());
   });
 
-  it('tools that reach outside creatif.space are open-world — and only they are', async () => {
+  it('only tools that post publicly are open-world', async () => {
     const list = await tools();
-    expect(list.filter((t) => t.annotations!.openWorldHint).map((t) => t.name).sort()).toEqual([...OPEN_WORLD].sort());
+    const names = new Set(list.map((t) => t.name));
+    expect(list.filter((t) => t.annotations!.openWorldHint).map((t) => t.name).sort()).toEqual(OPEN_WORLD.filter((n) => names.has(n)).sort());
+  });
+
+  it('docs/tool-justifications.md has one matching line per tool, and none for tools that do not exist', async () => {
+    const list = await tools();
+    const rows = justifications();
+    for (const t of list) {
+      const row = rows.get(t.name);
+      expect(row, `${t.name} missing from docs/tool-justifications.md`).toBeDefined();
+      expect(row, t.name).toEqual({
+        title: t.title,
+        readOnly: t.annotations!.readOnlyHint,
+        destructive: t.annotations!.destructiveHint,
+        openWorld: t.annotations!.openWorldHint,
+        why: expect.stringMatching(/\S{3}/),
+      });
+    }
+    expect([...rows.keys()].sort()).toEqual(list.map((t) => t.name).sort());
   });
 
   it('match the snapshot', async () => {

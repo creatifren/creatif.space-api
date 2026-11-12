@@ -161,7 +161,7 @@ export const decideApproval = defineTool({
     reason: z.string().trim().min(1).max(5000).optional().describe('Required for "revise": what should change (the sender reads it)'),
     confirm: z.boolean().default(false).describe('Leave false first: you get a preview. Set true only after the user explicitly agreed to that preview.'),
   },
-  annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: true },
+  annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: true, openWorldHint: false },
   notFound: { what: 'A post on that approval link', next: 'Check the link and post ids with list_waiting_approvals and call again.' },
   run: async (args, ctx) => {
     if (args.decision === 'revise' && !args.reason) {

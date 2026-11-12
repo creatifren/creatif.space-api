@@ -40,7 +40,7 @@ export const getConnectLink = defineTool({
     example: 'get_connect_link { "network": "instagram" } → { network, url: "https://creatif.space/social/connect?network=instagram", steps: [...], requirements: [...], existing: [...], room: { used, limit }, next_step }',
     rules: 'Plans limit how many channels can be connected; reconnecting one that is already listed does not need room.',
     errors: [
-      ['plan_required', 'the plan’s channel limit is reached: pass the message on (upgrade link) or disconnect a channel in creatif.space; do not retry'],
+      ['plan_required', 'the plan’s channel limit is reached: the user can disconnect a channel in creatif.space; do not retry'],
       ['invalid_input', 'use one of the networks in the input schema'],
       ['scope_missing', 'reconnect and allow "read"'],
       ['upstream_unavailable', 'wait a minute and call again'],

@@ -33,6 +33,9 @@ final class ProductEvents
 
     public const PLATFORMS = ['web', 'android_app', 'android_twa'];
 
+    /** Cache key prefix (+ user ULID) that keeps user_signed_up to one per user. */
+    public const SIGNED_UP_KEY = 'analytics:user_signed_up:';
+
     /** Events also sent under a second name while dashboards move over. */
     private const ALIASES = [
         'approval_link_created' => 'approval_link_sent',
@@ -123,13 +126,51 @@ final class ProductEvents
             $extra['$set_once'] = ['initial_entry' => $entry];
         }
 
-        self::capture($user, 'user_signed_up', ['method' => $method, 'plan' => 'free'] + $context + $extra);
+        // Exactly once per user, whichever path created the row (Google web,
+        // Google native, email, approver link): a second call — a retried
+        // request, a future path calling this too — sends nothing.
+        try {
+            $first = Cache::add(self::SIGNED_UP_KEY.$user->ulid, true, now()->addDays(30));
+        } catch (\Throwable) {
+            $first = true; // no cache: the call sites already run once per created row
+        }
+        if (! $first) {
+            return;
+        }
+
+        self::capture($user, 'user_signed_up', [
+            'method' => $method,
+            'plan' => self::planOf($user),
+            // Internal accounts never reach capture(); sent anyway so every
+            // funnel can filter is_staff != true the same way.
+            'is_staff' => (bool) ($user->getAttributes()['is_staff'] ?? false),
+            'signup_source' => self::signupSource($extra),
+        ] + $context + $extra);
         self::set($user, [
             'plan' => 'free',
             'signup_method' => $method,
             'signed_up_at' => ($user->created_at ?? now())->toIso8601String(),
             'is_internal' => Analytics::isInternal($user),
         ]);
+    }
+
+    /**
+     * Where a signup came from, in one property for breakdowns: the first-touch
+     * utm_source, else "referral" (an affiliate ref), else the entry slug
+     * (e.g. tpl-restaurants), else "direct".
+     *
+     * @param  array<string, mixed>  $attribution
+     */
+    public static function signupSource(array $attribution): string
+    {
+        foreach (['utm_source' => null, 'ref' => 'referral', 'entry' => null] as $key => $label) {
+            $value = $attribution[$key] ?? null;
+            if (is_string($value) && $value !== '') {
+                return $label ?? substr($value, 0, 100);
+            }
+        }
+
+        return 'direct';
     }
 
     /**

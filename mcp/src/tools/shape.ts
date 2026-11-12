@@ -50,6 +50,15 @@ export function shapePost(p: V1Post, withComments = false) {
     })),
     ...(p.author ? { author: p.author } : {}),
     created_at: p.created_at,
-    ...(withComments ? { comments: p.comments ?? [] } : {}),
+    ...(withComments ? { comments: (p.comments ?? []).map(trimComment) } : {}),
   };
+}
+
+/**
+ * A review-thread comment without the internal comment id (nothing takes
+ * it as input); replies the same way. Author, role, text, state and time stay.
+ */
+function trimComment(c: Obj): Obj {
+  const rest = Object.fromEntries(Object.entries(c).filter(([k]) => k !== 'id' && k !== 'replies'));
+  return { ...rest, ...(Array.isArray(c.replies) ? { replies: (c.replies as Obj[]).map(trimComment) } : {}) };
 }

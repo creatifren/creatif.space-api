@@ -24,6 +24,7 @@ use App\Http\Controllers\Api\V1\HealthController;
 use App\Http\Controllers\Api\V1\InboxCommentController;
 use App\Http\Controllers\Api\V1\InboxController;
 use App\Http\Controllers\Api\V1\InboxFeedController;
+use App\Http\Controllers\Api\V1\InsightBestTimesController;
 use App\Http\Controllers\Api\V1\InsightExportController;
 use App\Http\Controllers\Api\V1\InsightPdfExportController;
 use App\Http\Controllers\Api\V1\InsightReportController;
@@ -106,6 +107,12 @@ Route::get('/public/insight/{token}', PublicInsightController::class)
 Route::get('/me/export/{export}/download', [AccountExportController::class, 'download'])
     ->middleware(['signed', 'throttle:10,1'])
     ->name('api.v1.me.export.download');
+
+// A signed Insight CSV link (POST /insight/export-csv-link, 24 hours): the
+// signature is the credential; the plan is checked again on use.
+Route::get('/insight/export.csv/signed', [InsightExportController::class, 'signed'])
+    ->middleware(['signed', 'throttle:10,1'])
+    ->name('api.v1.insight.export.csv.signed');
 
 // A signed Insight PDF link (POST /insight/export-link, 15 minutes): the
 // signature is the credential; the plan is checked again on use.
@@ -633,6 +640,10 @@ Route::middleware(['auth:sanctum,mcp', EnforceTokenScope::class, EnsureNotPendin
     // Settings → Insight: the monthly email (opt-in, owner, Pro / Max).
     Route::get('/me/insight-settings', [InsightSettingsController::class, 'show'])->name('api.v1.me.insight-settings.show');
     Route::patch('/me/insight-settings', [InsightSettingsController::class, 'update'])->name('api.v1.me.insight-settings.update');
+    // A 24-hour signed CSV link (MCP: get_insight_csv_link).
+    Route::post('/insight/export-csv-link', [InsightExportController::class, 'link'])
+        ->middleware('throttle:30,1')
+        ->name('api.v1.insight.export-csv-link');
     Route::post('/insight/export-link', [InsightPdfExportController::class, 'link'])
         ->middleware('throttle:20,1')
         ->name('api.v1.insight.export-link');
@@ -651,6 +662,10 @@ Route::middleware(['auth:sanctum,mcp', EnforceTokenScope::class, EnsureNotPendin
     Route::get('/insight/top-posts', InsightTopPostsController::class)
         ->middleware('throttle:30,1')
         ->name('api.v1.insight.top-posts');
+    // Best weekday + hour slots from the workspace's own posts (MCP: get_best_times).
+    Route::get('/insight/best-times', InsightBestTimesController::class)
+        ->middleware('throttle:30,1')
+        ->name('api.v1.insight.best-times');
 
     // Proof of delivery. Deliberately not gated on a plan: "on every plan"
     // is what the screen promises, and evidence is not an upsell.

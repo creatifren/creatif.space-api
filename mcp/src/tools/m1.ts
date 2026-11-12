@@ -36,7 +36,6 @@ export const listChannels = defineTool({
         username: a.username,
         status: a.status,
         reconnect_required: reconnect,
-        connected_at: a.connected_at,
         ...(reconnect ? { reconnect: reconnectHint(a) } : {}),
         // Posting works; replying to DMs needs a fresh sign-in with messages allowed.
         ...(!reconnect && a.needs_reconnect_for_messages === true
@@ -293,9 +292,9 @@ export const getCredits = defineTool({
   title: 'Get plan, limits and Credits',
   description: describeTool({
     does: "Gets the workspace’s creatif.space plan, its limits and its Credits — everything that decides what can be sent.",
-    when: "before schedule_post or publish_post when the user asks what they can afford or why something was refused. It returns, as set on the plan: plan name; this month’s posts vs the plan’s monthly figure; connected channels used vs allowed; scheduling (days ahead allowed, queued posts — scheduled or waiting for approval — used vs allowed); approval clients used vs allowed; features (approval links, analytics, AI captions, Spaces…); Credits (Monthly, when they reset, Top-up, total, committed to scheduled posts); the Credit price per send by platform; how many sends connected apps have left today (cap 20/day); this month’s Credit spend by action (publish, reply, ai — AI captions are free today, so ai is 0); and the days until the Monthly Credits renew.",
+    when: "before schedule_post or publish_post when the user asks what they can afford or why something was refused. It returns, as set on the plan: plan name; this month’s posts vs the plan’s monthly figure; connected channels used vs allowed; scheduling (days ahead allowed, queued posts — scheduled or waiting for approval — used vs allowed); approval clients used vs allowed; features (approval links, analytics, AI captions, Spaces…); Credits (Monthly, when they reset, Top-up balance, total, committed to scheduled posts); the Credits each send uses, by platform; how many sends connected apps have left today (cap 20/day); this month’s Credit spend by action (publish, reply, ai — AI captions are free today, so ai is 0); and the days until the Monthly Credits renew.",
     example: "get_credits {} → { plan: { key: \"free\" }, credits: { monthly, topup, resets_at, committed }, price_per_send, scheduling, approval_clients, mcp_daily_sends, spend: { since, by_action: { publish, reply, ai }, total }, renewal: { resets_at, days_until } }",
-    rules: "Every plan, Free included, can use this server: sending spends Credits. Free schedules up to 7 days ahead, holds up to 10 queued posts and has approval links for one client; null means no limit (Pro, Max).",
+    rules: "Every plan, Free included, can use this server: sending spends Credits. Free schedules up to 7 days ahead, holds up to 10 queued posts and has approval links for one client; null means no limit.",
     errors: [
       ["unauthorized", "ask the user to reconnect the creatif.space connector"],
       ["upstream_unavailable", "wait a minute and call again"],

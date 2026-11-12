@@ -38,8 +38,8 @@ export const getStorageUsage = defineTool({
   description: describeTool({
     does: 'Shows how much of the plan’s media storage is used against its quota, and which library files are kept versus due for automatic deletion (with the soonest dates).',
     when: 'before a big upload, when an upload failed with storage_full, or when the user asks what will be deleted and when. To keep a file from being deleted use keep_file; to list or search files use list_files.',
-    example: 'get_storage_usage {} → { tier: "pro", quota: { used_bytes, quota_bytes, percent_used, counts }, files: { kept: { count, bytes }, auto_delete: { count, bytes, next_at, soonest: [...] }, no_auto_delete: {...}, complete } }',
-    rules: 'Free: 1 GB for everything in the library; files used by a post are removed once it publishes, files on no post 24 h after upload. Pro 25 GB / Max 50 GB Keep quota: kept files plus media on drafts and scheduled posts; other post media is removed 30 days after publishing. Large libraries: only the newest 300 files are split (files.complete false).',
+    example: 'get_storage_usage {} → { tier, quota: { used_bytes, quota_bytes, percent_used, counts }, files: { kept: { count, bytes }, auto_delete: { count, bytes, next_at, soonest: [...] }, no_auto_delete: {...}, complete } }',
+    rules: 'Free: 1 GB for everything in the library; files used by a post are removed once it publishes, files on no post 24 h after upload. Plans with Keep have a Keep quota: kept files plus media on drafts and scheduled posts; other post media is removed 30 days after publishing. Large libraries: only the newest 300 files are split (files.complete false).',
     errors: [
       ['unauthorized', 'ask the user to reconnect the creatif.space connector'],
       ['scope_missing', 'reconnect with "read" allowed'],
@@ -78,14 +78,14 @@ export const getStorageUsage = defineTool({
     if (percent !== null && percent >= 90) {
       steps.push(
         free
-          ? 'Storage is nearly full: suggest deleting files in creatif.space → Files and emptying the Trash, or upgrading to Pro.'
-          : 'Keep quota is nearly full: suggest unkeep_file on files no longer needed, or upgrading.',
+          ? 'Storage is nearly full: suggest deleting files in creatif.space → Files and emptying the Trash.'
+          : 'Keep quota is nearly full: suggest unkeep_file on files no longer needed.',
       );
     }
     if (dying.length) {
       steps.push(
         free
-          ? 'Files are due for automatic deletion (see files.auto_delete.soonest). Keep is on Pro and Max; on Free, tell the user to download what they need.'
+          ? 'Files are due for automatic deletion (see files.auto_delete.soonest). Keep is not included on Free; tell the user to download what they need.'
           : 'Files are due for automatic deletion (see files.auto_delete.soonest); keep_file stops that for a file.',
       );
     }
@@ -129,10 +129,10 @@ export const keepFile = defineTool({
     does: 'Marks a library file Keep, so automatic deletion never removes it. Counts toward the plan’s Keep quota.',
     when: 'when the user wants a file to stay after the post using it publishes (get_storage_usage shows what is due for deletion). To let it go again use unkeep_file. Safe to call again on a kept file.',
     example: 'keep_file { "file_id": "01JD…" } → { file: { id, name, is_kept: true, auto_delete_at: null }, next_step }',
-    rules: 'Pro and Max only (Pro 25 GB, Max 50 GB, shared with media on drafts and scheduled posts).',
+    rules: 'Not included on Free. The Keep quota is set by the plan and shared with media on drafts and scheduled posts.',
     errors: [
-      ['plan_required', 'Keep is on Pro and Max: pass the message on (upgrade link), do not retry'],
-      ['storage_full', 'the Keep quota is full: unkeep_file other files, or upgrade (link given); do not retry before that'],
+      ['plan_required', 'Keep is not included on this plan: tell the user it is not available on their plan, do not retry'],
+      ['storage_full', 'the Keep quota is full: unkeep_file other files; do not retry before that'],
       ['file_not_ready', 'confirm_media_upload first, or check list_files'],
       ['not_found', 'take the id from list_files'],
       ['forbidden', 'the user’s role (viewer) cannot change files'],
@@ -170,7 +170,7 @@ export const unkeepFile = defineTool({
   }),
   scope: 'draft',
   input: { file_id: fileId },
-  annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false },
+  annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: true, openWorldHint: false },
   notFound: { what: 'That file', next: 'Take the id from list_files and call again.' },
   run: async ({ file_id }, { v1 }) => {
     const { data } = await v1.delete<{ data: V1File }>(`/files/${encodeURIComponent(file_id)}/keep`);

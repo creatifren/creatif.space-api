@@ -3,6 +3,7 @@
 use Monolog\Handler\NullHandler;
 use Monolog\Handler\StreamHandler;
 use Monolog\Handler\SyslogUdpHandler;
+use App\Logging\RedactSensitiveData;
 use Monolog\Processor\PsrLogMessageProcessor;
 
 return [
@@ -63,6 +64,7 @@ return [
         // warning/error, which drops `info`, does not hide them.
         'webhooks' => [
             'driver' => 'daily',
+            'tap' => [RedactSensitiveData::class],
             'path' => storage_path('logs/webhooks.log'),
             'level' => env('WEBHOOK_LOG_LEVEL', 'info'),
             'days' => 14,
@@ -71,6 +73,7 @@ return [
 
         'single' => [
             'driver' => 'single',
+            'tap' => [RedactSensitiveData::class],
             'path' => storage_path('logs/laravel.log'),
             'level' => env('LOG_LEVEL', 'debug'),
             'replace_placeholders' => true,
@@ -78,6 +81,7 @@ return [
 
         'daily' => [
             'driver' => 'daily',
+            'tap' => [RedactSensitiveData::class],
             'path' => storage_path('logs/laravel.log'),
             'level' => env('LOG_LEVEL', 'debug'),
             'max_files' => env('LOG_DAILY_DAYS', 14),
@@ -86,6 +90,7 @@ return [
 
         'monthly' => [
             'driver' => 'monthly',
+            'tap' => [RedactSensitiveData::class],
             'path' => storage_path('logs/laravel.log'),
             'level' => env('LOG_LEVEL', 'debug'),
             'max_files' => 3,
@@ -94,6 +99,7 @@ return [
 
         'slack' => [
             'driver' => 'slack',
+            'tap' => [RedactSensitiveData::class],
             'url' => env('LOG_SLACK_WEBHOOK_URL'),
             'username' => env('LOG_SLACK_USERNAME', env('APP_NAME', 'Laravel')),
             'emoji' => env('LOG_SLACK_EMOJI', ':boom:'),
@@ -103,6 +109,7 @@ return [
 
         'papertrail' => [
             'driver' => 'monolog',
+            'tap' => [RedactSensitiveData::class],
             'level' => env('LOG_LEVEL', 'debug'),
             'handler' => env('LOG_PAPERTRAIL_HANDLER', SyslogUdpHandler::class),
             'handler_with' => [
@@ -115,6 +122,7 @@ return [
 
         'stderr' => [
             'driver' => 'monolog',
+            'tap' => [RedactSensitiveData::class],
             'level' => env('LOG_LEVEL', 'debug'),
             'handler' => StreamHandler::class,
             'handler_with' => [
@@ -126,6 +134,7 @@ return [
 
         'syslog' => [
             'driver' => 'syslog',
+            'tap' => [RedactSensitiveData::class],
             'level' => env('LOG_LEVEL', 'debug'),
             'facility' => env('LOG_SYSLOG_FACILITY', LOG_USER),
             'replace_placeholders' => true,
@@ -133,6 +142,7 @@ return [
 
         'errorlog' => [
             'driver' => 'errorlog',
+            'tap' => [RedactSensitiveData::class],
             'level' => env('LOG_LEVEL', 'debug'),
             'replace_placeholders' => true,
         ],

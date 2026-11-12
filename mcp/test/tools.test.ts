@@ -29,7 +29,7 @@ describe('list_channels', () => {
     const out = payload(res);
     expect(out.channels).toHaveLength(2);
     expect(out.channels[0]).toEqual({
-      id: IG, platform: 'instagram', username: 'instagram_user', status: 'connected', reconnect_required: false, connected_at: '2026-11-01T10:00:00Z',
+      id: IG, platform: 'instagram', username: 'instagram_user', status: 'connected', reconnect_required: false,
     });
     expect(out.channels[1].reconnect_required).toBe(true);
     expect(out.channels[0].profile_photo_url).toBeUndefined();
@@ -84,7 +84,8 @@ describe('get_post', () => {
     });
     const out = payload(res);
     expect(out.post.id).toBe(POST);
-    expect(out.post.comments).toEqual([{ id: 'c1', body: 'Looks good', role: 'client' }]);
+    // The internal comment id is trimmed (G5): nothing takes it as input.
+    expect(out.post.comments).toEqual([{ body: 'Looks good', role: 'client' }]);
   });
 
   it('answers not_found for a 404', async () => {

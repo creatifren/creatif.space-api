@@ -170,7 +170,7 @@ export const createApprovalLink = defineTool({
     errors: [
       ["invalid_input", "give either post_ids or both date_from and date_to"],
       ["not_approvable", "none of the posts can go on a link (details.refused gives each post’s status and reason): list_posts status \"draft\", or draft_post a new one, then call again"],
-      ["plan_required", "details.feature approval_clients, schedule_window or queue_limit — pass the message to the user as it is (it has the trial/upgrade link), do not retry"],
+      ["plan_required", "details.feature approval_clients, schedule_window or queue_limit — pass the message to the user as it is (it names the limit), do not retry"],
       ["not_found", "check ids with list_posts / list_channels"],
       ["scope_missing", "reconnect and allow \"approve\""],
       ["upstream_unavailable", "check list_posts / check_approval_status before calling again"],
@@ -188,7 +188,7 @@ export const createApprovalLink = defineTool({
     client_name: z.string().trim().max(120).optional().describe('Private note on who it is for; the client never sees it'),
     expires_in_hours: z.union([z.literal(48), z.literal(168), z.literal(720)]).optional().describe('48, 168 (7 days) or 720 (30 days); omit for no expiry'),
   },
-  annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: true },
+  annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false },
   notFound: { what: 'A post or channel', next: 'Check the post ids with list_posts (status draft) and channel ids with list_channels, then call again.' },
   run: async (args, ctx) => {
     const plan = args.date_from !== undefined || args.date_to !== undefined;
@@ -374,7 +374,7 @@ export const sendApprovalReminder = defineTool({
   input: {
     link_id: ulid('Approval link'),
   },
-  annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: true },
+  annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false },
   notFound: { what: 'That approval link', next: 'Check the link id: it comes from create_approval_link (or check_approval_status). Call again with a valid id.' },
   run: async (args, { v1 }) => {
     try {
@@ -489,10 +489,10 @@ export const schedulePost = defineTool({
     does: "Schedules a DRAFT to publish at a future time on its channels, after the user agrees to a preview of channels and Credit cost.",
     when: "when the user wants a draft to go out later; use publish_post to send now, and create_approval_link if a client must approve first. Two steps: call with confirm false (default) to get the preview; show it to the user, and only after they explicitly agree call again with confirm: true.",
     example: "schedule_post { \"post_id\": \"01JD…\", \"scheduled_at\": \"2026-12-01T09:00:00+07:00\" } → preview; then the same call with \"confirm\": true → { post, note }",
-    rules: "The confirm sends exactly what that preview showed (a signed confirm_token kept by the server, valid 10 minutes). Credits are charged when it is scheduled (Monthly Credits first, then Top-up; on every plan). On Free, scheduled_at is at most 7 days ahead and at most 10 posts can be queued. Connected apps can send at most 20 posts a day.",
+    rules: "The confirm sends exactly what that preview showed (a signed confirm_token kept by the server, valid 10 minutes). Credits are charged when it is scheduled (Monthly Credits first, then the Top-up balance; on every plan). On Free, scheduled_at is at most 7 days ahead and at most 10 posts can be queued. Connected apps can send at most 20 posts a day.",
     errors: [
       ["preview_stale", "nothing was sent; show the user the new preview in details.preview and confirm again only if they agree"],
-      ["insufficient_credits or quota_exceeded", "pass the message on as it is (nothing was charged); retry after a top-up"],
+      ["insufficient_credits or quota_exceeded", "pass the message on as it is (nothing was charged); retry only once the user has more Credits"],
       ["plan_required", "details.feature schedule_window or queue_limit — pass the message on as it is"],
       ["not_draft", "list_posts status \"draft\", or draft_post"],
       ["invalid_input", "scheduled_at must be in the future"],
@@ -533,10 +533,10 @@ export const publishPost = defineTool({
     does: "Publishes a DRAFT now on its channels — it goes public and cannot be undone — after the user agrees to a preview of channels and Credit cost.",
     when: "only when the user wants it out now; use schedule_post for later and create_approval_link if a client must approve first. Two steps: call with confirm false (default) to get the preview; show it to the user, and only after they explicitly agree call again with confirm: true.",
     example: "publish_post { \"post_id\": \"01JD…\" } → preview; then publish_post { \"post_id\": \"01JD…\", \"confirm\": true } → { post, note }; then get_post for each channel’s link",
-    rules: "The confirm sends exactly what that preview showed (a signed confirm_token kept by the server, valid 10 minutes). Credits are charged (Monthly Credits first, then Top-up; on every plan). Connected apps can send at most 20 posts a day.",
+    rules: "The confirm sends exactly what that preview showed (a signed confirm_token kept by the server, valid 10 minutes). Credits are charged (Monthly Credits first, then the Top-up balance; on every plan). Connected apps can send at most 20 posts a day.",
     errors: [
       ["preview_stale", "nothing was sent; show the user the new preview in details.preview and confirm again only if they agree"],
-      ["insufficient_credits or quota_exceeded", "pass the message on as it is (nothing was charged); retry after a top-up"],
+      ["insufficient_credits or quota_exceeded", "pass the message on as it is (nothing was charged); retry only once the user has more Credits"],
       ["plan_required", "pass the message on as it is"],
       ["not_draft", "list_posts status \"draft\", or draft_post"],
       ["daily_cap_reached", "send from creatif.space or wait for details.resets_at"],

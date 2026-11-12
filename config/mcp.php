@@ -71,8 +71,12 @@ return [
         'api.v1.insight.summary' => 'read',
         // list_top_posts: the top five posts by engagement (Pro / Max).
         'api.v1.insight.top-posts' => 'read',
+        // get_best_times: best weekday + hour slots from the workspace's own posts (Pro / Max).
+        'api.v1.insight.best-times' => 'read',
         // get_insight_report_link: a 15-minute signed PDF link (Pro / Max).
         'api.v1.insight.export-link' => 'read',
+        // get_insight_csv_link: a 24-hour signed CSV link (Pro / Max).
+        'api.v1.insight.export-csv-link' => 'read',
         // create_insight_share_link / revoke_insight_share_link: sharing with
         // a client, like an approval link (Pro / Max).
         'api.v1.insight.share.store' => 'approve',
@@ -95,6 +99,8 @@ return [
         'api.v1.social-posts.retry-preview' => 'read',
         'api.v1.social-posts.retry' => 'publish',
         'api.v1.social-approval-links.store' => 'approve',
+        // send_approval_reminder: one email per link per 12 h (in the controller).
+        'api.v1.social-approval-links.remind' => 'approve',
         'api.v1.social-approval-links.show' => 'read',
         // get_approval_audit: the owner's own link, as CSV.
         'api.v1.social-approval-links.audit' => 'read',

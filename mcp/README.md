@@ -66,6 +66,8 @@ Rate limit: 60 requests / minute / token (429 + `Retry-After`).
 | `retry_post` (post_id, confirm) — the failed channels of a post again; preview shows each `failure_code` and reason | publish | preview `GET /social-posts/{id}/retry-preview`; `confirm: true` → `POST /social-posts/{id}/retry` |
 | `get_insight_summary` (period: {month} \| {from, to} ≤ 92 days, channel_ids) — Pro / Max; Free → `plan_required` | read | `GET /insight/summary?month \| from&to&channel_ids` |
 | `list_top_posts` (period: {month} \| {from, to} ≤ 92 days, channel_ids, limit, cursor) — Pro / Max; Free → `plan_required` | read | `GET /insight/top-posts?month \| from&to&channel_ids` |
+| `get_best_times` (days 7–92, channel_ids) — Pro / Max; Free → `plan_required` | read | `GET /insight/best-times?days&channel_ids` |
+| `get_insight_csv_link` (from, to ≤ 366 days, channel_ids) — Pro / Max; Free → `plan_required` | read | `POST /insight/export-csv-link` |
 | `get_insight_report_link` (from, to ≤ 92 days, format onepage\|deck\|details, channel_ids, locale) — a 15-minute signed download link to the Insight PDF (one page, 16:9 deck or detailed); Pro / Max | read | `POST /insight/export-link` |
 | `create_insight_share_link` (from, to ≤ 92 days, channel_ids, recipient_email) — a read-only web link to an Insight report, open without an account for 30 days; with `recipient_email` that person is emailed once and sees it in `list_shared_with_me` | approve | `POST /insight/share` |
 | `revoke_insight_share_link` (share_id) — turns a shared Insight link off at once | approve | `DELETE /insight/share/{id}` |
@@ -89,7 +91,7 @@ Rate limit: 60 requests / minute / token (429 + `Retry-After`).
 | `get_approval_audit` (link_id) — every decision on one of the user's links: who, post, when, decision, comment; rows and CSV | read | `GET /social-approval-links/{id}/audit.csv` |
 | `send_feedback` (kind bug\|idea\|other, message, page) — to the creatif.space team; nothing public, no Credits; 10 an hour per user | draft | `POST /feedback` |
 | `get_notification_settings` — which emails the user gets: publish_failed, approval_decided, weekly_digest | read | `GET /me/notification-settings` |
-| `update_notification_settings` (publish_failed, approval_decided, weekly_digest: true/false; at least one) | draft | `PATCH /me/notification-settings` |
+| `update_notification_settings` (publish_failed, approval_decided, weekly_digest: true/false; timezone of the Monday 08:00 digest; at least one) | draft | `PATCH /me/notification-settings` |
 | `list_shared_with_me` — "Reports shared with you": Content Plans and Insight reports other users shared with this user's email | approvals:decide | `GET /me/reports/shared` |
 | `get_connect_link` (network) — the app's connect page (`https://creatif.space/social/connect?network=…`) with the steps; no token in the response; a new network on a full plan → `plan_required` | read | `GET /social-accounts` + `GET /credits` (never `POST /social-accounts/auth-url`) |
 
@@ -268,13 +270,34 @@ And on the owner's side, later:
 
 ## Tool annotations
 
-Every tool sets the four MCP hints. `list_*`, `get_*` and `check_*` are
-`readOnlyHint`. Anything that goes public or removes something is
-`destructiveHint`: `publish_post`, `schedule_post`, `reply_to_conversation`,
-`discard_draft`, `publish_space`, `revoke_insight_share_link`, `retry_post`. Tools that
-reach outside creatif.space (platforms, the client's inbox, public links) are
-`openWorldHint`. `test/annotations.test.ts` checks these rules and pins every
+Every tool has a human `title` and sets the four MCP hints as explicit
+booleans. `list_*`, `get_*` and `check_*` are `readOnlyHint`. Anything that
+posts publicly, deletes, revokes or records a decision that cannot be taken
+back is `destructiveHint`: `publish_post`, `schedule_post`, `schedule_posts`,
+`reply_to_conversation`, `retry_post`, `publish_space`, `discard_draft`,
+`unkeep_file`, `decide_approval`, `revoke_insight_share_link`. Only tools that
+post publicly (a social network or the public web) are `openWorldHint`:
+`publish_post`, `schedule_post`, `schedule_posts`, `reply_to_conversation`,
+`retry_post`, `publish_space`. One line per tool, for directory review forms,
+is in [`docs/tool-justifications.md`](docs/tool-justifications.md).
+`test/annotations.test.ts` checks these rules and that file, and pins every
 tool's hints in a snapshot.
+
+## Plan errors and ChatGPT
+
+No tool description names prices, plan tiers or upgrading, for any client
+(`test/no-upsell.test.ts`). When the OAuth client is ChatGPT — the API's
+introspection says `client_surface: "chatgpt"` (DCR name or a
+`chatgpt.com` / `openai.com` redirect host), or the client name says
+ChatGPT / OpenAI — any 402 or `plan_required` becomes:
+
+```json
+{ "error": { "code": "not_available_on_plan", "message": "This isn’t available on this account’s plan.", "next_step": "…no plan change or purchase…", "details": { "tool": "…" } } }
+```
+
+with no upgrade link or pricing step; other errors lose billing / top-up
+links. Other clients get the API's message and links unchanged
+(`test/chatgpt-surface.test.ts`).
 
 ## Rate limits (429)
 
@@ -391,6 +414,7 @@ registry workflow, which only publishes `mcp/server.json`.
 | `POSTHOG_KEY` | — | unset → no analytics |
 | `POSTHOG_HOST` | `https://us.i.posthog.com` | |
 | `GLAMA_CLAIM` | the published claim | served at `GET /.well-known/glama.json` and `GET /mcp/.well-known/glama.json` (public, must stay published) |
+| `OPENAI_APPS_CHALLENGE` | — | OpenAI Apps domain-verification token, served as `text/plain` at `GET /.well-known/openai-apps-challenge`; unset → 404 |
 | `MCP_PUBLIC_DISCOVERY` | off | `true` lets `initialize`, `notifications/initialized`, `ping` and `tools/list` answer **without a token** (registry crawlers, client previews; 30/min per IP). `tools/call` and everything else still get the 401 + `WWW-Authenticate` (`resource_metadata`) sign-in challenge; a request with a token always takes normal auth. Leave off until QA has verified it. |
 
 ## Develop

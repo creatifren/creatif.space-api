@@ -25,6 +25,8 @@ export interface Config {
    * else still need OAuth. Off unless set to exactly "true".
    */
   publicDiscovery: boolean;
+  /** OpenAI Apps domain-verification token (OPENAI_APPS_CHALLENGE); null → the well-known answers 404. */
+  openaiAppsChallenge: string | null;
 }
 
 /** Not a secret: Glama reads it from a public URL to verify we own the connector. */
@@ -63,5 +65,6 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
     introspectionTtlMs: 60_000,
     rateLimitPerMinute: 60,
     publicDiscovery: env.MCP_PUBLIC_DISCOVERY === 'true',
+    openaiAppsChallenge: env.OPENAI_APPS_CHALLENGE?.trim() || null,
   };
 }

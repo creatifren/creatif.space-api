@@ -190,14 +190,14 @@ export const createContentPlan = defineTool({
       ['preview_stale', 'nothing was created: channels or posts in the dates changed since the preview; show the user the new preview in details.preview and confirm again only if they agree'],
       ['invalid_input', 'fix the dates, timezone or email named in details and call again'],
       ['not_found', 'take channel ids from list_channels'],
-      ['plan_required', 'pass the message to the user as it is (it has the upgrade link); do not retry'],
+      ['plan_required', 'tell the user it is not available on their plan; do not retry'],
       ['scope_missing', 'reconnect and allow "approve"'],
       ['upstream_unavailable', 'check list_approval_links before calling again: the plan may have been created'],
     ],
   }),
   scope: 'approve',
   input,
-  annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: true },
+  annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false },
   notFound: { what: 'A channel', next: 'Take channel ids from list_channels, or leave channel_ids out, then call again.' },
   run: async (args, ctx) => {
     const key = requestKey(ctx.auth.extra.userUlid, args);

@@ -36,7 +36,6 @@ export const sendFeedback = defineTool({
     });
     return {
       sent: true,
-      id: data.id,
       kind: data.kind,
       note: 'Sent to the creatif.space team. They reply by email if they need more.',
     };

@@ -22,7 +22,7 @@ export const createInsightShareLink = defineTool({
     example: 'create_insight_share_link { "from": "2026-10-01", "to": "2026-10-31", "recipient_email": "client@example.com" } → { id: "01JD…", url: "https://app.creatif.space/report/…", expires_at, period: { label: "1 Oct – 31 Oct 2026" }, recipient_email }',
     rules: 'recipient_email is optional. With it, that person gets one email with the link, and the report appears under "Reports shared with you" when they sign in with that email (list_shared_with_me). Without it, the link is shared only by whoever you give it to.',
     errors: [
-      ['plan_required', 'Insight is on Pro and Max: tell the user the message as it is (it has the upgrade link); do not retry'],
+      ['plan_required', 'Insight is not included on this plan: tell the user it is not available on their plan; do not retry'],
       ['invalid_input', 'fix the dates (at most 92 days, not in the future) or the channel ids and call again'],
       ['scope_missing', 'reconnect and allow "approve"'],
       ['unauthorized', 'ask the user to reconnect the creatif.space connector'],
@@ -36,7 +36,7 @@ export const createInsightShareLink = defineTool({
     channel_ids: z.array(z.string().trim().min(10).max(26)).min(1).max(50).optional().describe('Only these channels (ids from list_channels); default all connected channels'),
     recipient_email: z.string().trim().email().max(254).optional().describe('Optional: who it is for. They get one email with the link and see it under "Reports shared with you".'),
   },
-  annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: true },
+  annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false },
   run: async ({ from, to, channel_ids, recipient_email }, { v1 }) => {
     const { data } = await v1.post<{ data: V1ShareLink }>('/insight/share', {
       from,
