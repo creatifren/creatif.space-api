@@ -119,6 +119,23 @@ class BuildAccountExport implements ShouldQueue
             ->with('link:id,ulid,title')
             ->orderBy('id')->get();
 
+        $onYourLinks = [];
+        foreach ($links as $l) {
+            foreach ($decisions[$l->id] ?? [] as $d) {
+                $onYourLinks[] = [
+                    'link_id' => $l->ulid,
+                    'link_title' => $l->title,
+                    'decided_at' => $at($d->created_at),
+                    'approver_name' => $d->client_name,
+                    'approver_email' => $d->approver_email,
+                    'decision' => $d->decision,
+                    'comment' => $d->comment,
+                    'post_id' => $postUlid[$d->social_post_id] ?? null,
+                    'source' => $d->source,
+                ];
+            }
+        }
+
         $shares = InsightShareLink::query()->where('owner_id', $owner->id)->orderBy('id')->get();
 
         $library = File::query()->whereIn('user_id', $ids)->where('status', File::STATUS_READY)->orderBy('id')->get();
@@ -213,17 +230,7 @@ class BuildAccountExport implements ShouldQueue
             ],
             'approval_audit.json' => [
                 // Every decision on the workspace's links, one row each (also inside approvals.json).
-                'on_your_links' => $links->flatMap(fn (SocialApprovalLink $l) => ($decisions[$l->id] ?? collect())->map(fn (SocialApprovalDecision $d) => [
-                    'link_id' => $l->ulid,
-                    'link_title' => $l->title,
-                    'decided_at' => $at($d->created_at),
-                    'approver_name' => $d->client_name,
-                    'approver_email' => $d->approver_email,
-                    'decision' => $d->decision,
-                    'comment' => $d->comment,
-                    'post_id' => $postUlid[$d->social_post_id] ?? null,
-                    'source' => $d->source,
-                ]))->values()->all(),
+                'on_your_links' => $onYourLinks,
                 // What you decided on links others sent you.
                 'your_decisions' => $mine->map(fn (SocialApprovalDecision $d) => [
                     'link_id' => $d->link?->ulid,
