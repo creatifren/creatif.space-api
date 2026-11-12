@@ -17,7 +17,7 @@ const tools = async () => {
 describe('tool descriptions for agents', () => {
   it('every tool: one line on what it does, when to use it, an example call, errors with next steps', async () => {
     const list = await tools();
-    expect(list).toHaveLength(19);
+    expect(list).toHaveLength(20);
     for (const t of list) {
       const lines = t.description!.split('\n');
       expect(lines[0], t.name).not.toMatch(/^(When to use|Example|Errors)/);
@@ -40,6 +40,7 @@ describe('tool descriptions for agents', () => {
     expect(d.schedule_post).toMatch(/use publish_post to send now/);
     expect(d.get_post).toMatch(/check_approval_status is shorter/);
     expect(d.create_approval_link).toMatch(/use check_approval_status with link_id/);
+    expect(d.list_shared_with_me).toMatch(/use list_waiting_approvals instead/);
   });
 
   it('errors named in descriptions use the codes tools return', async () => {
