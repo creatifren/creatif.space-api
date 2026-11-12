@@ -173,8 +173,8 @@ export const revokeApprovalLink = defineTool({
   annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: true, openWorldHint: false },
   notFound: { what: 'That approval link', next: 'Take the id from list_approval_links and call again.' },
   run: async ({ link_id, confirm }, { v1 }) => {
-    const path = `/social-approval-links/${encodeURIComponent(link_id)}`;
-    const { data: { link: l } } = await v1.get<{ data: { link: V1Link } }>(path);
+    const linkPath = `/social-approval-links/${encodeURIComponent(link_id)}`;
+    const { data: { link: l } } = await v1.get<{ data: { link: V1Link } }>(linkPath);
     if (l.status === 'revoked') {
       return { revoked: true, already: true, link_id: l.id, next_step: 'This link was already revoked; nothing changed. create_approval_link makes a new one.' };
     }
@@ -188,7 +188,7 @@ export const revokeApprovalLink = defineTool({
         next_step: 'Nothing was revoked. Show the user this link and ask whether to revoke it for good; call again with confirm: true only if they agree.',
       };
     }
-    await v1.delete(path);
+    await v1.delete(linkPath);
     return {
       revoked: true,
       link_id: l.id,
