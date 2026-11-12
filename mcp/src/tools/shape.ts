@@ -30,13 +30,31 @@ export interface V1Post {
   targets?: V1Target[];
 }
 
+/** Approval states that hold a post: it has not gone to the networks. */
+const HELD = new Set(['client', 'awaiting', 'revision']);
+
+/**
+ * The status an agent reads. The API keeps a post on an approval link as
+ * "scheduled" (with no time when it was a draft); shown as that, an agent
+ * tells the user it is scheduled and discard_draft looks wrong. So a held
+ * post reads "waiting_for_approval", or "changes_requested" when the client
+ * sent it back. list_posts status "scheduled" still includes them.
+ */
+export function displayStatus(p: Pick<V1Post, 'status' | 'approval'>): string {
+  if (p.status !== 'scheduled' || !p.approval || !HELD.has(p.approval)) return p.status;
+  return p.approval === 'revision' ? 'changes_requested' : 'waiting_for_approval';
+}
+
 export function shapePost(p: V1Post, withComments = false) {
+  const held = displayStatus(p) !== p.status;
   return {
     id: p.id,
-    status: p.status,
+    status: displayStatus(p),
     type: p.type,
     caption: p.caption,
     scheduled_at: p.scheduled_at,
+    // Approving a post with no time is refused (it would publish at once).
+    ...(held && !p.scheduled_at ? { needs_time: 'No publish time yet: the client cannot approve it until one is set with update_post scheduled_at.' } : {}),
     approval: p.approval,
     ...(p.approval_by ? { approval_by: p.approval_by, approval_at: p.approval_at } : {}),
     fail_reason: p.fail_reason,

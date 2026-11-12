@@ -236,6 +236,12 @@ exports[`tool annotations > match the snapshot 1`] = `
     "openWorld": true,
     "readOnly": false,
   },
+  "revoke_approval_link": {
+    "destructive": true,
+    "idempotent": true,
+    "openWorld": false,
+    "readOnly": false,
+  },
   "revoke_insight_share_link": {
     "destructive": true,
     "idempotent": true,

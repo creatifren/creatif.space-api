@@ -42,6 +42,7 @@ const ARGS: Record<string, Record<string, unknown>> = {
   unkeep_file: { file_id: ID },
   discard_draft: { post_id: ID },
   list_approval_links: {},
+  revoke_approval_link: { link_id: '01JLINKLINKLINKLINKLINKLI1', confirm: true },
   list_waiting_approvals: {},
   decide_approval: { link: ID, post_id: ID, decision: 'approve' },
   list_shared_with_me: {},

@@ -728,7 +728,13 @@ class SocialPostController extends Controller
     {
         Gate::allowIf(fn ($user) => $socialPost->user_id === $user->id);
 
-        if ($socialPost->status !== SocialPostStatus::Draft) {
+        // A draft, or a post held for approval that never reached the
+        // provider (sharing a draft on a link holds it as Scheduled): no
+        // Credits were taken, and deleting it takes it off its links.
+        $heldUnsent = $socialPost->status === SocialPostStatus::Scheduled
+            && $socialPost->held()
+            && $socialPost->provider_post_id === null;
+        if ($socialPost->status !== SocialPostStatus::Draft && ! $heldUnsent) {
             return response()->json(['message' => 'Only a draft can be discarded.'], 422);
         }
 

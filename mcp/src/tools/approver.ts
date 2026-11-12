@@ -20,6 +20,8 @@ interface DecisionPreview {
   decidable: boolean;
   decidable_from: string | null;
   already: boolean;
+  /** Approve on a post with no time: refused (a yes would publish it at once). */
+  needs_time?: boolean;
   effect: string;
   confirm_token: string | null;
   confirm_expires_at: string;
@@ -106,7 +108,7 @@ export const listWaitingApprovals = defineTool({
 });
 
 function previewResult(p: DecisionPreview) {
-  const blocked = !p.decidable && !p.already;
+  const blocked = (!p.decidable || p.needs_time === true) && !p.already;
   return {
     confirmation_required: !blocked,
     link: p.link,
@@ -117,7 +119,9 @@ function previewResult(p: DecisionPreview) {
     ...(p.already ? { already: true } : {}),
     ...(blocked
       ? {
-          blocked: p.decidable_from
+          blocked: p.needs_time
+            ? `This post has no publish time yet, so it cannot be approved (approving would publish it at once). ${p.link.editor} has to set a time first; asking for changes ("revise") still works.`
+            : p.decidable_from
             ? `This post can be decided from ${p.decidable_from} (the sender’s plan allows deciding 7 days ahead).`
             : `This post is not waiting for a decision (it is "${p.post.state}").`,
         }
@@ -144,9 +148,10 @@ export const decideApproval = defineTool({
     does: 'Approves a post someone sent this user for approval, or requests changes on it (decision "revise", with a reason the sender reads); previews first, decides only with confirm: true.',
     when: 'when the user wants to approve or send back a post that is waiting for them (ids from list_waiting_approvals). To share the user’s own posts for approval, use create_approval_link instead.',
     example: 'decide_approval { "link": "01JD…", "post_id": "01JE…", "decision": "approve" } → preview; then the same with "confirm": true → { decided }',
-    rules: 'Two steps: call with confirm false (default) for a preview; show it to the user and only after they explicitly agree call again with the same arguments and confirm: true. Approving sends the post at its scheduled time on the sender’s channels — it goes public. The confirm decides exactly what the preview showed (a signed token, valid 10 minutes). Only links sent to this user’s email. Deciding the same way twice changes nothing.',
+    rules: 'Two steps: call with confirm false (default) for a preview; show it to the user and only after they explicitly agree call again with the same arguments and confirm: true. Approving sends the post at its scheduled time on the sender’s channels — it goes public; it never publishes at once. A post with no time cannot be approved (needs_time) until the sender sets one. The confirm decides exactly what the preview showed (a signed token, valid 10 minutes). Only links sent to this user’s email. Deciding the same way twice changes nothing.',
     errors: [
       ['preview_stale', 'the post changed since the preview: show the user the new preview in details, then confirm again only if they agree'],
+      ['needs_time', 'the post has no publish time yet: nothing was decided; tell the user the sender has to set a time first (or send it back with decision "revise")'],
       ['forbidden', 'the link was sent to another email (details.expected_hint): tell the user, do not retry'],
       ['invalid_input', 'revise needs a reason; or the post is outside the decidable window (details.decidable_from): tell the user'],
       ['not_found', 'check ids with list_waiting_approvals'],
@@ -198,11 +203,21 @@ export const decideApproval = defineTool({
         post_id: data.id,
         state: data.state,
         approval: data.approval,
+        ...(args.decision === 'approve' ? { scheduled_at: data.scheduled_at ?? null } : {}),
         note: args.decision === 'approve'
-          ? 'Approved. It goes out at its scheduled time; the sender is told.'
+          ? `Approved. It goes out at its scheduled time (${String(data.scheduled_at ?? 'as planned')}), not now; the sender is told.`
           : 'Changes requested. The sender is told, with the reason.',
       };
     } catch (e) {
+      if (e instanceof V1Error && e.status === 422 && e.body?.reason === 'needs_time') {
+        decisionTokens.forget(key);
+        throw new ToolError(
+          'needs_time',
+          'Nothing was decided: this post has no publish time yet, and approving it would publish it at once.',
+          'Tell the user the sender has to set a time first; or send it back with decision "revise" and a reason.',
+          { post_id: args.post_id },
+        );
+      }
       if (e instanceof V1Error && e.status === 409 && e.body?.code === 'preview_stale') {
         decisionTokens.forget(key);
         const p = await fetchPreview(ctx, args);

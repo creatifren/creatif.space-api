@@ -81,6 +81,7 @@
         "reply_to_conversation",
         "request_media_upload",
         "retry_post",
+        "revoke_approval_link",
         "revoke_insight_share_link",
         "schedule_post",
         "schedule_posts",

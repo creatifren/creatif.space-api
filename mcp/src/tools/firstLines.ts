@@ -35,6 +35,7 @@ export const FIRST_LINES: Record<string, string> = {
   check_approval_status: 'Shows where client approval stands on a post or a link, as the send_for_approval prompt checks.',
   send_approval_reminder: 'Reminds the user\'s client by email to answer an approval link, a send_for_approval follow-up.',
   list_approval_links: 'Shows every approval link of the user\'s workspace and how far each one got.',
+  revoke_approval_link: 'Revokes one of the user\'s client approval links for good, after showing them which link.',
   get_approval_audit: 'Gives the user the record of every decision on one approval link or Content Plan, with a CSV.',
   get_approval_history: 'Shows who approved one post and when, across every link it was on.',
   get_plan_calendar_link: 'Gives the user a calendar feed of a Content Plan to add to their or their client\'s calendar app.',

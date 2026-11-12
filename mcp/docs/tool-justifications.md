@@ -32,6 +32,7 @@ is destructive previews first and acts only on `confirm: true`.
 | `check_approval_status` | Check approval status | yes | no | no | Reads approval state of a post or link. |
 | `send_approval_reminder` | Send an approval reminder | no | no | no | Emails the approver once more about a private link; posts nothing publicly. |
 | `list_approval_links` | List approval links | yes | no | no | Reads the workspace's approval links. |
+| `revoke_approval_link` | Revoke an approval link | no | yes | no | Revokes a client approval link for good (preview, then confirm); the same call again changes nothing. |
 | `get_approval_audit` | Get the approval audit of a link | yes | no | no | Reads the decision record of one link. |
 | `get_approval_history` | Get the approval history of a post | yes | no | no | Reads who approved one post and when. |
 | `get_plan_calendar_link` | Get a Content Plan calendar feed link | yes | no | no | Returns a private ICS feed link. |

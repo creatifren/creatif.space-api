@@ -7,14 +7,14 @@ Versions of the remote MCP server at `https://mcp.creatif.space/mcp`
 
 ## 0.3.0 — 2026-11-12
 
-48 tools (was 11). Every description follows the agent shape (what / when to
+49 tools (was 11). Every description follows the agent shape (what / when to
 use / example / errors → next step, #78), and every error is
 `{code, message, next_step, details}` (#76).
 
-Added (37):
+Added (38):
 
 - **Posts:** `list_failed_posts` (last 30 days, per channel `failure_code` + reason; points to `retry_post`), `schedule_posts` (up to 10 drafts, one preview, all or none), `discard_draft` (preview first; drafts only), `retry_post` (the failed channels of a post again, preview first; each failure with a stable `failure_code`), `suggest_caption` (AI caption + hashtags; `not_enabled` while the flag is off)
-- **Approvals:** `create_content_plan` (preview → `confirm: true` creates a Content Plan and emails the approver), `send_approval_reminder`, `list_approval_links`, `get_approval_audit`, `get_approval_history` (one post’s decisions, email masked), `get_plan_calendar_link` (Content Plan ICS feed, read-only); approver side `list_waiting_approvals`, `decide_approval`, `list_shared_with_me` (scope `approvals:decide`)
+- **Approvals:** `create_content_plan` (preview → `confirm: true` creates a Content Plan and emails the approver), `send_approval_reminder`, `list_approval_links`, `revoke_approval_link` (preview → `confirm: true` revokes the link; unanswered posts come back to the user), `get_approval_audit`, `get_approval_history` (one post’s decisions, email masked), `get_plan_calendar_link` (Content Plan ICS feed, read-only); approver side `list_waiting_approvals`, `decide_approval`, `list_shared_with_me` (scope `approvals:decide`)
 - **Media:** `request_media_upload`, `confirm_media_upload`, `get_storage_usage`, `keep_file`, `unkeep_file`
 - **Channels:** `get_connect_link` (app link, no token); `list_channels` marks channels to reconnect
 - **Insight:** `get_insight_summary` (per-channel threshold notes; previous period + change for every number), `list_top_posts` (top five by engagement), `get_best_times` (best weekday + hour from the user’s own posts; `not_enough_data` under 10 posts), `get_insight_report_link`, `get_insight_csv_link` (24-hour signed CSV link), `create_insight_share_link` (optional `recipient_email`: emailed, and listed in their `list_shared_with_me`), `revoke_insight_share_link` (scope `approve`)
@@ -39,6 +39,7 @@ Changed:
 - `test/in-step.test.ts`: the served tools are the one source of truth for the CHANGELOG count, the README Tools table, `server.json`, `docs/tool-justifications.md` and the first lines; every read-only tool has an `outputSchema` or is in `UNSTRUCTURED` on purpose.
 - `/free` tools (`check_caption`, `approval_request_template`, `connect_guide`): descriptions in the agent shape (what / When to use / Example / Errors → next step, no sign-in errors), and failures — bad arguments, an unknown tool, an internal error — answer in the `{code, message, next_step, details}` envelope instead of bare text or `{"error":"internal_error"}`. The first line of each description is unchanged.
 - A disconnected copy of an account that is also connected (hidden by `list_channels` since #204) is no longer reported as needing a reconnect anywhere: `get_account_summary` leaves it out of `needs_reconnect`, `reconnect` and `next_steps` (adds `hidden_duplicates`), `create_content_plan` previews give no reconnect warning for it, and `get_connect_link` leaves it out of `existing`.
+- Approval links (B3): a post on a link (a shared draft is kept as "scheduled" with no time) now reads status `waiting_for_approval` (`changes_requested` when sent back), with `needs_time` when it has no time. `discard_draft` also deletes such a post and takes it off its link. Approving a post with no time is refused (`needs_time`, on the client page and in `decide_approval`): a yes used to publish it at once; an approved post goes out at its scheduled time, which `decide_approval` now returns.
 - `approvals:decide` (bug fix, no new scope, no re-consent): the test-only stub token parser read `stub:<user>:read,approvals:decide` (no client name) as scopes `read,approvals`; it now keeps colon scopes whole. Tests pin the scope behaviour on both sides: owner scopes unchanged, a token or key without the grant gets `scope_missing` / `insufficient_scope`, and a token granted `approvals:decide` keeps it after the same app is reconnected and through a refresh.
 - `list_channels` leaves out a disconnected copy of an account that is also connected (same network and username); `hidden_duplicates` counts them and `include_disconnected: true` lists them. A disconnected account with no working copy is still listed, with its reconnect step.
 - `mcp/docs/telemetry.md`: HogQL over `mcp_tool_called` — p50/p95 `duration_ms` per tool, error rate per code, error codes per tool, and calls / error rate / p95 per day and client; each falls back to `ok`/`error`/`ms` for events from before `code` and `duration_ms`. `test/telemetry-doc.test.ts` checks the queries read only properties the server sends.

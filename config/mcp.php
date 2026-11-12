@@ -166,6 +166,9 @@ return [
         // the links list, read like the single link above.
         'api.v1.social-posts.discard' => 'draft',
         'api.v1.social-approval-links.index' => 'read',
+        // revoke_approval_link: DELETE /social-approval-links/{id} revokes for
+        // good; posts the client had not answered go back to the owner.
+        'api.v1.social-approval-links.destroy' => 'approve',
         // Approver side (decide_approval / list_waiting_approvals): only
         // links whose approver_email is this account's verified email.
         'api.v1.me.approvals.waiting' => 'approvals:decide',

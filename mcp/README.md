@@ -111,6 +111,7 @@ redirect_uris, token_endpoint_auth_method: "none"}`. The API fetches it
 | `suggest_caption` (brief, platform) — a caption and hashtags in the user's style; saves nothing. Pro/Max; 404 while `AI_CAPTION_ENABLED` is off → `not_enabled` ("write the caption yourself"), Free → `plan_required` | draft | `POST /ai/caption` |
 | `discard_draft` (post_id, confirm) — deletes a draft only; preview first, `confirm: true` deletes; scheduled / published / failed → `not_draft` with the next step | draft | `GET /social-posts/{id}`, then `DELETE /social-posts/{id}/draft` |
 | `list_approval_links` (status active\|expired\|revoked\|all, limit) — status, approver email, post count, approved/waiting/revision | read | `GET /social-approval-links` |
+| `revoke_approval_link` (link_id, confirm) — preview, then revokes the link for good; unanswered posts come back to the user | approve | `GET` then `DELETE /social-approval-links/{id}` |
 | `list_waiting_approvals` — posts other users sent to this user for approval | approvals:decide | `GET /me/approvals/waiting` |
 | `decide_approval` (link, post_id, decision approve\|revise, reason, confirm) — the approver side; same rules as the approval page, audited as `mcp` | approvals:decide | preview `GET /me/approvals/{post}/preview`; `confirm: true` → `POST /me/approvals/{post}/decision` |
 | `list_spaces` (status draft\|published\|archived, search, limit) — Pro/Max | read | `GET /spaces?tab&search` |
