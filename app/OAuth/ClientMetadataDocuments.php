@@ -206,13 +206,19 @@ class ClientMetadataDocuments
             throw new ClientMetadataException('Only token_endpoint_auth_method "none" (a public client with PKCE) is supported.');
         }
 
+        // Extra grants a client lists (Claude.ai's document also names
+        // urn:ietf:params:oauth:grant-type:jwt-bearer) are ignored, never
+        // honoured: the client is created as an authorization-code client,
+        // so the token endpoint still accepts only authorization_code and
+        // refresh_token for a metadata-document client.
         $grants = $document['grant_types'] ?? ['authorization_code'];
-        if (! is_array($grants) || array_diff($grants, ['authorization_code', 'refresh_token']) !== []) {
-            throw new ClientMetadataException('grant_types may only be authorization_code and refresh_token.');
+        if (! is_array($grants) || ! in_array('authorization_code', $grants, true)) {
+            throw new ClientMetadataException('grant_types must include authorization_code.');
         }
+        // Likewise extra response types are ignored; only code is ever issued.
         $responseTypes = $document['response_types'] ?? ['code'];
-        if (! is_array($responseTypes) || array_diff($responseTypes, ['code']) !== []) {
-            throw new ClientMetadataException('response_types may only be code.');
+        if (! is_array($responseTypes) || ! in_array('code', $responseTypes, true)) {
+            throw new ClientMetadataException('response_types must include code.');
         }
 
         $redirects = $document['redirect_uris'] ?? null;
