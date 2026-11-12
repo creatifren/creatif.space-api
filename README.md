@@ -65,7 +65,7 @@ in [mcp/README.md](mcp/README.md).
 | Engage | `list_conversations` | Comments and DMs, newest first | All |
 | Engage | `reply_to_conversation` | Reply to a comment or DM after a preview | All, may spend Credits |
 | Feedback | `send_feedback` | Send a bug or idea to the creatif.space team | All |
-| Settings | `get_notification_settings` | Which emails the user gets (publish failed, approvals, weekly digest) | All |
+| Settings | `get_notification_settings` | Which emails the user gets (post missed or failed, approvals, weekly digest) | All |
 | Settings | `update_notification_settings` | Turn those emails on or off | All |
 
 **Prompts:** `plan_week` (Plan next week), `send_for_approval` (Send to client for approval), `weekly_results` (Weekly results), `monthly_report` (Monthly report).

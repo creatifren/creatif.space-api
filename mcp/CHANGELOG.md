@@ -21,7 +21,7 @@ Added (37):
 - **Spaces:** `list_spaces`, `create_space_from_files`, `publish_space`
 - **Engage:** `list_conversations`, `reply_to_conversation`
 - **Feedback:** `send_feedback`
-- **Settings:** `get_notification_settings`, `update_notification_settings` (email: publish_failed, approval_decided, weekly_digest)
+- **Settings:** `get_notification_settings`, `update_notification_settings` (email: post_missed_or_failed, approval_decided, weekly_digest)
 - **Account:** `get_account_summary` (plan, limits left, Credits, channels, storage in one call), `get_onboarding` (the Get started checklist — connect, draft, send, publish — with done/at and the one next step to suggest)
 
 Resources (new): `creatif://channels`, `creatif://schedule/next-7-days` (read-only, scope `read`).
@@ -37,6 +37,7 @@ Changed:
 - Confirms of `publish_post`, `schedule_post` and `retry_post`, and `create_approval_link`, send an `Idempotency-Key` (one per confirm), so a double submit sends, charges or creates once.
 - `mcp_tool_called` adds `client_surface` (claude / chatgpt / cursor / vscode / api_key / other), `code` (`ok` or the error code) and `duration_ms`; `ms` and `error` stay. Never user text.
 - `test/in-step.test.ts`: the served tools are the one source of truth for the CHANGELOG count, the README Tools table, `server.json`, `docs/tool-justifications.md` and the first lines; every read-only tool has an `outputSchema` or is in `UNSTRUCTURED` on purpose.
+- Notification settings add `post_missed_or_failed` (“Post missed / failed”: a scheduled post missed its time or failed). Feature-detected: the API's own key when `GET /me/notification-settings` serves one, else the `publish_failed` switch, which covers both since API #199. `publish_failed` stays as the older name; giving both with different values is `invalid_input`.
 - `list_posts` status adds `waiting` (held for approval) and `changes_requested` (sent back by the client) — approval states of queued posts, paged over the raw rows — and `from`/`to` take a date (YYYY-MM-DD, UTC; `to` covers the whole day) as well as an ISO time; `from` after `to` is `invalid_input`.
 - `mcp/docs/mcp-tools.md`: every tool's title, scope, hints, description and inputs, generated from the served tool list (`npm run docs:tools`); `test/tools-doc.test.ts` fails CI when it is out of date.
 - Errors audit: for every tool, an API 401, 403, 404, 409, 422 or 429 returns one plain next step — no vendor names, prices, upgrade wording or links. A 404 names the tool's own way to a valid id or filter (no generic fallback left), and a 409 names the one tool that shows where the item stands now. `test/errors-table.test.ts` runs all 47 tools against each status and pins the codes in a table.

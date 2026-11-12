@@ -972,11 +972,11 @@ Errors → next step: not_failed → nothing failed: get_post shows each channel
 
 Shows which creatif.space emails the user gets.
 
-Returns which creatif.space emails the user gets: publish_failed, approval_decided and weekly_digest (true = on; all default on).
+Returns which creatif.space emails the user gets: post_missed_or_failed (“Post missed / failed”), approval_decided and weekly_digest (true = on; all default on).
 
 When to use: when the user asks which emails they get, or before changing one with update_notification_settings.
 
-Example: get_notification_settings {} → { settings: { publish_failed: true, approval_decided: true, weekly_digest: false, timezone: "Asia/Jakarta" }, meaning }
+Example: get_notification_settings {} → { settings: { post_missed_or_failed: true, publish_failed: true, approval_decided: true, weekly_digest: false, timezone: "Asia/Jakarta" }, meaning }
 
 Read-only. Email only: the in-app bell is not part of these. Account and storage emails cannot be turned off and are not listed.
 
@@ -990,19 +990,20 @@ No input.
 
 Turns a creatif.space email on or off for the user, such as failed posts, approvals or the weekly digest.
 
-Turns the user’s publish_failed, approval_decided or weekly_digest email on or off, or sets the timezone of the weekly digest (Monday 08:00 there), and returns all settings.
+Turns the user’s post_missed_or_failed (“Post missed / failed”), approval_decided or weekly_digest email on or off, or sets the weekly digest’s timezone, and returns all settings.
 
-When to use: when the user asks to stop or start one of these emails (e.g. "stop the weekly summary"). To only see them, use get_notification_settings.
+When to use: when the user asks to stop or start one of these emails (e.g. "stop the weekly summary", "tell me when a post misses its time"). To only see them, use get_notification_settings.
 
-Example: update_notification_settings { "weekly_digest": false } → { settings: { publish_failed: true, approval_decided: true, weekly_digest: false } }
+Example: update_notification_settings { "post_missed_or_failed": true } → { settings: { post_missed_or_failed: true, publish_failed: true, approval_decided: true, weekly_digest: false } }
 
-Give at least one of the three as true or false, or timezone (IANA, e.g. "Asia/Jakarta"; null resets it); the rest stay as they are. Only change what the user asked for. Email only: the in-app bell stays. Account and storage emails cannot be turned off.
+Give at least one switch as true or false, or timezone (IANA, e.g. "Asia/Jakarta"; null resets it); the rest stay as they are. post_missed_or_failed and publish_failed are one switch here: give one of them. Only change what the user asked for. Email only: the in-app bell stays. Account and storage emails cannot be turned off.
 
-Errors → next step: invalid_input → pass at least one of publish_failed, approval_decided, weekly_digest as true/false, or a valid IANA timezone; scope_missing → reconnect and allow "draft"; unauthorized → reconnect creatif.space; upstream_unavailable → call again in a minute; plan_required (402) → a plan limit, or a feature this account's plan does not include (on some plans: posts scheduled at most 7 days ahead, at most 10 queued posts, approval links for one client); tell the user it is not available on their plan, and do not retry; forbidden (403) → this seat or connection may not do this (e.g. a viewer, or a permission the connection was not given): the workspace owner or an editor can, or the user does it in creatif.space; do not retry; not_found (404) → the id is not in this workspace: take a fresh id from the matching list tool and call again.
+Errors → next step: invalid_input → pass at least one of post_missed_or_failed, approval_decided, weekly_digest as true/false, or a valid IANA timezone; scope_missing → reconnect and allow "draft"; unauthorized → reconnect creatif.space; upstream_unavailable → call again in a minute; plan_required (402) → a plan limit, or a feature this account's plan does not include (on some plans: posts scheduled at most 7 days ahead, at most 10 queued posts, approval links for one client); tell the user it is not available on their plan, and do not retry; forbidden (403) → this seat or connection may not do this (e.g. a viewer, or a permission the connection was not given): the workspace owner or an editor can, or the user does it in creatif.space; do not retry; not_found (404) → the id is not in this workspace: take a fresh id from the matching list tool and call again.
 
 | Input | Type | Required | Description |
 |---|---|---|---|
-| `publish_failed` | boolean | no | Email when a post fails to publish |
+| `post_missed_or_failed` | boolean | no | “Post missed / failed”: email when a scheduled post misses its time or fails to publish |
+| `publish_failed` | boolean | no | The same switch as post_missed_or_failed (older name) |
 | `approval_decided` | boolean | no | Email when a client approves or asks for changes |
 | `weekly_digest` | boolean | no | The Monday 08:00 weekly summary email |
 | `timezone` | string or null | no | IANA timezone for the weekly digest, e.g. "Asia/Jakarta"; null resets it |
