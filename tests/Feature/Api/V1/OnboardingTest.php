@@ -5,6 +5,7 @@ use App\Models\SocialAccount;
 use App\Models\SocialApprovalLink;
 use App\Models\SocialPost;
 use App\Models\SocialPostTarget;
+use App\Models\Subscription;
 use App\Models\TeamMember;
 use App\Models\User;
 use App\Support\Workspace;
@@ -76,6 +77,8 @@ it('does not count a destination that has not gone out, or a post that is not a 
 
 it('counts the whole workspace, and nobody else', function () {
     $owner = onbUser();
+    // A workspace exists only while the owner's plan has more than one seat (Workspace::membership).
+    Subscription::factory()->for($owner)->create(['seats' => 2]);
     $member = onbUser();
     TeamMember::factory()->active($member)->create(['owner_id' => $owner->id]);
     SocialAccount::factory()->for($owner)->create();
