@@ -164,15 +164,15 @@ it('serves the ZIP from the signed link only, and not after 24 hours', function 
 });
 
 it('is session only: an API key or MCP token gets 403, signed out 401', function () {
+    // Signed out first: bearer() keeps its Authorization header for the rest of the test.
+    $this->postJson('/api/v1/me/export')->assertUnauthorized();
+
     $user = axWorkspace('a.test');
     $key = $this->actingAs($user, 'web')->postJson('/api/v1/me/api-keys', ['name' => 'Claude', 'scopes' => ['read', 'draft', 'approve', 'publish']])->json('data.key');
     app('auth')->forgetGuards();
 
     bearer($this, $key)->postJson('/api/v1/me/export')->assertForbidden();
     expect(AccountExport::query()->count())->toBe(0);
-    app('auth')->forgetGuards();
-    $this->flushSession();
-    $this->postJson('/api/v1/me/export')->assertUnauthorized();
 });
 
 it('marks a failed build failed, and lets the user try again', function () {
