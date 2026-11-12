@@ -22,6 +22,8 @@ class MyProfileResource extends JsonResource
             'name' => $this->user->name,
             'locale' => $this->user->locale,
             'theme' => $this->user->theme,
+            // IANA zone the user picked; null = not set (the app's zone applies).
+            'timezone' => $this->user->timezone,
             'avatar_url' => $this->user->avatar_url,
             'handle' => $this->user->handle?->name,
             'mode' => $this->mode,
