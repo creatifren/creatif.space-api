@@ -147,7 +147,7 @@ class BuildAccountExport implements ShouldQueue
                 'status' => $p->status->value,
                 'approval' => $p->approval?->value,
                 'labels' => $p->labels ?? [],
-                'media' => collect($p->media ?? [])->map(fn ($m) => ['url' => $m['url'] ?? null])->values()->all(),
+                'media' => collect($p->media ?? [])->map(fn ($m) => ['url' => $m['url']])->values()->all(),
                 'scheduled_at' => $at($p->scheduled_at),
                 'created_at' => $at($p->created_at),
                 'channels' => $p->targets->map(fn (SocialPostTarget $t) => [
