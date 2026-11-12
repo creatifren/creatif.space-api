@@ -269,12 +269,17 @@ And on the owner's side, later:
 
 ## Tool annotations
 
-Every tool sets the four MCP hints. `list_*`, `get_*` and `check_*` are
-`readOnlyHint`. Anything that goes public or removes something is
-`destructiveHint`: `publish_post`, `schedule_post`, `reply_to_conversation`,
-`discard_draft`, `publish_space`, `revoke_insight_share_link`, `retry_post`. Tools that
-reach outside creatif.space (platforms, the client's inbox, public links) are
-`openWorldHint`. `test/annotations.test.ts` checks these rules and pins every
+Every tool has a human `title` and sets the four MCP hints as explicit
+booleans. `list_*`, `get_*` and `check_*` are `readOnlyHint`. Anything that
+posts publicly, deletes, revokes or records a decision that cannot be taken
+back is `destructiveHint`: `publish_post`, `schedule_post`, `schedule_posts`,
+`reply_to_conversation`, `retry_post`, `publish_space`, `discard_draft`,
+`unkeep_file`, `decide_approval`, `revoke_insight_share_link`. Only tools that
+post publicly (a social network or the public web) are `openWorldHint`:
+`publish_post`, `schedule_post`, `schedule_posts`, `reply_to_conversation`,
+`retry_post`, `publish_space`. One line per tool, for directory review forms,
+is in [`docs/tool-justifications.md`](docs/tool-justifications.md).
+`test/annotations.test.ts` checks these rules and that file, and pins every
 tool's hints in a snapshot.
 
 ## Rate limits (429)
