@@ -33,6 +33,8 @@ class MetadataController extends Controller
             'response_modes_supported' => ['query'],
             'grant_types_supported' => ['authorization_code', 'refresh_token'],
             'code_challenge_methods_supported' => ['S256'],
+            // MCP auth spec: a client_id may be an https URL to its metadata document.
+            'client_id_metadata_document_supported' => true,
             'token_endpoint_auth_methods_supported' => ['none', 'client_secret_post', 'client_secret_basic'],
             'revocation_endpoint_auth_methods_supported' => ['none', 'client_secret_post', 'client_secret_basic'],
 

@@ -45,6 +45,13 @@ names as `config/mcp.php` on the API. Every V1 call carries `X-MCP-Tool` and
 `X-MCP-Client` for the API's audit log (never content).
 Rate limit: 60 requests / minute / token (429 + `Retry-After`).
 
+Clients get a `client_id` either by Dynamic Client Registration
+(`POST /oauth/register`) or with an OAuth **Client ID Metadata Document**:
+the `client_id` is an https URL serving `{client_id, client_name,
+redirect_uris, token_endpoint_auth_method: "none"}`. The API fetches it
+(public addresses only, no redirects, ≤ 5 KB, cached per `Cache-Control`
+5 min–24 h) and advertises `client_id_metadata_document_supported: true`.
+
 ## Tools
 
 | Tool | Scope | V1 endpoint |
