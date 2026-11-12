@@ -40,7 +40,7 @@ Tokens (Passport OAuth 2.1 access tokens or `cs_live_…` API keys) are checked 
 Answers are cached 60 s (never past `exp`). The same bearer is then forwarded
 to V1 routes (guard `mcp`, built in the OAuth PR).
 
-Scopes (`scopes_supported`): `read`, `draft`, `approve`, `publish` — the same
+Scopes (`scopes_supported`): `read`, `draft`, `approve`, `publish`, `approvals:decide` — the same
 names as `config/mcp.php` on the API. Every V1 call carries `X-MCP-Tool` and
 `X-MCP-Client` for the API's audit log (never content).
 Rate limit: 60 requests / minute / token (429 + `Retry-After`).
@@ -67,6 +67,8 @@ Rate limit: 60 requests / minute / token (429 + `Retry-After`).
 | `get_storage_usage` — used vs quota (Free: 1 GB total; paid: Keep quota) and kept vs auto-delete (soonest dates), from the newest 300 files | read | `GET /files/usage` + `GET /files?per_page=60&page=1..5` |
 | `keep_file` (file_id) — Pro/Max; Free → `plan_required`, quota full → `storage_full`, not ready (409) → `file_not_ready` | draft | `POST /files/{id}/keep` |
 | `unkeep_file` (file_id) — back under the retention rules; returns `auto_delete_at` | draft | `DELETE /files/{id}/keep` |
+| `list_waiting_approvals` — posts other users sent to this user for approval | approvals:decide | `GET /me/approvals/waiting` |
+| `decide_approval` (link, post_id, decision approve\|revise, reason, confirm) — the approver side; same rules as the approval page, audited as `mcp` | approvals:decide | preview `GET /me/approvals/{post}/preview`; `confirm: true` → `POST /me/approvals/{post}/decision` |
 
 **Media upload.** `request_media_upload` → the client PUTs the exact bytes to
 the URL (Content-Type and Content-Length are signed) → `confirm_media_upload`

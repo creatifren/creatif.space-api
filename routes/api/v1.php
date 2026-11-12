@@ -22,7 +22,9 @@ use App\Http\Controllers\Api\V1\InboxCommentController;
 use App\Http\Controllers\Api\V1\InboxController;
 use App\Http\Controllers\Api\V1\InboxFeedController;
 use App\Http\Controllers\Api\V1\InsightExportController;
+use App\Http\Controllers\Api\V1\InsightReportController;
 use App\Http\Controllers\Api\V1\McpActivityController;
+use App\Http\Controllers\Api\V1\McpApprovalController;
 use App\Http\Controllers\Api\V1\MeController;
 use App\Http\Controllers\Api\V1\MyProfileController;
 use App\Http\Controllers\Api\V1\NotificationController;
@@ -513,6 +515,13 @@ Route::middleware(['auth:sanctum,mcp', EnforceTokenScope::class, EnsureNotPendin
         ->middleware('throttle:10,1')
         ->name('api.v1.insight.export');
 
+    // Insight → Export PDF (design pick #8). Pro / Max; POST queues a build.
+    Route::get('/insight/clients', [InsightReportController::class, 'clients'])->name('api.v1.insight.clients');
+    Route::post('/insight/reports', [InsightReportController::class, 'store'])
+        ->middleware('throttle:10,1')
+        ->name('api.v1.insight.reports.store');
+    Route::get('/insight/reports/{insightReport}', [InsightReportController::class, 'show'])->name('api.v1.insight.reports.show');
+
     // Proof of delivery. Deliberately not gated on a plan: "on every plan"
     // is what the screen promises, and evidence is not an upsell.
     Route::get('/me/deliveries', DeliveryLogController::class)->name('api.v1.me.deliveries');
@@ -548,6 +557,13 @@ Route::middleware(['auth:sanctum,mcp', EnforceTokenScope::class, EnsureNotPendin
     // "Waiting your approval": links sent to my (verified) email with posts
     // still waiting on my decision.
     Route::get('/me/approvals/waiting', [SocialApprovalController::class, 'waiting'])->name('api.v1.me.approvals.waiting');
+    // Deciding from an MCP client (decide_approval): preview → confirm_token → decide.
+    Route::get('/me/approvals/{post}/preview', [McpApprovalController::class, 'preview'])
+        ->middleware('throttle:60,1')
+        ->name('api.v1.me.approvals.preview');
+    Route::post('/me/approvals/{post}/decision', [McpApprovalController::class, 'decide'])
+        ->middleware('throttle:30,1')
+        ->name('api.v1.me.approvals.decide');
     // "Reports shared with you" — not built yet: always [] in its final shape.
     Route::get('/me/reports/shared', [SocialApprovalController::class, 'sharedReports'])->name('api.v1.me.reports.shared');
     // Show a draft to the client on a Content Plan covering its date.

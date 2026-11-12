@@ -1,3 +1,4 @@
+@props(['approvalFooter' => false])
 <x-mail::layout>
     {{-- Header --}}
     <x-slot:header>
@@ -20,6 +21,11 @@
 
     {{-- Footer --}}
     <x-slot:footer>
+        @if ($approvalFooter)
+{{ config('app.slogan') }}
+{{ \App\Notifications\ApprovalMailFooter::LINK }} {{ \App\Notifications\ApprovalMailFooter::URL }}
+
+        @endif
         <x-mail::footer>
             © {{ date('Y') }} {{ config('app.name') }}. @lang('All rights reserved.')
 

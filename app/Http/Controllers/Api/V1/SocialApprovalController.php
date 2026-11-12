@@ -717,6 +717,8 @@ class SocialApprovalController extends Controller
 
             $rows[] = [
                 'link' => [
+                    // For MCP decide_approval (`link`); the URL works too.
+                    'id' => $link->ulid,
                     'url' => $link->url(),
                     'title' => $link->title,
                     'editor' => $link->user->name,

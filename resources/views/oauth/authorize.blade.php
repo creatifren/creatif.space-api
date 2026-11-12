@@ -38,7 +38,7 @@
     <p>It will be able to:</p>
     <ul>
         @forelse ($scopes as $scope)
-            <li><strong>{{ ucfirst($scope->id) }}</strong><span>{{ $scope->description }}</span></li>
+            <li><strong>{{ ((array) config('mcp.scope_labels'))[$scope->id] ?? ucfirst($scope->id) }}</strong><span>{{ $scope->description }}</span></li>
         @empty
             <li><strong>Read</strong><span>{{ config('mcp.scopes.read') }}</span></li>
         @endforelse

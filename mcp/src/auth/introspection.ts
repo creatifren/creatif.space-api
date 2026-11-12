@@ -63,7 +63,13 @@ export class HttpIntrospector implements Introspector {
  */
 export class StubIntrospector implements Introspector {
   async introspect(token: string): Promise<Introspection> {
-    const [prefix, user, scopes, client] = token.split(':');
+    // stub:<user>:<scope,scope>[:<client>] — a scope may itself hold a
+    // colon (approvals:decide), so the client is the last part only when
+    // there are more than three.
+    const parts = token.split(':');
+    const [prefix, user] = parts;
+    const client = parts.length > 3 ? parts[parts.length - 1] : undefined;
+    const scopes = parts.slice(2, parts.length > 3 ? -1 : undefined).join(':');
     if (prefix !== 'stub' || !user) {
       return { active: false };
     }
