@@ -20,6 +20,12 @@ exports[`tool annotations > match the snapshot 1`] = `
     "openWorld": true,
     "readOnly": false,
   },
+  "create_content_plan": {
+    "destructive": false,
+    "idempotent": false,
+    "openWorld": true,
+    "readOnly": false,
+  },
   "create_insight_share_link": {
     "destructive": false,
     "idempotent": false,

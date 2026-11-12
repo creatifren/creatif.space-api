@@ -2,6 +2,7 @@ import { readFileSync } from 'node:fs';
 import { afterEach, describe, expect, it } from 'vitest';
 import { metadataUrls, SCOPES } from '../src/auth/middleware.js';
 import { VERSION } from '../src/version.js';
+import { SERVER_ICONS } from '../src/server.js';
 import { RESOURCE, startApp, TOKEN_FULL } from './helpers.js';
 
 /*
@@ -55,6 +56,22 @@ describe('mcp/server.json (official MCP registry)', () => {
       protected_resource_metadata: `https://mcp.creatif.space${metadataUrls(RESOURCE).pathFormPath}`,
     });
     expect(meta.auth.scopes).toEqual([...SCOPES]);
+  });
+
+  it('shows the Pen Rocket icon: one 512×512 PNG on creatif.space, the same one serverInfo gives', async () => {
+    expect(server.icons).toEqual([{ src: 'https://creatif.space/icons/icon-512.png', mimeType: 'image/png', sizes: ['512x512'] }]);
+    expect(server.icons).toEqual(SERVER_ICONS);
+    const app = await startApp();
+    try {
+      const client = await app.connect();
+      expect(client.getServerVersion()?.icons).toEqual(SERVER_ICONS);
+    } finally {
+      await app.close();
+    }
+  });
+
+  it('has no repository link: the source repository is not meant to be listed', () => {
+    expect(server.repository).toBeUndefined();
   });
 
   it('lists exactly the tools and prompts the server serves, and its version', async () => {

@@ -16,6 +16,7 @@ use App\Models\SocialApprovalLink;
 use App\Models\SocialPost;
 use App\Models\SocialPostComment;
 use App\Models\User;
+use App\Notifications\ApprovalLinkShared;
 use App\Notifications\ApprovalReminder;
 use App\Support\Credits;
 use App\Support\PlanQuota;
@@ -88,6 +89,8 @@ class SocialApprovalController extends Controller
             // Who may decide: the client signs in with this address (Google
             // or a one-time email link) to approve or ask for changes.
             'approver_email' => ['required', 'string', 'email:rfc', 'max:254'],
+            // Email the link to the approver now; absent/false = share it by hand.
+            'notify_approver' => ['sometimes', 'boolean'],
         ], [
             'approver_email.required' => 'Add the email address of the person who approves. They sign in with it to decide.',
             'approver_email.email' => 'That is not an email address.',
@@ -136,7 +139,7 @@ class SocialApprovalController extends Controller
             ->update(['approval' => SocialPostApproval::Client->value, 'status' => SocialPostStatus::Scheduled->value]);
         ProductEvents::approvalLinkCreated($link, $posts->count(), $hours);
 
-        return response()->json(['data' => $this->linkArray($this->withCounts($link))], 201);
+        return $this->created($link, $validated);
     }
 
     /**
@@ -163,7 +166,23 @@ class SocialApprovalController extends Controller
 
         ProductEvents::approvalLinkCreated($link, PlanScope::posts($link)->count(), $hours);
 
-        return response()->json(['data' => $this->linkArray($this->withCounts($link))], 201);
+        return $this->created($link, $validated);
+    }
+
+    /**
+     * The 201 for a new link; emails it to the approver first when asked
+     * (notify_approver), and says whether it did.
+     *
+     * @param  array<string, mixed>  $validated
+     */
+    private function created(SocialApprovalLink $link, array $validated): JsonResponse
+    {
+        $notify = (bool) ($validated['notify_approver'] ?? false);
+        if ($notify) {
+            Notification::route('mail', $link->approver_email)->notify(new ApprovalLinkShared($link));
+        }
+
+        return response()->json(['data' => $this->linkArray($this->withCounts($link)) + ['approver_notified' => $notify]], 201);
     }
 
     /**

@@ -47,6 +47,25 @@ describe('get_insight_summary', () => {
     expect(v1.headers.get('X-MCP-Tool')).toBe('get_insight_summary');
   });
 
+  it('passes a channel’s below-threshold note on, with its number and source', async () => {
+    const note = {
+      metric: 'audience',
+      reason: 'below_threshold',
+      threshold: 100,
+      source_url: 'https://developers.facebook.com/docs/instagram-platform/insights/',
+      text: 'Audience data: Instagram shares this once an account has at least 100 followers.',
+    };
+    const data = { ...summary, channels: [{ ...summary.channels[0], notes: [note] }, { ...summary.channels[1], notes: [] }] };
+    const res = await call({ period: { month: '2026-10' } }, {
+      'GET /insight/summary': () => ({ body: { data } }),
+    });
+
+    expect(res.isError).toBeFalsy();
+    const out = payload(res);
+    expect(out.channels[0].notes).toEqual([note]);
+    expect(out.channels[1].notes).toEqual([]);
+  });
+
   it('sends a range and the chosen channels as from / to / channel_ids', async () => {
     await call({ period: { from: '2026-09-15', to: '2026-10-14' }, channel_ids: [IG, FB] }, {
       'GET /insight/summary': () => ({ body: { data: summary } }),

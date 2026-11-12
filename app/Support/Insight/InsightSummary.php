@@ -59,6 +59,17 @@ final class InsightSummary
                 ],
                 'previous' => self::numbers($c['previous']),
                 'change_pct' => self::changes($c['current'], $c['previous']),
+                // Metrics the network holds back below an official follower count.
+                'notes' => array_values(array_map(fn (array $n) => [
+                    'metric' => $n['metric'],
+                    'reason' => $n['reason'],
+                    'threshold' => $n['threshold'],
+                    'source_url' => $n['source_url'],
+                    'text' => InsightStrings::get('en', 'below_threshold', [
+                        ...$n['params'],
+                        'metric' => InsightStrings::get('en', $n['metric']),
+                    ]),
+                ], array_filter($c['notes'], fn (array $n) => ($n['reason'] ?? null) === 'below_threshold'))),
             ], $data['channels']),
             'top_posts' => array_map(fn (array $p) => [
                 'network' => $p['network'],

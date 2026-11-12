@@ -3,8 +3,17 @@
   "name": "io.github.creatifren/creatif-space",
   "title": "Creatif Space",
   "description": "Get content approved & published faster: draft, send approval links and publish from your AI chat.",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "websiteUrl": "https://creatif.space/mcp",
+  "icons": [
+    {
+      "src": "https://creatif.space/icons/icon-512.png",
+      "mimeType": "image/png",
+      "sizes": [
+        "512x512"
+      ]
+    }
+  ],
   "remotes": [
     {
       "type": "streamable-http",
@@ -31,6 +40,7 @@
         "check_approval_status",
         "confirm_media_upload",
         "create_approval_link",
+        "create_content_plan",
         "create_insight_share_link",
         "create_space_from_files",
         "decide_approval",

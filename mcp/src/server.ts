@@ -13,6 +13,7 @@ import { insightTools } from './tools/insight.js';
 import { insightReportTools } from './tools/insightReport.js';
 import { insightShareTools } from './tools/insightShare.js';
 import { m2Tools } from './tools/m2.js';
+import { contentPlanTools } from './tools/contentPlan.js';
 import { mediaTools } from './tools/media.js';
 import { engageTools } from './tools/engage.js';
 import { storageTools } from './tools/storage.js';
@@ -32,7 +33,9 @@ import { mcpCors } from './cors.js';
 import { DEFAULT_FREE_RATE_LIMIT, DEFAULT_GLAMA_CLAIM } from './config.js';
 import { mountFree } from './free/server.js';
 
-export const SERVER_INFO = { name: 'creatif.space', version: VERSION };
+/** The Pen Rocket, as listed in server.json for the MCP Registry (served by the web app). */
+export const SERVER_ICONS = [{ src: 'https://creatif.space/icons/icon-512.png', mimeType: 'image/png', sizes: ['512x512'] }];
+export const SERVER_INFO = { name: 'creatif.space', version: VERSION, icons: SERVER_ICONS };
 
 export const INSTRUCTIONS =
   'Get content approved & published faster. ' +
@@ -70,7 +73,7 @@ export interface AppDeps {
 export function buildMcpServer(auth: CallerAuth, deps: AppDeps): McpServer {
   const server = new McpServer(SERVER_INFO, { instructions: INSTRUCTIONS });
   const v1 = new V1Client(deps.v1ApiUrl, auth.token, deps.fetchImpl);
-  const tools = [...m1Tools, ...m2Tools, ...mediaTools, ...engageTools, ...aiTools, ...storageTools, ...housekeepingTools, ...approverTools, ...insightTools, ...insightReportTools, ...spaceTools, ...auditTools, ...connectTools, ...feedbackTools, ...insightShareTools, ...calendarTools];
+  const tools = [...m1Tools, ...m2Tools, ...mediaTools, ...engageTools, ...aiTools, ...storageTools, ...housekeepingTools, ...approverTools, ...insightTools, ...insightReportTools, ...spaceTools, ...auditTools, ...connectTools, ...feedbackTools, ...insightShareTools, ...calendarTools, ...contentPlanTools];
   for (const tool of tools) {
     registerTool(server, tool, { auth, v1, analytics: deps.analytics });
   }

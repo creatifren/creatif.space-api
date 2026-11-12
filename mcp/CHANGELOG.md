@@ -7,14 +7,14 @@ Versions of the remote MCP server at `https://mcp.creatif.space/mcp`
 
 ## 0.3.0 — 2026-11-12
 
-37 tools (was 11). Every description follows the agent shape (what / when to
+38 tools (was 11). Every description follows the agent shape (what / when to
 use / example / errors → next step, #78), and every error is
 `{code, message, next_step, details}` (#76).
 
-Added (26):
+Added (27):
 
 - **Posts:** `discard_draft` (preview first; drafts only), `suggest_caption` (AI caption + hashtags; `not_enabled` while the flag is off)
-- **Approvals:** `send_approval_reminder`, `list_approval_links`, `get_approval_audit`, `get_approval_history` (one post’s decisions, email masked), `get_plan_calendar_link` (Content Plan ICS feed, read-only); approver side `list_waiting_approvals`, `decide_approval`, `list_shared_with_me` (scope `approvals:decide`)
+- **Approvals:** `create_content_plan` (preview → `confirm: true` creates a Content Plan and emails the approver), `send_approval_reminder`, `list_approval_links`, `get_approval_audit`, `get_approval_history` (one post’s decisions, email masked), `get_plan_calendar_link` (Content Plan ICS feed, read-only); approver side `list_waiting_approvals`, `decide_approval`, `list_shared_with_me` (scope `approvals:decide`)
 - **Media:** `request_media_upload`, `confirm_media_upload`, `get_storage_usage`, `keep_file`, `unkeep_file`
 - **Channels:** `get_connect_link` (app link, no token); `list_channels` marks channels to reconnect
 - **Insight:** `get_insight_summary`, `get_insight_report_link`, `create_insight_share_link` (optional `recipient_email`: emailed, and listed in their `list_shared_with_me`), `revoke_insight_share_link` (scope `approve`)
@@ -29,6 +29,7 @@ Prompts (new): `plan_week`, `send_for_approval`, `monthly_report` (`prompts/list
 Changed:
 
 - `MCP_PUBLIC_DISCOVERY` (off by default): `initialize` and `tools/list` without a token; `tools/call` stays behind OAuth (401 + `WWW-Authenticate`).
+- `serverInfo.icons` and the registry entry's `icons`: the Pen Rocket, 512×512 PNG at `https://creatif.space/icons/icon-512.png` (registry entry 1.2.0).
 - Every `list_*` tool takes `limit` + `cursor` and returns `next_cursor` (null at the end).
 - The 10 most-used read tools declare an `outputSchema` and return `structuredContent` (text block kept).
 - `/free` `connect_guide` returns `account_type` per network: `confirmed` from the code, or `check in app` where the code does not prove it.
