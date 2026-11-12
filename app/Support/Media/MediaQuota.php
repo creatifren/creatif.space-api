@@ -43,6 +43,8 @@ final class MediaQuota
                 'tier' => MediaLimits::tier($user),
                 'keep_used_bytes' => self::keepUsed($user),
                 'keep_quota_bytes' => MediaLimits::keepQuota($user),
+                // Everything in the library, Trash included — not what the Keep quota counts.
+                'library_used_bytes' => PlanQuota::storageUsed(Workspace::owner($user)),
             ];
         }
 

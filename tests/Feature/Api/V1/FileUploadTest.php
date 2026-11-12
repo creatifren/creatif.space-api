@@ -139,6 +139,19 @@ describe('complete', function () {
             ->and($file->fresh()->checksum)->toBe(md5($bytes));
     });
 
+    it('B14: reads width and height from the image itself when the client sends none (MCP uploads)', function (string $fixture) {
+        Storage::fake('s3');
+        $user = User::factory()->create();
+        $file = File::factory()->for($user)->pending()->create(['size_bytes' => 999, 'mime_type' => 'image/'.(pathinfo($fixture, PATHINFO_EXTENSION) === 'jpg' ? 'jpeg' : pathinfo($fixture, PATHINFO_EXTENSION))]);
+        Storage::disk('s3')->put($file->path, mediaFixture($fixture));
+
+        $this->actingAs($user)
+            ->postJson("/api/v1/files/{$file->ulid}/complete")
+            ->assertOk()
+            ->assertJsonPath('data.width', 16)
+            ->assertJsonPath('data.height', 16);
+    })->with(['pic.jpg', 'pic.png', 'pic.gif', 'pic.webp']);
+
     it('stores no checksum when storage cannot give a plain MD5', function () {
         /* A multipart ETag is an MD5 of the parts' MD5s with a -N suffix:
            stable per upload, but two identical files uploaded with

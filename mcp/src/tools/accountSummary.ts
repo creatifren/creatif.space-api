@@ -32,7 +32,7 @@ interface V1Account {
 }
 type Usage =
   | { tier: 'free'; used_bytes: number; quota_bytes: number }
-  | { tier: string; keep_used_bytes: number; keep_quota_bytes: number };
+  | { tier: string; keep_used_bytes: number; keep_quota_bytes: number; library_used_bytes?: number };
 
 /** used / limit / left; null limit = no limit, so nothing to run out of. */
 const quota = (q?: Quota) => (q ? { used: q.used, limit: q.limit, left: q.limit === null ? null : Math.max(0, q.limit - q.used) } : undefined);
@@ -89,6 +89,7 @@ export const getAccountSummary = defineTool({
       counts: free ? 'library' : 'kept',
       used_bytes: used,
       quota_bytes: cap,
+      library_used_bytes: free ? u.used_bytes : (u.library_used_bytes ?? null),
       left_bytes: Math.max(0, cap - used),
       percent_used: cap > 0 ? Math.round((used / cap) * 1000) / 10 : null,
     };

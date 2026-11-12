@@ -13,7 +13,7 @@ import { shapeFile, type V1File } from './media.js';
 
 type Usage =
   | { tier: 'free'; used_bytes: number; quota_bytes: number }
-  | { tier: string; keep_used_bytes: number; keep_quota_bytes: number };
+  | { tier: string; keep_used_bytes: number; keep_quota_bytes: number; library_used_bytes?: number };
 
 interface ListedFile {
   id: string;
@@ -38,8 +38,8 @@ export const getStorageUsage = defineTool({
   description: describeTool({
     does: 'Shows how much of the plan’s media storage is used against its quota, and which library files are kept versus due for automatic deletion (with the soonest dates).',
     when: 'before a big upload, when an upload failed with storage_full, or when the user asks what will be deleted and when. To keep a file from being deleted use keep_file; to list or search files use list_files.',
-    example: 'get_storage_usage {} → { tier, quota: { used_bytes, quota_bytes, percent_used, counts }, files: { kept: { count, bytes }, auto_delete: { count, bytes, next_at, soonest: [...] }, no_auto_delete: {...}, complete } }',
-    rules: 'Plans without Keep: 1 GB for everything in the library; files used by a post are removed once it publishes, files on no post 24 h after upload. Plans with Keep have a Keep quota: kept files plus media on drafts and scheduled posts; other post media is removed 30 days after publishing. Large libraries: only the newest 300 files are split (files.complete false).',
+    example: 'get_storage_usage {} → { tier, quota: { used_bytes, quota_bytes, percent_used, counts, library_used_bytes }, files: { kept: { count, bytes }, auto_delete: { count, bytes, next_at, soonest: [...] }, no_auto_delete: {...}, complete } }',
+    rules: 'Plans without Keep: 1 GB for everything in the library; files used by a post are removed once it publishes, files on no post 24 h after upload. Plans with Keep have a Keep quota: kept files plus media on drafts and scheduled posts; other post media is removed 30 days after publishing. quota.used_bytes is what counts toward the quota (quota.counts says what that is); quota.library_used_bytes is the whole library, Trash included. Large libraries: only the newest 300 files are split (files.complete false).',
     errors: [
       ['unauthorized', 'ask the user to reconnect the creatif.space connector'],
       ['scope_missing', 'reconnect with "read" allowed'],
@@ -97,6 +97,8 @@ export const getStorageUsage = defineTool({
         quota_bytes: quota,
         percent_used: percent,
         counts: free ? 'everything in the library, Trash included' : 'kept files plus media on drafts and scheduled posts',
+        // B14: used_bytes is what counts toward this quota; the whole library is separate on paid plans.
+        library_used_bytes: free ? usage.used_bytes : (usage.library_used_bytes ?? null),
       },
       files: {
         kept: sum(kept),

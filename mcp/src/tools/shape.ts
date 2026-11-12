@@ -5,6 +5,8 @@ type Obj = Record<string, unknown>;
 
 export interface V1Target {
   account: { id: string; platform: string; username: string | null };
+  /** This channel's own caption (captions_by_channel); null = the post's caption. */
+  caption?: string | null;
   status: string;
   fail_reason: string | null;
   /** PublishFailure's reason code, when it failed. */
@@ -47,6 +49,8 @@ export function displayStatus(p: Pick<V1Post, 'status' | 'approval'>): string {
 
 export function shapePost(p: V1Post, withComments = false) {
   const held = displayStatus(p) !== p.status;
+  // B15: the per-channel captions draft_post took (captions_by_channel), read back the same way.
+  const byChannel = Object.fromEntries((p.targets ?? []).filter((t) => typeof t.caption === 'string' && t.caption !== '').map((t) => [t.account.id, t.caption as string]));
   return {
     id: p.id,
     status: displayStatus(p),
@@ -58,12 +62,14 @@ export function shapePost(p: V1Post, withComments = false) {
     approval: p.approval,
     ...(p.approval_by ? { approval_by: p.approval_by, approval_at: p.approval_at } : {}),
     fail_reason: p.fail_reason,
+    ...(Object.keys(byChannel).length ? { captions_by_channel: byChannel } : {}),
     labels: p.labels ?? [],
     media: (p.media ?? []).map((m) => m.url),
     channels: (p.targets ?? []).map((t) => ({
       channel_id: t.account.id,
       platform: t.account.platform,
       username: t.account.username,
+      ...(typeof t.caption === 'string' && t.caption !== '' ? { caption: t.caption } : {}),
       status: t.status,
       fail_reason: t.fail_reason,
       platform_url: t.platform_url,

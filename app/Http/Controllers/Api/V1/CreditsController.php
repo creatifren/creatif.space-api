@@ -11,6 +11,7 @@ use App\Models\SocialPost;
 use App\Models\User;
 use App\Models\WalletTransaction;
 use App\Services\CreemService;
+use App\Support\AiCaptionReady;
 use App\Support\Credits;
 use App\Support\Media\MediaQuota;
 use App\Support\PlanQuota;
@@ -117,6 +118,10 @@ class CreditsController extends Controller
                 // The gates PlanQuota::requireFeature() enforces (402 when false).
                 ...collect(PlanQuota::FEATURES)->mapWithKeys(fn (string $f) => [$f => $plan->feature($f)])->all(),
             ],
+            // B10: the plan may include AI captions while POST /ai/caption is
+            // still switched off (AI_CAPTION_ENABLED) or not set up: then
+            // MCP suggest_caption answers not_enabled. True only when it works.
+            'ai_caption_ready' => $plan->feature('ai_caption') && AiCaptionReady::check(),
             'credits' => [
                 'monthly' => Credits::monthlyBalance($user),
                 'monthly_amount' => Credits::monthlyAmount($owner),

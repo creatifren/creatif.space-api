@@ -115,6 +115,7 @@ export const schedulePosts = defineTool({
       ['insufficient_credits', 'nothing was scheduled: the user tops up, or schedules fewer posts'],
       ['daily_cap_reached', 'nothing was scheduled: fewer posts, or tomorrow (UTC)'],
       ['plan_required', 'pass the message to the user as it is (window or queue limit), do not retry'],
+      ['invalid_input', 'a post is listed twice (details.post_ids): list each draft once and call again'],
       ['not_found', 'take draft ids from list_posts status "draft"'],
       ['scope_missing', 'reconnect and allow "publish"'],
     ],
