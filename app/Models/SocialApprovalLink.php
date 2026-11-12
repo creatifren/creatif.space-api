@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Casts\UtcDateTime;
 use App\Models\Contracts\WorkspaceOwned;
 use Carbon\CarbonImmutable;
 use Illuminate\Database\Eloquent\Builder;
@@ -30,6 +31,12 @@ use Illuminate\Support\Str;
  * @property string|null $client_name
  * @property string|null $approver_email
  * @property CarbonImmutable|null $approver_bound_at
+ * @property CarbonImmutable|null $scope_from
+ * @property CarbonImmutable|null $scope_to
+ * @property string|null $scope_timezone
+ * @property CarbonImmutable|null $scope_starts_at
+ * @property CarbonImmutable|null $scope_ends_at
+ * @property list<int>|null $scope_account_ids
  * @property CarbonImmutable|null $expires_at
  * @property CarbonImmutable|null $extended_at
  * @property CarbonImmutable|null $revoked_at
@@ -37,7 +44,7 @@ use Illuminate\Support\Str;
  */
 class SocialApprovalLink extends Model implements WorkspaceOwned
 {
-    protected $fillable = ['user_id', 'token', 'title', 'client_name', 'approver_email', 'approver_bound_at', 'expires_at', 'extended_at', 'revoked_at'];
+    protected $fillable = ['user_id', 'token', 'title', 'client_name', 'approver_email', 'approver_bound_at', 'scope_from', 'scope_to', 'scope_timezone', 'scope_starts_at', 'scope_ends_at', 'scope_account_ids', 'expires_at', 'extended_at', 'revoked_at'];
 
     public function expired(): bool
     {
@@ -74,6 +81,12 @@ class SocialApprovalLink extends Model implements WorkspaceOwned
             'extended_at' => 'datetime',
             'revoked_at' => 'datetime',
             'approver_bound_at' => 'datetime',
+            'scope_from' => 'date',
+            'scope_to' => 'date',
+            // UTC instants, read back as UTC (UtcDateTime), like scheduled_at.
+            'scope_starts_at' => UtcDateTime::class,
+            'scope_ends_at' => UtcDateTime::class,
+            'scope_account_ids' => 'array',
         ];
     }
 
@@ -141,6 +154,12 @@ class SocialApprovalLink extends Model implements WorkspaceOwned
     {
         $value = $value === null ? null : mb_strtolower(trim($value));
         $this->attributes['approver_email'] = $value === '' ? null : $value;
+    }
+
+    /** A Content Plan (date range + channels) rather than a fixed list of posts. */
+    public function isScoped(): bool
+    {
+        return ($this->getAttributes()['scope_from'] ?? null) !== null;
     }
 
     public function url(): string

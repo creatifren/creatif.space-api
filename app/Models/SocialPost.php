@@ -35,6 +35,7 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
  * @property SocialPostApproval|null $approval
  * @property string|null $approval_by
  * @property CarbonImmutable|null $approval_at
+ * @property CarbonImmutable|null $review_requested_at
  */
 class SocialPost extends Model implements WorkspaceOwned
 {
@@ -60,6 +61,7 @@ class SocialPost extends Model implements WorkspaceOwned
         'approval',
         'approval_by',
         'approval_at',
+        'review_requested_at',
     ];
 
     /**
@@ -78,6 +80,7 @@ class SocialPost extends Model implements WorkspaceOwned
             'approval' => SocialPostApproval::class,
             'labels' => 'array',
             'approval_at' => 'datetime',
+            'review_requested_at' => 'datetime',
         ];
     }
 

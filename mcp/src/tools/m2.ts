@@ -158,34 +158,53 @@ export const createApprovalLink = defineTool({
   name: 'create_approval_link',
   title: 'Create a client approval link',
   description: describeTool({
-    does: "Creates a creatif.space approval link for one or more drafts (or posts already held for approval) and returns its URL for the user to share with their client; the posts are held until the client approves.",
-    when: "when the user wants a client to approve posts before they go out. To follow decisions on an existing link, use check_approval_status with link_id instead of making a new link. The link is not sent anywhere by this tool; hand the URL to the user.",
-    example: "create_approval_link { \"post_ids\": [\"01JD…\"], \"approver_email\": \"client@example.com\", \"title\": \"November posts\", \"expires_in_hours\": 168 } → { link: { id, url, posts }, skipped? }",
-    rules: "approver_email is required: only that person, signed in with that address (Google or a one-time email link on the approval page), can approve or ask for changes; ask the user for it if you do not have it. Every plan: on Free, links are for one client at a time (the approver_email tells clients apart; links to the same address are fine), posts scheduled at most 7 days ahead, and at most 10 queued posts. Posts that cannot be approved are left off and listed in skipped with their status and reason.",
+    does: "Creates a creatif.space approval link — for a list of posts, or a Content Plan of dates and channels — and returns its URL for the user to share with their client; the posts are held until the client approves.",
+    when: "when the user wants a client to approve posts before they go out — a few posts by id, or a period (\"approve my December\") as a Content Plan. To follow decisions on an existing link, use check_approval_status with link_id instead of making a new link. The link is not sent anywhere by this tool; hand the URL to the user.",
+    example: "create_approval_link { \"post_ids\": [\"01JD…\"], \"approver_email\": \"client@example.com\", \"title\": \"November posts\", \"expires_in_hours\": 168 } → { link: { id, url, posts }, skipped? }; Content Plan: { \"date_from\": \"2026-12-01\", \"date_to\": \"2026-12-31\", \"approver_email\": \"client@example.com\" }",
+    rules: "Two kinds: a fixed list (post_ids: drafts, or posts already held for approval) or a Content Plan (date_from + date_to, optionally channel_ids): the client sees every post in those dates on those channels, including posts added later. Give post_ids OR date_from/date_to, never both. Content Plan dates are YYYY-MM-DD, both included, at most 93 days, in timezone (default the account's). approver_email is required: only that person, signed in with that address (Google or a one-time email link on the approval page), can approve or ask for changes; ask the user for it if you do not have it. Every plan: on Free, links are for one client at a time (the approver_email tells clients apart; links to the same address are fine), posts scheduled at most 7 days ahead, and at most 10 queued posts (on a Content Plan, a Free client can decide only posts in the next 7 days; the rest show). Fixed-list posts that cannot be approved are left off and listed in skipped with their status and reason.",
     errors: [
+      ["invalid_input", "give either post_ids or both date_from and date_to"],
       ["not_approvable", "none of the posts can go on a link (details.refused gives each post’s status and reason): list_posts status \"draft\", or draft_post a new one, then call again"],
       ["plan_required", "details.feature approval_clients, schedule_window or queue_limit — pass the message to the user as it is (it has the trial/upgrade link), do not retry"],
-      ["not_found", "check ids with list_posts"],
+      ["not_found", "check ids with list_posts / list_channels"],
       ["scope_missing", "reconnect and allow \"approve\""],
       ["upstream_unavailable", "check list_posts / check_approval_status before calling again"],
     ],
   }),
   scope: 'approve',
   input: {
-    post_ids: z.array(ulid('Post')).min(1).max(50).describe('Posts to put on the link'),
+    post_ids: z.array(ulid('Post')).min(1).max(50).optional().describe('Fixed list: the posts to put on the link (omit for a Content Plan)'),
+    date_from: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'YYYY-MM-DD').optional().describe('Content Plan: first day shown (YYYY-MM-DD, in timezone)'),
+    date_to: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'YYYY-MM-DD').optional().describe('Content Plan: last day shown, included (YYYY-MM-DD)'),
+    timezone: z.string().trim().max(64).optional().describe('Content Plan: IANA timezone the dates are in, e.g. Asia/Jakarta (default: the account timezone)'),
+    channel_ids: z.array(ulid('Channel')).max(20).optional().describe('Content Plan: only these channels (from list_channels); omit for all'),
     approver_email: z.string().trim().email().max(254).describe('Email of the person who approves; they sign in with it to decide'),
     title: z.string().trim().max(120).optional().describe('Shown to the client above the posts'),
     client_name: z.string().trim().max(120).optional().describe('Private note on who it is for; the client never sees it'),
     expires_in_hours: z.union([z.literal(48), z.literal(168), z.literal(720)]).optional().describe('48, 168 (7 days) or 720 (30 days); omit for no expiry'),
   },
   annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: true },
-  notFound: { what: 'A post', next: 'Check the post ids with list_posts (status draft) and call again.' },
+  notFound: { what: 'A post or channel', next: 'Check the post ids with list_posts (status draft) and channel ids with list_channels, then call again.' },
   run: async (args, ctx) => {
-    const ids = [...new Set(args.post_ids)];
+    const plan = args.date_from !== undefined || args.date_to !== undefined;
+    if (plan === (args.post_ids !== undefined)) {
+      throw new ToolError('invalid_input', 'Give either post_ids (a fixed list) or date_from and date_to (a Content Plan) — one of the two.', 'Pass post_ids, or date_from + date_to.');
+    }
+    if (plan && (args.date_from === undefined || args.date_to === undefined)) {
+      throw new ToolError('invalid_input', 'A Content Plan needs both date_from and date_to.', 'Pass both dates as YYYY-MM-DD.');
+    }
+    const ids = plan ? [] : [...new Set(args.post_ids)];
     let data: Record<string, unknown>;
     try {
       ({ data } = await ctx.v1.post<{ data: Record<string, unknown> }>('/social-approval-links', {
-        post_ids: ids,
+        ...(plan
+          ? {
+              date_from: args.date_from,
+              date_to: args.date_to,
+              ...(args.timezone ? { timezone: args.timezone } : {}),
+              ...(args.channel_ids ? { channel_ids: args.channel_ids } : {}),
+            }
+          : { post_ids: ids }),
         approver_email: args.approver_email,
         ...(args.title ? { title: args.title } : {}),
         ...(args.client_name ? { client_name: args.client_name } : {}),
@@ -194,7 +213,7 @@ export const createApprovalLink = defineTool({
     } catch (e) {
       // The API refuses a set with no approvable post in one bare sentence;
       // say which post is what, and what to do instead.
-      if (e instanceof V1Error && e.status === 422 && !e.body?.errors && !e.body?.code && /can still be approved/i.test(String(e.body?.message ?? ''))) {
+      if (!plan && e instanceof V1Error && e.status === 422 && !e.body?.errors && !e.body?.code && /can still be approved/i.test(String(e.body?.message ?? ''))) {
         const refused = await whyNotApprovable(ctx, ids);
         throw new ToolError(
           'not_approvable',
@@ -205,16 +224,18 @@ export const createApprovalLink = defineTool({
       }
       throw e;
     }
-    // Posts the API left off the link (published, queued, cancelled…) are
-    // dropped silently by the API; name them.
+    // Posts the API left off a fixed list (published, queued, cancelled…)
+    // are dropped silently by the API; name them. A Content Plan has no list.
     const onLink = typeof data.posts === 'number' ? data.posts : ids.length;
-    const skipped = onLink < ids.length ? await skippedFromLink(ctx, String(data.id), ids) : [];
+    const skipped = !plan && onLink < ids.length ? await skippedFromLink(ctx, String(data.id), ids) : [];
     return {
       link: {
         id: data.id,
         url: data.url,
         status: data.status,
         posts: data.posts,
+        kind: data.kind,
+        scope: data.scope,
         approver_email: data.approver_email,
         expires_at: data.expires_at,
       },
