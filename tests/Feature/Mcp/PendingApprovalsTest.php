@@ -1,10 +1,12 @@
 <?php
 
+use App\Models\Plan;
 use App\Models\SocialAccount;
 use App\Models\SocialApprovalLink;
 use App\Models\SocialPost;
 use App\Models\TeamMember;
 use App\Models\User;
+use App\Support\Workspace;
 use Tests\TestCase;
 
 /*
@@ -113,11 +115,15 @@ it('leaves out drafts, approved, published and owner-held posts', function () {
 });
 
 it('shows a team member the workspace’s posts and never another workspace’s', function () {
+    // A member counts only while the owner's plan carries seats (Team).
     $owner = User::factory()->create();
+    $owner->subscriptions()->create(['plan_id' => Plan::query()->where('key', 'team')->value('id'),
+        'billing_period' => 'monthly', 'seats' => 3, 'status' => 'active']);
     [$mine] = paHeld($owner);
     paHeld(User::factory()->create());
     $member = User::factory()->create();
     TeamMember::factory()->active($member)->viewer()->create(['owner_id' => $owner->id]);
+    Workspace::forget();
 
     expect($this->actingAs($owner)->getJson('/api/v1/social-approvals/pending')->json('data.*.id'))->toBe([$mine->ulid])
         ->and($this->actingAs($member)->getJson('/api/v1/social-approvals/pending')->json('data.*.id'))->toBe([$mine->ulid]);
