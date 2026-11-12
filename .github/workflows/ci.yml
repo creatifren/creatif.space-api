@@ -12,9 +12,13 @@ on:
     branches: [main]
   merge_group:
 
-# One run per branch / PR: a new push cancels the older run, never on main.
+# PRs and branches: one run per ref, a new push cancels the older run.
+# Main: one group per commit, so every merge gets its own completed run.
+# (A shared group never cancels the running run, but GitHub keeps only one
+# pending run per group and cancels the rest, whatever cancel-in-progress
+# says: merges in quick succession lost their runs, incl. the MySQL job.)
 concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
+  group: ${{ github.workflow }}-${{ github.ref == 'refs/heads/main' && github.sha || github.ref }}
   cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
 
 permissions:
