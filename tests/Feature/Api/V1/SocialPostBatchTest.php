@@ -31,7 +31,9 @@ function sbUser(int $credits = 100_000): User
     $user = User::factory()->create();
     Subscription::factory()->for($user)->create();
     $user = User::query()->findOrFail($user->id);
-    Credits::grant($user, $credits, 'Test');
+    if ($credits > 0) {
+        Credits::grant($user, $credits, 'Test');
+    }
 
     return $user;
 }
@@ -91,7 +93,9 @@ it('schedules every post of the batch', function () {
     $posts = [sbDraft($user), sbDraft($user, 'x'), sbDraft($user, 'linkedin')];
     $before = Credits::total($user);
 
-    sbSend($this, $user, sbItems($this, $user, $posts))->assertOk()->assertJsonCount(3, 'data.scheduled');
+    $res = sbSend($this, $user, sbItems($this, $user, $posts));
+    expect($res->status(), (string) $res->getContent())->toBe(200);
+    $res->assertJsonCount(3, 'data.scheduled');
 
     foreach ($posts as $p) {
         expect($p->fresh()->status->value)->toBe('scheduled')->and($p->fresh()->provider_post_id)->not->toBeNull();
