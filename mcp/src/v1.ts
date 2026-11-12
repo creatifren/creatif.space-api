@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import type { FetchLike } from './auth/introspection.js';
 import { VERSION } from './version.js';
 
@@ -50,8 +51,13 @@ export class V1Client {
     return this.request<T>('DELETE', path);
   }
 
-  post<T = unknown>(path: string, body: unknown): Promise<T> {
-    return this.request<T>('POST', path, body);
+  /**
+   * With idempotencyKey the API runs the request once for 24 hours and
+   * replays its answer to a repeat (publish, schedule, retry, approval
+   * link create).
+   */
+  post<T = unknown>(path: string, body: unknown, opts: { idempotencyKey?: string } = {}): Promise<T> {
+    return this.request<T>('POST', path, body, undefined, false, opts.idempotencyKey ? { 'Idempotency-Key': opts.idempotencyKey } : {});
   }
 
   /** A GET whose success body is not JSON (e.g. a CSV export): the raw text. Errors are still JSON. */
@@ -59,7 +65,7 @@ export class V1Client {
     return this.request<string>('GET', path, undefined, query, true);
   }
 
-  private async request<T>(method: string, path: string, body?: unknown, query?: Query, raw = false): Promise<T> {
+  private async request<T>(method: string, path: string, body?: unknown, query?: Query, raw = false, headers: Record<string, string> = {}): Promise<T> {
     const url = new URL(this.baseUrl + path);
     for (const [k, v] of Object.entries(query ?? {})) {
       if (v !== undefined && v !== null && v !== '') url.searchParams.set(k, String(v));
@@ -75,6 +81,7 @@ export class V1Client {
           ...(body !== undefined ? { 'Content-Type': 'application/json' } : {}),
           'User-Agent': `creatif-mcp/${VERSION}`,
           ...this.extraHeaders,
+          ...headers,
         },
         ...(body !== undefined ? { body: JSON.stringify(body) } : {}),
         signal: AbortSignal.timeout(20_000),
@@ -110,4 +117,14 @@ export function retryAfter(header: string | null, now: number = Date.now()): num
   if (Number.isNaN(at)) return undefined;
   const secs = Math.ceil((at - now) / 1000);
   return secs > 0 ? secs : undefined;
+}
+
+/**
+ * The Idempotency-Key of one confirm: derived from what was confirmed, so a
+ * confirm sent twice (a double call, a client retry) is one request to the
+ * API and gets the first answer back. Hashed: the key never carries the
+ * token or the arguments themselves.
+ */
+export function idempotencyKey(...parts: string[]): string {
+  return 'mcp-' + createHash('sha256').update(parts.join('\u0000')).digest('hex').slice(0, 40);
 }

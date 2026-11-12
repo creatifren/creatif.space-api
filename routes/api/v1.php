@@ -69,6 +69,7 @@ use App\Http\Middleware\CapTokenSends;
 use App\Http\Middleware\EnforceTokenScope;
 use App\Http\Middleware\EnsureInboxEnabled;
 use App\Http\Middleware\EnsureNotPendingDeletion;
+use App\Http\Middleware\IdempotencyKey;
 use App\Http\Middleware\MarketingSiteOrigin;
 use App\Http\Middleware\ScopeToWorkspace;
 use Illuminate\Http\Request;
@@ -401,14 +402,14 @@ Route::middleware(['auth:sanctum,mcp', EnforceTokenScope::class, EnsureNotPendin
     Route::get('/social-posts/{socialPost}/send-preview', [SocialPostController::class, 'sendPreview'])
         ->name('api.v1.social-posts.send-preview');
     Route::post('/social-posts/{socialPost}/send', [SocialPostController::class, 'send'])
-        ->middleware(['throttle:30,1', CapTokenSends::class])
+        ->middleware(['throttle:30,1', IdempotencyKey::class, CapTokenSends::class])
         ->name('api.v1.social-posts.send');
     // Try a failed publish again (MCP retry_post: preview → confirm).
     Route::get('/social-posts/{socialPost}/retry-preview', [PublishRetryController::class, 'preview'])
         ->middleware('throttle:60,1')
         ->name('api.v1.social-posts.retry-preview');
     Route::post('/social-posts/{socialPost}/retry', [PublishRetryController::class, 'store'])
-        ->middleware(['throttle:30,1', CapTokenSends::class])
+        ->middleware(['throttle:30,1', IdempotencyKey::class, CapTokenSends::class])
         ->name('api.v1.social-posts.retry');
     Route::delete('/social-posts/{socialPost}/draft', [SocialPostController::class, 'discard'])
         ->name('api.v1.social-posts.discard');
@@ -435,7 +436,7 @@ Route::middleware(['auth:sanctum,mcp', EnforceTokenScope::class, EnsureNotPendin
         ->middleware('throttle:60,1')
         ->name('api.v1.social-approval-links.index');
     Route::post('/social-approval-links', [SocialApprovalController::class, 'link'])
-        ->middleware('throttle:30,1')
+        ->middleware(['throttle:30,1', IdempotencyKey::class])
         ->name('api.v1.social-approval-links.store');
     Route::get('/social-approval-links/{socialApprovalLink}', [SocialApprovalController::class, 'show'])
         ->middleware('throttle:60,1')

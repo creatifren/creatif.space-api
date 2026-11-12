@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { ToolError } from '../errors.js';
-import { V1Error } from '../v1.js';
+import { idempotencyKey, V1Error } from '../v1.js';
 import { defineTool, describeTool, type ToolContext } from './define.js';
 import { PreviewTokens } from './m2.js';
 import { shapePost, type V1Post } from './shape.js';
@@ -116,7 +116,9 @@ export const retryPost = defineTool({
     }
 
     try {
-      const res = await ctx.v1.post<{ data: V1Post; retried: number }>(`/social-posts/${encodeURIComponent(args.post_id)}/retry`, { confirm_token: token });
+      const res = await ctx.v1.post<{ data: V1Post; retried: number }>(`/social-posts/${encodeURIComponent(args.post_id)}/retry`, { confirm_token: token }, {
+        idempotencyKey: idempotencyKey('retry', user, args.post_id, token),
+      });
       retryTokens.forget(user, args.post_id);
       return {
         post: shapePost(res.data),

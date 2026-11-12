@@ -1,8 +1,11 @@
 import { z } from 'zod';
 import { ToolError } from '../errors.js';
-import { V1Error } from '../v1.js';
+import { idempotencyKey, V1Error } from '../v1.js';
 import { defineTool, describeTool, type ToolContext } from './define.js';
 import { shapePost, type V1Post } from './shape.js';
+
+/** A repeat of the same create_approval_link within this window gets the first link back. */
+const LINK_DEDUPE_MS = 10 * 60_000;
 
 const ulid = (what: string) =>
   z.string().trim().min(10).max(26).describe(`${what} id, as returned by the list tools`);
@@ -109,7 +112,9 @@ async function confirmedSend(
     return { ...fresh, note: 'No current preview of this post had been shown (or it expired after 10 minutes), so nothing was sent. Show the user this preview first.' };
   }
   try {
-    const res = await ctx.v1.post<{ data: V1Post }>(`/social-posts/${encodeURIComponent(postId)}/send`, { ...body, confirm_token: token });
+    const res = await ctx.v1.post<{ data: V1Post }>(`/social-posts/${encodeURIComponent(postId)}/send`, { ...body, confirm_token: token }, {
+      idempotencyKey: idempotencyKey('send', user, postId, token, JSON.stringify(body)),
+    });
     previewTokens.forget(user, postId);
     return res;
   } catch (e) {
@@ -195,20 +200,26 @@ export const createApprovalLink = defineTool({
     }
     const ids = plan ? [] : [...new Set(args.post_ids)];
     let data: Record<string, unknown>;
+    const body = {
+      ...(plan
+        ? {
+            date_from: args.date_from,
+            date_to: args.date_to,
+            ...(args.timezone ? { timezone: args.timezone } : {}),
+            ...(args.channel_ids ? { channel_ids: args.channel_ids } : {}),
+          }
+        : { post_ids: ids }),
+      approver_email: args.approver_email,
+      ...(args.title ? { title: args.title } : {}),
+      ...(args.client_name ? { client_name: args.client_name } : {}),
+      ...(args.expires_in_hours ? { expires_in_hours: args.expires_in_hours } : {}),
+    };
     try {
-      ({ data } = await ctx.v1.post<{ data: Record<string, unknown> }>('/social-approval-links', {
-        ...(plan
-          ? {
-              date_from: args.date_from,
-              date_to: args.date_to,
-              ...(args.timezone ? { timezone: args.timezone } : {}),
-              ...(args.channel_ids ? { channel_ids: args.channel_ids } : {}),
-            }
-          : { post_ids: ids }),
-        approver_email: args.approver_email,
-        ...(args.title ? { title: args.title } : {}),
-        ...(args.client_name ? { client_name: args.client_name } : {}),
-        ...(args.expires_in_hours ? { expires_in_hours: args.expires_in_hours } : {}),
+      // The same link asked twice within ten minutes (a double call) is
+      // made once: the API replays the first answer.
+      const window = String(Math.floor(Date.now() / LINK_DEDUPE_MS));
+      ({ data } = await ctx.v1.post<{ data: Record<string, unknown> }>('/social-approval-links', body, {
+        idempotencyKey: idempotencyKey('approval-link', ctx.auth.extra.userUlid, JSON.stringify(body), window),
       }));
     } catch (e) {
       // The API refuses a set with no approvable post in one bare sentence;
