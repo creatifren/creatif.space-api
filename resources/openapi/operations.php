@@ -169,6 +169,8 @@ return [
     'api.v1.insight.export-csv-link' => 'A 24-hour signed link to the Insight CSV',
     'api.v1.insight.top-posts' => 'The top five posts of a period by engagement',
     'api.v1.insight.best-times' => 'Best times to post, from the workspace’s own posts',
+    'api.v1.insight.top-posts.csv' => 'The top five posts of a period by engagement, as CSV',
+    'api.v1.insight.best-times.csv' => 'Best times to post per channel and slot, as CSV',
     'api.v1.insight.clients' => 'Insight clients (workspaces you report on)',
     'api.v1.insight.reports.store' => 'Build an Insight report',
     'api.v1.insight.reports.show' => 'Status and download of an Insight report',

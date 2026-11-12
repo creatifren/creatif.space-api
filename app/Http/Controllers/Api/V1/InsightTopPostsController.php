@@ -4,9 +4,11 @@ namespace App\Http\Controllers\Api\V1;
 
 use App\Http\Controllers\Controller;
 use App\Support\Insight\InsightCollector;
+use App\Support\Insight\InsightCsv;
 use App\Support\Insight\InsightScope;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Symfony\Component\HttpFoundation\StreamedResponse;
 
 /**
  * GET /insight/top-posts?month=2026-10 | ?from=…&to=… [&channel_ids=<id>,<id>]
@@ -49,5 +51,21 @@ class InsightTopPostsController extends Controller
                 'limit' => InsightCollector::TOP_RANKED,
             ],
         ]);
+    }
+
+    /** GET /insight/top-posts.csv — the same five posts as a CSV (one row each). */
+    public function csv(Request $request, InsightCollector $collector): StreamedResponse
+    {
+        $scope = InsightScope::fromRequest($request);
+        $data = $collector->collectCached($scope->owner, $scope->accounts, $scope->period);
+
+        return InsightCsv::download(
+            "insight-top-posts-{$data['period']['from']}-to-{$data['period']['to']}.csv",
+            ['rank', 'posted_at', 'platform', 'channel', 'engagement', 'likes', 'comments', 'shares', 'saves', 'reach', 'impressions', 'url', 'caption'],
+            array_map(fn (array $p, int $i) => [
+                $i + 1, $p['posted_at'], $p['platform'], $p['username'] ?? $p['network'], $p['engagement'],
+                $p['likes'], $p['comments'], $p['shares'], $p['saves'], $p['reach'], $p['views'], $p['url'], $p['caption'],
+            ], $data['top_ranked'], array_keys($data['top_ranked'])),
+        );
     }
 }

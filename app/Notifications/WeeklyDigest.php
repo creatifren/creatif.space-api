@@ -19,7 +19,7 @@ class WeeklyDigest extends Notification implements ShouldQueue
     use Queueable;
 
     /**
-     * @param  array{week: array{from: string, to: string, timezone: string}, published: int, waiting: int, failed: list<array{post_id: string, caption: string, reason: string, url: string}>, failed_total: int}  $digest
+     * @param  array{week: array{from: string, to: string, timezone: string}, published: int, waiting: int, failed: list<array{post_id: string, caption: string, reason: string, url: string}>, failed_total: int, insight?: array<string, mixed>|null}  $digest
      */
     public function __construct(public array $digest) {}
 
@@ -47,6 +47,23 @@ class WeeklyDigest extends Notification implements ShouldQueue
         }
         if ($d['failed_total'] > count($d['failed'])) {
             $mail->line('…and '.($d['failed_total'] - count($d['failed'])).' more.');
+        }
+
+        if (($i = $d['insight'] ?? null) !== null) {
+            $mail->line('**Insight, last week vs the week before**');
+            foreach (['reach' => 'Reach', 'engagement' => 'Engagement'] as $key => $label) {
+                if ($i[$key] !== null) {
+                    $change = $i[$key.'_change'];
+                    $mail->line("• {$label}: ".number_format($i[$key]).($change === null ? '' : ' ('.($change > 0 ? '↑' : ($change < 0 ? '↓' : '')).' '.abs($change).'%)'));
+                }
+            }
+            if ($i['top_post'] !== null) {
+                $p = $i['top_post'];
+                $mail->line("• Top post on {$p['network']}: “{$p['caption']}” — ".number_format($p['engagement']).' engagement'.($p['url'] ? " [Open]({$p['url']})" : ''));
+            }
+            if ($i['best_time'] !== null) {
+                $mail->line("• Best time to post, from your posts: {$i['best_time']['label']} on {$i['best_time']['network']}");
+            }
         }
 
         return $mail

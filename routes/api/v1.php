@@ -671,6 +671,13 @@ Route::middleware(['auth:sanctum,mcp', EnforceTokenScope::class, EnsureNotPendin
     Route::get('/insight/best-times', InsightBestTimesController::class)
         ->middleware('throttle:30,1')
         ->name('api.v1.insight.best-times');
+    // The same two as CSVs (top posts; best times per channel and slot).
+    Route::get('/insight/top-posts.csv', [InsightTopPostsController::class, 'csv'])
+        ->middleware('throttle:30,1')
+        ->name('api.v1.insight.top-posts.csv');
+    Route::get('/insight/best-times.csv', [InsightBestTimesController::class, 'csv'])
+        ->middleware('throttle:30,1')
+        ->name('api.v1.insight.best-times.csv');
 
     // Proof of delivery. Deliberately not gated on a plan: "on every plan"
     // is what the screen promises, and evidence is not an upsell.
