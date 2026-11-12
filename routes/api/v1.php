@@ -403,6 +403,10 @@ Route::middleware(['auth:sanctum,mcp', EnforceTokenScope::class, EnsureNotPendin
     Route::post('/social-approval-links/{socialApprovalLink}/approve', [SocialApprovalController::class, 'approveAll'])
         ->middleware('throttle:10,1')
         ->name('api.v1.social-approval-links.approve');
+    // Send a reminder to the approver: one per link per 12 hours (in the controller).
+    Route::post('/social-approval-links/{socialApprovalLink}/remind', [SocialApprovalController::class, 'remind'])
+        ->middleware('throttle:10,1')
+        ->name('api.v1.social-approval-links.remind');
     Route::delete('/social-approval-links/{socialApprovalLink}', [SocialApprovalController::class, 'revoke'])
         ->name('api.v1.social-approval-links.destroy');
     Route::get('/social-plan-links', [SocialPlanLinkController::class, 'index'])

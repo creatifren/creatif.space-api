@@ -168,6 +168,48 @@ describe('check_approval_status', () => {
   });
 });
 
+describe('send_approval_reminder', () => {
+  it('posts to /remind with the approve scope and passes the reminder back', async () => {
+    const res = await call('send_approval_reminder', { link_id: LINK }, {
+      [`POST /social-approval-links/${LINK}/remind`]: () => ({
+        body: { data: { link_id: LINK, reminded_at: '2026-11-12T09:00:00+00:00', next_reminder_at: '2026-11-12T21:00:00+00:00', waiting: 2 } },
+      }),
+    });
+    const out = payload(res);
+    expect(out.reminder).toEqual({ link_id: LINK, reminded_at: '2026-11-12T09:00:00+00:00', next_reminder_at: '2026-11-12T21:00:00+00:00', waiting: 2 });
+    expect(out.note).toMatch(/2 posts/);
+  });
+
+  it('inside 12 hours: rate_limited with next_reminder_at, no retry', async () => {
+    const res = await call('send_approval_reminder', { link_id: LINK }, {
+      [`POST /social-approval-links/${LINK}/remind`]: () => ({
+        status: 429,
+        body: { message: 'A reminder went out less than 12 hours ago.', code: 'reminder_too_soon', next_reminder_at: '2026-11-12T21:00:00+00:00' },
+      }),
+    });
+    expect(res.isError).toBe(true);
+    const e = payload(res).error;
+    expect(e.code).toBe('rate_limited');
+    expect(e.details).toMatchObject({ reason: 'reminder_too_soon', next_reminder_at: '2026-11-12T21:00:00+00:00' });
+  });
+
+  it('nothing waiting: invalid_input with the reason', async () => {
+    const res = await call('send_approval_reminder', { link_id: LINK }, {
+      [`POST /social-approval-links/${LINK}/remind`]: () => ({ status: 422, body: { message: 'Nothing on this link is waiting for an answer.', code: 'nothing_waiting' } }),
+    });
+    const e = payload(res).error;
+    expect(e.code).toBe('invalid_input');
+    expect(e.details.reason).toBe('nothing_waiting');
+  });
+
+  it('needs the approve scope', async () => {
+    const res = await call('send_approval_reminder', { link_id: LINK }, {}, TOKEN_READ);
+    expect(res.isError).toBe(true);
+    expect(payload(res).error.code).toBe('scope_missing');
+    expect(app!.v1.calls).toHaveLength(0);
+  });
+});
+
 describe('update_post', () => {
   it('patches a draft with the draft scope', async () => {
     const res = await call(
