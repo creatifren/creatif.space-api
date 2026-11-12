@@ -9,7 +9,7 @@ use Symfony\Component\HttpFoundation\Response;
 
 /**
  * Idempotency-Key on the POSTs that spend or share: send (publish /
- * schedule), retry, and approval-link create. A request with the header
+ * schedule), the batch schedule, retry, and approval-link create. A request with the header
  * runs once per user, route and key for 24 hours; repeating it replays the
  * first response (same status and body, plus Idempotent-Replayed: true)
  * without doing anything again: no second send, charge or link.

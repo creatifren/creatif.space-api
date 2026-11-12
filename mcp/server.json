@@ -81,6 +81,7 @@
         "retry_post",
         "revoke_insight_share_link",
         "schedule_post",
+        "schedule_posts",
         "send_approval_reminder",
         "send_feedback",
         "suggest_caption",

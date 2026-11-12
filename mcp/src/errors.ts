@@ -16,6 +16,8 @@ export type ErrorCode =
   | 'insufficient_credits'
   | 'quota_exceeded'
   | 'preview_stale'
+  | 'batch_failed'
+  | 'not_schedulable'
   | 'not_editable'
   | 'not_draft'
   | 'not_failed'

@@ -98,6 +98,8 @@ return [
         // retry_post: the preview reads; the retry spends Credits like a send.
         'api.v1.social-posts.retry-preview' => 'read',
         'api.v1.social-posts.retry' => 'publish',
+        // schedule_posts: the same scope as one send (all or none, up to 10).
+        'api.v1.social-posts.send-batch' => 'publish',
         'api.v1.social-approval-links.store' => 'approve',
         // send_approval_reminder: one email per link per 12 h (in the controller).
         'api.v1.social-approval-links.remind' => 'approve',

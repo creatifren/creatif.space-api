@@ -25,6 +25,7 @@ in [mcp/README.md](mcp/README.md).
 | Posts | `update_post` | Change a draft or a post waiting for approval | All |
 | Posts | `discard_draft` | Delete a draft (preview first) | All |
 | Posts | `schedule_post` | Schedule a draft after a preview | All, spends Credits |
+| Posts | `schedule_posts` | Schedule up to 10 drafts after one preview, all or none | All, spends Credits |
 | Posts | `publish_post` | Publish a draft now after a preview | All, spends Credits |
 | Posts | `retry_post` | Send a post's failed channels again after a preview | All, spends Credits |
 | Posts | `suggest_caption` | AI caption + hashtags in the user's style | Pro / Max |

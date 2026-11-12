@@ -208,6 +208,6 @@ describe('the key', function () {
             ->filter(fn ($r) => in_array(IdempotencyKey::class, $r->gatherMiddleware(), true))
             ->map(fn ($r) => $r->getName())->sort()->values()->all();
 
-        expect($routes)->toBe(['api.v1.social-approval-links.store', 'api.v1.social-posts.retry', 'api.v1.social-posts.send']);
+        expect($routes)->toBe(['api.v1.social-approval-links.store', 'api.v1.social-posts.retry', 'api.v1.social-posts.send', 'api.v1.social-posts.send-batch']);
     });
 });

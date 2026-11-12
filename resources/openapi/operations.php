@@ -82,6 +82,7 @@ return [
     'api.v1.social-posts.swap' => 'Swap two posts\' slots',
     'api.v1.social-posts.send-preview' => 'Preview what sending a post costs and does',
     'api.v1.social-posts.send' => 'Send or schedule a post',
+    'api.v1.social-posts.send-batch' => 'Schedule up to 10 drafts, all or none',
     'api.v1.social-posts.discard' => 'Turn a post back into a draft',
     'api.v1.social-posts.approve' => 'Approve a post held for the editor',
     'api.v1.social-posts.comments.index' => 'List a post\'s comments',

@@ -22,6 +22,7 @@ is destructive previews first and acts only on `confirm: true`.
 | `update_post` | Update a post | no | no | no | Edits a draft or a post awaiting approval; nothing is sent. |
 | `discard_draft` | Discard a draft | no | yes | no | Deletes a draft for good (preview, then confirm). |
 | `schedule_post` | Schedule a draft | no | yes | yes | Queues a post to go public on social networks (preview, then confirm). |
+| `schedule_posts` | Schedule several drafts at once | no | yes | yes | Queues up to 10 posts to go public on social networks, all or none (one preview, then confirm). |
 | `publish_post` | Publish a draft now | no | yes | yes | Posts publicly on social networks now (preview, then confirm). |
 | `retry_post` | Retry a failed post | no | yes | yes | Posts again publicly on the channels that failed (preview, then confirm). |
 | `create_approval_link` | Create a client approval link | no | no | no | Creates a private review link for the user's client; posts nothing publicly. |

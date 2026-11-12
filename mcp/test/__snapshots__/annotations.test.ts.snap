@@ -236,6 +236,12 @@ exports[`tool annotations > match the snapshot 1`] = `
     "openWorld": true,
     "readOnly": false,
   },
+  "schedule_posts": {
+    "destructive": true,
+    "idempotent": false,
+    "openWorld": true,
+    "readOnly": false,
+  },
   "send_approval_reminder": {
     "destructive": false,
     "idempotent": false,
