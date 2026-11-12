@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\Api\V1\AccountDeletionController;
+use App\Http\Controllers\Api\V1\AccountExportController;
 use App\Http\Controllers\Api\V1\AffiliateController;
 use App\Http\Controllers\Api\V1\AiCaptionController;
 use App\Http\Controllers\Api\V1\AnalyticsController;
@@ -92,6 +93,12 @@ Route::get('/health', PublicHealthController::class)
 Route::get('/public/insight/{token}', PublicInsightController::class)
     ->middleware('throttle:60,1')
     ->name('api.v1.public.insight.show');
+
+// The account export's emailed link (24 hours): the signature is the
+// credential, for one export.
+Route::get('/me/export/{export}/download', [AccountExportController::class, 'download'])
+    ->middleware(['signed', 'throttle:10,1'])
+    ->name('api.v1.me.export.download');
 
 // A signed Insight PDF link (POST /insight/export-link, 15 minutes): the
 // signature is the credential; the plan is checked again on use.
@@ -298,6 +305,11 @@ Route::middleware(['auth:sanctum,mcp', EnforceTokenScope::class, EnsureNotPendin
     Route::post('/feedback', FeedbackController::class)
         ->middleware('throttle:10,60')
         ->name('api.v1.feedback.store');
+    // Account data export: session only (not in mcp.routes, so tokens get 403).
+    Route::post('/me/export', [AccountExportController::class, 'store'])
+        ->middleware('throttle:5,60')
+        ->name('api.v1.me.export.store');
+    Route::get('/me/export', [AccountExportController::class, 'show'])->name('api.v1.me.export.show');
     Route::post('/handles', [HandleController::class, 'claim'])
         ->middleware('throttle:10,1')
         ->name('api.v1.handles.claim');

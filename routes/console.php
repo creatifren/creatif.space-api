@@ -5,6 +5,7 @@ use App\Jobs\ApplyMediaRetention;
 use App\Jobs\BackfillFileChecksums;
 use App\Jobs\ExpireSubscriptions;
 use App\Jobs\NotifyKeptFilesDowngrade;
+use App\Jobs\PruneAccountExports;
 use App\Jobs\PruneActivityLog;
 use App\Jobs\PruneInsightReports;
 use App\Jobs\PruneMcpAuditLogs;
@@ -172,3 +173,6 @@ Schedule::job(new SendMonthlyInsightReports)->monthlyOn(1, '09:00')->timezone(co
  * Every 15 minutes, so the email lands close to the 24-hour mark.
  */
 Schedule::job(new SendContentPlanReminders)->everyFifteenMinutes()->withoutOverlapping();
+
+// Account exports: the ZIP goes once its 24-hour link has expired.
+Schedule::job(new PruneAccountExports)->hourly();
