@@ -3,6 +3,7 @@
 namespace App\Http\Middleware;
 
 use App\Models\User;
+use App\Support\RateLimitHeaders;
 use Closure;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Cache;
@@ -42,7 +43,7 @@ class CapTokenSends
                 'code' => 'daily_send_cap',
                 'cap' => self::DAILY_CAP,
                 'resets_at' => now('UTC')->addDay()->startOfDay()->toIso8601String(),
-            ], 429);
+            ], 429, RateLimitHeaders::for(self::DAILY_CAP, (int) now('UTC')->diffInSeconds(now('UTC')->addDay()->startOfDay(), true)));
         }
 
         try {

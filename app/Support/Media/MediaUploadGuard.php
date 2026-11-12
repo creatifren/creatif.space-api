@@ -33,7 +33,7 @@ final class MediaUploadGuard
         if (RateLimiter::tooManyAttempts($key, $perMinute)) {
             self::hit($owner, 'presign_rate');
 
-            throw MediaRefused::uploadLimit();
+            throw MediaRefused::uploadLimit(RateLimiter::availableIn($key));
         }
         RateLimiter::hit($key, 60);
 
@@ -47,14 +47,19 @@ final class MediaUploadGuard
         if ($count + 1 > (int) config('media.abuse.daily_count')) {
             self::hit($owner, 'daily_count');
 
-            throw MediaRefused::uploadLimit();
+            throw MediaRefused::uploadLimit(self::untilTomorrow());
         }
 
         if ($sum + $bytes > (int) config('media.abuse.daily_bytes')) {
             self::hit($owner, 'daily_bytes');
 
-            throw MediaRefused::uploadLimit();
+            throw MediaRefused::uploadLimit(self::untilTomorrow());
         }
+    }
+
+    private static function untilTomorrow(): int
+    {
+        return (int) now()->diffInSeconds(now()->addDay()->startOfDay(), true);
     }
 
     /** Count one cap hit; flag the account once hits reach the threshold. */
