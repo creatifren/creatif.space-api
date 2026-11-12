@@ -326,6 +326,18 @@ are quoted and marked as data. Defined in `src/prompts.ts`.
 - `test/registry.test.ts` keeps all of these in step with the server: the same tools, prompts, scopes and version; the same tool count in the README Tools table; only schema fields.
 - **Publishing is manual and not done here:** `.github/workflows/mcp-registry.yml` runs only on `workflow_dispatch`. Publishing is a public act, done by Rizal.
 
+## Resources
+
+`resources/list` and `resources/read` offer two read-only JSON resources, scope `read`. Defined in `src/resources.ts`.
+
+| URI | What | Same shape as |
+| --- | --- | --- |
+| `creatif://channels` | Connected channels, which ones need reconnecting | `list_channels` (limit 100) |
+| `creatif://schedule/next-7-days` | Posts scheduled from now to now + 7 days (up to 100), soonest first, with `{from, to, count}` | `list_posts` status `scheduled` |
+
+- **Errors:** a missing scope or an API error is a JSON-RPC error whose `data` is the usual `{code, message, next_step, details}` envelope.
+- **Audit:** API calls carry `X-MCP-Tool: resource.channels` / `resource.schedule`, so they appear in the audit log and `mcp:usage`.
+
 ## Free Tools (`/free`)
 
 A second, stateless MCP server on the same process: `check_caption`,
