@@ -7,6 +7,7 @@ use App\Http\Controllers\Auth\PasswordAuthController;
 use App\Http\Controllers\Auth\ReviewerLoginController;
 use App\Http\Controllers\OAuth\SwitchAccountController;
 use App\Http\Middleware\BindAuthRequestToSession;
+use App\Http\Middleware\PendingAuthorizations;
 use App\Http\Middleware\RememberPendingAuthorization;
 use App\Http\Middleware\RequirePkce;
 use App\Http\Middleware\ResolveClientMetadataDocument;
@@ -68,13 +69,14 @@ Route::post('/auth/logout', function () {
 // two buttons. Session-based, like the rest of web.php; a guest is sent to
 // the frontend's login and comes back through /oauth/resume.
 Route::get('/oauth/authorize', [AuthorizationController::class, 'authorize'])
-    ->middleware([RequirePkce::class, 'throttle:'.OAuthRateLimits::AUTHORIZE, ResolveClientMetadataDocument::class, RememberPendingAuthorization::class])
+    ->middleware([RequirePkce::class, 'throttle:'.OAuthRateLimits::AUTHORIZE, ResolveClientMetadataDocument::class, RememberPendingAuthorization::class, PendingAuthorizations::class])
     ->name('passport.authorizations.authorize');
 Route::middleware('auth')->group(function () {
     Route::post('/oauth/authorize', [ApproveAuthorizationController::class, 'approve'])
-        ->middleware(BindAuthRequestToSession::class)
+        ->middleware([PendingAuthorizations::class, BindAuthRequestToSession::class])
         ->name('passport.authorizations.approve');
     Route::delete('/oauth/authorize', [DenyAuthorizationController::class, 'deny'])
+        ->middleware(PendingAuthorizations::class)
         ->name('passport.authorizations.deny');
 });
 
