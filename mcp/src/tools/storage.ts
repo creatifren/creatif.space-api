@@ -170,7 +170,7 @@ export const unkeepFile = defineTool({
   }),
   scope: 'draft',
   input: { file_id: fileId },
-  annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false },
+  annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: true, openWorldHint: false },
   notFound: { what: 'That file', next: 'Take the id from list_files and call again.' },
   run: async ({ file_id }, { v1 }) => {
     const { data } = await v1.delete<{ data: V1File }>(`/files/${encodeURIComponent(file_id)}/keep`);
