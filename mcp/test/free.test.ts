@@ -326,7 +326,7 @@ describe('connect_guide', () => {
 describe('free-tools/server.json', () => {
   it('names the free server and is not the main one', () => {
     const json = JSON.parse(readFileSync(new URL('../free-tools/server.json', import.meta.url), 'utf8'));
-    expect(json.name).toBe('io.github.creatifren/creatif-space-tools');
+    expect(json.name).toBe('io.github.creatifren/creatif-space-free-tools');
     expect(json.version).toBe('1.1.0');
     expect(json.description.length).toBeLessThanOrEqual(100);
     expect(json.remotes).toEqual([{ type: 'streamable-http', url: 'https://mcp.creatif.space/free' }]);
