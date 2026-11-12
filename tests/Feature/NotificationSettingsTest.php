@@ -18,7 +18,7 @@ describe('GET /me/notification-settings', function () {
         $this->actingAs(User::factory()->create())
             ->getJson('/api/v1/me/notification-settings')
             ->assertOk()
-            ->assertExactJson(['data' => ['publish_failed' => true, 'approval_decided' => true, 'weekly_digest' => true]]);
+            ->assertExactJson(['data' => ['publish_failed' => true, 'approval_decided' => true, 'weekly_digest' => true, 'timezone' => config('app.timezone')]]);
     });
 
     it('needs a signed-in user', function () {
@@ -32,7 +32,7 @@ describe('PATCH /me/notification-settings', function () {
 
         $this->actingAs($user)->patchJson('/api/v1/me/notification-settings', ['weekly_digest' => false])
             ->assertOk()
-            ->assertExactJson(['data' => ['publish_failed' => true, 'approval_decided' => true, 'weekly_digest' => false]]);
+            ->assertExactJson(['data' => ['publish_failed' => true, 'approval_decided' => true, 'weekly_digest' => false, 'timezone' => config('app.timezone')]]);
 
         $user = $user->fresh();
         expect($user->wants(NotificationType::WeeklyDigest, 'email'))->toBeFalse()
@@ -73,6 +73,22 @@ describe('PATCH /me/notification-settings', function () {
         $this->actingAs($alice)->patchJson('/api/v1/me/notification-settings', ['publish_failed' => false])->assertOk();
 
         $this->actingAs($bob)->getJson('/api/v1/me/notification-settings')->assertJsonPath('data.publish_failed', true);
+    });
+});
+
+describe('timezone (the weekly digest’s Monday 08:00)', function () {
+    it('sets a valid IANA zone, refuses another, and null resets it', function () {
+        $user = User::factory()->create();
+
+        $this->actingAs($user)->patchJson('/api/v1/me/notification-settings', ['timezone' => 'Indian/Maldives'])
+            ->assertOk()->assertJsonPath('data.timezone', 'Indian/Maldives');
+        $this->actingAs($user)->patchJson('/api/v1/me/notification-settings', ['timezone' => 'Mars/Olympus'])
+            ->assertUnprocessable()->assertJsonValidationErrors('timezone');
+        $this->actingAs($user)->patchJson('/api/v1/me/notification-settings', ['timezone' => null])
+            ->assertOk()->assertJsonPath('data.timezone', config('app.timezone'));
+
+        expect($user->fresh()->timezone)->toBeNull()
+            ->and($user->notificationPreferences()->count())->toBe(0);
     });
 });
 

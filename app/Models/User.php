@@ -41,6 +41,8 @@ use Spatie\Permission\Traits\HasRoles;
  * @property CarbonImmutable|null $storage_rental_ended_at
  * @property array<string, mixed>|null $social_settings
  * @property CarbonImmutable|null $created_at
+ * @property string|null $timezone IANA zone (weekly digest)
+ * @property string|null $weekly_digest_sent_on Y-m-d, the local Monday the last digest was for
  * @property-read Handle|null $handle
  * @property-read Profile|null $profile
  */
@@ -63,6 +65,9 @@ class User extends Authenticatable implements FilamentUser
         'theme',
         // Monthly Insight email (opt-in, Pro / Max owners).
         'insight_monthly_email',
+        // IANA zone for the weekly digest (Monday 08:00 there); null = the app's.
+        'timezone',
+        'weekly_digest_sent_on',
         // Managed from the Filament admin panel only — API requests never
         // mass-assign these (API input is whitelisted per endpoint).
         'status',

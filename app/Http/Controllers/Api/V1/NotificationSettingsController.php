@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Api\V1;
 use App\Enums\NotificationType;
 use App\Http\Controllers\Controller;
 use App\Models\User;
+use App\Support\WeeklyDigest;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
@@ -21,6 +22,9 @@ use Illuminate\Http\Request;
  * preferences, so this and Settings → Notifications never disagree, and
  * the notifications read the same switch when they send. Default on. The
  * in-app bell is not changed here.
+ *
+ * timezone is where the weekly digest's Monday 08:00 is (IANA; null
+ * resets it to the latest Content Plan's zone, else the app's).
  *
  * Not /me/notifications: that path is already the bell's list.
  */
@@ -41,16 +45,21 @@ class NotificationSettingsController extends Controller
     public function update(Request $request): JsonResponse
     {
         $rules = array_fill_keys(array_keys(self::SETTINGS), ['sometimes', 'boolean']);
+        $rules['timezone'] = ['sometimes', 'nullable', 'string', 'timezone:all'];
         $validated = $request->validate($rules);
 
         if ($validated === []) {
             return response()->json([
-                'message' => 'Send at least one of: '.implode(', ', array_keys(self::SETTINGS)).'.',
+                'message' => 'Send at least one of: '.implode(', ', [...array_keys(self::SETTINGS), 'timezone']).'.',
                 'errors' => ['settings' => ['Send at least one setting.']],
             ], 422);
         }
 
         $user = $request->user();
+        if (array_key_exists('timezone', $validated)) {
+            $user->forceFill(['timezone' => $validated['timezone']])->save();
+            unset($validated['timezone']);
+        }
         foreach ($validated as $name => $on) {
             $user->notificationPreferences()->updateOrCreate(
                 ['type' => self::SETTINGS[$name]->value],
@@ -61,9 +70,12 @@ class NotificationSettingsController extends Controller
         return response()->json(['data' => self::settings($user->load('notificationPreferences'))]);
     }
 
-    /** @return array<string, bool> */
+    /** @return array<string, bool|string> */
     public static function settings(User $user): array
     {
-        return array_map(fn (NotificationType $type) => $user->wants($type, 'email'), self::SETTINGS);
+        return [
+            ...array_map(fn (NotificationType $type) => $user->wants($type, 'email'), self::SETTINGS),
+            'timezone' => WeeklyDigest::timezone($user),
+        ];
     }
 }
