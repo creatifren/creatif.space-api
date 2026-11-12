@@ -41,6 +41,22 @@ describe('create_insight_share_link', () => {
     expect(app!.v1.calls[0]!.headers.get('X-MCP-Tool')).toBe('create_insight_share_link');
   });
 
+  it('passes recipient_email and says the recipient was emailed', async () => {
+    const res = await call('create_insight_share_link', { from: '2026-10-01', to: '2026-10-31', recipient_email: 'rani@client.test' }, {
+      'POST /insight/share': () => ({ status: 201, body: { data: { ...created.data, recipient_email: 'rani@client.test' } } }),
+    });
+
+    expect(app!.v1.calls[0]!.body).toEqual({ from: '2026-10-01', to: '2026-10-31', recipient_email: 'rani@client.test' });
+    expect(payload(res)).toMatchObject({ id: SHARE, recipient_email: 'rani@client.test' });
+    expect(payload(res).note).toMatch(/Emailed to rani@client\.test/);
+  });
+
+  it('refuses a malformed recipient_email before calling the API', async () => {
+    const res = await call('create_insight_share_link', { from: '2026-10-01', to: '2026-10-31', recipient_email: 'not an email' });
+    expect(payload(res).error.code).toBe('invalid_input');
+    expect(app!.v1.calls).toHaveLength(0);
+  });
+
   it('needs the approve permission', async () => {
     const res = await call('create_insight_share_link', { from: '2026-10-01', to: '2026-10-31' }, {}, TOKEN_READ);
 
