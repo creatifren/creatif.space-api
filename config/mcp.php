@@ -95,6 +95,8 @@ return [
         'api.v1.social-posts.retry-preview' => 'read',
         'api.v1.social-posts.retry' => 'publish',
         'api.v1.social-approval-links.store' => 'approve',
+        // send_approval_reminder: one email per link per 12 h (in the controller).
+        'api.v1.social-approval-links.remind' => 'approve',
         'api.v1.social-approval-links.show' => 'read',
         // get_approval_audit: the owner's own link, as CSV.
         'api.v1.social-approval-links.audit' => 'read',
