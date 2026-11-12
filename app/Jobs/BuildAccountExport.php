@@ -12,6 +12,8 @@ use App\Models\SocialApprovalDecision;
 use App\Models\SocialApprovalLink;
 use App\Models\SocialPost;
 use App\Models\SocialPostTarget;
+use App\Models\Space;
+use App\Models\SpaceItem;
 use App\Models\TeamMember;
 use App\Models\User;
 use App\Notifications\AccountExportReady;
@@ -108,7 +110,7 @@ class BuildAccountExport implements ShouldQueue
         $posts = SocialPost::query()->whereIn('user_id', $ids)->with('targets', 'user:id,ulid,name')->orderBy('id')->get();
         $postUlid = $posts->pluck('ulid', 'id');
 
-        $links = SocialApprovalLink::query()->whereIn('user_id', $ids)->orderBy('id')->get();
+        $links = SocialApprovalLink::query()->whereIn('user_id', $ids)->with('user')->orderBy('id')->get();
         $decisions = SocialApprovalDecision::query()->whereIn('social_approval_link_id', $links->pluck('id'))->orderBy('id')->get()->groupBy('social_approval_link_id');
 
         // Decisions this person made as an approver on other people's links:
@@ -135,6 +137,8 @@ class BuildAccountExport implements ShouldQueue
                 ];
             }
         }
+
+        $spaces = Space::query()->whereIn('user_id', $ids)->with('items.file:id,ulid,name')->orderBy('id')->get();
 
         $shares = InsightShareLink::query()->where('owner_id', $owner->id)->orderBy('id')->get();
 
@@ -197,6 +201,14 @@ class BuildAccountExport implements ShouldQueue
                 'created_at' => $at($l->created_at),
                 'expires_at' => $at($l->expires_at),
                 'revoked_at' => $at($l->revoked_at),
+                // The posts on it: a fixed list's own, or a Content Plan's
+                // (every post in its dates and channels, as the client sees it).
+                'items' => PlanScope::posts($l)->orderBy('social_posts.id')->get()->map(fn (SocialPost $p) => [
+                    'post_id' => $p->ulid,
+                    'scheduled_at' => $at($p->scheduled_at),
+                    'status' => $p->status->value,
+                    'approval' => $p->approval?->value,
+                ])->values()->all(),
                 // The audit, as the audit CSV gives it: who, what, when — not where from.
                 'audit' => ($decisions[$l->id] ?? collect())->map(fn (SocialApprovalDecision $d) => [
                     'decided_at' => $at($d->created_at),
@@ -206,6 +218,29 @@ class BuildAccountExport implements ShouldQueue
                     'comment' => $d->comment,
                     'post_id' => $postUlid[$d->social_post_id] ?? null,
                     'source' => $d->source,
+                ])->values()->all(),
+            ])->values()->all(),
+            // Spaces: what each one is and which library files it shows — no
+            // file bytes (files.json links them) and no password.
+            'spaces.json' => $spaces->map(fn (Space $s) => [
+                'id' => $s->ulid,
+                'slug' => $s->slug,
+                'title' => $s->title,
+                'description' => $s->description,
+                'status' => $s->status->value,
+                'visibility' => $s->visibility->value,
+                'view_mode' => $s->view_mode->value,
+                'password_protected' => $s->password_hash !== null,
+                'created_at' => $at($s->created_at),
+                'published_at' => $at($s->published_at),
+                'expires_at' => $at($s->expires_at),
+                'archived_at' => $at($s->archived_at),
+                'items' => $s->items->map(fn (SpaceItem $i) => [
+                    'file_id' => $i->file?->ulid,
+                    'file_name' => $i->file?->name,
+                    'section' => $i->section,
+                    'caption' => $i->caption,
+                    'position' => $i->sort_order,
                 ])->values()->all(),
             ])->values()->all(),
             'insight_share_links.json' => $shares->map(fn (InsightShareLink $s) => [
@@ -265,9 +300,10 @@ class BuildAccountExport implements ShouldQueue
             'workspace.json  the workspace you belong to and its team',
             'channels.json   connected social channels (no access tokens)',
             'posts.json      every post in the workspace',
-            'approvals.json  approval links and Content Plans, with their decision audit',
+            'approvals.json  approval links and Content Plans, with their posts and decision audit',
             'approval_audit.json  every approval decision as one list, and your own decisions on links sent to you',
             'insight_share_links.json  shared Insight report links (no link tokens)',
+            'spaces.json     your Spaces and the files each shows (the files themselves: files.json)',
             'notification_settings.json  which emails and notifications you get',
             'files.json      library files, each with a download link valid '.AccountExport::FILE_URL_TTL_DAYS.' days',
             '',
