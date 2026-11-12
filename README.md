@@ -9,6 +9,62 @@
 <a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/l/laravel/framework" alt="License"></a>
 </p>
 
+## MCP tools
+
+Connector URL **`https://mcp.creatif.space/mcp`** (OAuth 2.1 or a `cs_live_…`
+API key). Every plan can use it, Free included. Sending and replying spend
+Credits. Free plan limits: posts scheduled at most 7 days ahead, at most 10
+queued posts, approval links for one client. Details, scopes and V1 routes are
+in [mcp/README.md](mcp/README.md).
+
+| Group | Tool | What it does | Plan |
+| --- | --- | --- | --- |
+| Posts | `list_posts` | List posts by status, date window and channel | All |
+| Posts | `get_post` | One post: caption, media, schedule, approval, delivery per channel | All |
+| Posts | `draft_post` | Save a draft (never publishes, no Credits) | All |
+| Posts | `update_post` | Change a draft or a post waiting for approval | All |
+| Posts | `discard_draft` | Delete a draft (preview first) | All |
+| Posts | `schedule_post` | Schedule a draft after a preview | All, spends Credits |
+| Posts | `publish_post` | Publish a draft now after a preview | All, spends Credits |
+| Posts | `suggest_caption` | AI caption + hashtags in the user's style | Pro / Max |
+| Approvals | `create_approval_link` | Approval link for posts or a Content Plan | All (Free: one client) |
+| Approvals | `check_approval_status` | Where approval stands for a post or a link | All |
+| Approvals | `list_approval_links` | The workspace's approval links and their status | All |
+| Approvals | `send_approval_reminder` | Email the approver a reminder | All |
+| Approvals | `get_approval_audit` | Every decision on one link, with CSV | All |
+| Approvals | `list_waiting_approvals` | Posts others sent this user to approve | All (scope `approvals:decide`) |
+| Approvals | `decide_approval` | Approve or request changes (preview first) | All (scope `approvals:decide`) |
+| Approvals | `list_shared_with_me` | Content Plans others shared with this user | All (scope `approvals:decide`) |
+| Media | `request_media_upload` | Step 1: get an upload URL for a new file | All |
+| Media | `confirm_media_upload` | Step 2: check the upload and get the file id | All |
+| Media | `list_files` | Search the file library | All |
+| Media | `get_storage_usage` | Storage used vs quota; kept vs auto-delete | All |
+| Media | `keep_file` | Keep a file from automatic deletion | Pro / Max |
+| Media | `unkeep_file` | Let a kept file go back under the rules | All |
+| Channels | `list_channels` | Connected channels; marks ones to reconnect | All |
+| Channels | `get_connect_link` | App link to connect or reconnect a network (no token) | All |
+| Insight | `get_insight_summary` | Insight numbers for a month or up to 92 days | Pro / Max |
+| Insight | `get_insight_report_link` | 15-minute download link to the Insight PDF | Pro / Max |
+| Insight | `create_insight_share_link` | Read-only report link for 30 days | Pro / Max |
+| Insight | `revoke_insight_share_link` | Turn a shared report link off | Pro / Max |
+| Spaces | `list_spaces` | The user's Spaces and their status | Pro / Max |
+| Spaces | `create_space_from_files` | New draft Space from library files | Pro / Max |
+| Spaces | `publish_space` | Publish a draft Space after a preview | Pro / Max |
+| Credits | `get_credits` | Plan, limits, Credits, spend this month, days to renewal | All |
+| Engage | `list_conversations` | Comments and DMs, newest first | All |
+| Engage | `reply_to_conversation` | Reply to a comment or DM after a preview | All, may spend Credits |
+| Feedback | `send_feedback` | Send a bug or idea to the creatif.space team | All |
+
+**Prompts:** `plan_week`, `send_for_approval`, `monthly_report`.
+
+**Free Tools** (`https://mcp.creatif.space/free`, no sign-in):
+
+| Tool | What it does |
+| --- | --- |
+| `check_caption` | Check a caption against each network's limits |
+| `approval_request_template` | A ready-to-send client approval message |
+| `connect_guide` | What is needed to connect a network, and the steps |
+
 ## Approve from your AI chat
 
 Clients can review and decide on posts sent to them from Claude or ChatGPT
