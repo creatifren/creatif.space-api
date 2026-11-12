@@ -37,7 +37,7 @@ class IdempotencyKey
             return $next($request);
         }
 
-        if (! is_string($key) || preg_match('/^[\x21-\x7E]{1,255}$/', $key) !== 1) {
+        if (preg_match('/^[\x21-\x7E]{1,255}$/', $key) !== 1) {
             return response()->json([
                 'message' => 'Idempotency-Key must be 1–255 visible ASCII characters (a UUID is ideal).',
                 'code' => 'invalid_idempotency_key',
