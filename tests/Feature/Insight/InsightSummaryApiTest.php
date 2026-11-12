@@ -52,7 +52,10 @@ it('answers the October numbers, with null where a network said nothing', functi
         ->assertJsonCount(5, 'data.channels')
         ->assertJsonPath('data.channels.0.id', $accounts['instagram']->ulid)
         ->assertJsonPath('data.channels.0.saves', 501)
-        ->assertJsonPath('data.channels.0.followers', ['start' => 12400, 'end' => 13150, 'change' => 750, 'history_since' => '2026-08-31'])
+        ->assertJsonPath('data.channels.0.followers.start', 12400)
+        ->assertJsonPath('data.channels.0.followers.end', 13150)
+        ->assertJsonPath('data.channels.0.followers.change', 750)
+        ->assertJsonPath('data.channels.0.followers.history_since', '2026-08-31')
         // Facebook: no saves. TikTok: no reach, so no rate. X: nothing before October, so no change.
         ->assertJsonPath('data.channels.1.saves', null)
         ->assertJsonPath('data.channels.2.reach', null)
