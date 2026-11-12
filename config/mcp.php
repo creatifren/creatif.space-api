@@ -85,5 +85,11 @@ return [
         'api.v1.inbox.feed.index' => 'read',
         'api.v1.inbox.feed.show' => 'read',
         'api.v1.inbox.feed.reply' => 'publish',
+
+        // Media housekeeping (get_storage_usage / keep_file / unkeep_file).
+        // Quota and plan rules stay in MediaQuota: Keep is paid, 402 when full.
+        'api.v1.files.usage' => 'read',
+        'api.v1.files.keep' => 'draft',
+        'api.v1.files.unkeep' => 'draft',
     ],
 ];

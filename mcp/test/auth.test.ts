@@ -94,6 +94,7 @@ describe('401 flow', () => {
         'create_approval_link', 'check_approval_status', 'update_post', 'schedule_post', 'publish_post',
         'request_media_upload', 'confirm_media_upload',
         'list_conversations', 'reply_to_conversation',
+        'get_storage_usage', 'keep_file', 'unkeep_file',
       ].sort(),
     );
     for (const tool of tools) {
