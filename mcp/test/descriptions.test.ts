@@ -15,15 +15,15 @@ const tools = async () => {
 };
 
 describe('tool descriptions for agents', () => {
-  it('every tool: a "Use …" line, one line on what it does, when to use it, an example call, errors with next steps', async () => {
+  it('every tool: a one-sentence "what it does for the user" line, one line on what it does, when to use it, an example call, errors with next steps', async () => {
     const list = await tools();
     // The count itself is pinned once, against every list, in test/in-step.test.ts.
     expect(list.length).toBeGreaterThan(0);
     for (const t of list) {
       const lines = t.description!.split('\n');
-      expect(lines[0], t.name).toMatch(/^Use /);
+      expect(lines[0], t.name).toMatch(/^[A-Z][a-z]+s \S.*\.$/);
       expect(lines[0]!.length, t.name).toBeLessThanOrEqual(120);
-      expect(lines[1], t.name).not.toMatch(/^(Use |When to use|Example|Errors)/);
+      expect(lines[1], t.name).not.toMatch(/^(When to use|Example|Errors)/);
       expect(lines[1]!.length, t.name).toBeLessThan(260);
       expect(lines[2], t.name).toMatch(/^When to use: /);
       expect(lines[3], t.name).toMatch(new RegExp(`^Example: ${t.name} \\{`));

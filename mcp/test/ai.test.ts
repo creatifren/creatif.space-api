@@ -133,7 +133,7 @@ describe('suggest_caption', () => {
     app = await startApp();
     const { tools } = await (await app.connect()).listTools();
     const t = tools.find((x) => x.name === 'suggest_caption')!;
-    expect(t.description).toMatch(/^Use when the user wants a caption written in their style; the plan_week prompt drafts with it\.\nWrites a caption and hashtags/);
+    expect(t.description).toMatch(/^Writes a caption and hashtags in the user's own style from a short brief, used by the plan_week prompt\.\nWrites a caption and hashtags/);
     expect(t.description).toMatch(/\nWhen to use: /);
     expect(t.description).toMatch(/\nExample: suggest_caption \{/);
     expect(t.description).toMatch(/not_enabled → AI captions are not switched on yet: write the caption yourself/);

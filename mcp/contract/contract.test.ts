@@ -76,7 +76,7 @@ describe('tools/list against the real API (#78 describeTool shape)', () => {
     expect(new Set(tools.map((t) => t.name)).size).toBe(tools.length);
   });
 
-  it('every tool: "Use …" line / does / When to use / Example / Errors → next step, then the data notice', () => {
+  it('every tool: what-it-does-for-the-user line / does / When to use / Example / Errors → next step, then the data notice', () => {
     const bad: string[] = [];
     for (const t of tools) {
       const d = t.description ?? '';
@@ -84,7 +84,7 @@ describe('tools/list against the real API (#78 describeTool shape)', () => {
       const problems = [
         /^[a-z][a-z0-9_]*$/.test(t.name) ? null : 'name is not snake_case',
         t.title?.trim() ? null : 'no title',
-        /^Use \S/.test(lines[0] ?? '') && (lines[0] ?? '').length <= 120 ? null : 'first line is not "Use …" (≤ 120 chars)',
+        /^[A-Z][a-z]+s \S.*\.$/.test(lines[0] ?? '') && (lines[0] ?? '').length <= 120 ? null : 'first line is not one verb-led sentence (≤ 120 chars)',
         lines[1] && !/^(Use |When to use|Example|Errors)/.test(lines[1]) ? null : 'line 2 is not what it does',
         /^When to use: \S/.test(lines[2] ?? '') ? null : 'line 3 is not "When to use: …"',
         new RegExp(`^Example: ${t.name} \\{`).test(lines[3] ?? '') ? null : `line 4 is not "Example: ${t.name} {…}"`,
