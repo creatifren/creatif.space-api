@@ -24,6 +24,7 @@ use App\Http\Controllers\Api\V1\InboxFeedController;
 use App\Http\Controllers\Api\V1\InsightExportController;
 use App\Http\Controllers\Api\V1\InsightPdfExportController;
 use App\Http\Controllers\Api\V1\InsightReportController;
+use App\Http\Controllers\Api\V1\InsightSettingsController;
 use App\Http\Controllers\Api\V1\InsightSummaryController;
 use App\Http\Controllers\Api\V1\McpActivityController;
 use App\Http\Controllers\Api\V1\McpApprovalController;
@@ -527,6 +528,9 @@ Route::middleware(['auth:sanctum,mcp', EnforceTokenScope::class, EnsureNotPendin
     Route::get('/insight/export.pdf', [InsightPdfExportController::class, 'download'])
         ->middleware('throttle:10,1')
         ->name('api.v1.insight.export.pdf');
+    // Settings → Insight: the monthly email (opt-in, owner, Pro / Max).
+    Route::get('/me/insight-settings', [InsightSettingsController::class, 'show'])->name('api.v1.me.insight-settings.show');
+    Route::patch('/me/insight-settings', [InsightSettingsController::class, 'update'])->name('api.v1.me.insight-settings.update');
     Route::post('/insight/export-link', [InsightPdfExportController::class, 'link'])
         ->middleware('throttle:20,1')
         ->name('api.v1.insight.export-link');
