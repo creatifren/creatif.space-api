@@ -47,4 +47,42 @@ export const getInsightReportLink = defineTool({
   },
 });
 
-export const insightReportTools = [getInsightReportLink];
+export const getInsightCsvLink = defineTool({
+  name: 'get_insight_csv_link',
+  title: 'Get an Insight CSV link',
+  description: describeTool({
+    does: 'Makes a signed download link (24 hours) to the Insight CSV: one row per published post in a date range of up to 366 days, with date, platform, channel, link and the six metrics.',
+    when: 'when the user wants the raw post numbers in a spreadsheet. The link works without signing in until it expires, so hand it to the user rather than posting it anywhere public. For a formatted report use get_insight_report_link; for totals get_insight_summary. channel_ids (from list_channels) limits it to some channels; by default all connected channels.',
+    example: 'get_insight_csv_link { "from": "2026-10-01", "to": "2026-10-31" } → { url: "https://api.creatif.space/api/v1/insight/export.csv/signed?…", expires_at, file_name: "insight-2026-10-01-to-2026-10-31.csv", columns: ["date", ...] }',
+    errors: [
+      ['plan_required', 'Insight is on Pro and Max: tell the user the message as it is (it has the upgrade link); do not retry'],
+      ['invalid_input', 'fix the dates (to on or after from, at most 366 days) or the channel ids and call again'],
+      ['scope_missing', 'reconnect and allow "read"'],
+      ['unauthorized', 'ask the user to reconnect the creatif.space connector'],
+      ['upstream_unavailable', 'wait a minute and call again'],
+    ],
+  }),
+  scope: 'read',
+  input: {
+    from: day('First day'),
+    to: day('Last day'),
+    channel_ids: z.array(z.string().trim().min(10).max(26)).min(1).max(50).optional().describe('Only these channels (ids from list_channels)'),
+  },
+  annotations: READ_ONLY,
+  run: async ({ from, to, channel_ids }, { v1 }) => {
+    const res = await v1.post<{ url: string; expires_at: string; file_name: string; columns: string[] }>('/insight/export-csv-link', {
+      from,
+      to,
+      ...(channel_ids ? { channels: channel_ids.join(',') } : {}),
+    });
+    return {
+      url: res.url,
+      expires_at: res.expires_at,
+      file_name: res.file_name,
+      columns: res.columns,
+      note: 'The link downloads the CSV without signing in and stops working at expires_at. Give it to the user; do not post it publicly.',
+    };
+  },
+});
+
+export const insightReportTools = [getInsightReportLink, getInsightCsvLink];

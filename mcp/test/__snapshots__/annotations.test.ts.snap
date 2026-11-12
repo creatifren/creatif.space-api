@@ -92,6 +92,12 @@ exports[`tool annotations > match the snapshot 1`] = `
     "openWorld": false,
     "readOnly": true,
   },
+  "get_insight_csv_link": {
+    "destructive": false,
+    "idempotent": false,
+    "openWorld": false,
+    "readOnly": true,
+  },
   "get_insight_report_link": {
     "destructive": false,
     "idempotent": false,

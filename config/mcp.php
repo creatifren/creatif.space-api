@@ -75,6 +75,8 @@ return [
         'api.v1.insight.best-times' => 'read',
         // get_insight_report_link: a 15-minute signed PDF link (Pro / Max).
         'api.v1.insight.export-link' => 'read',
+        // get_insight_csv_link: a 24-hour signed CSV link (Pro / Max).
+        'api.v1.insight.export-csv-link' => 'read',
         // create_insight_share_link / revoke_insight_share_link: sharing with
         // a client, like an approval link (Pro / Max).
         'api.v1.insight.share.store' => 'approve',
