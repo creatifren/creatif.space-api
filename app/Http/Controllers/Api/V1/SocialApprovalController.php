@@ -757,8 +757,9 @@ class SocialApprovalController extends Controller
      *
      * kind "content_plan": a live Content Plan (a scoped approval link)
      * whose approver_email is this user's verified email — the same rule
-     * as "Waiting your approval". kind "insight" is reserved for Insight
-     * share links; the API has none yet, so no such rows exist.
+     * as "Waiting your approval". kind "insight" is reserved: Insight share
+     * links (insight_share_links) are token-only and addressed to nobody, so
+     * there is no one to list them for until they gain a recipient.
      *
      * Reached across workspaces only through the approver email, never by
      * id, so ScopeToWorkspace has nothing to check here.

@@ -624,7 +624,7 @@ Route::middleware(['auth:sanctum,mcp', EnforceTokenScope::class, EnsureNotPendin
     Route::post('/me/approvals/{post}/decision', [McpApprovalController::class, 'decide'])
         ->middleware('throttle:30,1')
         ->name('api.v1.me.approvals.decide');
-    // "Reports shared with you": Content Plans sent to my verified email (Insight share links: not built yet).
+    // "Reports shared with you": Content Plans sent to my verified email (Insight share links are token-only, addressed to nobody, so they are not listed).
     Route::get('/me/reports/shared', [SocialApprovalController::class, 'sharedReports'])->name('api.v1.me.reports.shared');
     // Show a draft to the client on a Content Plan covering its date.
     Route::post('/social-posts/{socialPost}/review', [SocialApprovalController::class, 'markForReview'])
