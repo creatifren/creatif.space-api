@@ -97,3 +97,15 @@ Route::get('/oauth/resume', function () {
         ? redirect()->to($intended)
         : redirect(config('app.frontend_url'));
 })->middleware('throttle:30,1')->name('oauth.resume');
+
+// RFC 9116: how to report a security problem. Plain text, public, cached a day.
+Route::get('/.well-known/security.txt', function () {
+    $body = implode("\n", [
+        'Contact: mailto:hello@creatif.space',
+        'Expires: '.now()->utc()->addYear()->startOfDay()->format('Y-m-d\TH:i:s.000\Z'),
+        'Preferred-Languages: en, id',
+        'Canonical: '.rtrim((string) config('app.url'), '/').'/.well-known/security.txt',
+    ])."\n";
+
+    return response($body, 200, ['Content-Type' => 'text/plain; charset=utf-8', 'Cache-Control' => 'public, max-age=86400']);
+})->middleware('throttle:60,1')->name('security.txt');
