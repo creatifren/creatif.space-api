@@ -38,6 +38,7 @@ use App\Http\Controllers\Api\V1\MeController;
 use App\Http\Controllers\Api\V1\MyProfileController;
 use App\Http\Controllers\Api\V1\NotificationController;
 use App\Http\Controllers\Api\V1\NotificationSettingsController;
+use App\Http\Controllers\Api\V1\OnboardingController;
 use App\Http\Controllers\Api\V1\OpenApiController;
 use App\Http\Controllers\Api\V1\OutstandConnectController;
 use App\Http\Controllers\Api\V1\PinterestBoardController;
@@ -327,6 +328,8 @@ Route::post('/billing/google/verify', [GooglePlayBillingController::class, 'veri
 Route::middleware(['auth:sanctum,mcp', EnforceTokenScope::class, EnsureNotPendingDeletion::class, ScopeToWorkspace::class])->group(function () {
     Route::get('/me', MeController::class)->name('api.v1.me');
     Route::post('/me/tour', TourController::class)->name('api.v1.me.tour');
+    // Today's "Get started" checklist: four steps from the data, with when each first happened.
+    Route::get('/me/onboarding', OnboardingController::class)->name('api.v1.me.onboarding');
     // Tester feedback to the team inbox (MCP send_feedback): 10 an hour per user.
     Route::post('/feedback', FeedbackController::class)
         ->middleware('throttle:10,60')
