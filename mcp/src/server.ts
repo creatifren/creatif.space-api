@@ -40,7 +40,11 @@ import { mountFree } from './free/server.js';
 
 /** The Pen Rocket, as listed in server.json for the MCP Registry (served by the web app). */
 export const SERVER_ICONS = [{ src: 'https://creatif.space/icons/icon-512.png', mimeType: 'image/png', sizes: ['512x512'] }];
-export const SERVER_INFO = { name: 'creatif.space', version: VERSION, icons: SERVER_ICONS };
+/** Public pages: serverInfo carries websiteUrl (MCP Implementation); privacy and terms are in the RFC 9728 metadata. */
+export const WEBSITE_URL = 'https://creatif.space';
+export const PRIVACY_URL = 'https://creatif.space/privacy';
+export const TERMS_URL = 'https://creatif.space/terms';
+export const SERVER_INFO = { name: 'creatif.space', version: VERSION, websiteUrl: WEBSITE_URL, icons: SERVER_ICONS };
 
 export const INSTRUCTIONS =
   'Get content approved & published faster. ' +
