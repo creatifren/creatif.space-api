@@ -38,6 +38,8 @@ const base = {
   'GET /credits': () => credits(),
   'GET /social-accounts': () => ({ body: { data: [account(IG), account(X, 'x', { status: 'expired', reconnect_required: true })] } }),
   'GET /files/usage': () => ({ body: { data: { tier: 'free', used_bytes: 250_000_000, quota_bytes: 1_000_000_000 } } }),
+  // No failed posts and nothing held for approval unless a test says so.
+  'GET /social-posts': () => ({ body: { data: [] } }),
 };
 
 describe('get_account_summary', () => {
@@ -58,7 +60,9 @@ describe('get_account_summary', () => {
     });
     expect(out.storage).toEqual({ tier: 'free', counts: 'library', used_bytes: 250_000_000, quota_bytes: 1_000_000_000, left_bytes: 750_000_000, percent_used: 25 });
     expect(out.next_steps).toEqual(['x x_user needs reconnecting: get_connect_link { "network": "x" }.']);
-    expect(app!.v1.calls.map((c) => c.path).sort()).toEqual(['/credits', '/files/usage', '/social-accounts']);
+    expect(app!.v1.calls.map((c) => c.path).sort()).toEqual(['/credits', '/files/usage', '/social-accounts', '/social-posts', '/social-posts', '/social-posts']);
+    expect(out.failed_posts).toBe(0);
+    expect(out.approvals).toEqual({ waiting: 0, changes_requested: 0 });
     expect(app!.v1.calls.every((c) => c.headers.get('x-mcp-tool') === 'get_account_summary')).toBe(true);
   });
 
@@ -115,4 +119,31 @@ describe('get_account_summary', () => {
     expect(res.isError).toBe(true);
     expect(payload(res).error.code).toBe('unauthorized');
   });
+
+  it('counts failed posts (last 30 days, as list_failed_posts) and posts waiting for approval, with next steps', async () => {
+    const target = (status: string) => ({ account: { id: IG, platform: 'instagram', username: 'studio' }, status, fail_reason: null, fail_code: null, platform_url: null });
+    const out = payload(
+      await run({
+        ...base,
+        'GET /social-accounts': () => ({ body: { data: [account(IG)] } }),
+        'GET /social-posts': (c: { query: Record<string, string> }) => {
+          if (c.query.status === 'failed') return { body: { data: [post('01JPOSTPOSTPOSTPOSTPOSTPF1', 'failed', [target('failed')]), post('01JPOSTPOSTPOSTPOSTPOSTPF2', 'failed', [target('failed')])] } };
+          if (c.query.status === 'published') return { body: { data: [post('01JPOSTPOSTPOSTPOSTPOSTPP1', 'published', [target('published')])] } };
+          return { body: { data: [{ approval: 'client' }, { approval: 'awaiting' }, { approval: 'revision' }, { approval: null }] } };
+        },
+      }),
+    );
+    expect(out.failed_posts).toBe(2);
+    expect(out.approvals).toEqual({ waiting: 2, changes_requested: 1 });
+    const steps = out.next_steps.join(' ');
+    expect(steps).toContain('2 posts failed to publish in the last 30 days: list_failed_posts');
+    expect(steps).toContain('1 post came back with changes requested');
+    expect(steps).toContain('2 posts are waiting for approval: check_approval_status, or send_approval_reminder');
+    const queued = app!.v1.calls.find((c) => c.path === '/social-posts' && c.query.status === 'scheduled')!;
+    expect(queued.query.limit).toBe('100');
+  });
 });
+
+function post(id: string, status: string, targets: unknown[]) {
+  return { id, caption: 'x', type: 'post', labels: [], media: [], scheduled_at: '2026-11-10T02:00:00Z', status, fail_reason: null, approval: null, created_at: '2026-11-09T02:00:00Z', targets };
+}
