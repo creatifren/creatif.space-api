@@ -126,6 +126,21 @@
     "instagram": {
       "name": "Instagram",
       "flow": "oauth",
+      "account_type": [
+        {
+          "text": "An Instagram Business or Creator account: the sign-in asks for Instagram’s business permissions (instagram_business_*).",
+          "status": "confirmed",
+          "evidence": [
+            "config/services.php:113-117",
+            "app/Services/OutstandService.php:39-40",
+            "app/Services/OutstandService.php:95-102"
+          ]
+        },
+        {
+          "text": "Whether the Instagram account must also be linked to a Facebook Page.",
+          "status": "check in app"
+        }
+      ],
       "requirements": [
         {
           "text": "Allow every permission Instagram asks for, including messages: Engage for Instagram covers DMs and comments.",
@@ -171,6 +186,21 @@
     "facebook": {
       "name": "Facebook",
       "flow": "page_picker",
+      "account_type": [
+        {
+          "text": "A Facebook Page: after sign-in you choose the Pages to connect, and each one is connected as its own account.",
+          "status": "confirmed",
+          "evidence": [
+            "app/Http/Controllers/Api/V1/OutstandConnectController.php:20-28",
+            "app/Services/OutstandService.php:572-600",
+            "app/Services/OutstandService.php:609-612"
+          ]
+        },
+        {
+          "text": "Which role on the Page you need (for example admin).",
+          "status": "check in app"
+        }
+      ],
       "requirements": [
         {
           "text": "A Facebook Page to connect. After sign-in you choose the Page; each Page you choose counts as one account on your plan.",
@@ -213,6 +243,21 @@
     "linkedin": {
       "name": "LinkedIn",
       "flow": "page_picker",
+      "account_type": [
+        {
+          "text": "A LinkedIn page: after sign-in you choose from the pages LinkedIn lists for you.",
+          "status": "confirmed",
+          "evidence": [
+            "app/Http/Controllers/Api/V1/OutstandConnectController.php:20-28",
+            "app/Services/OutstandService.php:572-600",
+            "app/Services/OutstandService.php:609-612"
+          ]
+        },
+        {
+          "text": "Which role on the page you need (for example admin), and whether a personal profile can be connected.",
+          "status": "check in app"
+        }
+      ],
       "requirements": [
         {
           "text": "After sign-in you choose which LinkedIn pages to connect; each one you choose counts as one account on your plan.",
@@ -243,6 +288,12 @@
     "x": {
       "name": "X",
       "flow": "oauth",
+      "account_type": [
+        {
+          "text": "Which X account types can connect.",
+          "status": "check in app"
+        }
+      ],
       "requirements": [],
       "common_errors": [],
       "notes": []
@@ -250,6 +301,12 @@
     "tiktok": {
       "name": "TikTok",
       "flow": "oauth",
+      "account_type": [
+        {
+          "text": "Which TikTok account types can connect (personal, Creator or Business).",
+          "status": "check in app"
+        }
+      ],
       "requirements": [],
       "common_errors": [],
       "notes": [
@@ -265,6 +322,12 @@
     "threads": {
       "name": "Threads",
       "flow": "oauth",
+      "account_type": [
+        {
+          "text": "Which Threads account types can connect.",
+          "status": "check in app"
+        }
+      ],
       "requirements": [],
       "common_errors": [],
       "notes": [
@@ -280,6 +343,12 @@
     "youtube": {
       "name": "YouTube",
       "flow": "oauth",
+      "account_type": [
+        {
+          "text": "Whether the Google account needs a YouTube channel set up before you connect.",
+          "status": "check in app"
+        }
+      ],
       "requirements": [],
       "common_errors": [],
       "notes": []
@@ -287,6 +356,20 @@
     "pinterest": {
       "name": "Pinterest",
       "flow": "oauth",
+      "account_type": [
+        {
+          "text": "A Pinterest account with at least one board: every Pin goes to a board.",
+          "status": "confirmed",
+          "evidence": [
+            "app/Http/Controllers/Api/V1/PinterestBoardController.php:14-17",
+            "app/Support/PublishPreflight.php:91-93"
+          ]
+        },
+        {
+          "text": "Whether a Pinterest business account is required.",
+          "status": "check in app"
+        }
+      ],
       "requirements": [
         {
           "text": "Every Pin goes to a board, so you'll choose one of the account's boards when you post.",
@@ -315,6 +398,16 @@
     "bluesky": {
       "name": "Bluesky",
       "flow": "bluesky",
+      "account_type": [
+        {
+          "text": "A Bluesky account and an app password for it: Creatif Space signs in with your handle and that app password.",
+          "status": "confirmed",
+          "evidence": [
+            "app/Services/OutstandService.php:68-73",
+            "app/Http/Controllers/Api/V1/SocialAccountController.php:103-105"
+          ]
+        }
+      ],
       "requirements": [
         {
           "text": "Your Bluesky handle and an app password. Bluesky has no sign-in page to send you to.",

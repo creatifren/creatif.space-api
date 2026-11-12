@@ -30,6 +30,7 @@ Changed:
 
 - Every `list_*` tool takes `limit` + `cursor` and returns `next_cursor` (null at the end).
 - The 10 most-used read tools declare an `outputSchema` and return `structuredContent` (text block kept).
+- `/free` `connect_guide` returns `account_type` per network: `confirmed` from the code, or `check in app` where the code does not prove it.
 
 - `get_credits` adds this cycle's spend by action (`spend`) and days until renewal (`renewal`).
 - `update_post` takes `add_file_ids` (keep current media) as well as `file_ids` (replace).

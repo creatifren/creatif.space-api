@@ -347,7 +347,9 @@ stored; each call sends PostHog `free_tool_called {tool, network}` (no
 caption text) with the existing `POSTHOG_KEY`. Copy and limits live in
 `free-tools/*.json` (`caption-rules.json`, `approval-templates.json` keyed by
 niche, `connect-guides.json` with `file:line` evidence that is never sent to
-callers). Registry entry `free-tools/server.json`
+callers). `connect_guide` also returns `account_type`: each item is
+`confirmed` (cites the code) or `check in app` (the code does not prove it,
+so nothing is guessed). Registry entry `free-tools/server.json`
 (`io.github.creatifren/creatif-space-tools`) is **not published** by the
 registry workflow, which only publishes `mcp/server.json`.
 
