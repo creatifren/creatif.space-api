@@ -10,7 +10,7 @@ import { defineTool, describeTool } from './define.js';
  * confirm_media_upload → POST /files/{id}/complete.
  */
 
-interface V1File {
+export interface V1File {
   id: string;
   name: string;
   mime_type: string;
@@ -24,7 +24,7 @@ interface V1File {
   created_at?: string;
 }
 
-const shapeFile = (f: V1File) => ({
+export const shapeFile = (f: V1File) => ({
   id: f.id,
   name: f.name,
   mime_type: f.mime_type,

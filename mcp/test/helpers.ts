@@ -24,7 +24,8 @@ export interface V1Call {
   headers: Headers;
 }
 
-type Handler = (call: V1Call) => { status?: number; body?: unknown } | Promise<{ status?: number; body?: unknown }>;
+type Reply = { status?: number; body?: unknown; /** a non-JSON body, sent as is */ text?: string; contentType?: string };
+type Handler = (call: V1Call) => Reply | Promise<Reply>;
 
 /** A fake V1 API: routes keyed "METHOD /path" (exact path, no query). */
 export function mockV1(routes: Record<string, Handler>) {
@@ -44,10 +45,10 @@ export function mockV1(routes: Record<string, Handler>) {
     calls.push(call);
     const handler = routes[`${call.method} ${path}`];
     if (!handler) return new Response(JSON.stringify({ message: 'Not Found' }), { status: 404 });
-    const { status = 200, body = null } = await handler(call);
-    return new Response(body === null ? null : JSON.stringify(body), {
+    const { status = 200, body = null, text, contentType } = await handler(call);
+    return new Response(text ?? (body === null ? null : JSON.stringify(body)), {
       status,
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': contentType ?? (text !== undefined ? 'text/plain' : 'application/json') },
     });
   };
   return { fetchImpl, calls };

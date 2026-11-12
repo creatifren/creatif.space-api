@@ -60,14 +60,24 @@ Rate limit: 60 requests / minute / token (429 + `Retry-After`).
 | `update_post` (caption, scheduled_at, labels, file_ids \| add_file_ids) | draft (drafts and posts waiting for approval only) | `PATCH /social-posts/{id}` |
 | `schedule_post` (post_id, scheduled_at, confirm) | publish | preview `GET /social-posts/{id}/send-preview`; `confirm: true` → `POST /social-posts/{id}/send` |
 | `publish_post` (post_id, confirm) | publish | same, sends now |
+| `get_insight_summary` (period: {month} \| {from, to} ≤ 92 days, channel_ids) — Pro / Max; Free → `plan_required` | read | `GET /insight/summary?month \| from&to&channel_ids` |
 | `request_media_upload` (filename, mime, size_bytes, folder_id) | draft | `POST /files/presign` → file_id + presigned PUT URL (15 min) |
 | `confirm_media_upload` (file_id) | draft | `POST /files/{id}/complete` (409 → `GET /files/{id}`: already ready is returned) |
 | `list_conversations` (type comment\|dm, channel_id, unread_only, since, limit, cursor) — Engage comments and DMs in one list, newest first | read | `GET /inbox/feed?type&account&unread&since&per_page&cursor` |
 | `reply_to_conversation` (conversation_id, text, confirm) — DM into the thread, or public reply under a comment | publish | preview `GET /inbox/feed/{id}`; `confirm: true` → `POST /inbox/feed/{id}/reply` |
+| `get_storage_usage` — used vs quota (Free: 1 GB total; paid: Keep quota) and kept vs auto-delete (soonest dates), from the newest 300 files | read | `GET /files/usage` + `GET /files?per_page=60&page=1..5` |
+| `keep_file` (file_id) — Pro/Max; Free → `plan_required`, quota full → `storage_full`, not ready (409) → `file_not_ready` | draft | `POST /files/{id}/keep` |
+| `unkeep_file` (file_id) — back under the retention rules; returns `auto_delete_at` | draft | `DELETE /files/{id}/keep` |
+| `suggest_caption` (brief, platform) — a caption and hashtags in the user's style; saves nothing. Pro/Max; 404 while `AI_CAPTION_ENABLED` is off → `not_enabled` ("write the caption yourself"), Free → `plan_required` | draft | `POST /ai/caption` |
 | `discard_draft` (post_id, confirm) — deletes a draft only; preview first, `confirm: true` deletes; scheduled / published / failed → `not_draft` with the next step | draft | `GET /social-posts/{id}`, then `DELETE /social-posts/{id}/draft` |
 | `list_approval_links` (status active\|expired\|revoked\|all, limit) — status, approver email, post count, approved/waiting/revision | read | `GET /social-approval-links` |
 | `list_waiting_approvals` — posts other users sent to this user for approval | approvals:decide | `GET /me/approvals/waiting` |
 | `decide_approval` (link, post_id, decision approve\|revise, reason, confirm) — the approver side; same rules as the approval page, audited as `mcp` | approvals:decide | preview `GET /me/approvals/{post}/preview`; `confirm: true` → `POST /me/approvals/{post}/decision` |
+| `list_spaces` (status draft\|published\|archived, search, limit) — Pro/Max | read | `GET /spaces?tab&search` |
+| `create_space_from_files` (title, file_ids 1–100, view_mode) — always a Draft+Private Space, never published; Pro/Max | draft | `POST /spaces` with `file_ids` (checked before anything is created) |
+| `publish_space` (space_id, confirm) — Pro/Max | publish | preview `GET /spaces/{id}/publish-preview`; `confirm: true` → `POST /spaces/{id}/publish` |
+| `get_approval_audit` (link_id) — every decision on one of the user's links: who, post, when, decision, comment; rows and CSV | read | `GET /social-approval-links/{id}/audit.csv` |
+| `list_shared_with_me` — "Reports shared with you": Content Plans other users sent to this user's email | approvals:decide | `GET /me/reports/shared` |
 
 **Media upload.** `request_media_upload` → the client PUTs the exact bytes to
 the URL (Content-Type and Content-Length are signed) → `confirm_media_upload`
@@ -100,6 +110,19 @@ approval (or whose client asked for changes) is never sent or scheduled, from
 the app or a token (409 `approval_required`); it can only be held for the
 client again. A token cannot drop the editor's own approval step either. A
 token can only edit drafts and posts waiting for approval (409 `not_editable`).
+
+**Spaces.** Pro and Max only for connected apps: every Spaces route a token
+can reach is listed in `config('mcp.route_features')`, so a Free caller gets
+the standard 402 `plan_required` (`feature: "spaces"`) from `EnforceTokenScope`
+before the controller runs — the app itself still lists a Free user's existing
+Spaces. `publish_space` works like `publish_post`: the preview returns a
+`confirm_token` (HMAC over user + Space + title, address, visibility, password,
+expiry and files; 10 minutes) that this server keeps and sends on
+`confirm: true`; a token publish without one → 422 `confirm_token_required`,
+a changed Space → 409 `preview_stale`. The preview also says what blocks it
+(`active_slots_full`) and what to warn about (`no_handle`: no address yet,
+`empty`, `expired`). A Space's link is `{public_url}/{handle}/{slug}`
+(`public_url` on the Space resources; null without a handle).
 
 **Plan limits are the API's rules too** (one plan definition: `PlanSeeder`,
 enforced by `PlanQuota`). Free schedules at most 7 days ahead (UTC), holds at
@@ -141,6 +164,86 @@ replies `reply_window_closed`, `reply_rejected`, `reply_not_possible`,
 
 Each call emits PostHog `mcp_tool_called` `{tool, client_name, ok, ms}` (plus
 `error` code on failure) — never content. Skipped when `POSTHOG_KEY` is unset.
+
+## Approve from your AI chat
+
+For the **client** — the person a creatif.space user sent posts or a Content
+Plan to for approval. They connect creatif.space to Claude or ChatGPT with
+their own account (the email the link was sent to), allow **Decide approvals**
+(`approvals:decide`) on the consent screen, and can then review and decide
+without opening the approval page.
+
+| Tool | What it does |
+|---|---|
+| `list_shared_with_me` | "Reports shared with you": Content Plans sent to the user's verified email — title, dates, who sent it, link, how many posts wait. |
+| `list_waiting_approvals` | Every post still waiting on the user's decision, with the link id and post id to decide with. |
+| `decide_approval` | Approve, or request changes with a reason. Always shows a preview first; decides only with `confirm: true` after the user agrees. |
+
+The owner's side has one more: `get_approval_audit` (scope `read`) — who
+decided what and when, with the comment, as rows and CSV, for one of the
+owner's own links.
+
+Rules the tools keep (the API enforces them; the tools only explain them):
+
+- Only links addressed to the user's **verified email**. Anyone else gets
+  `forbidden` with a hint of the expected address; an id from another
+  workspace is `not_found`.
+- Two steps for every decision: preview, then confirm. The confirm carries a
+  signed token (10 minutes) over the exact post the user saw; if the post was
+  edited in between, the answer is `preview_stale` with the new preview and
+  nothing is decided. The token never reaches the model.
+- Same rules as the approval page: the post must be in the plan's dates and
+  channels and still waiting; on a Free sender's plan only the next 7 days
+  can be decided (`invalid_input` with `decidable_from`).
+- Every decision is audited with `source: mcp`, and the sender is notified
+  exactly as from the page.
+- A day before the first waiting post goes out, the approver gets one
+  reminder email (once per plan; they can turn it off from the email, or the
+  owner with `PATCH /social-approval-links/{id}` `{reminders: false}`).
+
+### Example conversation
+
+> **Rani:** Anything I need to approve this week?
+>
+> *Claude calls `list_shared_with_me` and `list_waiting_approvals`.*
+>
+> **Claude:** Bro shared one Content Plan with you, **December**
+> (1–31 Dec, Asia/Jakarta). Two posts are waiting for you:
+> 1. "Launch day — 20% off everything…" — Instagram, Wed 2 Dec 09:00
+> 2. "Behind the scenes at the studio" — Instagram, Fri 4 Dec 18:00
+>
+> **Rani:** Approve the first one. For the second, ask them to use the photo
+> with the team in it.
+>
+> *Claude calls `decide_approval` with `decision: "approve"` for post 1 and
+> `decision: "revise"`, `reason: "Please use the photo with the team in it"`
+> for post 2 — both without `confirm`, so both come back as previews.*
+>
+> **Claude:** Here's what I'll do:
+> - **Approve** "Launch day…" — it will go out on Instagram on Wed 2 Dec at 09:00.
+> - **Request changes** on "Behind the scenes…", telling Bro: "Please use
+>   the photo with the team in it."
+>
+> Shall I go ahead?
+>
+> **Rani:** Yes.
+>
+> *Claude calls `decide_approval` again with the same arguments and
+> `confirm: true`, once per post.*
+>
+> **Claude:** Done. "Launch day…" is approved and goes out Wednesday 09:00;
+> Bro has your note on "Behind the scenes…". Nothing else is waiting.
+
+And on the owner's side, later:
+
+> **Bro:** Who approved the December launch post, and when?
+>
+> *Claude calls `get_approval_audit` with the plan's link id.*
+>
+> **Claude:** Rani (rani@client.test) asked for changes on "Behind the
+> scenes…" on 1 Dec at 03:10 UTC ("Please use the photo with the team in it")
+> and approved "Launch day…" at 03:10 UTC, both from an AI chat. Want the
+> CSV?
 
 ## Free Tools (`/free`)
 
