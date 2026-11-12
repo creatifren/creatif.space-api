@@ -30,6 +30,8 @@ The Creatif Space MCP server (`https://mcp.creatif.space/mcp`, OAuth or API key)
 | `schedule_post` | Schedules a draft after the user confirms the Credit cost | All plans, spends Credits (Free: 7 days ahead, 10 queued posts) |
 | `publish_post` | Publishes a draft now after the user confirms the Credit cost | All plans, spends Credits |
 | `get_credits` | Plan, limits and Credit balance | All plans |
+| `list_waiting_approvals` | Posts other Creatif Space users sent this user to approve | All plans (needs the "Decide approvals" permission) |
+| `decide_approval` | Approves a post, or asks for changes, as the invited approver, after the user confirms | All plans (Free sender: posts in the next 7 days) |
 | `list_conversations` | Comments and DMs from the connected channels (Engage) | All plans |
 | `reply_to_conversation` | Replies to a comment or DM after the user confirms | All plans, spends Credits |
 
