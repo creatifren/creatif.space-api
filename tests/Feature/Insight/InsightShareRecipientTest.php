@@ -114,7 +114,8 @@ it('answers 404 for another workspace’s link, and validates the email', functi
     ['owner' => $owner] = InsightFixture::workspace();
     $link = isrShare($this, $owner, 'rani@client.test');
 
-    ['owner' => $other] = InsightFixture::workspace();
+    // Another workspace: any other user (InsightFixture::workspace() is one per test).
+    $other = User::factory()->create();
     Workspace::forget();
     app('auth')->forgetGuards();
     $this->actingAs($other)->deleteJson("/api/v1/insight/share/{$link['id']}")->assertNotFound();
