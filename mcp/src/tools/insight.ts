@@ -85,4 +85,34 @@ export const listTopPosts = defineTool({
   },
 });
 
-export const insightTools = [getInsightSummary, listTopPosts];
+export const getBestTimes = defineTool({
+  name: 'get_best_times',
+  title: 'Get best times to post',
+  description: describeTool({
+    does: 'Gets, for each channel, the three weekday + hour slots in which its own posts drew the most engagement on average over the last 7–92 days (default 90), in the workspace’s timezone.',
+    when: 'when the user asks when to post. It is from their own posts only, never a benchmark: say "from your posts". A channel with fewer than 10 posts with engagement comes back as status "not_enough_data" with no slots: say so, never guess a time. channel_ids (from list_channels) limits it to some channels.',
+    example: 'get_best_times { "days": 90 } → { data: [{ network: "Instagram", status: "ok", posts_analyzed: 24, slots: [{ label: "Tue 19:00", posts: 4, avg_engagement: 412.5 }, ...] }], meta: { basis: "from your posts", timezone: "Asia/Jakarta" } }',
+    errors: [
+      ['plan_required', 'Insight is on Pro and Max: tell the user the message as it is (it has the upgrade link); do not retry'],
+      ['invalid_input', 'days must be 7–92; fix the channel ids and call again'],
+      ['scope_missing', 'reconnect and allow "read"'],
+      ['unauthorized', 'ask the user to reconnect the creatif.space connector'],
+      ['upstream_unavailable', 'wait a minute and call again'],
+    ],
+  }),
+  scope: 'read',
+  input: {
+    days: z.number().int().min(7).max(92).optional().describe('How many days back to look, 7–92 (default 90)'),
+    channel_ids: z.array(z.string().trim().min(10).max(26)).min(1).max(50).optional().describe('Only these channels (ids from list_channels)'),
+  },
+  annotations: READ_ONLY,
+  run: async ({ days, channel_ids }, { v1 }) => {
+    const res = await v1.get<{ data: unknown[]; meta: Record<string, unknown> }>('/insight/best-times', {
+      days,
+      channel_ids: channel_ids?.join(','),
+    });
+    return { data: res.data, meta: res.meta };
+  },
+});
+
+export const insightTools = [getInsightSummary, listTopPosts, getBestTimes];

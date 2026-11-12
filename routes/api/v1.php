@@ -24,6 +24,7 @@ use App\Http\Controllers\Api\V1\HealthController;
 use App\Http\Controllers\Api\V1\InboxCommentController;
 use App\Http\Controllers\Api\V1\InboxController;
 use App\Http\Controllers\Api\V1\InboxFeedController;
+use App\Http\Controllers\Api\V1\InsightBestTimesController;
 use App\Http\Controllers\Api\V1\InsightExportController;
 use App\Http\Controllers\Api\V1\InsightPdfExportController;
 use App\Http\Controllers\Api\V1\InsightReportController;
@@ -651,6 +652,10 @@ Route::middleware(['auth:sanctum,mcp', EnforceTokenScope::class, EnsureNotPendin
     Route::get('/insight/top-posts', InsightTopPostsController::class)
         ->middleware('throttle:30,1')
         ->name('api.v1.insight.top-posts');
+    // Best weekday + hour slots from the workspace's own posts (MCP: get_best_times).
+    Route::get('/insight/best-times', InsightBestTimesController::class)
+        ->middleware('throttle:30,1')
+        ->name('api.v1.insight.best-times');
 
     // Proof of delivery. Deliberately not gated on a plan: "on every plan"
     // is what the screen promises, and evidence is not an upsell.
