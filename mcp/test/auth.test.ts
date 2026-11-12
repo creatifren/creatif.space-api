@@ -104,6 +104,7 @@ describe('401 flow', () => {
         'get_approval_audit',
         'get_connect_link',
         'send_feedback',
+        'create_insight_share_link', 'revoke_insight_share_link',
       ].sort(),
     );
     for (const tool of tools) {
