@@ -39,6 +39,8 @@ use Illuminate\Support\Str;
  * @property list<int>|null $scope_account_ids
  * @property bool $reminders_enabled Content Plan reminder email on (per-link opt-out)
  * @property CarbonImmutable|null $reminded_at when the one reminder went out
+ * @property int $calendar_version bumped when the calendar feed is turned off or rotated (old URLs die)
+ * @property CarbonImmutable|null $calendar_disabled_at calendar feed off
  * @property CarbonImmutable|null $expires_at
  * @property CarbonImmutable|null $extended_at
  * @property CarbonImmutable|null $last_reminded_at
@@ -47,7 +49,7 @@ use Illuminate\Support\Str;
  */
 class SocialApprovalLink extends Model implements WorkspaceOwned
 {
-    protected $fillable = ['user_id', 'token', 'title', 'client_name', 'approver_email', 'approver_bound_at', 'scope_from', 'scope_to', 'scope_timezone', 'scope_starts_at', 'scope_ends_at', 'scope_account_ids', 'reminders_enabled', 'reminded_at', 'expires_at', 'extended_at', 'last_reminded_at', 'revoked_at'];
+    protected $fillable = ['user_id', 'token', 'title', 'client_name', 'approver_email', 'approver_bound_at', 'scope_from', 'scope_to', 'scope_timezone', 'scope_starts_at', 'scope_ends_at', 'scope_account_ids', 'reminders_enabled', 'reminded_at', 'calendar_version', 'calendar_disabled_at', 'expires_at', 'extended_at', 'last_reminded_at', 'revoked_at'];
 
     public function expired(): bool
     {
@@ -93,6 +95,8 @@ class SocialApprovalLink extends Model implements WorkspaceOwned
             'scope_account_ids' => 'array',
             'reminders_enabled' => 'boolean',
             'reminded_at' => 'datetime',
+            'calendar_version' => 'integer',
+            'calendar_disabled_at' => 'datetime',
         ];
     }
 
@@ -175,6 +179,50 @@ class SocialApprovalLink extends Model implements WorkspaceOwned
     public function isScoped(): bool
     {
         return ($this->getAttributes()['scope_from'] ?? null) !== null;
+    }
+
+    /**
+     * The calendar feed's token: "{ulid}-{signature}", the signature an HMAC
+     * of the ulid and calendar_version under the app key. Nothing is stored;
+     * bumping the version (off, or a new URL) kills every earlier token.
+     */
+    public function calendarToken(): string
+    {
+        return $this->ulid.'-'.self::calendarSignature($this->ulid, $this->calendarVersion());
+    }
+
+    public static function calendarSignature(string $ulid, int $version): string
+    {
+        $mac = hash_hmac('sha256', "content-plan-calendar|{$ulid}|{$version}", (string) config('app.key'), true);
+
+        return rtrim(strtr(base64_encode($mac), '+/', '-_'), '=');
+    }
+
+    /** The link a calendar token names, if the signature matches its current version. */
+    public static function forCalendarToken(string $token): ?self
+    {
+        [$ulid, $signature] = array_pad(explode('-', $token, 2), 2, '');
+        if ($ulid === '' || $signature === '') {
+            return null;
+        }
+        $link = self::query()->where('ulid', $ulid)->first();
+
+        return $link !== null && hash_equals(self::calendarSignature($ulid, $link->calendarVersion()), $signature) ? $link : null;
+    }
+
+    public function calendarOn(): bool
+    {
+        return ($this->getAttributes()['calendar_disabled_at'] ?? null) === null;
+    }
+
+    public function calendarVersion(): int
+    {
+        return (int) ($this->getAttributes()['calendar_version'] ?? 1);
+    }
+
+    public function calendarUrl(): string
+    {
+        return rtrim((string) config('app.url'), '/').'/api/v1/content-plans/'.$this->calendarToken().'/calendar.ics';
     }
 
     public function url(): string

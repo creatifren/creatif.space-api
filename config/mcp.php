@@ -89,6 +89,9 @@ return [
         'api.v1.social-approval-links.show' => 'read',
         // get_approval_audit: the owner's own link, as CSV.
         'api.v1.social-approval-links.audit' => 'read',
+        // get_plan_calendar_link: reads the plan's feed URL (turning it on or
+        // off stays in the app).
+        'api.v1.social-approval-links.calendar.show' => 'read',
 
         // Media (request_media_upload / confirm_media_upload): the same
         // presign and complete as the app — limits, quota and the

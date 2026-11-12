@@ -32,6 +32,7 @@ in [mcp/README.md](mcp/README.md).
 | Approvals | `list_approval_links` | The workspace's approval links and their status | All |
 | Approvals | `send_approval_reminder` | Email the approver a reminder | All |
 | Approvals | `get_approval_audit` | Every decision on one link, with CSV | All |
+| Approvals | `get_plan_calendar_link` | Calendar feed (ICS) URL of a Content Plan | All |
 | Approvals | `list_waiting_approvals` | Posts others sent this user to approve | All (scope `approvals:decide`) |
 | Approvals | `decide_approval` | Approve or request changes (preview first) | All (scope `approvals:decide`) |
 | Approvals | `list_shared_with_me` | Content Plans others shared with this user | All (scope `approvals:decide`) |

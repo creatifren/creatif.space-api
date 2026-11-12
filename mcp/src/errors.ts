@@ -18,6 +18,8 @@ export type ErrorCode =
   | 'not_editable'
   | 'not_draft'
   | 'not_approvable'
+  | 'not_a_plan'
+  | 'link_inactive'
   | 'approval_required'
   | 'storage_full'
   | 'file_too_large'

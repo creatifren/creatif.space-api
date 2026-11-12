@@ -38,6 +38,7 @@ use App\Http\Controllers\Api\V1\NotificationController;
 use App\Http\Controllers\Api\V1\OpenApiController;
 use App\Http\Controllers\Api\V1\OutstandConnectController;
 use App\Http\Controllers\Api\V1\PinterestBoardController;
+use App\Http\Controllers\Api\V1\PlanCalendarController;
 use App\Http\Controllers\Api\V1\ProfileFontController;
 use App\Http\Controllers\Api\V1\PublicApprovalController;
 use App\Http\Controllers\Api\V1\PublicHealthController;
@@ -253,6 +254,12 @@ Route::withoutMiddleware([EnsureFrontendRequestsAreStateful::class])
             ->name('api.v1.approval-links.reminders-off.store');
     });
 
+// Content Plan calendar feed (ICS): the signed token is the credential; a
+// feed turned off or rotated, or a revoked or expired plan, answers 404.
+Route::get('/content-plans/{token}/calendar.ics', [PlanCalendarController::class, 'feed'])
+    ->middleware('throttle:60,1')
+    ->name('api.v1.content-plans.calendar');
+
 // Content Plan share link — read-only, the token is the credential.
 Route::get('/plan/{token}', [SocialPlanLinkController::class, 'show'])
     ->middleware('throttle:60,1')
@@ -430,6 +437,14 @@ Route::middleware(['auth:sanctum,mcp', EnforceTokenScope::class, EnsureNotPendin
     Route::post('/social-approval-links/{socialApprovalLink}/remind', [SocialApprovalController::class, 'remind'])
         ->middleware('throttle:10,1')
         ->name('api.v1.social-approval-links.remind');
+    // The plan's calendar feed: URL (GET, MCP get_plan_calendar_link), on / new URL (POST), off (DELETE).
+    Route::get('/social-approval-links/{socialApprovalLink}/calendar', [PlanCalendarController::class, 'show'])
+        ->name('api.v1.social-approval-links.calendar.show');
+    Route::post('/social-approval-links/{socialApprovalLink}/calendar', [PlanCalendarController::class, 'store'])
+        ->middleware('throttle:30,1')
+        ->name('api.v1.social-approval-links.calendar.store');
+    Route::delete('/social-approval-links/{socialApprovalLink}/calendar', [PlanCalendarController::class, 'destroy'])
+        ->name('api.v1.social-approval-links.calendar.destroy');
     Route::delete('/social-approval-links/{socialApprovalLink}', [SocialApprovalController::class, 'revoke'])
         ->name('api.v1.social-approval-links.destroy');
     Route::get('/social-plan-links', [SocialPlanLinkController::class, 'index'])

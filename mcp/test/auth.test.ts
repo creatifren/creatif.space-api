@@ -105,6 +105,7 @@ describe('401 flow', () => {
         'get_connect_link',
         'send_feedback',
         'create_insight_share_link', 'revoke_insight_share_link',
+        'get_plan_calendar_link',
       ].sort(),
     );
     for (const tool of tools) {
