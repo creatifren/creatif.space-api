@@ -19,6 +19,7 @@ use App\Jobs\RetryRateLimitedPublishes;
 use App\Jobs\SendApprovedHeldPosts;
 use App\Jobs\SendContentPlanReminders;
 use App\Jobs\SendMonthlyInsightReports;
+use App\Jobs\SendConnectNudges;
 use App\Jobs\SendWeeklyDigests;
 use App\Jobs\SnapshotFollowerCounts;
 use App\Jobs\SyncInboxes;
@@ -181,3 +182,7 @@ Schedule::job(new PruneAccountExports)->hourly();
 // The weekly digest: Monday 08:00 in each user's timezone (hourly, so
 // every zone's 08:xx comes round once; sent once per week).
 Schedule::job(new SendWeeklyDigests)->hourly()->withoutOverlapping();
+
+// Day 2 with no channel connected: one "connect your first channel" email
+// per account, ever (App\Support\Onboarding).
+Schedule::job(new SendConnectNudges)->hourly()->withoutOverlapping();

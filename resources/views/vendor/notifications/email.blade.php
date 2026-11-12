@@ -1,4 +1,4 @@
-<x-mail::message :approval-footer="$approvalFooter ?? false">
+<x-mail::message :approval-footer="$approvalFooter ?? false" :footer-link="$approvalFooterLink ?? true">
 {{-- Greeting --}}
 @if (! empty($greeting))
 # {{ $greeting }}

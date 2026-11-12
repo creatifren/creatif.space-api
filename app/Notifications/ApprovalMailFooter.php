@@ -28,4 +28,18 @@ final class ApprovalMailFooter
 
         return $mail;
     }
+
+    /**
+     * The slogan line alone, without the "Approved with Creatif Space →"
+     * link: for the owner's own onboarding emails (welcome, connect nudge),
+     * where that link reads wrong and its approval-footer UTM would count a
+     * click as a client's.
+     */
+    public static function sloganOnly(MailMessage $mail): MailMessage
+    {
+        $mail->viewData['approvalFooter'] = true;
+        $mail->viewData['approvalFooterLink'] = false;
+
+        return $mail;
+    }
 }

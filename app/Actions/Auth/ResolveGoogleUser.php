@@ -6,6 +6,7 @@ use App\Enums\UserStatus;
 use App\Exceptions\GoogleLoginRefused;
 use App\Models\User;
 use App\Support\AutoHandle;
+use App\Support\Onboarding;
 use App\Support\ProductEvents;
 use App\Support\ReferralAttribution;
 use App\Support\SignupAttribution;
@@ -74,6 +75,12 @@ class ResolveGoogleUser
                 'entry' => is_string($entry) ? $entry : null,
             ] + (is_array($utm) ? $utm : []) + (is_array($touch) ? $touch : SignupAttribution::touchFrom($request)),
                 $platform === null ? [] : ['platform' => $platform]);
+
+            // A creator's account is ready: the welcome email, once. Not for a
+            // client who signed in only to answer an approval or a plan.
+            if (! Onboarding::isClientLanding($request->session()->get('next_path') ?? $request->input('next'))) {
+                Onboarding::welcome($user);
+            }
         } elseif ($user->google_id === null) {
             // Existing (non-staff) account signing in with Google for the first time.
             $user->forceFill(['google_id' => $google->id])->save();
