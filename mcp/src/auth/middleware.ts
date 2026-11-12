@@ -14,7 +14,7 @@ export type CallerAuth = AuthInfo & { extra: CallerExtra };
 export const metadataPath = '/.well-known/oauth-protected-resource';
 
 /** Every scope a tool can ask for (must match config/mcp.php on the API). */
-export const SCOPES = ['read', 'draft', 'approve', 'publish'] as const;
+export const SCOPES = ['read', 'draft', 'approve', 'publish', 'approvals:decide'] as const;
 
 /**
  * Where the metadata lives for a resource URL, always built from its ORIGIN
