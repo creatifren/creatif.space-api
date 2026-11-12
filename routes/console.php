@@ -19,6 +19,7 @@ use App\Jobs\RetryRateLimitedPublishes;
 use App\Jobs\SendApprovedHeldPosts;
 use App\Jobs\SendContentPlanReminders;
 use App\Jobs\SendMonthlyInsightReports;
+use App\Jobs\SendWeeklyDigests;
 use App\Jobs\SnapshotFollowerCounts;
 use App\Jobs\SyncInboxes;
 use Illuminate\Foundation\Inspiring;
@@ -176,3 +177,7 @@ Schedule::job(new SendContentPlanReminders)->everyFifteenMinutes()->withoutOverl
 
 // Account exports: the ZIP goes once its 24-hour link has expired.
 Schedule::job(new PruneAccountExports)->hourly();
+
+// The weekly digest: Monday 08:00 in each user's timezone (hourly, so
+// every zone's 08:xx comes round once; sent once per week).
+Schedule::job(new SendWeeklyDigests)->hourly()->withoutOverlapping();

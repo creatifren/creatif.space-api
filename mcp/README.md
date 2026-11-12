@@ -91,7 +91,7 @@ Rate limit: 60 requests / minute / token (429 + `Retry-After`).
 | `get_approval_audit` (link_id) — every decision on one of the user's links: who, post, when, decision, comment; rows and CSV | read | `GET /social-approval-links/{id}/audit.csv` |
 | `send_feedback` (kind bug\|idea\|other, message, page) — to the creatif.space team; nothing public, no Credits; 10 an hour per user | draft | `POST /feedback` |
 | `get_notification_settings` — which emails the user gets: publish_failed, approval_decided, weekly_digest | read | `GET /me/notification-settings` |
-| `update_notification_settings` (publish_failed, approval_decided, weekly_digest: true/false; at least one) | draft | `PATCH /me/notification-settings` |
+| `update_notification_settings` (publish_failed, approval_decided, weekly_digest: true/false; timezone of the Monday 08:00 digest; at least one) | draft | `PATCH /me/notification-settings` |
 | `list_shared_with_me` — "Reports shared with you": Content Plans and Insight reports other users shared with this user's email | approvals:decide | `GET /me/reports/shared` |
 | `get_connect_link` (network) — the app's connect page (`https://creatif.space/social/connect?network=…`) with the steps; no token in the response; a new network on a full plan → `plan_required` | read | `GET /social-accounts` + `GET /credits` (never `POST /social-accounts/auth-url`) |
 
