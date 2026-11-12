@@ -39,6 +39,7 @@ use App\Http\Controllers\Api\V1\OpenApiController;
 use App\Http\Controllers\Api\V1\OutstandConnectController;
 use App\Http\Controllers\Api\V1\PinterestBoardController;
 use App\Http\Controllers\Api\V1\PlanCalendarController;
+use App\Http\Controllers\Api\V1\PostApprovalAuditController;
 use App\Http\Controllers\Api\V1\ProfileFontController;
 use App\Http\Controllers\Api\V1\PublicApprovalController;
 use App\Http\Controllers\Api\V1\PublicHealthController;
@@ -416,6 +417,9 @@ Route::middleware(['auth:sanctum,mcp', EnforceTokenScope::class, EnsureNotPendin
         ->name('api.v1.social-comments.apply');
     Route::get('/social-posts/{socialPost}/approval-link', [SocialApprovalController::class, 'linkFor'])
         ->name('api.v1.social-posts.approval-link');
+    // Every approval decision on the post (post detail; MCP get_approval_history).
+    Route::get('/social-posts/{socialPost}/approval-audit', PostApprovalAuditController::class)
+        ->name('api.v1.social-posts.approval-audit');
     Route::get('/social-approval-links', [SocialApprovalController::class, 'links'])
         ->name('api.v1.social-approval-links.index');
     Route::post('/social-approval-links', [SocialApprovalController::class, 'link'])
