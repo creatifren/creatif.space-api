@@ -99,6 +99,10 @@ return [
         'api.v1.inbox.feed.show' => 'read',
         'api.v1.inbox.feed.reply' => 'publish',
 
+        // AI caption (suggest_caption): a suggestion, nothing saved. `draft`,
+        // like writing a draft; AI_CAPTION_ENABLED and the plan gate stay in
+        // AiCaptionController (404 while off, 402 on Free).
+        'api.v1.ai.caption' => 'draft',
         // Approver side (decide_approval / list_waiting_approvals): only
         // links whose approver_email is this account's verified email.
         'api.v1.me.approvals.waiting' => 'approvals:decide',

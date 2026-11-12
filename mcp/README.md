@@ -65,6 +65,7 @@ Rate limit: 60 requests / minute / token (429 + `Retry-After`).
 | `confirm_media_upload` (file_id) | draft | `POST /files/{id}/complete` (409 → `GET /files/{id}`: already ready is returned) |
 | `list_conversations` (type comment\|dm, channel_id, unread_only, since, limit, cursor) — Engage comments and DMs in one list, newest first | read | `GET /inbox/feed?type&account&unread&since&per_page&cursor` |
 | `reply_to_conversation` (conversation_id, text, confirm) — DM into the thread, or public reply under a comment | publish | preview `GET /inbox/feed/{id}`; `confirm: true` → `POST /inbox/feed/{id}/reply` |
+| `suggest_caption` (brief, platform) — a caption and hashtags in the user's style; saves nothing. Pro/Max; 404 while `AI_CAPTION_ENABLED` is off → `not_enabled` ("write the caption yourself"), Free → `plan_required` | draft | `POST /ai/caption` |
 | `list_waiting_approvals` — posts other users sent to this user for approval | approvals:decide | `GET /me/approvals/waiting` |
 | `decide_approval` (link, post_id, decision approve\|revise, reason, confirm) — the approver side; same rules as the approval page, audited as `mcp` | approvals:decide | preview `GET /me/approvals/{post}/preview`; `confirm: true` → `POST /me/approvals/{post}/decision` |
 | `list_spaces` (status draft\|published\|archived, search, limit) — Pro/Max | read | `GET /spaces?tab&search` |

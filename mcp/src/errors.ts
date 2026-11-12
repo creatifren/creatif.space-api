@@ -6,6 +6,7 @@ export type ErrorCode =
   | 'plan_required'
   | 'not_found'
   | 'unknown_tool'
+  | 'not_enabled'
   | 'invalid_input'
   | 'unauthorized'
   | 'forbidden'
