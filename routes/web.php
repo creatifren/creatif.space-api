@@ -10,6 +10,7 @@ use App\Http\Middleware\BindAuthRequestToSession;
 use App\Http\Middleware\RememberPendingAuthorization;
 use App\Http\Middleware\RequirePkce;
 use App\Http\Middleware\ResolveClientMetadataDocument;
+use App\OAuth\OAuthRateLimits;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Route;
 use Laravel\Passport\Http\Controllers\ApproveAuthorizationController;
@@ -67,7 +68,7 @@ Route::post('/auth/logout', function () {
 // two buttons. Session-based, like the rest of web.php; a guest is sent to
 // the frontend's login and comes back through /oauth/resume.
 Route::get('/oauth/authorize', [AuthorizationController::class, 'authorize'])
-    ->middleware([RequirePkce::class, 'throttle:60,1', ResolveClientMetadataDocument::class, RememberPendingAuthorization::class])
+    ->middleware([RequirePkce::class, 'throttle:'.OAuthRateLimits::AUTHORIZE, ResolveClientMetadataDocument::class, RememberPendingAuthorization::class])
     ->name('passport.authorizations.authorize');
 Route::middleware('auth')->group(function () {
     Route::post('/oauth/authorize', [ApproveAuthorizationController::class, 'approve'])
