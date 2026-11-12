@@ -496,7 +496,7 @@ export const schedulePost = defineTool({
     scheduled_at: z.iso.datetime({ offset: true }).describe('When to publish, ISO 8601, in the future'),
     confirm,
   },
-  annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: true },
+  annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: false, openWorldHint: true },
   notFound: { what: 'That post', next: 'Check the post id: find it with list_posts (status draft for drafts) and call again.' },
   run: async (args, ctx) => {
     if (Date.parse(args.scheduled_at) <= Date.now()) {
