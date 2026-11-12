@@ -111,6 +111,7 @@ it('partial failure rolls back: the posts already handed over are recalled, refu
     $before = Credits::total($user);
 
     $res = sbSend($this, $user, sbItems($this, $user, $posts));
+    // The reason first, so another refusal shows what it was.
     expect([$res->json('code'), $res->json('failed_post_id') === $posts[1]->ulid ? 'second' : $res->json('reason')])->toBe(['batch_failed', 'second']);
     $res->assertStatus(409)
         ->assertJsonPath('code', 'batch_failed')

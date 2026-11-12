@@ -52,8 +52,10 @@ class SocialPostBatchController extends Controller
         $items = collect($rows);
 
         // The user's own posts only; anything else reads as not found.
+        // With their owner: the relay prices and charges through $post->user
+        // (lazy loading is off).
         $posts = SocialPost::query()->where('user_id', $user->id)
-            ->whereIn('ulid', $items->pluck('post_id'))->get()->keyBy('ulid');
+            ->whereIn('ulid', $items->pluck('post_id'))->with('user')->get()->keyBy('ulid');
         $missing = $items->pluck('post_id')->reject(fn ($id) => $posts->has($id))->values()->all();
         if ($missing !== []) {
             return self::refuse('not_found', 'Some of these posts do not exist in your account.', 404, ['post_ids' => $missing]);
