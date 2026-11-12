@@ -35,6 +35,7 @@ use App\Http\Controllers\Api\V1\McpApprovalController;
 use App\Http\Controllers\Api\V1\MeController;
 use App\Http\Controllers\Api\V1\MyProfileController;
 use App\Http\Controllers\Api\V1\NotificationController;
+use App\Http\Controllers\Api\V1\OpenApiController;
 use App\Http\Controllers\Api\V1\OutstandConnectController;
 use App\Http\Controllers\Api\V1\PinterestBoardController;
 use App\Http\Controllers\Api\V1\ProfileFontController;
@@ -111,6 +112,11 @@ Route::get('/insight/export.pdf/signed', [InsightPdfExportController::class, 'si
 Route::get('/health/deep', [HealthController::class, 'deep'])
     ->middleware('throttle:30,1')
     ->name('api.v1.health.deep');
+
+// The public v1 API as OpenAPI 3.1, built from this route table.
+Route::get('/openapi.json', OpenApiController::class)
+    ->middleware('throttle:60,1')
+    ->name('api.v1.openapi');
 
 // Enterprise is contact-sales only. Auth optional; the honeypot and the
 // throttle keep it from being a spam relay to the sales inbox.
