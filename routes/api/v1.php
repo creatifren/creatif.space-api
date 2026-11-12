@@ -22,6 +22,9 @@ use App\Http\Controllers\Api\V1\InboxCommentController;
 use App\Http\Controllers\Api\V1\InboxController;
 use App\Http\Controllers\Api\V1\InboxFeedController;
 use App\Http\Controllers\Api\V1\InsightExportController;
+use App\Http\Controllers\Api\V1\InsightPdfExportController;
+use App\Http\Controllers\Api\V1\InsightReportController;
+use App\Http\Controllers\Api\V1\InsightSummaryController;
 use App\Http\Controllers\Api\V1\McpActivityController;
 use App\Http\Controllers\Api\V1\McpApprovalController;
 use App\Http\Controllers\Api\V1\MeController;
@@ -77,6 +80,12 @@ Route::get('/plans', [SubscriptionController::class, 'plans'])
 Route::get('/health', PublicHealthController::class)
     ->middleware('throttle:60,1')
     ->name('api.v1.health');
+
+// A signed Insight PDF link (POST /insight/export-link, 15 minutes): the
+// signature is the credential; the plan is checked again on use.
+Route::get('/insight/export.pdf/signed', [InsightPdfExportController::class, 'signed'])
+    ->middleware(['signed', 'throttle:10,1'])
+    ->name('api.v1.insight.export.signed');
 
 // For an external uptime monitor: every dependency, behind HEALTH_TOKEN
 // (404 when unset). /up stays the cheap public liveness probe.
@@ -513,6 +522,25 @@ Route::middleware(['auth:sanctum,mcp', EnforceTokenScope::class, EnsureNotPendin
     Route::get('/insight/export.csv', InsightExportController::class)
         ->middleware('throttle:10,1')
         ->name('api.v1.insight.export');
+    // The Insight PDF as a direct download (the app's Export menu), and a
+    // short-lived signed link to it for connected apps (MCP).
+    Route::get('/insight/export.pdf', [InsightPdfExportController::class, 'download'])
+        ->middleware('throttle:10,1')
+        ->name('api.v1.insight.export.pdf');
+    Route::post('/insight/export-link', [InsightPdfExportController::class, 'link'])
+        ->middleware('throttle:20,1')
+        ->name('api.v1.insight.export-link');
+
+    // Insight → Export PDF (design pick #8). Pro / Max; POST queues a build.
+    Route::get('/insight/clients', [InsightReportController::class, 'clients'])->name('api.v1.insight.clients');
+    Route::post('/insight/reports', [InsightReportController::class, 'store'])
+        ->middleware('throttle:10,1')
+        ->name('api.v1.insight.reports.store');
+    Route::get('/insight/reports/{insightReport}', [InsightReportController::class, 'show'])->name('api.v1.insight.reports.show');
+    // The same numbers without the PDF (MCP: get_insight_summary).
+    Route::get('/insight/summary', InsightSummaryController::class)
+        ->middleware('throttle:30,1')
+        ->name('api.v1.insight.summary');
 
     // Proof of delivery. Deliberately not gated on a plan: "on every plan"
     // is what the screen promises, and evidence is not an upsell.
@@ -556,7 +584,7 @@ Route::middleware(['auth:sanctum,mcp', EnforceTokenScope::class, EnsureNotPendin
     Route::post('/me/approvals/{post}/decision', [McpApprovalController::class, 'decide'])
         ->middleware('throttle:30,1')
         ->name('api.v1.me.approvals.decide');
-    // "Reports shared with you" — not built yet: always [] in its final shape.
+    // "Reports shared with you": Content Plans sent to my verified email (Insight share links: not built yet).
     Route::get('/me/reports/shared', [SocialApprovalController::class, 'sharedReports'])->name('api.v1.me.reports.shared');
     // Show a draft to the client on a Content Plan covering its date.
     Route::post('/social-posts/{socialPost}/review', [SocialApprovalController::class, 'markForReview'])
