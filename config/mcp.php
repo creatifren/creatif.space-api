@@ -85,5 +85,10 @@ return [
         'api.v1.inbox.feed.index' => 'read',
         'api.v1.inbox.feed.show' => 'read',
         'api.v1.inbox.feed.reply' => 'publish',
+
+        // AI caption (suggest_caption): a suggestion, nothing saved. `draft`,
+        // like writing a draft; AI_CAPTION_ENABLED and the plan gate stay in
+        // AiCaptionController (404 while off, 402 on Free).
+        'api.v1.ai.caption' => 'draft',
     ],
 ];
