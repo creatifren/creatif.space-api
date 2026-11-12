@@ -138,6 +138,8 @@ it('has no Insight read route outside the gated list (new ones must be added her
         'api.v1.insight.summary',
         // tests/Feature/Insight/InsightTopPostsTest.php: 402 on Free.
         'api.v1.insight.top-posts',
+        // tests/Feature/Insight/InsightBestTimesTest.php: 402 on Free.
+        'api.v1.insight.best-times',
         // tests/Feature/Insight/InsightPdfExportTest.php: 402 on Free.
         'api.v1.insight.export.pdf',
         'api.v1.insight.export.signed',

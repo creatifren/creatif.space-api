@@ -74,6 +74,12 @@ exports[`tool annotations > match the snapshot 1`] = `
     "openWorld": false,
     "readOnly": true,
   },
+  "get_best_times": {
+    "destructive": false,
+    "idempotent": true,
+    "openWorld": false,
+    "readOnly": true,
+  },
   "get_connect_link": {
     "destructive": false,
     "idempotent": true,

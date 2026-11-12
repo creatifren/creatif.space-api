@@ -66,6 +66,7 @@ Rate limit: 60 requests / minute / token (429 + `Retry-After`).
 | `retry_post` (post_id, confirm) — the failed channels of a post again; preview shows each `failure_code` and reason | publish | preview `GET /social-posts/{id}/retry-preview`; `confirm: true` → `POST /social-posts/{id}/retry` |
 | `get_insight_summary` (period: {month} \| {from, to} ≤ 92 days, channel_ids) — Pro / Max; Free → `plan_required` | read | `GET /insight/summary?month \| from&to&channel_ids` |
 | `list_top_posts` (period: {month} \| {from, to} ≤ 92 days, channel_ids, limit, cursor) — Pro / Max; Free → `plan_required` | read | `GET /insight/top-posts?month \| from&to&channel_ids` |
+| `get_best_times` (days 7–92, channel_ids) — Pro / Max; Free → `plan_required` | read | `GET /insight/best-times?days&channel_ids` |
 | `get_insight_report_link` (from, to ≤ 92 days, format onepage\|deck\|details, channel_ids, locale) — a 15-minute signed download link to the Insight PDF (one page, 16:9 deck or detailed); Pro / Max | read | `POST /insight/export-link` |
 | `create_insight_share_link` (from, to ≤ 92 days, channel_ids, recipient_email) — a read-only web link to an Insight report, open without an account for 30 days; with `recipient_email` that person is emailed once and sees it in `list_shared_with_me` | approve | `POST /insight/share` |
 | `revoke_insight_share_link` (share_id) — turns a shared Insight link off at once | approve | `DELETE /insight/share/{id}` |

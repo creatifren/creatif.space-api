@@ -44,6 +44,7 @@ const ARGS: Record<string, Record<string, unknown>> = {
   list_shared_with_me: {},
   get_insight_summary: { period: { month: '2026-10' } },
   list_top_posts: { period: { month: '2026-10' } },
+  get_best_times: {},
   get_insight_report_link: { from: '2026-10-01', to: '2026-10-31' },
   list_spaces: {},
   create_space_from_files: { title: 'Winter', file_ids: [ID] },

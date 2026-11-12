@@ -293,6 +293,7 @@ final class InsightCollector
             'followers_prev_delta' => $followersBefore['delta'],
             'top' => $top,
             'ranked' => $ranked,
+            'best_times' => InsightBestTimes::of($inPeriod),
             'weekly_reach' => $weekly,
             'notes' => $notes,
         ], $notes];

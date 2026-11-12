@@ -54,6 +54,7 @@
         "get_account_summary",
         "get_approval_audit",
         "get_approval_history",
+        "get_best_times",
         "get_connect_link",
         "get_credits",
         "get_insight_report_link",

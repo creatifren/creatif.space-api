@@ -49,6 +49,7 @@ in [mcp/README.md](mcp/README.md).
 | Channels | `get_connect_link` | App link to connect or reconnect a network (no token) | All |
 | Insight | `get_insight_summary` | Insight numbers for a month or up to 92 days | Pro / Max |
 | Insight | `list_top_posts` | The five most engaging posts of a period, with links | Pro / Max |
+| Insight | `get_best_times` | Best weekday + hour to post per channel, from the user’s own posts | Pro / Max |
 | Insight | `get_insight_report_link` | 15-minute download link to the Insight PDF | Pro / Max |
 | Insight | `create_insight_share_link` | Read-only report link for 30 days; optional recipient (emailed) | Pro / Max |
 | Insight | `revoke_insight_share_link` | Turn a shared report link off | Pro / Max |
