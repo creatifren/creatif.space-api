@@ -71,10 +71,26 @@ class HealthProbe
             return true;
         }
 
-        $table = (string) config('queue.connections.database.table', 'jobs');
-        $oldest = DB::table($table)->whereNull('reserved_at')->min('available_at');
-        $lag = $oldest === null ? 0 : max(0, now()->getTimestamp() - (int) $oldest);
+        return (int) self::queueLag() <= (int) config('services.ops.queue_max_lag', 600);
+    }
 
-        return $lag <= (int) config('services.ops.queue_max_lag', 600);
+    /**
+     * Seconds the oldest waiting job has waited (0 when none waits), for
+     * the database queue; null for another driver or when it cannot be read.
+     */
+    public static function queueLag(): ?int
+    {
+        if (config('queue.default') !== 'database') {
+            return null;
+        }
+
+        try {
+            $table = (string) config('queue.connections.database.table', 'jobs');
+            $oldest = DB::table($table)->whereNull('reserved_at')->min('available_at');
+        } catch (Throwable) {
+            return null;
+        }
+
+        return $oldest === null ? 0 : max(0, now()->getTimestamp() - (int) $oldest);
     }
 }

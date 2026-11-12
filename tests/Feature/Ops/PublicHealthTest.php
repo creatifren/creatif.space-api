@@ -28,6 +28,8 @@ it('answers 200 with every check ok and the deployed commit', function () {
             'db' => 'ok',
             'queue' => 'ok',
             'storage' => 'ok',
+            'queue_lag_seconds' => 0,
+            'scheduler_last_tick' => null,
             'version' => str_repeat('ab12', 10),
         ])
         ->assertHeader('Cache-Control', 'no-store, private');
@@ -61,7 +63,7 @@ it('carries no user data and no configuration', function () {
 
     $body = $this->getJson('/api/v1/health')->assertOk()->getContent();
 
-    expect(array_keys(json_decode((string) $body, true)))->toBe(['status', 'db', 'queue', 'storage', 'version'])
+    expect(array_keys(json_decode((string) $body, true)))->toBe(['status', 'db', 'queue', 'storage', 'queue_lag_seconds', 'scheduler_last_tick', 'version'])
         ->and($body)->not->toContain('someone@example.test')
         ->not->toContain('deep-token-value')
         ->not->toContain('sk_live_secret');
