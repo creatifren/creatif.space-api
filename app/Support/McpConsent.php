@@ -46,7 +46,8 @@ final class McpConsent
 
     /**
      * Enough of an address for its owner to recognise it, not enough for
-     * someone looking over their shoulder: ri***@gmail.com.
+     * someone looking over their shoulder: the first two letters and the
+     * domain, as in "ri***" at gmail.com.
      */
     public static function maskEmail(?string $email): string
     {
