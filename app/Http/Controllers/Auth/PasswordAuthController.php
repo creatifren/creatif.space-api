@@ -9,6 +9,7 @@ use App\Support\AutoHandle;
 use App\Support\ProductEvents;
 use App\Support\ReferralAttribution;
 use App\Support\SafePath;
+use App\Support\SignupAttribution;
 use App\Support\TeamInvite;
 use Illuminate\Auth\Events\PasswordReset;
 use Illuminate\Http\JsonResponse;
@@ -60,8 +61,9 @@ class PasswordAuthController extends Controller
             'utm_campaign' => ['nullable', 'string', 'max:100'],
             'utm_term' => ['nullable', 'string', 'max:100'],
             'utm_content' => ['nullable', 'string', 'max:100'],
-            // `entry` is read by ProductEvents::entryFrom: an invalid one is
-            // dropped, never a 422 that would block the signup.
+            // `entry` (ProductEvents::entryFrom) and `referrer_host` /
+            // `landing_path` (SignupAttribution::touchFrom) are read the same
+            // way: an invalid one is dropped, never a 422 that would block the signup.
         ]);
         $email = Str::lower($data['email']);
         $next = SafePath::of($data['next'] ?? null);
@@ -96,7 +98,7 @@ class PasswordAuthController extends Controller
                 ProductEvents::signedUp($user, 'email', [
                     'ref' => $data['ref'] ?? null,
                     'entry' => ProductEvents::entryFrom($request),
-                ] + ProductEvents::utmFrom($request));
+                ] + ProductEvents::utmFrom($request) + SignupAttribution::touchFrom($request));
             });
         }
 

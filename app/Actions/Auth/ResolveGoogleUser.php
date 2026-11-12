@@ -8,6 +8,7 @@ use App\Models\User;
 use App\Support\AutoHandle;
 use App\Support\ProductEvents;
 use App\Support\ReferralAttribution;
+use App\Support\SignupAttribution;
 use App\Support\TeamInvite;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
@@ -66,10 +67,13 @@ class ResolveGoogleUser
 
             $utm = $request->session()->pull('signup_utm');
             $entry = $request->session()->pull('signup_entry');
+            // Web: stashed by the redirect. Native sign-in: in the POST body.
+            $touch = $request->session()->pull('signup_touch');
             ProductEvents::signedUp($user, 'google', [
                 'ref' => is_string($code) ? $code : null,
                 'entry' => is_string($entry) ? $entry : null,
-            ] + (is_array($utm) ? $utm : []), $platform === null ? [] : ['platform' => $platform]);
+            ] + (is_array($utm) ? $utm : []) + (is_array($touch) ? $touch : SignupAttribution::touchFrom($request)),
+                $platform === null ? [] : ['platform' => $platform]);
         } elseif ($user->google_id === null) {
             // Existing (non-staff) account signing in with Google for the first time.
             $user->forceFill(['google_id' => $google->id])->save();

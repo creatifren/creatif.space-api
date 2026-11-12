@@ -11,6 +11,7 @@ use App\Http\Controllers\OAuth\SwitchAccountController;
 use App\Support\GoogleIdToken;
 use App\Support\ProductEvents;
 use App\Support\SafePath;
+use App\Support\SignupAttribution;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -54,6 +55,11 @@ class GoogleAuthController extends Controller
         $entry = ProductEvents::entryFrom($request);
         if ($entry !== null) {
             $request->session()->put('signup_entry', $entry);
+        }
+        // The first landing's referrer host and path, kept on a new account.
+        $touch = SignupAttribution::touchFrom($request);
+        if ($touch !== []) {
+            $request->session()->put('signup_touch', $touch);
         }
 
         $next = $request->query('next');
