@@ -26,6 +26,8 @@ Prompts (new): `plan_week`, `send_for_approval`, `monthly_report` (`prompts/list
 
 Changed:
 
+- The 10 most-used read tools declare an `outputSchema` and return `structuredContent` (text block kept).
+
 - `get_credits` adds this cycle's spend by action (`spend`) and days until renewal (`renewal`).
 - `update_post` takes `add_file_ids` (keep current media) as well as `file_ids` (replace).
 - CORS for browser MCP clients on `/mcp`, `/` and `/free`; Glama claim at `/.well-known/glama.json`.

@@ -261,6 +261,17 @@ reach outside creatif.space (platforms, the client's inbox, public links) are
 `openWorldHint`. `test/annotations.test.ts` checks these rules and pins every
 tool's hints in a snapshot.
 
+## Structured output
+
+`list_channels`, `list_posts`, `get_post`, `get_credits`,
+`list_waiting_approvals`, `check_approval_status`, `get_insight_summary`,
+`list_files`, `list_spaces` and `get_storage_usage` declare an `outputSchema`
+and return `structuredContent`. The same JSON is still in the text block for
+older clients. The schemas (`src/tools/outputs.ts`) name and type the fields
+agents rely on and let new fields through, so a field the API adds never
+fails a call. Error results carry no `structuredContent`; the error envelope
+is in the text.
+
 ## Prompts
 
 `prompts/list` / `prompts/get` offer three ready-made workflows. Each is one
