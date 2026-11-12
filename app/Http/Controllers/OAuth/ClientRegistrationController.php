@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\OAuth;
 
 use App\Http\Controllers\Controller;
+use App\OAuth\RedirectUris;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
@@ -49,7 +50,7 @@ class ClientRegistrationController extends Controller
         $data = $validator->validated();
 
         foreach ($data['redirect_uris'] as $uri) {
-            if (! $this->acceptableRedirect($uri)) {
+            if (! RedirectUris::acceptable($uri)) {
                 return $this->error('invalid_redirect_uri', "Redirect URI not allowed: {$uri}. Use https, a loopback http URL, or an app scheme.");
             }
         }
@@ -92,29 +93,6 @@ class ClientRegistrationController extends Controller
             'token_endpoint_auth_method' => $method,
             'scope' => implode(' ', $requested === [] ? $scopes : $requested),
         ], fn ($v) => $v !== null), 201, ['Cache-Control' => 'no-store'], JSON_UNESCAPED_SLASHES);
-    }
-
-    /**
-     * https anywhere; http only on loopback (RFC 8252 native apps); a
-     * private-use app scheme (cursor://, vscode://). Never a scheme a
-     * browser would execute or read locally, and never a fragment.
-     */
-    private function acceptableRedirect(string $uri): bool
-    {
-        $parts = parse_url($uri);
-        if ($parts === false || ! isset($parts['scheme']) || isset($parts['fragment'])) {
-            return false;
-        }
-
-        $scheme = strtolower($parts['scheme']);
-        $host = strtolower($parts['host'] ?? '');
-
-        return match (true) {
-            $scheme === 'https' => $host !== '',
-            $scheme === 'http' => in_array($host, ['localhost', '127.0.0.1', '[::1]', '::1'], true),
-            in_array($scheme, ['javascript', 'data', 'file', 'vbscript', 'blob', 'ftp', 'ws', 'wss'], true) => false,
-            default => preg_match('/^[a-z][a-z0-9+.-]*$/', $scheme) === 1,
-        };
     }
 
     private function error(string $code, string $description, int $status = 400): JsonResponse

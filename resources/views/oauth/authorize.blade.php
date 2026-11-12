@@ -57,6 +57,10 @@
 <main>
     <div class="brand">Creatif Space</div>
     <h1>{{ $client->name }} wants to connect to your account</h1>
+    @php($documentHost = \App\OAuth\ClientMetadataDocuments::hostFor($client))
+    @if ($documentHost !== null)
+        <p class="lead">This app identifies itself from <strong>{{ $documentHost }}</strong>.</p>
+    @endif
 
     <section class="account" aria-label="Account">
         <dl>
