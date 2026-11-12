@@ -97,4 +97,50 @@ export const getApprovalAudit = defineTool({
   },
 });
 
-export const auditTools = [getApprovalAudit];
+interface V1PostDecision {
+  decided_at: string | null;
+  decision: 'approved' | 'changes_requested' | 'retracted';
+  approver: { name: string | null; email: string | null };
+  comment: string | null;
+  source: 'web' | 'mcp';
+  link: { id: string; title: string | null; kind: 'plan' | 'list' } | null;
+}
+
+export const getApprovalHistory = defineTool({
+  name: 'get_approval_history',
+  title: 'Get the approval history of a post',
+  description: describeTool({
+    does: 'Returns every approval decision on one post, oldest first, across every approval link or Content Plan it was on: who decided (name, email masked), when, approved / changes requested / taken back, and their comment.',
+    when: 'when the user asks who approved a post, when, or what the client said about it. For every decision on one approval link (with full emails, as CSV) use get_approval_audit; for the post’s current approval state only, check_approval_status is shorter.',
+    example: 'get_approval_history { "post_id": "01JD…" } → { post_id, approval: "approved", decisions: [{ decided_at, decision: "changes_requested", approver: { name, email: "r***@c***.com" }, comment, source, link }] }',
+    rules: 'Read-only. Posts in the user’s own workspace only (ids from list_posts). Times are UTC. source is web (approval page) or mcp (an AI chat). The approver’s email is masked on purpose; do not try to guess it.',
+    errors: [
+      ['not_found', 'the id is not a post in this workspace: take ids from list_posts'],
+      ['scope_missing', 'reconnect and allow "read"'],
+      ['unauthorized', 'reconnect creatif.space'],
+      ['upstream_unavailable', 'call again in a minute'],
+    ],
+  }),
+  scope: 'read',
+  input: {
+    post_id: z.string().trim().min(10).max(26).describe('Post id, as list_posts returns it'),
+  },
+  annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
+  notFound: { what: 'A post in this workspace', next: 'Check the post id with list_posts and call again.' },
+  run: async (args, { v1 }) => {
+    const { data } = await v1.get<{ data: { post_id: string; approval: string | null; decisions: V1PostDecision[] } }>(
+      `/social-posts/${encodeURIComponent(args.post_id)}/approval-audit`,
+    );
+    return {
+      post_id: data.post_id,
+      approval: data.approval,
+      count: data.decisions.length,
+      decisions: data.decisions,
+      note: data.decisions.length === 0
+        ? 'Nobody has decided on this post yet.'
+        : 'Oldest first; times are UTC. The approver email is masked.',
+    };
+  },
+});
+
+export const auditTools = [getApprovalAudit, getApprovalHistory];

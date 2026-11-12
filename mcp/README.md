@@ -80,6 +80,7 @@ Rate limit: 60 requests / minute / token (429 + `Retry-After`).
 | `list_spaces` (status draft\|published\|archived, search, limit) — Pro/Max | read | `GET /spaces?tab&search` |
 | `create_space_from_files` (title, file_ids 1–100, view_mode) — always a Draft+Private Space, never published; Pro/Max | draft | `POST /spaces` with `file_ids` (checked before anything is created) |
 | `publish_space` (space_id, confirm) — Pro/Max | publish | preview `GET /spaces/{id}/publish-preview`; `confirm: true` → `POST /spaces/{id}/publish` |
+| `get_approval_history` (post_id) — every decision on one post, oldest first: who (email masked), when, decision, comment | read | `GET /social-posts/{id}/approval-audit` |
 | `get_plan_calendar_link` (link_id) — ICS feed URL of a Content Plan (scheduled posts, first 60 characters of the caption); read-only, stable URL | read | `GET /social-approval-links/{id}/calendar` |
 | `get_approval_audit` (link_id) — every decision on one of the user's links: who, post, when, decision, comment; rows and CSV | read | `GET /social-approval-links/{id}/audit.csv` |
 | `send_feedback` (kind bug\|idea\|other, message, page) — to the creatif.space team; nothing public, no Credits; 10 an hour per user | draft | `POST /feedback` |
@@ -192,9 +193,10 @@ without opening the approval page.
 | `list_waiting_approvals` | Every post still waiting on the user's decision, with the link id and post id to decide with. |
 | `decide_approval` | Approve, or request changes with a reason. Always shows a preview first; decides only with `confirm: true` after the user agrees. |
 
-The owner's side has one more: `get_approval_audit` (scope `read`) — who
+The owner's side has two more (scope `read`): `get_approval_audit` — who
 decided what and when, with the comment, as rows and CSV, for one of the
-owner's own links.
+owner's own links — and `get_approval_history` — the same for one post,
+across every link it was on, with the approver's email masked.
 
 Rules the tools keep (the API enforces them; the tools only explain them):
 
