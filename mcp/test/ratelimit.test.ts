@@ -46,6 +46,7 @@ const ARGS: Record<string, Record<string, unknown>> = {
   create_space_from_files: { title: 'Winter', file_ids: [ID] },
   publish_space: { space_id: ID },
   get_approval_audit: { link_id: ID },
+  get_approval_history: { post_id: ID },
   get_plan_calendar_link: { link_id: ID },
   get_connect_link: { network: 'instagram' },
   send_feedback: { kind: 'idea', message: 'More filters please' },

@@ -87,6 +87,7 @@ return [
     'api.v1.social-posts.comments.store' => 'Comment on a post',
     'api.v1.social-comments.resolve' => 'Resolve a comment',
     'api.v1.social-comments.apply' => 'Apply a comment\'s suggested caption',
+    'api.v1.social-posts.approval-audit' => 'Every approval decision on a post (approver email masked)',
     'api.v1.social-posts.approval-link' => 'The approval link a post is on',
     'api.v1.social-approval-links.index' => 'List approval links and Content Plans',
     'api.v1.social-approval-links.store' => 'Create an approval link or Content Plan',

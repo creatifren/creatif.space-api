@@ -39,6 +39,7 @@ use App\Http\Controllers\Api\V1\OpenApiController;
 use App\Http\Controllers\Api\V1\OutstandConnectController;
 use App\Http\Controllers\Api\V1\PinterestBoardController;
 use App\Http\Controllers\Api\V1\PlanCalendarController;
+use App\Http\Controllers\Api\V1\PostApprovalAuditController;
 use App\Http\Controllers\Api\V1\ProfileFontController;
 use App\Http\Controllers\Api\V1\PublicApprovalController;
 use App\Http\Controllers\Api\V1\PublicHealthController;
@@ -415,13 +416,20 @@ Route::middleware(['auth:sanctum,mcp', EnforceTokenScope::class, EnsureNotPendin
     Route::post('/social-comments/{socialPostComment}/apply', [SocialApprovalController::class, 'applySuggestion'])
         ->name('api.v1.social-comments.apply');
     Route::get('/social-posts/{socialPost}/approval-link', [SocialApprovalController::class, 'linkFor'])
+        ->middleware('throttle:60,1')
         ->name('api.v1.social-posts.approval-link');
+    // Every approval decision on the post (post detail; MCP get_approval_history).
+    Route::get('/social-posts/{socialPost}/approval-audit', PostApprovalAuditController::class)
+        ->middleware('throttle:60,1')
+        ->name('api.v1.social-posts.approval-audit');
     Route::get('/social-approval-links', [SocialApprovalController::class, 'links'])
+        ->middleware('throttle:60,1')
         ->name('api.v1.social-approval-links.index');
     Route::post('/social-approval-links', [SocialApprovalController::class, 'link'])
         ->middleware('throttle:30,1')
         ->name('api.v1.social-approval-links.store');
     Route::get('/social-approval-links/{socialApprovalLink}', [SocialApprovalController::class, 'show'])
+        ->middleware('throttle:60,1')
         ->name('api.v1.social-approval-links.show');
     // Who decided what, when, and their comment (MCP get_approval_audit).
     Route::get('/social-approval-links/{socialApprovalLink}/audit.csv', ApprovalAuditController::class)
@@ -439,20 +447,25 @@ Route::middleware(['auth:sanctum,mcp', EnforceTokenScope::class, EnsureNotPendin
         ->name('api.v1.social-approval-links.remind');
     // The plan's calendar feed: URL (GET, MCP get_plan_calendar_link), on / new URL (POST), off (DELETE).
     Route::get('/social-approval-links/{socialApprovalLink}/calendar', [PlanCalendarController::class, 'show'])
+        ->middleware('throttle:60,1')
         ->name('api.v1.social-approval-links.calendar.show');
     Route::post('/social-approval-links/{socialApprovalLink}/calendar', [PlanCalendarController::class, 'store'])
         ->middleware('throttle:30,1')
         ->name('api.v1.social-approval-links.calendar.store');
     Route::delete('/social-approval-links/{socialApprovalLink}/calendar', [PlanCalendarController::class, 'destroy'])
+        ->middleware('throttle:30,1')
         ->name('api.v1.social-approval-links.calendar.destroy');
     Route::delete('/social-approval-links/{socialApprovalLink}', [SocialApprovalController::class, 'revoke'])
+        ->middleware('throttle:30,1')
         ->name('api.v1.social-approval-links.destroy');
     Route::get('/social-plan-links', [SocialPlanLinkController::class, 'index'])
+        ->middleware('throttle:60,1')
         ->name('api.v1.social-plan-links.index');
     Route::post('/social-plan-links', [SocialPlanLinkController::class, 'store'])
         ->middleware('throttle:30,1')
         ->name('api.v1.social-plan-links.store');
     Route::delete('/social-plan-links/{socialPlanLink}', [SocialPlanLinkController::class, 'destroy'])
+        ->middleware('throttle:30,1')
         ->name('api.v1.social-plan-links.destroy');
     Route::delete('/social-posts/{socialPost}', [SocialPostController::class, 'destroy'])->name('api.v1.social-posts.destroy');
 
@@ -658,7 +671,8 @@ Route::middleware(['auth:sanctum,mcp', EnforceTokenScope::class, EnsureNotPendin
 
     // "Waiting your approval": links sent to my (verified) email with posts
     // still waiting on my decision.
-    Route::get('/me/approvals/waiting', [SocialApprovalController::class, 'waiting'])->name('api.v1.me.approvals.waiting');
+    Route::get('/me/approvals/waiting', [SocialApprovalController::class, 'waiting'])
+        ->middleware('throttle:60,1')->name('api.v1.me.approvals.waiting');
     // Deciding from an MCP client (decide_approval): preview → confirm_token → decide.
     Route::get('/me/approvals/{post}/preview', [McpApprovalController::class, 'preview'])
         ->middleware('throttle:60,1')
@@ -666,8 +680,9 @@ Route::middleware(['auth:sanctum,mcp', EnforceTokenScope::class, EnsureNotPendin
     Route::post('/me/approvals/{post}/decision', [McpApprovalController::class, 'decide'])
         ->middleware('throttle:30,1')
         ->name('api.v1.me.approvals.decide');
-    // "Reports shared with you": Content Plans sent to my verified email (Insight share links are token-only, addressed to nobody, so they are not listed).
-    Route::get('/me/reports/shared', [SocialApprovalController::class, 'sharedReports'])->name('api.v1.me.reports.shared');
+    // "Reports shared with you": Content Plans sent to my verified email and Insight share links made with my email as recipient.
+    Route::get('/me/reports/shared', [SocialApprovalController::class, 'sharedReports'])
+        ->middleware('throttle:60,1')->name('api.v1.me.reports.shared');
     // Show a draft to the client on a Content Plan covering its date.
     Route::post('/social-posts/{socialPost}/review', [SocialApprovalController::class, 'markForReview'])
         ->middleware('throttle:60,1')

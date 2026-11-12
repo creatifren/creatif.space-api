@@ -102,6 +102,7 @@ describe('401 flow', () => {
         'get_insight_report_link',
         'list_spaces', 'create_space_from_files', 'publish_space',
         'get_approval_audit',
+        'get_approval_history',
         'get_connect_link',
         'send_feedback',
         'create_insight_share_link', 'revoke_insight_share_link',
