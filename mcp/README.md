@@ -57,6 +57,7 @@ Rate limit: 60 requests / minute / token (429 + `Retry-After`).
 | `get_credits` | read | `GET /credits` |
 | `create_approval_link` (post_ids — or a Content Plan: date_from, date_to, timezone, channel_ids — **approver_email** (required — the client signs in with it to decide), title, client_name, expires_in_hours) — every plan; Free: one client (by approver_email), 7-day window, 10 queued | approve | `POST /social-approval-links` (drafts accepted) |
 | `check_approval_status` (post_id \| link_id) | read | `GET /social-posts/{id}` or `GET /social-approval-links/{id}` |
+| `send_approval_reminder` (link_id) | approve | `POST /social-approval-links/{id}/remind` (one per link per 12 h) |
 | `update_post` (caption, scheduled_at, labels, file_ids \| add_file_ids) | draft (drafts and posts waiting for approval only) | `PATCH /social-posts/{id}` |
 | `schedule_post` (post_id, scheduled_at, confirm) | publish | preview `GET /social-posts/{id}/send-preview`; `confirm: true` → `POST /social-posts/{id}/send` |
 | `publish_post` (post_id, confirm) | publish | same, sends now |

@@ -44,7 +44,7 @@ use Illuminate\Support\Str;
  */
 class SocialApprovalLink extends Model implements WorkspaceOwned
 {
-    protected $fillable = ['user_id', 'token', 'title', 'client_name', 'approver_email', 'approver_bound_at', 'scope_from', 'scope_to', 'scope_timezone', 'scope_starts_at', 'scope_ends_at', 'scope_account_ids', 'expires_at', 'extended_at', 'revoked_at'];
+    protected $fillable = ['user_id', 'token', 'title', 'client_name', 'approver_email', 'approver_bound_at', 'scope_from', 'scope_to', 'scope_timezone', 'scope_starts_at', 'scope_ends_at', 'scope_account_ids', 'expires_at', 'extended_at', 'last_reminded_at', 'revoked_at'];
 
     public function expired(): bool
     {
@@ -79,6 +79,7 @@ class SocialApprovalLink extends Model implements WorkspaceOwned
         return [
             'expires_at' => 'datetime',
             'extended_at' => 'datetime',
+            'last_reminded_at' => 'datetime',
             'revoked_at' => 'datetime',
             'approver_bound_at' => 'datetime',
             'scope_from' => 'date',

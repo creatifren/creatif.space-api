@@ -343,6 +343,60 @@ export const checkApprovalStatus = defineTool({
   },
 });
 
+export const sendApprovalReminder = defineTool({
+  name: 'send_approval_reminder',
+  title: 'Send an approval reminder',
+  description: describeTool({
+    does: "Emails the client (the link's approver) a reminder to review the posts still waiting on an approval link — the same link, sent once more.",
+    when: "when the user wants to nudge a client who has not answered yet. Use check_approval_status with link_id first to see what is still waiting; do not make a new link to remind someone.",
+    example: "send_approval_reminder { \"link_id\": \"01JL…\" } → { reminder: { link_id, reminded_at, next_reminder_at, waiting } }",
+    rules: "At most one reminder per link every 12 hours. Only a live link (not revoked or expired) with an approver email and at least one post still waiting can be reminded.",
+    errors: [
+      ["rate_limited", "details.reason reminder_too_soon: a reminder already went out; tell the user the next one can go at details.next_reminder_at, do not retry before then"],
+      ["invalid_input", "details.reason nothing_waiting, no_approver or link_not_live: tell the user (nothing left to answer, no approver email on an old link, or the link is revoked/expired), do not retry"],
+      ["not_found", "link ids come from create_approval_link"],
+      ["scope_missing", "reconnect and allow \"approve\""],
+      ["upstream_unavailable", "check_approval_status shows last_reminded_at before calling again"],
+    ],
+  }),
+  scope: 'approve',
+  input: {
+    link_id: ulid('Approval link'),
+  },
+  annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: true },
+  notFound: { what: 'That approval link', next: 'Check the link id: it comes from create_approval_link (or check_approval_status). Call again with a valid id.' },
+  run: async (args, { v1 }) => {
+    try {
+      const { data } = await v1.post<{ data: { link_id: string; reminded_at: string; next_reminder_at: string; waiting: number } }>(
+        `/social-approval-links/${encodeURIComponent(args.link_id)}/remind`,
+        {},
+      );
+      return {
+        reminder: data,
+        note: `The client was emailed a reminder about ${data.waiting === 1 ? 'one post' : `${data.waiting} posts`} on this link. The next reminder can go from next_reminder_at.`,
+      };
+    } catch (e) {
+      const code = e instanceof V1Error ? e.body?.code : undefined;
+      const message = e instanceof V1Error && typeof e.body?.message === 'string' ? e.body.message : undefined;
+      if (e instanceof V1Error && e.status === 429 && code === 'reminder_too_soon') {
+        throw new ToolError(
+          'rate_limited',
+          message ?? 'A reminder went out less than 12 hours ago.',
+          'Tell the user a reminder was already sent; the next one can go at details.next_reminder_at. Do not retry before then.',
+          { reason: 'reminder_too_soon', next_reminder_at: e.body?.next_reminder_at ?? null, retryable: false },
+        );
+      }
+      if (e instanceof V1Error && e.status === 422 && (code === 'nothing_waiting' || code === 'no_approver' || code === 'link_not_live')) {
+        throw new ToolError('invalid_input', message ?? 'This link cannot be reminded.', 'Tell the user this message as it is; do not retry.', {
+          reason: code,
+          link_id: args.link_id,
+        });
+      }
+      throw e;
+    }
+  },
+});
+
 /** The post's current media as the API takes it back: url, plus a video cover when there is one. */
 const keptMedia = (post: V1Post) =>
   (post.media ?? []).map((m) => ({ url: m.url, ...(m.thumbnail_url ? { thumbnail_url: m.thumbnail_url } : {}) }));
@@ -497,4 +551,4 @@ export const publishPost = defineTool({
   },
 });
 
-export const m2Tools = [createApprovalLink, checkApprovalStatus, updatePost, schedulePost, publishPost];
+export const m2Tools = [createApprovalLink, checkApprovalStatus, sendApprovalReminder, updatePost, schedulePost, publishPost];

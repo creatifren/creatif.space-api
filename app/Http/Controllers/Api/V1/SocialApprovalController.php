@@ -15,6 +15,7 @@ use App\Models\SocialApprovalLink;
 use App\Models\SocialPost;
 use App\Models\SocialPostComment;
 use App\Models\User;
+use App\Notifications\ApprovalReminder;
 use App\Support\Credits;
 use App\Support\PlanQuota;
 use App\Support\PlanScope;
@@ -27,6 +28,7 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Notification;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
 use Throwable;
@@ -482,6 +484,59 @@ class SocialApprovalController extends Controller
      * owner (awaiting) unless another link still asks for them; approved
      * posts stay approved and a request for changes stays on the to-do.
      */
+    /** One reminder per link per this many hours. */
+    public const REMIND_EVERY_HOURS = 12;
+
+    /**
+     * POST /social-approval-links/{id}/remind — "Send a reminder": email the
+     * approver once more about the posts still waiting on this link, at most
+     * once every 12 hours. 422 when there is no one to remind or nothing to
+     * remind about; 429 reminder_too_soon (with next_reminder_at) inside the
+     * 12 hours. The claim is one conditional UPDATE, so two clicks at once
+     * send one email.
+     */
+    public function remind(Request $request, SocialApprovalLink $socialApprovalLink): JsonResponse
+    {
+        self::writable($request->user(), $socialApprovalLink->user_id);
+        $link = $socialApprovalLink;
+
+        if ($link->revoked_at !== null || $link->expired()) {
+            return response()->json(['message' => 'This link is no longer live — make a new one, or extend it first.', 'code' => 'link_not_live'], 422);
+        }
+        if ($link->approver_email === null) {
+            return response()->json(['message' => 'This link has no approver email to remind.', 'code' => 'no_approver'], 422);
+        }
+        $waiting = (int) $this->linkArray($this->withCounts($link))['by_state'][PlanScope::STATE_WAITING];
+        if ($waiting < 1) {
+            return response()->json(['message' => 'Nothing on this link is waiting for an answer.', 'code' => 'nothing_waiting'], 422);
+        }
+
+        $now = now();
+        $claimed = SocialApprovalLink::query()
+            ->whereKey($link->getKey())
+            ->where(fn ($q) => $q->whereNull('last_reminded_at')
+                ->orWhere('last_reminded_at', '<=', $now->copy()->subHours(self::REMIND_EVERY_HOURS)))
+            ->update(['last_reminded_at' => $now]);
+        if ($claimed === 0) {
+            $next = $link->fresh()?->last_reminded_at?->copy()->addHours(self::REMIND_EVERY_HOURS);
+
+            return response()->json([
+                'message' => 'A reminder went out less than '.self::REMIND_EVERY_HOURS.' hours ago.',
+                'code' => 'reminder_too_soon',
+                'next_reminder_at' => $next?->toIso8601String(),
+            ], 429, $next ? ['Retry-After' => (string) max(1, $now->diffInSeconds($next, true))] : []);
+        }
+
+        Notification::route('mail', $link->approver_email)->notify(new ApprovalReminder($link->fresh() ?? $link, $waiting));
+
+        return response()->json(['data' => [
+            'link_id' => $link->ulid,
+            'reminded_at' => $now->toIso8601String(),
+            'next_reminder_at' => $now->copy()->addHours(self::REMIND_EVERY_HOURS)->toIso8601String(),
+            'waiting' => $waiting,
+        ]]);
+    }
+
     public function revoke(Request $request, SocialApprovalLink $socialApprovalLink): JsonResponse
     {
         self::writable($request->user(), $socialApprovalLink->user_id);
@@ -679,6 +734,9 @@ class SocialApprovalController extends Controller
             'extended_at' => $link->extended_at?->toIso8601String(),
             'revoked_at' => $link->revoked_at?->toIso8601String(),
             'created_at' => $link->created_at?->toIso8601String(),
+            // Send a reminder: when the last one went, and when the next may.
+            'last_reminded_at' => $link->last_reminded_at?->toIso8601String(),
+            'next_reminder_at' => $link->last_reminded_at?->copy()->addHours(self::REMIND_EVERY_HOURS)->toIso8601String(),
         ];
     }
 
