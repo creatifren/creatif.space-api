@@ -373,6 +373,41 @@ final class Credits
             ->count();
     }
 
+    /**
+     * Credits spent this cycle, by what they paid for: publish (sends, less
+     * what failed or cancelled destinations gave back), reply (Inbox
+     * replies, less refused ones) and ai (AI captions — free today, so 0;
+     * kept in the shape so it never needs to change). Both buckets.
+     *
+     * @return array{publish: int, reply: int, ai: int, total: int}
+     */
+    public static function spendThisCycle(User $user): array
+    {
+        $owner = self::owner($user);
+
+        $sums = WalletTransaction::query()
+            ->where('user_id', $owner->id)
+            ->whereIn('wallet', [Wallet::CREDITS, Wallet::MONTHLY])
+            ->where('created_at', '>=', self::cycleSince($owner))
+            ->whereIn('type', [
+                WalletTransactionType::CreditsSend->value,
+                WalletTransactionType::CreditsSendReturn->value,
+                WalletTransactionType::CreditsReply->value,
+                WalletTransactionType::CreditsReplyReturn->value,
+            ])
+            ->groupBy('type')
+            ->selectRaw('type, SUM(amount) as total')
+            // Base query: raw strings, not the enum cast, as keys.
+            ->toBase()
+            ->pluck('total', 'type');
+
+        $spent = fn (WalletTransactionType ...$types) => max(0, -1 * (int) collect($types)->sum(fn ($t) => (int) ($sums[$t->value] ?? 0)));
+        $publish = $spent(WalletTransactionType::CreditsSend, WalletTransactionType::CreditsSendReturn);
+        $reply = $spent(WalletTransactionType::CreditsReply, WalletTransactionType::CreditsReplyReturn);
+
+        return ['publish' => $publish, 'reply' => $reply, 'ai' => 0, 'total' => $publish + $reply];
+    }
+
     /** @deprecated the allowance became Monthly Credits; same cycle. */
     public static function allowanceSince(User $owner): CarbonImmutable
     {

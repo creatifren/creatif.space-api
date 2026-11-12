@@ -242,13 +242,37 @@ interface CommittedCredits {
   sends_monthly: number;
 }
 
+interface SpendBlock {
+  since?: string;
+  by_action?: { publish?: number; reply?: number; ai?: number; total?: number };
+}
+
+/** This cycle's Credits by action, as the API counts them (undefined from an older API). */
+function spendThisMonth(spend: SpendBlock | undefined) {
+  if (!spend?.by_action) return undefined;
+  const a = spend.by_action;
+  return {
+    since: spend.since ?? null,
+    by_action: { publish: a.publish ?? 0, reply: a.reply ?? 0, ai: a.ai ?? 0 },
+    total: a.total ?? (a.publish ?? 0) + (a.reply ?? 0) + (a.ai ?? 0),
+  };
+}
+
+/** Whole days until the Monthly Credits renew (0 on the day itself). */
+export function renewal(resetsAt: string | undefined, now: number = Date.now()) {
+  if (!resetsAt) return undefined;
+  const at = Date.parse(resetsAt);
+  if (Number.isNaN(at)) return undefined;
+  return { resets_at: resetsAt, days_until: Math.max(0, Math.ceil((at - now) / 86_400_000)) };
+}
+
 export const getCredits = defineTool({
   name: 'get_credits',
   title: 'Get plan, limits and Credits',
   description: describeTool({
     does: "Gets the workspace’s creatif.space plan, its limits and its Credits — everything that decides what can be sent.",
-    when: "before schedule_post or publish_post when the user asks what they can afford or why something was refused. It returns, as set on the plan: plan name; this month’s posts vs the plan’s monthly figure; connected channels used vs allowed; scheduling (days ahead allowed, queued posts — scheduled or waiting for approval — used vs allowed); approval clients used vs allowed; features (approval links, analytics, AI captions, Spaces…); Credits (Monthly, when they reset, Top-up, total, committed to scheduled posts); the Credit price per send by platform; and how many sends connected apps have left today (cap 20/day).",
-    example: "get_credits {} → { plan: { key: \"free\" }, credits: { monthly, topup, resets_at, committed }, price_per_send, scheduling, approval_clients, mcp_daily_sends }",
+    when: "before schedule_post or publish_post when the user asks what they can afford or why something was refused. It returns, as set on the plan: plan name; this month’s posts vs the plan’s monthly figure; connected channels used vs allowed; scheduling (days ahead allowed, queued posts — scheduled or waiting for approval — used vs allowed); approval clients used vs allowed; features (approval links, analytics, AI captions, Spaces…); Credits (Monthly, when they reset, Top-up, total, committed to scheduled posts); the Credit price per send by platform; how many sends connected apps have left today (cap 20/day); this month’s Credit spend by action (publish, reply, ai — AI captions are free today, so ai is 0); and the days until the Monthly Credits renew.",
+    example: "get_credits {} → { plan: { key: \"free\" }, credits: { monthly, topup, resets_at, committed }, price_per_send, scheduling, approval_clients, mcp_daily_sends, spend: { since, by_action: { publish, reply, ai }, total }, renewal: { resets_at, days_until } }",
     rules: "Every plan, Free included, can use this server: sending spends Credits. Free schedules up to 7 days ahead, holds up to 10 queued posts and has approval links for one client; null means no limit (Pro, Max).",
     errors: [
       ["unauthorized", "ask the user to reconnect the creatif.space connector"],
@@ -276,6 +300,8 @@ export const getCredits = defineTool({
       features: limits.features,
       mcp_daily_sends: limits.mcp_daily_sends,
       urls: limits.urls,
+      spend: spendThisMonth(limits.spend as SpendBlock | undefined),
+      renewal: renewal((limits.credits as { resets_at?: string } | undefined)?.resets_at),
     };
   },
 });
