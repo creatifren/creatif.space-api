@@ -3,7 +3,7 @@
   "name": "io.github.creatifren/creatif-space",
   "title": "Creatif Space",
   "description": "Get content approved & published faster: draft, send approval links and publish from your AI chat.",
-  "version": "1.2.1",
+  "version": "1.2.2",
   "websiteUrl": "https://creatif.space/mcp",
   "repository": {
     "url": "https://github.com/creatifren/creatif.space-api",

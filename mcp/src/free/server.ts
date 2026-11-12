@@ -10,9 +10,13 @@ import { checkCaption, checkCaptionInput } from './checkCaption.js';
 import { connectGuide, connectInput } from './connect.js';
 import { ctaLine, type FreeToolName } from './cta.js';
 
+/** The Pen Rocket, as in free-tools/server.json (served by the web app). */
+export const FREE_SERVER_ICONS = [{ src: 'https://creatif.space/icons/icon-512.png', mimeType: 'image/png', sizes: ['512x512'] }];
+
 export const FREE_SERVER_INFO = {
   name: 'Creatif Space Free Tools',
   version: '1.0.0',
+  icons: FREE_SERVER_ICONS,
   description: 'Free caption checks, client approval templates and connect guides for social media managers. No sign-in.',
 };
 
