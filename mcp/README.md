@@ -160,6 +160,86 @@ replies `reply_window_closed`, `reply_rejected`, `reply_not_possible`,
 Each call emits PostHog `mcp_tool_called` `{tool, client_name, ok, ms}` (plus
 `error` code on failure) — never content. Skipped when `POSTHOG_KEY` is unset.
 
+## Approve from your AI chat
+
+For the **client** — the person a creatif.space user sent posts or a Content
+Plan to for approval. They connect creatif.space to Claude or ChatGPT with
+their own account (the email the link was sent to), allow **Decide approvals**
+(`approvals:decide`) on the consent screen, and can then review and decide
+without opening the approval page.
+
+| Tool | What it does |
+|---|---|
+| `list_shared_with_me` | "Reports shared with you": Content Plans sent to the user's verified email — title, dates, who sent it, link, how many posts wait. |
+| `list_waiting_approvals` | Every post still waiting on the user's decision, with the link id and post id to decide with. |
+| `decide_approval` | Approve, or request changes with a reason. Always shows a preview first; decides only with `confirm: true` after the user agrees. |
+
+The owner's side has one more: `get_approval_audit` (scope `read`) — who
+decided what and when, with the comment, as rows and CSV, for one of the
+owner's own links.
+
+Rules the tools keep (the API enforces them; the tools only explain them):
+
+- Only links addressed to the user's **verified email**. Anyone else gets
+  `forbidden` with a hint of the expected address; an id from another
+  workspace is `not_found`.
+- Two steps for every decision: preview, then confirm. The confirm carries a
+  signed token (10 minutes) over the exact post the user saw; if the post was
+  edited in between, the answer is `preview_stale` with the new preview and
+  nothing is decided. The token never reaches the model.
+- Same rules as the approval page: the post must be in the plan's dates and
+  channels and still waiting; on a Free sender's plan only the next 7 days
+  can be decided (`invalid_input` with `decidable_from`).
+- Every decision is audited with `source: mcp`, and the sender is notified
+  exactly as from the page.
+- A day before the first waiting post goes out, the approver gets one
+  reminder email (once per plan; they can turn it off from the email, or the
+  owner with `PATCH /social-approval-links/{id}` `{reminders: false}`).
+
+### Example conversation
+
+> **Rani:** Anything I need to approve this week?
+>
+> *Claude calls `list_shared_with_me` and `list_waiting_approvals`.*
+>
+> **Claude:** Bro shared one Content Plan with you, **December**
+> (1–31 Dec, Asia/Jakarta). Two posts are waiting for you:
+> 1. "Launch day — 20% off everything…" — Instagram, Wed 2 Dec 09:00
+> 2. "Behind the scenes at the studio" — Instagram, Fri 4 Dec 18:00
+>
+> **Rani:** Approve the first one. For the second, ask them to use the photo
+> with the team in it.
+>
+> *Claude calls `decide_approval` with `decision: "approve"` for post 1 and
+> `decision: "revise"`, `reason: "Please use the photo with the team in it"`
+> for post 2 — both without `confirm`, so both come back as previews.*
+>
+> **Claude:** Here's what I'll do:
+> - **Approve** "Launch day…" — it will go out on Instagram on Wed 2 Dec at 09:00.
+> - **Request changes** on "Behind the scenes…", telling Bro: "Please use
+>   the photo with the team in it."
+>
+> Shall I go ahead?
+>
+> **Rani:** Yes.
+>
+> *Claude calls `decide_approval` again with the same arguments and
+> `confirm: true`, once per post.*
+>
+> **Claude:** Done. "Launch day…" is approved and goes out Wednesday 09:00;
+> Bro has your note on "Behind the scenes…". Nothing else is waiting.
+
+And on the owner's side, later:
+
+> **Bro:** Who approved the December launch post, and when?
+>
+> *Claude calls `get_approval_audit` with the plan's link id.*
+>
+> **Claude:** Rani (rani@client.test) asked for changes on "Behind the
+> scenes…" on 1 Dec at 03:10 UTC ("Please use the photo with the team in it")
+> and approved "Launch day…" at 03:10 UTC, both from an AI chat. Want the
+> CSV?
+
 ## Free Tools (`/free`)
 
 A second, stateless MCP server on the same process: `check_caption`,
