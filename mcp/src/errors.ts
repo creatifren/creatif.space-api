@@ -6,6 +6,7 @@ export type ErrorCode =
   | 'plan_required'
   | 'not_found'
   | 'unknown_tool'
+  | 'not_enabled'
   | 'invalid_input'
   | 'unauthorized'
   | 'forbidden'
@@ -293,13 +294,16 @@ export function toToolError(e: unknown, notFound: NotFound = DEFAULT_NOT_FOUND):
             { reason: 'refused' },
           );
     }
-    case 429:
+    case 429: {
+      // The API says how long (bootstrap/app.php: {message, retry_after}).
+      const after = typeof body.retry_after === 'number' && body.retry_after > 0 ? Math.ceil(body.retry_after) : 60;
       return new ToolError(
         'rate_limited',
         'creatif.space is rate limiting these requests.',
-        'Wait a minute before calling again; do not loop.',
-        { retryable: true, retry_after_seconds: 60 },
+        `Wait ${after} seconds (details.retry_after_seconds) before calling again; do not loop.`,
+        { retryable: true, retry_after_seconds: after },
       );
+    }
     default:
       return new ToolError(
         'upstream_unavailable',
@@ -322,6 +326,15 @@ function mediaError(status: number, body: Record<string, unknown>, message: stri
   const billing = str(body.billing_url);
   const files = str(body.files_url);
 
+  // Keep on Free: not a full quota but a paid feature (Free has no Keep).
+  if (reason === 'quota_exceeded' && body.feature === 'keep_quota' && body.next_step === 'upgrade_pro') {
+    return new ToolError(
+      'plan_required',
+      message,
+      `Nothing was kept. Tell the user Keep is on Pro and Max${billing ? ` (upgrade: ${billing})` : ''}; on Free, files used by a published post are removed after it goes out. Do not retry.`,
+      { reason: 'plan_limit', ...pick(body, ['feature', 'next_step', 'billing_url', 'files_url']) },
+    );
+  }
   if (reason === 'quota_exceeded' && (body.feature === 'media_quota' || body.feature === 'keep_quota')) {
     const freeUp =
       body.feature === 'media_quota'

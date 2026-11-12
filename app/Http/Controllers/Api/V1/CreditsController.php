@@ -124,6 +124,11 @@ class CreditsController extends Controller
                 'total' => Credits::total($user),
                 'resets_at' => Credits::cycleEnds($owner)->toIso8601String(),
             ],
+            // This cycle's Credits by what they paid for (get_credits).
+            'spend' => [
+                'since' => Credits::cycleSince($owner)->toIso8601String(),
+                'by_action' => Credits::spendThisCycle($user),
+            ],
             'price_per_send' => [
                 'default' => Credits::perSend(),
                 'by_platform' => Credits::perSendByPlatform(),

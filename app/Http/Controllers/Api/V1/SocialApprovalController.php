@@ -15,6 +15,7 @@ use App\Models\SocialApprovalLink;
 use App\Models\SocialPost;
 use App\Models\SocialPostComment;
 use App\Models\User;
+use App\Notifications\ApprovalReminder;
 use App\Support\Credits;
 use App\Support\PlanQuota;
 use App\Support\PlanScope;
@@ -27,6 +28,7 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Notification;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
 use Throwable;
@@ -283,6 +285,8 @@ class SocialApprovalController extends Controller
             'timezone' => ['sometimes', 'nullable', 'string', 'timezone:all'],
             'channel_ids' => ['sometimes', 'nullable', 'array', 'max:20'],
             'channel_ids.*' => ['string', 'max:26', 'distinct'],
+            // Content Plan reminder email to the approver, on or off.
+            'reminders' => ['sometimes', 'boolean'],
         ]);
 
         $link = $socialApprovalLink;
@@ -341,6 +345,9 @@ class SocialApprovalController extends Controller
 
         DB::transaction(function () use ($link, $validated, $add, $remove, $scope): void {
             $fields = array_intersect_key($validated, array_flip(['title', 'client_name', 'approver_email']));
+            if (array_key_exists('reminders', $validated)) {
+                $fields['reminders_enabled'] = (bool) $validated['reminders'];
+            }
             if (isset($fields['approver_email'])) {
                 // Re-addressed by the owner: no longer a first-use binding.
                 $fields['approver_bound_at'] = null;
@@ -482,6 +489,64 @@ class SocialApprovalController extends Controller
      * owner (awaiting) unless another link still asks for them; approved
      * posts stay approved and a request for changes stays on the to-do.
      */
+    /** One reminder per link per this many hours. */
+    public const REMIND_EVERY_HOURS = 12;
+
+    /**
+     * POST /social-approval-links/{id}/remind — "Send a reminder": email the
+     * approver once more about the posts still waiting on this link, at most
+     * once every 12 hours. 422 when there is no one to remind or nothing to
+     * remind about; 429 reminder_too_soon (with next_reminder_at) inside the
+     * 12 hours. The claim is one conditional UPDATE, so two clicks at once
+     * send one email.
+     */
+    public function remind(Request $request, SocialApprovalLink $socialApprovalLink): JsonResponse
+    {
+        self::writable($request->user(), $socialApprovalLink->user_id);
+        $link = $socialApprovalLink;
+
+        if ($link->revoked_at !== null || $link->expired()) {
+            return response()->json(['message' => 'This link is no longer live — make a new one, or extend it first.', 'code' => 'link_not_live'], 422);
+        }
+        if ($link->approver_email === null) {
+            return response()->json(['message' => 'This link has no approver email to remind.', 'code' => 'no_approver'], 422);
+        }
+        // The approver turned reminders off for this link (the Content Plan
+        // reminder's one-click opt-out, #102): that covers these too.
+        if (! $link->remindersOn()) {
+            return response()->json(['message' => 'Your client turned reminders off for this link.', 'code' => 'reminders_off'], 422);
+        }
+        $waiting = (int) $this->linkArray($this->withCounts($link))['by_state'][PlanScope::STATE_WAITING];
+        if ($waiting < 1) {
+            return response()->json(['message' => 'Nothing on this link is waiting for an answer.', 'code' => 'nothing_waiting'], 422);
+        }
+
+        $now = now();
+        $claimed = SocialApprovalLink::query()
+            ->whereKey($link->getKey())
+            ->where(fn ($q) => $q->whereNull('last_reminded_at')
+                ->orWhere('last_reminded_at', '<=', $now->copy()->subHours(self::REMIND_EVERY_HOURS)))
+            ->update(['last_reminded_at' => $now]);
+        if ($claimed === 0) {
+            $next = $link->fresh()?->last_reminded_at?->copy()->addHours(self::REMIND_EVERY_HOURS);
+
+            return response()->json([
+                'message' => 'A reminder went out less than '.self::REMIND_EVERY_HOURS.' hours ago.',
+                'code' => 'reminder_too_soon',
+                'next_reminder_at' => $next?->toIso8601String(),
+            ], 429, $next ? ['Retry-After' => (string) max(1, (int) ceil($now->diffInSeconds($next, true)))] : []);
+        }
+
+        Notification::route('mail', $link->approver_email)->notify(new ApprovalReminder($link->fresh() ?? $link, $waiting));
+
+        return response()->json(['data' => [
+            'link_id' => $link->ulid,
+            'reminded_at' => $now->toIso8601String(),
+            'next_reminder_at' => $now->copy()->addHours(self::REMIND_EVERY_HOURS)->toIso8601String(),
+            'waiting' => $waiting,
+        ]]);
+    }
+
     public function revoke(Request $request, SocialApprovalLink $socialApprovalLink): JsonResponse
     {
         self::writable($request->user(), $socialApprovalLink->user_id);
@@ -675,10 +740,17 @@ class SocialApprovalController extends Controller
                 PlanScope::STATE_DRAFT => (int) ($link->draft_count ?? 0),
                 PlanScope::STATE_PUBLISHED => (int) ($link->published_count ?? 0),
             ],
+            // Content Plans: one email to the approver 24 h before the first
+            // undecided post (PATCH reminders: false turns it off).
+            'reminders' => $link->remindersOn(),
+            'reminded_at' => isset($link->getAttributes()['reminded_at']) ? $link->reminded_at?->toIso8601String() : null,
             'expires_at' => $link->expires_at?->toIso8601String(),
             'extended_at' => $link->extended_at?->toIso8601String(),
             'revoked_at' => $link->revoked_at?->toIso8601String(),
             'created_at' => $link->created_at?->toIso8601String(),
+            // Send a reminder: when the last one went, and when the next may.
+            'last_reminded_at' => $link->last_reminded_at?->toIso8601String(),
+            'next_reminder_at' => $link->last_reminded_at?->copy()->addHours(self::REMIND_EVERY_HOURS)->toIso8601String(),
         ];
     }
 
@@ -742,13 +814,57 @@ class SocialApprovalController extends Controller
     }
 
     /**
-     * GET /me/reports/shared — "Reports shared with you". Not built yet:
-     * always empty, in its final shape so the app can render it:
-     * [{report_id, title, period: {from, to}, owner: {name}, url}].
+     * GET /me/reports/shared — "Reports shared with you": what other people
+     * shared with this user to look at, newest first. Each row is
+     * {report_id, kind, title, period: {from, to}, owner: {name}, url, …}.
+     *
+     * kind "content_plan": a live Content Plan (a scoped approval link)
+     * whose approver_email is this user's verified email — the same rule
+     * as "Waiting your approval". kind "insight" is reserved: Insight share
+     * links (insight_share_links) are token-only and addressed to nobody, so
+     * there is no one to list them for until they gain a recipient.
+     *
+     * Reached across workspaces only through the approver email, never by
+     * id, so ScopeToWorkspace has nothing to check here.
      */
     public function sharedReports(Request $request): JsonResponse
     {
-        return response()->json(['data' => []]);
+        $user = $request->user();
+        if ($user->email_verified_at === null) {
+            return response()->json(['data' => []]);
+        }
+
+        $plans = SocialApprovalLink::query()
+            ->live()
+            ->whereNotNull('scope_from')
+            ->where('approver_email', mb_strtolower(trim($user->email)))
+            ->with('user:id,name')
+            ->latest('id')
+            ->limit(100)
+            ->get();
+
+        $rows = $plans->map(function (SocialApprovalLink $link) {
+            $counts = PlanScope::counts($link);
+
+            return [
+                'report_id' => $link->ulid,
+                'kind' => 'content_plan',
+                'title' => $link->title,
+                'period' => [
+                    'from' => $link->scope_from?->format('Y-m-d'),
+                    'to' => $link->scope_to?->format('Y-m-d'),
+                    'timezone' => PlanScope::timezone($link),
+                ],
+                'owner' => ['name' => $link->user->name],
+                'url' => $link->url(),
+                'posts' => $counts['total'],
+                'waiting' => $counts[PlanScope::STATE_WAITING],
+                'expires_at' => $link->expires_at?->toIso8601String(),
+                'created_at' => $link->created_at?->toIso8601String(),
+            ];
+        })->values()->all();
+
+        return response()->json(['data' => $rows]);
     }
 
     /**

@@ -13,8 +13,8 @@ export const listChannels = defineTool({
   title: 'List connected channels',
   description: describeTool({
     does: "Lists the social channels (Instagram, Facebook, TikTok, LinkedIn, X, Threads, YouTube, Pinterest, Bluesky…) connected to the user’s creatif.space workspace, with each channel’s id and whether it can be posted to.",
-    when: "first, before draft_post, list_posts by channel or any send — it is the only source of channel ids. A channel with reconnect_required=true (or status other than \"connected\") cannot be posted to until the user reconnects it in creatif.space → Channels.",
-    example: "list_channels {} → { channels: [{ id: \"01JD…\", platform: \"instagram\", username: \"studio\", status: \"connected\", reconnect_required: false }] }",
+    when: "first, before draft_post, list_posts by channel or any send — it is the only source of channel ids. A channel with reconnect_required=true (or status other than \"connected\") cannot be posted to until the user reconnects it: such channels carry a reconnect block, and needs_reconnect lists them — call get_connect_link with the channel’s platform for the link to send the user. To add a new network, use get_connect_link too.",
+    example: "list_channels {} → { channels: [{ id: \"01JD…\", platform: \"instagram\", username: \"studio\", status: \"connected\", reconnect_required: false }, { id: \"01JE…\", platform: \"x\", status: \"expired\", reconnect_required: true, reconnect: { reason, next_step } }], needs_reconnect: [\"01JE…\"] }",
     errors: [
       ["scope_missing", "reconnect and allow \"read\""],
       ["unauthorized", "ask the user to reconnect the creatif.space connector"],
@@ -26,18 +26,45 @@ export const listChannels = defineTool({
   annotations: READ_ONLY,
   run: async (_args, { v1 }) => {
     const res = await v1.get<{ data: Record<string, unknown>[] }>('/social-accounts');
-    return {
-      channels: res.data.map((a) => ({
+    const channels = res.data.map((a) => {
+      const reconnect = a.reconnect_required === true || a.status !== 'connected';
+      return {
         id: a.id,
         platform: a.platform,
         username: a.username,
         status: a.status,
-        reconnect_required: a.reconnect_required === true || a.status !== 'connected',
+        reconnect_required: reconnect,
         connected_at: a.connected_at,
-      })),
+        ...(reconnect ? { reconnect: reconnectHint(a) } : {}),
+        // Posting works; replying to DMs needs a fresh sign-in with messages allowed.
+        ...(!reconnect && a.needs_reconnect_for_messages === true
+          ? { reconnect_for_messages: { next_step: `Posting works. To reply to DMs, the user reconnects it and allows messages: get_connect_link { "network": "${String(a.platform)}" }.` } }
+          : {}),
+      };
+    });
+    const needs = channels.filter((c) => c.reconnect_required).map((c) => c.id);
+    return {
+      channels,
+      ...(needs.length
+        ? {
+            needs_reconnect: needs,
+            next_step: 'Channels in needs_reconnect cannot be posted to. Tell the user which ones, and give them the link from get_connect_link for each platform; do not draft or send to them until they show as connected.',
+          }
+        : {}),
     };
   },
 });
+
+/** Why a channel needs reconnecting, in words the user understands, and the one next step. */
+function reconnectHint(a: Record<string, unknown>) {
+  const reason =
+    a.reconnect_required === true && a.status === 'disconnected'
+      ? 'It was connected through an older connection that no longer works; it has to be connected again.'
+      : a.status === 'expired'
+        ? 'The platform sign-in expired or was revoked.'
+        : 'The channel is not connected right now.';
+  return { reason, next_step: `Ask the user to reconnect it: get_connect_link { "network": "${String(a.platform)}" } gives the link.` };
+}
 
 export const listPosts = defineTool({
   name: 'list_posts',
@@ -215,13 +242,37 @@ interface CommittedCredits {
   sends_monthly: number;
 }
 
+interface SpendBlock {
+  since?: string;
+  by_action?: { publish?: number; reply?: number; ai?: number; total?: number };
+}
+
+/** This cycle's Credits by action, as the API counts them (undefined from an older API). */
+function spendThisMonth(spend: SpendBlock | undefined) {
+  if (!spend?.by_action) return undefined;
+  const a = spend.by_action;
+  return {
+    since: spend.since ?? null,
+    by_action: { publish: a.publish ?? 0, reply: a.reply ?? 0, ai: a.ai ?? 0 },
+    total: a.total ?? (a.publish ?? 0) + (a.reply ?? 0) + (a.ai ?? 0),
+  };
+}
+
+/** Whole days until the Monthly Credits renew (0 on the day itself). */
+export function renewal(resetsAt: string | undefined, now: number = Date.now()) {
+  if (!resetsAt) return undefined;
+  const at = Date.parse(resetsAt);
+  if (Number.isNaN(at)) return undefined;
+  return { resets_at: resetsAt, days_until: Math.max(0, Math.ceil((at - now) / 86_400_000)) };
+}
+
 export const getCredits = defineTool({
   name: 'get_credits',
   title: 'Get plan, limits and Credits',
   description: describeTool({
     does: "Gets the workspace’s creatif.space plan, its limits and its Credits — everything that decides what can be sent.",
-    when: "before schedule_post or publish_post when the user asks what they can afford or why something was refused. It returns, as set on the plan: plan name; this month’s posts vs the plan’s monthly figure; connected channels used vs allowed; scheduling (days ahead allowed, queued posts — scheduled or waiting for approval — used vs allowed); approval clients used vs allowed; features (approval links, analytics, AI captions, Spaces…); Credits (Monthly, when they reset, Top-up, total, committed to scheduled posts); the Credit price per send by platform; and how many sends connected apps have left today (cap 20/day).",
-    example: "get_credits {} → { plan: { key: \"free\" }, credits: { monthly, topup, resets_at, committed }, price_per_send, scheduling, approval_clients, mcp_daily_sends }",
+    when: "before schedule_post or publish_post when the user asks what they can afford or why something was refused. It returns, as set on the plan: plan name; this month’s posts vs the plan’s monthly figure; connected channels used vs allowed; scheduling (days ahead allowed, queued posts — scheduled or waiting for approval — used vs allowed); approval clients used vs allowed; features (approval links, analytics, AI captions, Spaces…); Credits (Monthly, when they reset, Top-up, total, committed to scheduled posts); the Credit price per send by platform; how many sends connected apps have left today (cap 20/day); this month’s Credit spend by action (publish, reply, ai — AI captions are free today, so ai is 0); and the days until the Monthly Credits renew.",
+    example: "get_credits {} → { plan: { key: \"free\" }, credits: { monthly, topup, resets_at, committed }, price_per_send, scheduling, approval_clients, mcp_daily_sends, spend: { since, by_action: { publish, reply, ai }, total }, renewal: { resets_at, days_until } }",
     rules: "Every plan, Free included, can use this server: sending spends Credits. Free schedules up to 7 days ahead, holds up to 10 queued posts and has approval links for one client; null means no limit (Pro, Max).",
     errors: [
       ["unauthorized", "ask the user to reconnect the creatif.space connector"],
@@ -249,6 +300,8 @@ export const getCredits = defineTool({
       features: limits.features,
       mcp_daily_sends: limits.mcp_daily_sends,
       urls: limits.urls,
+      spend: spendThisMonth(limits.spend as SpendBlock | undefined),
+      renewal: renewal((limits.credits as { resets_at?: string } | undefined)?.resets_at),
     };
   },
 });

@@ -37,14 +37,17 @@ use Illuminate\Support\Str;
  * @property CarbonImmutable|null $scope_starts_at
  * @property CarbonImmutable|null $scope_ends_at
  * @property list<int>|null $scope_account_ids
+ * @property bool $reminders_enabled Content Plan reminder email on (per-link opt-out)
+ * @property CarbonImmutable|null $reminded_at when the one reminder went out
  * @property CarbonImmutable|null $expires_at
  * @property CarbonImmutable|null $extended_at
+ * @property CarbonImmutable|null $last_reminded_at
  * @property CarbonImmutable|null $revoked_at
  * @property CarbonImmutable|null $created_at
  */
 class SocialApprovalLink extends Model implements WorkspaceOwned
 {
-    protected $fillable = ['user_id', 'token', 'title', 'client_name', 'approver_email', 'approver_bound_at', 'scope_from', 'scope_to', 'scope_timezone', 'scope_starts_at', 'scope_ends_at', 'scope_account_ids', 'expires_at', 'extended_at', 'revoked_at'];
+    protected $fillable = ['user_id', 'token', 'title', 'client_name', 'approver_email', 'approver_bound_at', 'scope_from', 'scope_to', 'scope_timezone', 'scope_starts_at', 'scope_ends_at', 'scope_account_ids', 'reminders_enabled', 'reminded_at', 'expires_at', 'extended_at', 'last_reminded_at', 'revoked_at'];
 
     public function expired(): bool
     {
@@ -79,6 +82,7 @@ class SocialApprovalLink extends Model implements WorkspaceOwned
         return [
             'expires_at' => 'datetime',
             'extended_at' => 'datetime',
+            'last_reminded_at' => 'datetime',
             'revoked_at' => 'datetime',
             'approver_bound_at' => 'datetime',
             'scope_from' => 'date',
@@ -87,6 +91,8 @@ class SocialApprovalLink extends Model implements WorkspaceOwned
             'scope_starts_at' => UtcDateTime::class,
             'scope_ends_at' => UtcDateTime::class,
             'scope_account_ids' => 'array',
+            'reminders_enabled' => 'boolean',
+            'reminded_at' => 'datetime',
         ];
     }
 
@@ -157,6 +163,15 @@ class SocialApprovalLink extends Model implements WorkspaceOwned
     }
 
     /** A Content Plan (date range + channels) rather than a fixed list of posts. */
+    /**
+     * Whether the Content Plan reminder may go out. Read from the raw
+     * attributes: a link just made in memory has no column default yet.
+     */
+    public function remindersOn(): bool
+    {
+        return (bool) ($this->getAttributes()['reminders_enabled'] ?? true);
+    }
+
     public function isScoped(): bool
     {
         return ($this->getAttributes()['scope_from'] ?? null) !== null;
