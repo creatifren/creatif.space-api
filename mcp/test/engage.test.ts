@@ -181,6 +181,48 @@ describe('reply_to_conversation', () => {
     expect(out).toMatchObject({ sent: true, type: 'comment', replied_at: '2026-11-11T10:00:00Z' });
   });
 
+  it('on two networks the preview names the network, the channel it is sent from, who it goes to, DM or public, and the exact text', async () => {
+    const FB = '01JACCTACCTACCTACCTACCTFB1';
+    const client = await open({
+      // An Instagram DM…
+      [SHOW_DM]: () => ({ body: { data: { ...dmItem(), reply: check() } } }),
+      // …and a Facebook comment, whose author has a name but no handle.
+      [SHOW_COMMENT]: () => ({
+        body: {
+          data: {
+            ...commentItem({
+              channel: { id: FB, platform: 'facebook', username: 'Studio Page' },
+              author: { name: 'Budi Santoso', username: null },
+              post_url: 'https://www.facebook.com/123/posts/456',
+            }),
+            reply: check({ kind: 'public_comment_reply', max_length: 2200, can_reply_until: null }),
+          },
+        },
+      }),
+    });
+
+    const dm = payload(await client.callTool({ name: 'reply_to_conversation', arguments: { conversation_id: DM, text: 'Yes, 10 to 4!' } }));
+    expect(dm.goes_to).toEqual({ network: 'Instagram', from: '@studio', to: 'Ana (@ana)', as: 'direct message' });
+    expect(dm.summary).toBe('A direct message on Instagram from @studio to Ana (@ana): "Yes, 10 to 4!"');
+
+    const fb = payload(await client.callTool({ name: 'reply_to_conversation', arguments: { conversation_id: COMMENT, text: 'Thanks Budi!' } }));
+    expect(fb.goes_to).toEqual({
+      network: 'Facebook',
+      from: 'Studio Page',
+      to: 'Budi Santoso',
+      as: 'public reply under their comment',
+      post_url: 'https://www.facebook.com/123/posts/456',
+    });
+    expect(fb.summary).toBe('A public reply on Facebook from Studio Page to Budi Santoso, under their comment on https://www.facebook.com/123/posts/456: "Thanks Budi!"');
+
+    for (const out of [dm, fb]) {
+      expect(out).toMatchObject({ confirmation_required: true, sent: false });
+      expect(out.next).toMatch(/summary word for word.*explicitly agree.*confirm: true/s);
+    }
+    // Previews only: nothing went out on either network.
+    expect(sends()).toHaveLength(0);
+  });
+
   it('confirm without a preview sends nothing and returns one', async () => {
     const client = await open({
       [SHOW_DM]: () => ({ body: { data: { ...dmItem(), reply: check() } } }),
