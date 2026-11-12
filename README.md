@@ -53,6 +53,7 @@ in [mcp/README.md](mcp/README.md).
 | Spaces | `list_spaces` | The user's Spaces and their status | Pro / Max |
 | Spaces | `create_space_from_files` | New draft Space from library files | Pro / Max |
 | Spaces | `publish_space` | Publish a draft Space after a preview | Pro / Max |
+| Credits | `get_account_summary` | Onboarding in one call: plan, limits left, Credits, channels, storage | All |
 | Credits | `get_credits` | Plan, limits, Credits, spend this month, days to renewal | All |
 | Engage | `list_conversations` | Comments and DMs, newest first | All |
 | Engage | `reply_to_conversation` | Reply to a comment or DM after a preview | All, may spend Credits |

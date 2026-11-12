@@ -56,6 +56,12 @@ exports[`tool annotations > match the snapshot 1`] = `
     "openWorld": false,
     "readOnly": false,
   },
+  "get_account_summary": {
+    "destructive": false,
+    "idempotent": true,
+    "openWorld": false,
+    "readOnly": true,
+  },
   "get_approval_audit": {
     "destructive": false,
     "idempotent": true,

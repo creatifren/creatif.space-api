@@ -54,6 +54,7 @@ Rate limit: 60 requests / minute / token (429 + `Retry-After`).
 | `get_post` | read | `GET /social-posts/{id}` |
 | `list_files` (search, type, folder_id, limit) | read | `GET /files` |
 | `draft_post` (caption, channel_ids, file_ids, media_urls, captions_by_channel, type) | draft | `POST /social-posts` with `draft: true` |
+| `get_account_summary` — onboarding in one call: plan, limits used/left, Credits left, channels connected / needing reconnect, storage used, next_steps | read | `GET /credits`, `GET /social-accounts`, `GET /files/usage` |
 | `get_credits` — plan, limits, Credits; `spend` (this cycle by action: publish, reply, ai) and `renewal` (resets_at, days_until) | read | `GET /credits` (`limits.spend`) |
 | `create_approval_link` (post_ids — or a Content Plan: date_from, date_to, timezone, channel_ids — **approver_email** (required — the client signs in with it to decide), title, client_name, expires_in_hours) — every plan; Free: one client (by approver_email), 7-day window, 10 queued | approve | `POST /social-approval-links` (drafts accepted) |
 | `create_content_plan` (date_from, date_to, timezone, channel_ids, **approver_email**, title, client_name, expires_in_hours, confirm) — preview first; `confirm: true` creates the Content Plan and emails the approver | approve | `GET /social-accounts`, `GET /social-posts?from&to` (preview); `confirm: true` → `POST /social-approval-links` with `notify_approver: true` |

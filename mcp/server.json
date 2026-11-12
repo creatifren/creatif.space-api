@@ -46,6 +46,7 @@
         "decide_approval",
         "discard_draft",
         "draft_post",
+        "get_account_summary",
         "get_approval_audit",
         "get_approval_history",
         "get_connect_link",
