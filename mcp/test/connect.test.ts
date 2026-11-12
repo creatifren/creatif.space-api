@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it } from 'vitest';
+import { CONNECT_GUIDES, CONNECT_NETWORKS, connectGuide } from '../src/free/connect.js';
 import { account } from './fixtures.js';
 import { payload, startApp, TOKEN_ALL } from './helpers.js';
 
@@ -108,5 +109,25 @@ describe('get_connect_link', () => {
     expect(d.get_connect_link).toMatch(/no token/);
     expect(d.get_connect_link).toMatch(/plan_required → /);
     expect(d.list_channels).toMatch(/get_connect_link/);
+  });
+
+  it('every network says what account it needs, from the same data as /free connect_guide, before the user clicks', async () => {
+    for (const network of CONNECT_NETWORKS) {
+      const out = payload(await call('get_connect_link', { network }, routes({ list: [] })));
+      await app!.close();
+      app = undefined;
+      const name = CONNECT_GUIDES.networks[network].name;
+      const guide = connectGuide({ network });
+      expect(out.account_type, network).toEqual(guide.account_type);
+      expect(out.account_needed, network).toMatch(new RegExp(`^For ${name} `));
+      // Every account-type item is in the line: confirmed ones as "you need", the rest under "Check on the connect screen".
+      for (const item of guide.account_type) {
+        const core = item.text.replace(/[.\s]+$/, '').slice(1);
+        expect(out.account_needed, `${network}: ${item.text}`).toContain(core);
+      }
+      const checks = guide.account_type.filter((a) => a.status === 'check in app').length;
+      expect(out.account_needed.includes('Check on the connect screen'), network).toBe(checks > 0);
+      expect(out.next_step, network).toMatch(/^Before the user clicks, tell them account_needed/);
+    }
   });
 });
