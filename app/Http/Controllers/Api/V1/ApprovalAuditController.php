@@ -7,6 +7,7 @@ use App\Models\SocialApprovalDecision;
 use App\Models\SocialApprovalLink;
 use App\Models\SocialPostComment;
 use App\Support\Workspace;
+use Illuminate\Database\Eloquent\Collection as EloquentCollection;
 use Illuminate\Http\Request;
 use Illuminate\Support\Collection;
 use Symfony\Component\HttpFoundation\StreamedResponse;
@@ -68,7 +69,7 @@ class ApprovalAuditController extends Controller
      * the comment column existed.
      *
      * @param  Collection<int, SocialApprovalDecision>  $decisions
-     * @return Collection<int, Collection<int, SocialPostComment>> by post id
+     * @return Collection<array-key, EloquentCollection<int, SocialPostComment>> by post id
      */
     private function approverNotes(Collection $decisions): Collection
     {
@@ -87,7 +88,7 @@ class ApprovalAuditController extends Controller
             ->groupBy('social_post_id');
     }
 
-    /** @param  Collection<int, Collection<int, SocialPostComment>>  $notes */
+    /** @param  Collection<array-key, EloquentCollection<int, SocialPostComment>>  $notes */
     private function noteFor(SocialApprovalDecision $d, Collection $notes): string
     {
         if ($d->decision !== SocialApprovalDecision::CHANGES_REQUESTED || $d->created_at === null) {
