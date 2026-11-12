@@ -112,6 +112,9 @@ it('accepts a document that also lists grants we do not support, like Claude\'s 
 
     $this->post('/oauth/token', ['grant_type' => 'urn:ietf:params:oauth:grant-type:jwt-bearer', 'client_id' => CIMD_URL])
         ->assertStatus(400);
+
+    // The stored client is an authorization-code client: the extra grant is never kept.
+    expect(Client::query()->sole()->grant_types)->toContain('authorization_code')->not->toContain('urn:ietf:params:oauth:grant-type:jwt-bearer');
 });
 
 it('refuses a redirect_uri the document does not list', function () {
@@ -152,6 +155,7 @@ it('answers invalid_client for a document it cannot accept', function (Closure $
     'confidential auth method' => [fn () => fakeCimd(cimdDocument(['token_endpoint_auth_method' => 'private_key_jwt'])), 'token_endpoint_auth_method'],
     'carries a secret' => [fn () => fakeCimd(cimdDocument(['client_secret' => 'x'])), 'client_secret'],
     'unsupported grant' => [fn () => fakeCimd(cimdDocument(['grant_types' => ['client_credentials']])), 'grant_types'],
+    'no code response type' => [fn () => fakeCimd(cimdDocument(['response_types' => ['token']])), 'response_types'],
     'not found' => [fn () => fakeCimd([], 404), '404'],
     'a redirect' => [fn () => Http::fake([CIMD_URL => Http::response('', 302, ['Location' => 'https://elsewhere.example/c.json'])]), '302'],
     'not JSON' => [fn () => Http::fake([CIMD_URL => Http::response('<html>', 200)]), 'json'],
