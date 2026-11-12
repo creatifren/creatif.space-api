@@ -187,3 +187,13 @@ it('cover-crops thumbnails to a square and skips media that is not an image', fu
         ->toStartWith('data:image/jpeg;base64,')
         ->and($images->firstImage(['https://video.example.test/a.mp4']))->toBeNull();
 });
+
+it('leaves no logo slot at all when the workspace has no logo — never an empty or cropped disc', function (string $format) {
+    $html = view('insight.'.$format, insightPdf($format, 'en')['view'])->render();
+
+    // The logo sizes each template uses for its slot (52 / 72 / 40 mm round crops).
+    expect($html)->not->toContain('border-radius: 26px;" alt=""')
+        ->not->toContain('border-radius: 36px;" alt=""')
+        ->not->toContain('border-radius: 20mm;" alt=""')
+        ->not->toContain('border-radius: 17px;" alt=""');
+})->with(['onepage', 'deck', 'details']);

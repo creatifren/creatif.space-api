@@ -27,7 +27,7 @@ export const getInsightSummary = defineTool({
   title: 'Get Insight numbers',
   description: describeTool({
     does: 'Gets the numbers of an Insight report (as in the PDF, without it) for a month or up to 92 days: posts, reach, impressions, engagement and its rate, followers, weekly reach, top posts and the approval workflow.',
-    when: 'when the user asks how their channels did over a period, or wants numbers for a client report. Every figure (totals, each channel, the workflow) comes with the previous period of the same length (totals_previous, channels[].previous, workflow.previous, followers.previous_change) and change_pct, only when both periods have it. null means the network did not report that number — never read it as zero — and notes[] says why: pass those notes on. channels[].notes[] marks a metric the network holds back until the account is bigger ({ metric, reason: "below_threshold", threshold, source_url, text }): say it in those words, never as a drop to zero. channel_ids (from list_channels) limits it to some channels; by default all connected channels.',
+    when: 'when the user asks how their channels did over a period, or wants numbers for a client report. in_one_line is the period in one sentence (headline numbers with their change, and the best time to post from the user’s own posts): say it as it stands when one line is enough. Every figure (totals, each channel, the workflow) comes with the previous period of the same length (totals_previous, channels[].previous, workflow.previous, followers.previous_change) and change_pct, only when both periods have it. null means the network did not report that number — never read it as zero — and notes[] says why: pass those notes on. channels[].notes[] marks a metric the network holds back until the account is bigger ({ metric, reason: "below_threshold", threshold, source_url, text }): say it in those words, never as a drop to zero. channel_ids (from list_channels) limits it to some channels; by default all connected channels.',
     example: 'get_insight_summary { "period": { "month": "2026-10" } } → { period, totals: { posts: 36, reach: 64900, engagement_rate: 0.089 }, change_pct: { reach: 70.8 }, channels: [...], top_posts: [...], workflow: {...}, notes: ["Saves not available from Facebook API"] }',
     errors: [
       ['plan_required', 'Insight is not included on this plan: tell the user it is not available on their plan; do not retry'],
@@ -48,9 +48,57 @@ export const getInsightSummary = defineTool({
       ...('month' in period ? { month: period.month } : { from: period.from, to: period.to }),
       channel_ids: channel_ids?.join(','),
     });
-    return res.data;
+    // The best slot is a bonus: a failure there never costs the numbers.
+    const best = await v1
+      .get<{ data: BestTimesChannel[] }>('/insight/best-times', { channel_ids: channel_ids?.join(',') })
+      .then((r) => r.data)
+      .catch(() => null);
+    return { in_one_line: oneLine(res.data as unknown as SummaryForLine, best), ...res.data };
   },
 });
+
+type SummaryForLine = {
+  period?: { label?: string };
+  compared_with?: { label?: string };
+  totals?: Record<string, number | null>;
+  change_pct?: Record<string, number | null>;
+};
+type BestTimesChannel = { network?: string; status?: string; slots?: { label: string; avg_engagement: number }[] };
+
+const LINE_METRICS: [key: string, label: string][] = [
+  ['reach', 'reach'],
+  ['engagement', 'engagement'],
+  ['posts', 'posts'],
+];
+
+/**
+ * The period in one sentence an agent can say as it stands: each headline
+ * number with its change against the previous period (only when the API
+ * gave one), then the best slot from the user's own posts. Never a number
+ * the API did not send.
+ */
+export function oneLine(s: SummaryForLine, best: BestTimesChannel[] | null): string {
+  const n = (v: number) => v.toLocaleString('en-US');
+  const parts = LINE_METRICS.flatMap(([key, label]) => {
+    const value = s.totals?.[key];
+    if (value === null || value === undefined) return [];
+    const pct = s.change_pct?.[key];
+    const change = pct === null || pct === undefined ? '' : pct === 0 ? ' (no change)' : ` (${pct > 0 ? '↑' : '↓'} ${Math.abs(pct)}%)`;
+    return [`${label} ${n(value)}${change}`];
+  });
+  const vs = s.compared_with?.label ? ` vs ${s.compared_with.label}` : '';
+  const head = parts.length > 0
+    ? `${s.period?.label ?? 'This period'}${vs}: ${parts.join(', ')}.`
+    : `${s.period?.label ?? 'This period'}: the networks reported no numbers yet.`;
+
+  const slots = (best ?? [])
+    .filter((c) => c.status === 'ok' && c.slots && c.slots.length > 0)
+    .map((c) => ({ network: c.network ?? 'a channel', slot: c.slots![0]! }))
+    .sort((a, b) => b.slot.avg_engagement - a.slot.avg_engagement);
+  const tail = slots.length > 0 ? ` Best time to post, from your posts: ${slots[0]!.slot.label} on ${slots[0]!.network}.` : '';
+
+  return head + tail;
+}
 
 export const listTopPosts = defineTool({
   name: 'list_top_posts',

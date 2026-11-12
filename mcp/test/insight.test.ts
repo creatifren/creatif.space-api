@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import { payload, startApp, TOKEN_READ, USER } from './helpers.js';
+import { oneLine } from '../src/tools/insight.js';
 
 const IG = '01JACCTACCTACCTACCTACCTIG1';
 const FB = '01JACCTACCTACCTACCTACCTFB1';
@@ -64,6 +65,60 @@ describe('get_insight_summary', () => {
     const out = payload(res);
     expect(out.channels[0].notes).toEqual([note]);
     expect(out.channels[1].notes).toEqual([]);
+  });
+
+  it('puts the period in one line: headline numbers with their change, then the best slot from the user’s posts', async () => {
+    const res = await call({ period: { month: '2026-10' } }, {
+      'GET /insight/summary': () => ({ body: { data: summary } }),
+      'GET /insight/best-times': () => ({
+        body: {
+          data: [
+            { network: 'Facebook', status: 'ok', slots: [{ label: 'Fri 12:00', avg_engagement: 120 }] },
+            { network: 'Instagram', status: 'ok', slots: [{ label: 'Tue 19:00', avg_engagement: 412.5 }] },
+            { network: 'TikTok', status: 'not_enough_data', slots: [] },
+          ],
+          meta: {},
+        },
+      }),
+    });
+
+    expect(res.isError).toBeFalsy();
+    expect(payload(res).in_one_line).toBe(
+      'October 2026 vs September 2026: reach 64,900 (↑ 70.8%), engagement 16,137 (↑ 120.4%), posts 36 (↑ 89.5%). Best time to post, from your posts: Tue 19:00 on Instagram.',
+    );
+  });
+
+  it('keeps the numbers when best times cannot be read, and never invents a change', () => {
+    expect(oneLine({ period: { label: 'October 2026' }, totals: { reach: 1200, engagement: null, posts: 4 }, change_pct: { reach: null, posts: -25 } }, null)).toBe(
+      'October 2026: reach 1,200, posts 4 (↓ 25%).',
+    );
+    expect(oneLine({ period: { label: 'Last 30 days' }, totals: {}, change_pct: {} }, [{ network: 'X', status: 'not_enough_data', slots: [] }])).toBe(
+      'Last 30 days: the networks reported no numbers yet.',
+    );
+  });
+
+  it('passes the summary on even when best times fails', async () => {
+    const res = await call({ period: { month: '2026-10' } }, {
+      'GET /insight/summary': () => ({ body: { data: summary } }),
+      'GET /insight/best-times': () => ({ status: 500, body: { message: 'boom' } }),
+    });
+    expect(res.isError).toBeFalsy();
+    expect(payload(res).totals.posts).toBe(36);
+    expect(payload(res).in_one_line).not.toContain('Best time');
+  });
+
+  it('Free: one plain line with the upgrade link, and never a price', async () => {
+    const res = await call({ period: { month: '2026-10' } }, {
+      'GET /insight/summary': () => ({
+        status: 402,
+        body: { message: 'Insights and analytics is on Pro and Max. Upgrade: https://app.creatif.space/settings/subscription', code: 'plan_required', reason: 'plan_required', feature: 'insight', required_plan: 'pro' },
+      }),
+    });
+    expect(res.isError).toBe(true);
+    const err = payload(res).error;
+    expect(err.code).toBe('plan_required');
+    expect(err.next_step).toMatch(/not on Free: say that in one line and pass on the upgrade link/);
+    expect(`${err.message} ${err.next_step}`).not.toMatch(/\$\s?\d|USD|per month|\/mo/i);
   });
 
   it('sends a range and the chosen channels as from / to / channel_ids', async () => {

@@ -445,6 +445,12 @@ describe('402 next steps per Free limit', () => {
   });
 
   it('any other feature → get_credits, with the Free limits named', async () => {
-    expect((await plan('insight')).next_step).toMatch(/get_credits.*7 days ahead, 10 queued posts, approval links for one client/);
+    expect((await plan('spaces')).next_step).toMatch(/get_credits.*7 days ahead, 10 queued posts, approval links for one client/);
+  });
+
+  it('insight → one line that Insight is not on Free, the upgrade link, no price', async () => {
+    const next = (await plan('insight')).next_step;
+    expect(next).toMatch(/Insight .* is not on Free: say that in one line and pass on the upgrade link/);
+    expect(next).toMatch(/Do not quote a price/);
   });
 });

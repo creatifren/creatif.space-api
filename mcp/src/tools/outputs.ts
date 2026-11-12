@@ -65,6 +65,7 @@ export const OUTPUT_SCHEMAS: Record<string, z.ZodRawShape> = {
     posts: opt(z.array(loose({ id: str, status: str, approval: opt(str) }))),
   },
   get_insight_summary: {
+    in_one_line: opt(str),
     period: opt(loose({ from: opt(str), to: opt(str) })),
     compared_with: opt(loose({})),
     totals: opt(loose({})),
