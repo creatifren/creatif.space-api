@@ -15,15 +15,17 @@ const tools = async () => {
 };
 
 describe('tool descriptions for agents', () => {
-  it('every tool: one line on what it does, when to use it, an example call, errors with next steps', async () => {
+  it('every tool: a "Use …" line, one line on what it does, when to use it, an example call, errors with next steps', async () => {
     const list = await tools();
     expect(list).toHaveLength(39);
     for (const t of list) {
       const lines = t.description!.split('\n');
-      expect(lines[0], t.name).not.toMatch(/^(When to use|Example|Errors)/);
-      expect(lines[0]!.length, t.name).toBeLessThan(260);
-      expect(lines[1], t.name).toMatch(/^When to use: /);
-      expect(lines[2], t.name).toMatch(new RegExp(`^Example: ${t.name} \\{`));
+      expect(lines[0], t.name).toMatch(/^Use /);
+      expect(lines[0]!.length, t.name).toBeLessThanOrEqual(120);
+      expect(lines[1], t.name).not.toMatch(/^(Use |When to use|Example|Errors)/);
+      expect(lines[1]!.length, t.name).toBeLessThan(260);
+      expect(lines[2], t.name).toMatch(/^When to use: /);
+      expect(lines[3], t.name).toMatch(new RegExp(`^Example: ${t.name} \\{`));
       const errors = lines.find((l) => l.startsWith('Errors → next step: '));
       expect(errors, t.name).toBeDefined();
       // code → next step, for each error listed

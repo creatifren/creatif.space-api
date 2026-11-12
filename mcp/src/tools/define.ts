@@ -5,6 +5,7 @@ import type { Analytics } from '../analytics.js';
 import type { CallerAuth } from '../auth/middleware.js';
 import { ToolError, toToolError, type NotFound } from '../errors.js';
 import type { V1Client } from '../v1.js';
+import { FIRST_LINES } from './firstLines.js';
 import { OUTPUT_SCHEMAS } from './outputs.js';
 
 export type Scope = 'read' | 'draft' | 'approve' | 'publish' | 'approvals:decide';
@@ -87,11 +88,13 @@ export interface RegisterDeps {
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export function registerTool(server: McpServer, def: ToolDef<any>, deps: RegisterDeps) {
+  const first = FIRST_LINES[def.name];
+  if (!first) throw new Error(`${def.name} has no first line in src/tools/firstLines.ts`);
   server.registerTool(
     def.name,
     {
       title: def.title,
-      description: `${def.description}\n\n${DATA_NOTICE}`,
+      description: `${first}\n${def.description}\n\n${DATA_NOTICE}`,
       inputSchema: def.input,
       ...(OUTPUT_SCHEMAS[def.name] ? { outputSchema: OUTPUT_SCHEMAS[def.name] } : {}),
       annotations: { title: def.title, ...def.annotations },
