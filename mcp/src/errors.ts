@@ -4,6 +4,7 @@ export type ErrorCode =
   | 'reconnect_required'
   | 'scope_missing'
   | 'plan_required'
+  | 'not_available_on_plan'
   | 'not_found'
   | 'unknown_tool'
   | 'not_enabled'
@@ -45,6 +46,8 @@ export type ErrorCode =
  */
 export class ToolError extends Error {
   readonly details: Record<string, unknown>;
+  /** The API's HTTP status behind this error, when there was one (not sent to the model). */
+  httpStatus?: number;
 
   constructor(
     readonly code: ErrorCode,
@@ -100,6 +103,57 @@ const pick = (body: Record<string, unknown>, keys: string[]): Record<string, unk
 /** V1 answers → specific, actionable tool errors. */
 export function toToolError(e: unknown, notFound: NotFound = DEFAULT_NOT_FOUND): ToolError {
   if (e instanceof ToolError) return e;
+  const err = classify(e, notFound);
+  if (e instanceof V1Error) err.httpStatus = e.status;
+  return err;
+}
+
+/** Upgrade, pricing and purchase wording a ChatGPT answer must not carry. */
+const UPSELL = /upgrad|pric(e|ing)|trial|subscri|billing|top[- ]?up|\b(Pro|Max)\b/i;
+/** Links to billing or buying Credits: dropped from details for ChatGPT. */
+const UPSELL_KEYS = /billing|topup|top_up|upgrade|pricing|checkout/i;
+
+/** What to do instead, without a purchase, for errors that may name one. */
+const NEUTRAL_NEXT: Partial<Record<ErrorCode, string>> = {
+  insufficient_credits: 'Tell the user there are not enough Credits for this right now (details.needed vs details.available). Nothing was charged. Do not retry; offer to send to fewer channels or keep it as a draft.',
+  quota_exceeded: 'Tell the user this month’s Credits are used up until details.resets_at. Nothing was charged. Do not retry before then; offer to keep it as a draft.',
+  storage_full: 'Tell the user storage is full: they can free up space by deleting files in creatif.space → Files and emptying the Trash. Do not retry until they have.',
+  file_too_large: 'Make the file smaller (compress it, lower the resolution or trim the video), then call request_media_upload again with the new size.',
+};
+
+/**
+ * ChatGPT (directory rules): a plan refusal (any 402, or plan_required) is
+ * the neutral not_available_on_plan with no upgrade link or pricing step;
+ * any other error loses billing / top-up links and upgrade wording.
+ */
+export function forChatGpt(err: ToolError): ToolError {
+  const details = Object.fromEntries(Object.entries(err.details).filter(([k]) => !UPSELL_KEYS.test(k)));
+  if (err.code === 'plan_required' || err.code === 'not_available_on_plan' || err.httpStatus === 402) {
+    const neutral = new ToolError(
+      'not_available_on_plan',
+      'This isn’t available on this account’s plan.',
+      'Tell the user this isn’t available on their account’s plan. Do not retry, and do not suggest a plan change or a purchase.',
+      typeof err.details.feature === 'string' ? { feature: err.details.feature } : {},
+    );
+    neutral.httpStatus = 402;
+    return neutral;
+  }
+  const message = UPSELL.test(err.message) ? NEUTRAL_MESSAGE[err.code] ?? err.message.replace(/\s*https?:\/\/\S+/g, '') : err.message;
+  const nextStep = UPSELL.test(err.nextStep) ? NEUTRAL_NEXT[err.code] ?? 'Tell the user this cannot be done right now. Do not retry.' : err.nextStep;
+  if (message === err.message && nextStep === err.nextStep && Object.keys(details).length === Object.keys(err.details).length) return err;
+  const out = new ToolError(err.code, message, nextStep, details);
+  out.httpStatus = err.httpStatus;
+  return out;
+}
+
+const NEUTRAL_MESSAGE: Partial<Record<ErrorCode, string>> = {
+  insufficient_credits: 'There are not enough Credits for this.',
+  quota_exceeded: 'This month’s Credits are used up.',
+  storage_full: 'Storage is full.',
+  file_too_large: 'The file is larger than this account allows.',
+};
+
+function classify(e: unknown, notFound: NotFound): ToolError {
 
   if (e instanceof V1Unavailable) {
     return new ToolError(

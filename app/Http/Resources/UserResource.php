@@ -30,6 +30,7 @@ class UserResource extends JsonResource
             'avatar_url' => $this->avatar_url,
             'locale' => $this->locale,
             'theme' => $this->theme,
+            'timezone' => $this->timezone,
             'status' => $this->status,
             // Null for almost everybody. The sidebar shows /referral only
             // on "approved" — one nullable string here beats a second

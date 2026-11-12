@@ -31,6 +31,9 @@ class MyProfileController extends Controller
         $validated = $request->validate([
             'name' => ['sometimes', 'string', 'max:255'],
             'locale' => ['sometimes', 'string', 'in:en,id'],
+            // IANA zone (Settings → Profile); null = the app's. The same
+            // users.timezone the weekly digest reads (notification settings).
+            'timezone' => ['sometimes', 'nullable', 'string', 'max:64', 'timezone:all'],
             'theme' => ['sometimes', 'string', 'in:light,dark,system'],
             'mode' => ['sometimes', 'string', 'in:portfolio,freelance'],
             // Which layout the next new Space starts in — an account
@@ -94,7 +97,7 @@ class MyProfileController extends Controller
 
         $user = $request->user();
 
-        $accountFields = array_intersect_key($validated, array_flip(['name', 'locale', 'theme', 'avatar_url']));
+        $accountFields = array_intersect_key($validated, array_flip(['name', 'locale', 'theme', 'timezone', 'avatar_url']));
         $profileFields = array_diff_key($validated, $accountFields);
 
         // The public profile is the link in bio: editing it is part of

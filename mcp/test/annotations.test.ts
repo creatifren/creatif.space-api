@@ -75,10 +75,23 @@ describe('tool annotations', () => {
   it('docs/tool-justifications.md has one matching line per tool, and none for tools that do not exist', async () => {
     const list = await tools();
     const rows = justifications();
+    const yesNo = (b: boolean | undefined) => (b ? 'yes' : 'no');
+    const missing = list.filter((t) => !rows.has(t.name));
+    // One message naming every missing tool and the exact line to add, so a
+    // new tool merged without its line says how to fix it.
+    expect(
+      missing.map((t) => t.name),
+      missing.length === 0
+        ? ''
+        : `Tool(s) without a line in mcp/docs/tool-justifications.md: ${missing.map((t) => t.name).join(', ')}.\n` +
+            'Add one table row per tool (Title, RO, Destr., Open must match the tool; Why is one sentence):\n' +
+            missing
+              .map((t) => `| \`${t.name}\` | ${t.title} | ${yesNo(t.annotations?.readOnlyHint)} | ${yesNo(t.annotations?.destructiveHint)} | ${yesNo(t.annotations?.openWorldHint)} | <why> |`)
+              .join('\n'),
+    ).toEqual([]);
     for (const t of list) {
       const row = rows.get(t.name);
-      expect(row, `${t.name} missing from docs/tool-justifications.md`).toBeDefined();
-      expect(row, t.name).toEqual({
+      expect(row, `mcp/docs/tool-justifications.md: the line for ${t.name} must match its title and hints`).toEqual({
         title: t.title,
         readOnly: t.annotations!.readOnlyHint,
         destructive: t.annotations!.destructiveHint,
@@ -86,7 +99,9 @@ describe('tool annotations', () => {
         why: expect.stringMatching(/\S{3}/),
       });
     }
-    expect([...rows.keys()].sort()).toEqual(list.map((t) => t.name).sort());
+    const names = new Set(list.map((t) => t.name));
+    const stale = [...rows.keys()].filter((n) => !names.has(n));
+    expect(stale, `mcp/docs/tool-justifications.md has lines for tools that do not exist: ${stale.join(', ')} — remove them.`).toEqual([]);
   });
 
   it('match the snapshot', async () => {

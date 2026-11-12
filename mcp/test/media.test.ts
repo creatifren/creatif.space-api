@@ -335,7 +335,7 @@ describe('descriptions', () => {
       expect(desc(name)).toContain('storage_full');
     }
     expect(desc('request_media_upload')).toMatch(/When to use: /);
-    expect(desc('request_media_upload')).toMatch(/upgrade/);
+    expect(desc('request_media_upload')).not.toMatch(/upgrade/);
     expect(desc('request_media_upload')).toMatch(/free up space/);
     expect(desc('draft_post')).toContain('confirm_media_upload');
     expect(desc('update_post')).toContain('add_file_ids');

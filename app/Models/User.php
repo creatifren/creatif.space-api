@@ -25,12 +25,14 @@ use Spatie\Permission\Traits\HasRoles;
  * @property string $email
  * @property string|null $google_id
  * @property string|null $avatar_url
+ * @property array<string, string>|null $signup_attribution
  * @property string $locale
  * @property bool $insight_monthly_email
  * @property string|null $insight_monthly_sent_for
  * @property string $theme
  * @property UserStatus $status
  * @property bool $is_staff
+ * @property bool $is_directory_reviewer
  * @property CarbonImmutable|null $email_verified_at
  * @property CarbonImmutable|null $onboarded_at
  * @property CarbonImmutable|null $tour_seen_at
@@ -87,6 +89,8 @@ class User extends Authenticatable implements FilamentUser
         'password',
         'remember_token',
         'signup_next_path',
+        // First-touch attribution (SignupAttribution): support and analytics only.
+        'signup_attribution',
     ];
 
     /**
@@ -103,10 +107,12 @@ class User extends Authenticatable implements FilamentUser
             'suspended_at' => 'datetime',
             'deletion_requested_at' => 'datetime',
             'is_staff' => 'boolean',
+            'is_directory_reviewer' => 'boolean',
             'insight_monthly_email' => 'boolean',
             'storage_blocks' => 'integer',
             'storage_rental_ended_at' => 'datetime',
             'social_settings' => 'array',
+            'signup_attribution' => 'array',
             'password' => 'hashed',
             'status' => UserStatus::class,
         ];

@@ -33,6 +33,16 @@ final class ProductEvents
 
     public const PLATFORMS = ['web', 'android_app', 'android_twa'];
 
+    /**
+     * The activation milestones: each sent once per user, ever, the first
+     * time it happens (ProductEvents::activated). On top of the per-event
+     * is_first_* flags, which stay as they are.
+     */
+    public const ACTIVATION = ['first_channel_connected', 'first_draft_created', 'first_approval_sent', 'first_post_published'];
+
+    /** Cache key prefix (+ user ULID) that keeps user_signed_up to one per user. */
+    public const SIGNED_UP_KEY = 'analytics:user_signed_up:';
+
     /** Events also sent under a second name while dashboards move over. */
     private const ALIASES = [
         'approval_link_created' => 'approval_link_sent',
@@ -106,7 +116,8 @@ final class ProductEvents
     /**
      * A user row was created.
      *
-     * @param  array<string, string|null>  $attribution  ref, utm_* and entry — only the present ones are sent
+     * @param  array<string, string|null>  $attribution  ref, utm_*, entry, referrer_host, landing_path — ref, utm_* and entry
+     *                                                    are sent; all but ref are kept on the user (SignupAttribution)
      * @param  array<string, string>  $context  sent as is, e.g. ['platform' => 'android_app'] for the app shell
      */
     public static function signedUp(User $user, string $method, array $attribution = [], array $context = []): void
@@ -123,13 +134,55 @@ final class ProductEvents
             $extra['$set_once'] = ['initial_entry' => $entry];
         }
 
-        self::capture($user, 'user_signed_up', ['method' => $method, 'plan' => 'free'] + $context + $extra);
+        // On the row, for support and the activation events (first touch,
+        // internal accounts too: it is not analytics).
+        SignupAttribution::store($user, $extra + array_intersect_key($attribution, array_flip(['referrer_host', 'landing_path'])));
+
+        // Exactly once per user, whichever path created the row (Google web,
+        // Google native, email, approver link): a second call — a retried
+        // request, a future path calling this too — sends nothing.
+        try {
+            $first = Cache::add(self::SIGNED_UP_KEY.$user->ulid, true, now()->addDays(30));
+        } catch (\Throwable) {
+            $first = true; // no cache: the call sites already run once per created row
+        }
+        if (! $first) {
+            return;
+        }
+
+        self::capture($user, 'user_signed_up', [
+            'method' => $method,
+            'plan' => self::planOf($user),
+            // Internal accounts never reach capture(); sent anyway so every
+            // funnel can filter is_staff != true the same way.
+            'is_staff' => (bool) ($user->getAttributes()['is_staff'] ?? false),
+            'signup_source' => self::signupSource($extra),
+        ] + $context + $extra);
         self::set($user, [
             'plan' => 'free',
             'signup_method' => $method,
             'signed_up_at' => ($user->created_at ?? now())->toIso8601String(),
             'is_internal' => Analytics::isInternal($user),
         ]);
+    }
+
+    /**
+     * Where a signup came from, in one property for breakdowns: the first-touch
+     * utm_source, else "referral" (an affiliate ref), else the entry slug
+     * (e.g. tpl-restaurants), else "direct".
+     *
+     * @param  array<string, mixed>  $attribution
+     */
+    public static function signupSource(array $attribution): string
+    {
+        foreach (['utm_source' => null, 'ref' => 'referral', 'entry' => null] as $key => $label) {
+            $value = $attribution[$key] ?? null;
+            if (is_string($value) && $value !== '') {
+                return $label ?? substr($value, 0, 100);
+            }
+        }
+
+        return 'direct';
     }
 
     /**
@@ -203,6 +256,42 @@ final class ProductEvents
         return (string) self::key($user->plan()->key);
     }
 
+    /**
+     * An activation milestone (ACTIVATION), once per user ever. The caller
+     * has already decided this is the first time from the data (the
+     * is_first_* checks); a marker per (event, user) in the cache (database
+     * store in prod, no expiry) keeps a retried request, a replayed webhook
+     * or a second path from sending it again. Internal accounts send nothing.
+     *
+     * Carries plan, signup_source (SignupAttribution) and minutes_since_signup.
+     *
+     * @param  array<string, mixed>  $properties
+     */
+    public static function activated(User $user, string $event, array $properties = []): void
+    {
+        if (! in_array($event, self::ACTIVATION, true) || Analytics::isInternal($user)) {
+            return;
+        }
+
+        try {
+            $first = Cache::add('analytics:'.$event.':'.$user->ulid, true);
+        } catch (\Throwable) {
+            $first = true; // no cache: the is_first_* check already held
+        }
+        if (! $first) {
+            return;
+        }
+
+        // created_at read only if loaded: strict mode throws on a partial select.
+        $created = array_key_exists('created_at', $user->getAttributes()) ? $user->created_at : null;
+
+        self::capture($user, $event, [
+            'plan' => self::planOf($user),
+            'signup_source' => SignupAttribution::sourceOf($user),
+            'minutes_since_signup' => $created === null ? null : (int) $created->diffInMinutes(now(), true),
+        ] + $properties);
+    }
+
     /** $set plan — call when it may have moved; sends only on a change from $before. */
     public static function planChanged(User $user, PlanKey|string|null $before = null): void
     {
@@ -217,13 +306,19 @@ final class ProductEvents
     {
         $count = self::connectedCount($user);
 
+        // Ever: a reconnect of an old row is not a new row, so only the very first row counts.
+        $first = $user->socialAccounts()->whereKeyNot($account->id)->doesntExist();
+
         self::capture($user, 'channel_connected', [
             'network' => $account->platform->value,
-            // Ever: a reconnect of an old row is not a new row, so only the very first row counts.
-            'is_first_channel' => $user->socialAccounts()->whereKeyNot($account->id)->doesntExist(),
+            'is_first_channel' => $first,
             'channels_count' => $count,
         ]);
         self::set($user, ['channels_count' => $count]);
+
+        if ($first) {
+            self::activated($user, 'first_channel_connected', ['network' => $account->platform->value]);
+        }
     }
 
     public static function channelsCount(User $user): void
@@ -249,18 +344,29 @@ final class ProductEvents
             'has_media' => ! empty($post->media),
             'approval_required' => $post->approval !== null,
         ]);
+
+        // The first post this person ever made (a draft, or straight to the queue).
+        if (SocialPost::query()->where('user_id', $post->user_id)->whereKeyNot($post->id)->doesntExist()) {
+            self::activated($post->user, 'first_draft_created', ['post_id' => $post->ulid, 'status' => $status]);
+        }
     }
 
     public static function approvalLinkCreated(SocialApprovalLink $link, int $postsCount, ?int $hours): void
     {
         $owner = $link->user;
 
+        $first = SocialApprovalLink::query()->where('user_id', $owner->id)->whereKeyNot($link->id)->doesntExist();
+
         self::capture($owner, 'approval_link_created', [
             'link_id' => $link->ulid,
             'posts_count' => $postsCount,
             'expires_in_days' => $hours === null ? null : round($hours / 24, 1),
-            'is_first_link' => SocialApprovalLink::query()->where('user_id', $owner->id)->whereKeyNot($link->id)->doesntExist(),
+            'is_first_link' => $first,
         ]);
+
+        if ($first) {
+            self::activated($owner, 'first_approval_sent', ['link_id' => $link->ulid, 'posts_count' => $postsCount]);
+        }
     }
 
     /**
@@ -338,6 +444,10 @@ final class ProductEvents
                 'is_first_publish' => $firstEver,
                 'source' => $source,
             ]);
+
+            if ($firstEver) {
+                self::activated($post->user, 'first_post_published', ['post_id' => $post->ulid, 'network' => $network]);
+            }
 
             return;
         }

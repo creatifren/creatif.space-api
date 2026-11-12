@@ -96,7 +96,7 @@ const NEXT_FOR_BLOCK: Record<string, string> = {
   account_reconnect_required: 'Ask the user to reconnect this channel in creatif.space → Channels, then preview again.',
   permission_missing: 'Ask the user to reconnect this Instagram account in creatif.space → Channels to allow messages, then preview again.',
   post_unknown: 'This comment cannot be answered from here; the user can reply on the platform itself. Do not retry.',
-  insufficient_credits: 'Tell the user this message as it is; they can top up Credits in creatif.space. Preview again after that.',
+  insufficient_credits: 'Tell the user this message as it is (needed vs available). Preview again once they have more Credits.',
   forbidden: 'This user’s seat can read Engage but not reply; the workspace owner or an editor has to send it. Do not retry.',
 };
 
@@ -141,7 +141,7 @@ export const listConversations = defineTool({
       ["invalid_input", "fix the named field (a cursor from an older list: start again without it)"],
       ["not_found", "the channel_id is unknown: take one from list_channels or drop it"],
       ["scope_missing", "reconnect the connector allowing \"read\""],
-      ["plan_required", "pass the message on as it is (it has the upgrade link), do not retry"],
+      ["plan_required", "tell the user it is not available on their plan, do not retry"],
       ["forbidden", "Engage is not on for this account yet (details.reason inbox_disabled), tell the user"],
       ["rate_limited", "wait a minute"],
       ["upstream_unavailable", "call again shortly"],
@@ -191,7 +191,7 @@ export const replyToConversation = defineTool({
       ["relay_unavailable", "the platform could not be reached and nothing was sent (Credits returned); tell the user and call again in a few minutes"],
       ["reply_rejected", "the platform refused this reply; pass its message on, change the text only if the user wants to"],
       ["reply_not_possible", "it cannot be answered from here; the user replies on the platform"],
-      ["insufficient_credits", "pass the message on as it is (top-up link), retry only after a top-up"],
+      ["insufficient_credits", "pass the message on as it is (needed vs available), retry only once the user has more Credits"],
       ["plan_required", "pass the message on as it is, do not retry"],
       ["scope_missing", "reconnect the connector allowing \"publish\""],
       ["forbidden", "this seat cannot reply, the owner or an editor must"],

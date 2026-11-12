@@ -22,6 +22,7 @@ use App\Support\Credits;
 use App\Support\PlanQuota;
 use App\Support\PlanScope;
 use App\Support\ProductEvents;
+use App\Support\RateLimitHeaders;
 use App\Support\ScheduleHorizon;
 use App\Support\SocialPostRelay;
 use App\Support\Workspace;
@@ -554,7 +555,7 @@ class SocialApprovalController extends Controller
                 'message' => 'A reminder went out less than '.self::REMIND_EVERY_HOURS.' hours ago.',
                 'code' => 'reminder_too_soon',
                 'next_reminder_at' => $next?->toIso8601String(),
-            ], 429, $next ? ['Retry-After' => (string) max(1, (int) ceil($now->diffInSeconds($next, true)))] : []);
+            ], 429, RateLimitHeaders::for(1, $next ? (int) ceil($now->diffInSeconds($next, true)) : self::REMIND_EVERY_HOURS * 3600));
         }
 
         Notification::route('mail', $link->approver_email)->notify(new ApprovalReminder($link->fresh() ?? $link, $waiting));

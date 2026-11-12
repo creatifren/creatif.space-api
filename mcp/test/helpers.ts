@@ -67,6 +67,7 @@ export async function startApp(opts: {
   freeRateLimit?: number;
   publicDiscovery?: boolean;
   discoveryRateLimit?: number;
+  openaiAppsChallenge?: string | null;
 } = {}) {
   const v1 = mockV1(opts.routes ?? {});
   const rec = recordingAnalytics();
@@ -84,6 +85,7 @@ export async function startApp(opts: {
     ...(opts.freeRateLimit ? { freeRateLimitPerMinute: opts.freeRateLimit } : {}),
     ...(opts.publicDiscovery !== undefined ? { publicDiscovery: opts.publicDiscovery } : {}),
     ...(opts.discoveryRateLimit ? { discoveryRateLimiter: new TokenRateLimiter(opts.discoveryRateLimit) } : {}),
+    ...(opts.openaiAppsChallenge !== undefined ? { openaiAppsChallenge: opts.openaiAppsChallenge } : {}),
   });
   const server: Server = await new Promise((resolve) => {
     const s = app.listen(0, '127.0.0.1', () => resolve(s));

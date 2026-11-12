@@ -21,10 +21,10 @@ export const suggestCaption = defineTool({
     does: 'Writes a caption and hashtags from a short brief, in the user’s own creatif.space style (tone, emoji, hashtag count, language). Saves nothing.',
     when: 'when the user wants creatif.space’s AI to write or rework a caption. Show the result to the user; to save it, pass the caption (with the hashtags if wanted) to draft_post or update_post. If you are writing the caption yourself, you do not need this tool.',
     example: 'suggest_caption { "brief": "Morning coffee promo, 20% off until Friday", "platform": "instagram" } → { caption, hashtags: ["#coffee", …], next_step }',
-    rules: 'Pro and Max only. The feature may not be switched on for every account yet.',
+    rules: 'Not included on every plan, and may not be switched on for every account yet.',
     errors: [
       ['not_enabled', `AI captions are not switched on yet: ${WRITE_IT_YOURSELF}; do not retry`],
-      ['plan_required', 'pass the message on (upgrade link included), then offer to write the caption yourself; do not retry'],
+      ['plan_required', 'tell the user it is not available on their plan, then offer to write the caption yourself; do not retry'],
       ['upstream_unavailable', `call once more; if it fails again, ${WRITE_IT_YOURSELF}`],
       ['invalid_input', 'shorten the brief (2000 characters max) or fix the platform'],
       ['forbidden', 'the user’s role (viewer) cannot write captions; tell them'],

@@ -9,7 +9,11 @@ use App\Enums\SocialPostTargetStatus;
 use App\Enums\UserStatus;
 use App\Http\Controllers\Api\V1\FileController;
 use App\Http\Controllers\Api\V1\ProfileFontController;
+use App\Models\AccountExport;
+use App\Models\Feedback;
 use App\Models\File;
+use App\Models\InsightReport;
+use App\Models\InsightShareLink;
 use App\Models\SocialAccount;
 use App\Models\SocialApprovalLink;
 use App\Models\SocialPlanLink;
@@ -228,16 +232,51 @@ final class AccountDeletion
         DB::table('folders')->where('user_id', $user->id)->delete();
         Storage::disk('s3')->delete(ProfileFontController::path($user));
 
+        // Insight: their reports (rows and the PDFs on R2) and share links,
+        // made by them or in their workspace. The user row is only soft
+        // deleted, so nothing here goes by the foreign key's cascade.
+        $counts['insight_reports'] = 0;
+        InsightReport::query()->where('user_id', $user->id)->orWhere('owner_id', $user->id)
+            ->each(function (InsightReport $report) use (&$counts): void {
+                if ($report->path !== null) {
+                    Storage::disk(InsightReport::DISK)->delete($report->path);
+                }
+                $report->delete();
+                $counts['insight_reports']++;
+            });
+        $counts['insight_share_links'] = InsightShareLink::query()
+            ->where('user_id', $user->id)->orWhere('owner_id', $user->id)->delete();
+        // Someone else's link shared with them: the link stays the owner's,
+        // without their address (it becomes a plain public link).
+        $counts['insight_shared_with_anonymised'] = InsightShareLink::query()->where('recipient_email', Str::lower($email))
+            ->update(['recipient_email' => null, 'recipient_token' => null]);
+
+        // Their exports (rows and the ZIPs on R2), feedback and AI style.
+        $counts['exports'] = 0;
+        AccountExport::query()->where('user_id', $user->id)->each(function (AccountExport $export) use (&$counts): void {
+            if ($export->path !== null) {
+                Storage::disk(AccountExport::DISK)->delete($export->path);
+            }
+            $export->delete();
+            $counts['exports']++;
+        });
+        $counts['feedback'] = Feedback::query()->where('user_id', $user->id)->delete();
+        DB::table('ai_style_profiles')->where('user_id', $user->id)->delete();
+
         $user->handle()->delete();
         $user->profile()->delete();
-        foreach (['notification_preferences', 'activity_log', 'media_upload_flags', 'mcp_audit_logs'] as $table) {
+        foreach (['notification_preferences', 'activity_log', 'media_upload_flags', 'mcp_audit_logs', 'directory_reviewer_logins'] as $table) {
             DB::table($table)->where('user_id', $user->id)->delete();
         }
         DB::table('notifications')->where('notifiable_type', $user->getMorphClass())->where('notifiable_id', $user->id)->delete();
         TeamMember::query()->where('owner_id', $user->id)->orWhere('member_id', $user->id)->delete();
 
-        // The approval audit trail stays — without their address.
-        $counts['approval_audit_anonymised'] = DB::table('social_approval_decisions')->where('approver_email', $email)->update(['approver_email' => $placeholder]);
+        // The approval audit trail of other people's links stays — without
+        // who they were: address, account, IP and browser. The decision,
+        // its time and comment are the owner's record.
+        $counts['approval_audit_anonymised'] = DB::table('social_approval_decisions')
+            ->where(fn ($q) => $q->where('approver_email', $email)->orWhere('approver_user_id', $user->id))
+            ->update(['approver_email' => $placeholder, 'approver_user_id' => null, 'ip' => null, 'user_agent' => null]);
         DB::table('social_approval_links')->where('approver_email', $email)->update(['approver_email' => $placeholder]);
         DB::table('approver_login_tokens')->where('email', $email)->delete();
 
@@ -251,6 +290,8 @@ final class AccountDeletion
             'password' => Str::random(64),
             'remember_token' => null,
             'social_settings' => null,
+            'timezone' => null,
+            'weekly_digest_sent_on' => null,
             'status' => UserStatus::Deleted,
         ])->save();
         $user->delete();

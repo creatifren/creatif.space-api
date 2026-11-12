@@ -31,7 +31,7 @@ export const getNotificationSettings = defineTool({
     does: 'Returns which creatif.space emails the user gets: publish_failed, approval_decided and weekly_digest (true = on; all default on).',
     when: 'when the user asks which emails they get, or before changing one with update_notification_settings.',
     example: 'get_notification_settings {} → { settings: { publish_failed: true, approval_decided: true, weekly_digest: false, timezone: "Asia/Jakarta" }, meaning }',
-    rules: 'Read-only. Email only: the in-app bell is not part of these. Billing and storage emails cannot be turned off and are not listed.',
+    rules: 'Read-only. Email only: the in-app bell is not part of these. Account and storage emails cannot be turned off and are not listed.',
     errors: [
       ['scope_missing', 'reconnect and allow "read"'],
       ['unauthorized', 'reconnect creatif.space'],
@@ -54,7 +54,7 @@ export const updateNotificationSettings = defineTool({
     does: 'Turns the user’s publish_failed, approval_decided or weekly_digest email on or off, or sets the timezone of the weekly digest (Monday 08:00 there), and returns all settings.',
     when: 'when the user asks to stop or start one of these emails (e.g. "stop the weekly summary"). To only see them, use get_notification_settings.',
     example: 'update_notification_settings { "weekly_digest": false } → { settings: { publish_failed: true, approval_decided: true, weekly_digest: false } }',
-    rules: 'Give at least one of the three as true or false, or timezone (IANA, e.g. "Asia/Jakarta"; null resets it); the rest stay as they are. Only change what the user asked for. Email only: the in-app bell stays. Billing and storage emails cannot be turned off.',
+    rules: 'Give at least one of the three as true or false, or timezone (IANA, e.g. "Asia/Jakarta"; null resets it); the rest stay as they are. Only change what the user asked for. Email only: the in-app bell stays. Account and storage emails cannot be turned off.',
     errors: [
       ['invalid_input', 'pass at least one of publish_failed, approval_decided, weekly_digest as true/false, or a valid IANA timezone'],
       ['scope_missing', 'reconnect and allow "draft"'],

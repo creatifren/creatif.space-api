@@ -6,7 +6,17 @@ export interface CallerExtra {
   userUlid: string;
   clientName: string;
   tokenType: 'oauth' | 'api_key';
+  /** Which app is calling: ChatGPT gets neutral plan errors (no upgrade wording or links). */
+  surface?: 'chatgpt' | 'other';
   [key: string]: unknown;
+}
+
+/** ChatGPT's own names for itself as a DCR client. The API also checks redirect hosts. */
+const CHATGPT_NAME = /chat\s*gpt|openai/i;
+
+/** 'chatgpt' when the API says so, or the client's registered name is ChatGPT / OpenAI. */
+export function clientSurface(info: { client_surface?: string; client_name?: string }): 'chatgpt' | 'other' {
+  return info.client_surface === 'chatgpt' || CHATGPT_NAME.test(info.client_name ?? '') ? 'chatgpt' : 'other';
 }
 
 export type CallerAuth = AuthInfo & { extra: CallerExtra };
@@ -95,6 +105,7 @@ export function bearerAuth(introspector: Introspector, resourceUrl: string) {
         userUlid: info.user_ulid,
         clientName: info.client_name ?? info.client_id ?? 'unknown',
         tokenType: info.token_type ?? 'oauth',
+        surface: clientSurface(info),
       },
     };
     req.auth = auth;

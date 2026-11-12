@@ -6,6 +6,7 @@ use App\Exceptions\PlanFeatureRequired;
 use App\Mcp\TokenContext;
 use App\Models\McpAuditLog;
 use App\Support\PlanQuota;
+use App\Support\RateLimitHeaders;
 use Closure;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -105,7 +106,7 @@ class EnforceTokenScope
         return response()->json([
             'message' => "Too many requests with this token. Try again in {$retry} seconds.",
             'error' => 'rate_limited',
-        ], 429, ['Retry-After' => (string) $retry]);
+        ], 429, RateLimitHeaders::for(max(1, (int) config('mcp.rate_limit_per_minute')), $retry));
     }
 
     private function audit(Request $request, TokenContext $context, ?string $route, int $status, int $durationMs): void

@@ -20,7 +20,7 @@ describe('send_feedback', () => {
       'POST /feedback': () => ({ status: 201, body: { data: { id: '01JFEEDBACKFEEDBACKFEEDBA', kind: 'bug', received_at: '2026-11-12T05:00:00Z' } } }),
     });
     const out = payload(await client.callTool({ name: 'send_feedback', arguments: { kind: 'bug', message: 'Calendar is a day late', page: 'Content Plan' } }));
-    expect(out).toMatchObject({ sent: true, id: '01JFEEDBACKFEEDBACKFEEDBA', kind: 'bug' });
+    expect(out).toEqual({ sent: true, kind: 'bug', note: expect.any(String) });
     expect(app!.v1.calls[0]).toMatchObject({ method: 'POST', path: '/feedback', body: { kind: 'bug', message: 'Calendar is a day late', page: 'Content Plan' } });
   });
 

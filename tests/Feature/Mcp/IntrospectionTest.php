@@ -40,6 +40,7 @@ it('describes a live OAuth access token', function () {
             'scopes' => ['read', 'draft'],
             'client_id' => (string) $client->getKey(),
             'client_name' => 'Claude',
+            'client_surface' => 'other',
             'token_type' => 'oauth',
             'exp' => Token::query()->sole()->expires_at->getTimestamp(),
         ]);
@@ -61,6 +62,7 @@ it('describes a live API key', function () {
             'scopes' => ['read'],
             'client_id' => null,
             'client_name' => 'Claude Code',
+            'client_surface' => 'other',
             'token_type' => 'api_key',
             'exp' => null,
         ]);
@@ -77,3 +79,16 @@ it('answers inactive for a revoked token', function () {
 
     introspect($this, $tokens['access_token'])->assertExactJson(['active' => false]);
 });
+
+it('marks ChatGPT clients by redirect host or registered name', function (string $name, string $redirect, string $surface) {
+    $client = app(\Laravel\Passport\ClientRepository::class)->createAuthorizationCodeGrantClient($name, [$redirect], false);
+    $tokens = oauthTokens($this, User::factory()->create(), $client, 'read');
+
+    introspect($this, $tokens['access_token'])->assertOk()->assertJsonPath('client_surface', $surface);
+})->with([
+    'ChatGPT by redirect host' => ['MCP client', 'https://chatgpt.com/connector_platform_oauth_redirect', 'chatgpt'],
+    'ChatGPT by legacy host' => ['MCP client', 'https://chat.openai.com/aip/callback', 'chatgpt'],
+    'ChatGPT by name' => ['ChatGPT', 'https://example.test/callback', 'chatgpt'],
+    'Claude' => ['Claude', 'https://claude.ai/api/mcp/auth_callback', 'other'],
+    'look-alike host' => ['MCP client', 'https://notchatgpt.com/callback', 'other'],
+]);

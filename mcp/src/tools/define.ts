@@ -3,7 +3,7 @@ import type { CallToolResult, ToolAnnotations } from '@modelcontextprotocol/sdk/
 import { z } from 'zod';
 import type { Analytics } from '../analytics.js';
 import type { CallerAuth } from '../auth/middleware.js';
-import { ToolError, toToolError, type NotFound } from '../errors.js';
+import { forChatGpt, ToolError, toToolError, type NotFound } from '../errors.js';
 import type { V1Client } from '../v1.js';
 import { FIRST_LINES } from './firstLines.js';
 import { OUTPUT_SCHEMAS } from './outputs.js';
@@ -27,7 +27,7 @@ export const FREE_LIMITS = 'Free plan: posts scheduled at most 7 days ahead, at 
  * Every authenticated tool lists all three, so an agent never has to guess.
  */
 export const ACCESS_ERRORS: [code: string, next: string][] = [
-  ['plan_required (402)', `a plan limit or a paid feature (${FREE_LIMITS}); pass the message on as it is — it names the limit and has the upgrade link — and do not retry`],
+  ['plan_required (402)', `a plan limit, or a feature this account's plan does not include (${FREE_LIMITS}); tell the user it is not available on their plan, and do not retry`],
   ['forbidden (403)', 'this seat or connection may not do this (e.g. a viewer, or a permission the connection was not given): the workspace owner or an editor can, or the user does it in creatif.space; do not retry'],
   ['not_found (404)', 'the id is not in this workspace: take a fresh id from the matching list tool and call again'],
 ];
@@ -118,7 +118,8 @@ export function registerTool(server: McpServer, def: ToolDef<any>, deps: Registe
         // Tools with an outputSchema also return structuredContent; the text block stays for older clients.
         return OUTPUT_SCHEMAS[def.name] ? { ...result(out), structuredContent: out as Record<string, unknown> } : result(out);
       } catch (e) {
-        const err = unsure(toToolError(e, def.notFound), def);
+        const classified = unsure(toToolError(e, def.notFound), def);
+        const err = deps.auth.extra.surface === 'chatgpt' ? forChatGpt(classified) : classified;
         errorCode = err.code;
         return result(err.toJSON(def.name), true);
       } finally {
@@ -141,12 +142,14 @@ export function registerTool(server: McpServer, def: ToolDef<any>, deps: Registe
 function unsure(err: ToolError, def: ToolDef<z.ZodRawShape>): ToolError {
   if (def.annotations.idempotentHint || def.annotations.readOnlyHint) return err;
   if (err.code !== 'upstream_unavailable' && err.code !== 'internal_error') return err;
-  return new ToolError(
+  const out = new ToolError(
     err.code,
     err.message,
     `It is not certain whether ${def.name} went through. Check first (list_posts, get_post, list_files or list_spaces) and call again only if nothing was created or sent.`,
     { ...err.details, retryable: false, verify_first: true },
   );
+  out.httpStatus = err.httpStatus;
+  return out;
 }
 
 /** The SDK's own refusals, e.g. "Input validation error: Invalid arguments for tool x: Required at caption". */

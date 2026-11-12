@@ -72,6 +72,8 @@ export interface AppDeps {
   publicDiscovery?: boolean;
   /** Anonymous discovery calls per IP per minute. */
   discoveryRateLimiter?: TokenRateLimiter;
+  /** OpenAI Apps domain-verification token; unset → 404. */
+  openaiAppsChallenge?: string | null;
 }
 
 export function buildMcpServer(auth: CallerAuth, deps: AppDeps): McpServer {
@@ -111,6 +113,18 @@ export function createApp(deps: AppDeps) {
   app.get(['/.well-known/glama.json', '/mcp/.well-known/glama.json'], (_req, res) => {
     res.setHeader('Access-Control-Allow-Origin', '*');
     res.type('application/json').send(glama);
+  });
+
+  // OpenAI Apps domain verification: the token from OPENAI_APPS_CHALLENGE as
+  // plain text, public, no auth; 404 while it is not set.
+  app.get('/.well-known/openai-apps-challenge', (_req, res) => {
+    const token = deps.openaiAppsChallenge?.trim();
+    if (!token) {
+      res.status(404).type('text/plain').send('Not Found');
+      return;
+    }
+    res.setHeader('Cache-Control', 'no-store');
+    res.type('text/plain').send(token);
   });
 
   const metadata = protectedResourceMetadata(deps.resourceUrl, deps.authorizationServer);

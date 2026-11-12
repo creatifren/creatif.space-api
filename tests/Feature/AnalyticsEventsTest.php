@@ -197,7 +197,7 @@ describe('user_signed_up', function () {
         ])->assertStatus(202);
 
         $user = User::query()->sole();
-        $m = ae()->assertCapturedWithKeys('user_signed_up', ['method', 'plan', 'platform', 'ref', 'utm_source', 'utm_campaign']);
+        $m = ae()->assertCapturedWithKeys('user_signed_up', ['is_staff', 'signup_source', 'method', 'plan', 'platform', 'ref', 'utm_source', 'utm_campaign']);
         expect($m['distinct_id'])->toBe($user->ulid)
             ->and($m['properties'])->toMatchArray(['method' => 'email', 'plan' => 'free', 'ref' => 'RANI10', 'utm_source' => 'instagram'])
             ->and(ae()->setFor($user->ulid)[0])->toMatchArray(['plan' => 'free', 'signup_method' => 'email', 'is_internal' => false])
@@ -212,7 +212,7 @@ describe('user_signed_up', function () {
         $this->postJson('/auth/register', ['email' => 'secret@example.com', 'password' => 'long-enough-1'])->assertStatus(202);
 
         expect(json_encode(ae()->sent))->not->toContain('secret@example.com');
-        ae()->assertCapturedWithKeys('user_signed_up', ['method', 'plan', 'platform']);
+        ae()->assertCapturedWithKeys('user_signed_up', ['is_staff', 'signup_source', 'method', 'plan', 'platform']);
     });
 
     it('fires once for a Google signup, not for the login after', function () {
@@ -229,10 +229,92 @@ describe('user_signed_up', function () {
         $this->get('/auth/google/callback?code=abc')->assertRedirect();
 
         $user = User::query()->sole();
-        $m = ae()->assertCapturedWithKeys('user_signed_up', ['method', 'plan', 'platform', 'ref', 'utm_source', 'utm_medium']);
+        $m = ae()->assertCapturedWithKeys('user_signed_up', ['is_staff', 'signup_source', 'method', 'plan', 'platform', 'ref', 'utm_source', 'utm_medium']);
         expect($m['distinct_id'])->toBe($user->ulid)
             ->and($m['properties']['method'])->toBe('google')
             ->and(ae()->setFor($user->ulid)[0]['is_internal'])->toBeFalse();
+    });
+});
+
+describe('user_signed_up: is_staff, signup_source, plan, exactly once (CS signup funnel, 12 Nov)', function () {
+    it('names the source: utm_source, else referral, else the entry, else direct', function (array $attribution, string $expected) {
+        expect(ProductEvents::signupSource($attribution))->toBe($expected);
+    })->with([
+        'utm wins' => [['utm_source' => 'instagram', 'ref' => 'RANI10', 'entry' => 'tpl-base'], 'instagram'],
+        'referral' => [['ref' => 'RANI10', 'entry' => 'tpl-base'], 'referral'],
+        'entry' => [['entry' => 'tpl-restaurants'], 'tpl-restaurants'],
+        'nothing' => [[], 'direct'],
+        'empty values' => [['utm_source' => '', 'ref' => ''], 'direct'],
+    ]);
+
+    it('sends is_staff, signup_source and the plan on a Google signup from a campaign', function () {
+        $this->get('/auth/google/redirect?ref=RANI10&utm_source=newsletter&utm_campaign=nov');
+
+        aeGoogleCallback();
+        $this->get('/auth/google/callback?code=abc')->assertRedirect();
+
+        $m = ae()->assertCapturedWithKeys('user_signed_up', ['is_staff', 'signup_source', 'method', 'plan', 'platform', 'ref', 'utm_source', 'utm_campaign']);
+        expect($m['properties'])->toMatchArray([
+            'method' => 'google',
+            'plan' => 'free',
+            'is_staff' => false,
+            'signup_source' => 'newsletter',
+            'ref' => 'RANI10',
+        ]);
+    });
+
+    it('says referral or direct when there is no campaign', function () {
+        $this->postJson('/auth/register', ['email' => 'a@example.com', 'password' => 'long-enough-1', 'ref' => 'RANI10'])->assertStatus(202);
+        $this->postJson('/auth/register', ['email' => 'b@example.com', 'password' => 'long-enough-1'])->assertStatus(202);
+
+        $sources = array_map(fn (array $m) => $m['properties']['signup_source'], ae()->captured('user_signed_up'));
+        expect($sources)->toBe(['referral', 'direct']);
+    });
+
+    it('is sent once per user, however often signedUp runs for them', function () {
+        $user = User::factory()->create(['email' => 'once@example.com']);
+
+        ProductEvents::signedUp($user, 'google');
+        ProductEvents::signedUp($user, 'google');
+        ProductEvents::signedUp($user, 'email');
+
+        ae()->assertCapturedOnce('user_signed_up');
+        expect(ae()->captured('user_signed_up')[0]['distinct_id'])->toBe($user->ulid);
+    });
+
+    it('is sent once for an email signup that later signs in with Google', function () {
+        $this->postJson('/auth/register', ['email' => 'rani@example.com', 'password' => 'long-enough-1'])->assertStatus(202);
+
+        aeGoogleCallback();
+        $this->get('/auth/google/callback?code=abc')->assertRedirect();
+        auth()->logout();
+        $this->get('/auth/google/callback?code=abc')->assertRedirect();
+
+        expect(User::query()->count())->toBe(1);
+        ae()->assertCapturedOnce('user_signed_up');
+        expect(ae()->captured('user_signed_up')[0]['properties']['method'])->toBe('email');
+    });
+
+    it('two users each get their own', function () {
+        ProductEvents::signedUp(User::factory()->create(['email' => 'x@example.com']), 'email');
+        ProductEvents::signedUp(User::factory()->create(['email' => 'y@example.com']), 'email');
+
+        expect(ae()->captured('user_signed_up'))->toHaveCount(2);
+    });
+
+    it('sends nothing for internal accounts: staff or an internal address', function () {
+        ProductEvents::signedUp(User::factory()->create(['email' => 'ops@example.com', 'is_staff' => true]), 'google');
+        ProductEvents::signedUp(User::factory()->create(['email' => 'hello@creatif.space']), 'google');
+
+        ae()->assertNotCaptured('user_signed_up');
+    });
+
+    it('still sends when the cache is down (the call sites already run once per new row)', function () {
+        Cache::shouldReceive('add')->andThrow(new RuntimeException('cache down'));
+
+        ProductEvents::signedUp(User::factory()->create(['email' => 'nocache@example.com']), 'email');
+
+        ae()->assertCapturedOnce('user_signed_up');
     });
 });
 
@@ -255,7 +337,7 @@ describe('user_signed_up entry and utm_term/utm_content', function () {
         ])->assertStatus(202);
 
         $m = ae()->assertCapturedWithKeys('user_signed_up', [
-            'method', 'plan', 'platform', 'utm_source', 'utm_medium', 'utm_campaign', 'utm_term', 'utm_content', 'entry', '$set_once',
+            'is_staff', 'signup_source', 'method', 'plan', 'platform', 'utm_source', 'utm_medium', 'utm_campaign', 'utm_term', 'utm_content', 'entry', '$set_once',
         ]);
         expect($m['properties'])->toMatchArray([
             'utm_term' => 'client approval',
@@ -273,7 +355,7 @@ describe('user_signed_up entry and utm_term/utm_content', function () {
         aeGoogleCallback();
         $this->get('/auth/google/callback?code=abc')->assertRedirect();
 
-        $m = ae()->assertCapturedWithKeys('user_signed_up', ['method', 'plan', 'platform', 'utm_term', 'utm_content', 'entry', '$set_once']);
+        $m = ae()->assertCapturedWithKeys('user_signed_up', ['is_staff', 'signup_source', 'method', 'plan', 'platform', 'utm_term', 'utm_content', 'entry', '$set_once']);
         expect($m['properties'])->toMatchArray([
             'method' => 'google',
             'entry' => 'mcp-page',
@@ -286,7 +368,7 @@ describe('user_signed_up entry and utm_term/utm_content', function () {
             'email' => 'andi@example.com', 'password' => 'long-enough-1', 'entry' => $entry,
         ])->assertStatus(202);
 
-        ae()->assertCapturedWithKeys('user_signed_up', ['method', 'plan', 'platform']);
+        ae()->assertCapturedWithKeys('user_signed_up', ['is_staff', 'signup_source', 'method', 'plan', 'platform']);
     })->with([
         'uppercase' => 'Pricing',
         'space' => 'pricing hero',
@@ -302,7 +384,7 @@ describe('user_signed_up entry and utm_term/utm_content', function () {
         aeGoogleCallback();
         $this->get('/auth/google/callback?code=abc')->assertRedirect();
 
-        ae()->assertCapturedWithKeys('user_signed_up', ['method', 'plan', 'platform']);
+        ae()->assertCapturedWithKeys('user_signed_up', ['is_staff', 'signup_source', 'method', 'plan', 'platform']);
     });
 
     it('never treats entry as a referral code', function () {
@@ -932,5 +1014,188 @@ describe('plan, platform, aliases and internal accounts (CS_Product_3, 11 Nov)',
 
         ae()->assertCapturedTimes('waitlist_joined', 1);
         ae()->assertNotCaptured('waitlist_priority_reached');
+    });
+});
+
+describe('activation: first_* milestones, once per user (CS activation funnel)', function () {
+    it('sends first_channel_connected once, with plan, signup_source and minutes_since_signup', function () {
+        $user = User::factory()->create(['signup_attribution' => ['signup_source' => 'newsletter'], 'created_at' => now()->subMinutes(42)]);
+        $ig = SocialAccount::factory()->for($user)->create(['platform' => 'instagram']);
+        ProductEvents::channelConnected($user, $ig);
+        $tt = SocialAccount::factory()->for($user)->create(['platform' => 'tiktok']);
+        ProductEvents::channelConnected($user, $tt);
+        ProductEvents::channelConnected($user, $ig); // a reconnect
+
+        $m = ae()->assertCapturedWithKeys('first_channel_connected', ['plan', 'signup_source', 'minutes_since_signup', 'network']);
+        expect($m['distinct_id'])->toBe($user->ulid)
+            ->and($m['properties'])->toMatchArray([
+                'plan' => 'free', 'signup_source' => 'newsletter', 'minutes_since_signup' => 42, 'network' => 'instagram',
+            ]);
+        ae()->assertCapturedTimes('channel_connected', 3);
+    });
+
+    it('sends first_draft_created for the first post only, through the API', function () {
+        $user = aePaidUser();
+        $account = SocialAccount::factory()->for($user)->create(['platform' => 'linkedin']);
+
+        foreach (['One', 'Two'] as $caption) {
+            $this->actingAs($user)->postJson('/api/v1/social-posts', ['caption' => $caption, 'account_ids' => [$account->ulid], 'draft' => true])->assertCreated();
+        }
+
+        $m = ae()->assertCapturedWithKeys('first_draft_created', ['plan', 'signup_source', 'minutes_since_signup', 'post_id', 'status']);
+        expect($m['properties'])->toMatchArray(['plan' => 'pro', 'status' => 'draft', 'signup_source' => 'unknown'])
+            ->and($m['properties']['minutes_since_signup'])->toBeInt()
+            ->and(json_encode($m))->not->toContain('One');
+        ae()->assertCapturedTimes('post_created', 2);
+    });
+
+    it('sends first_approval_sent for the first link only', function () {
+        $user = aePaidUser();
+        $one = SocialApprovalLink::create(['user_id' => $user->id]);
+        ProductEvents::approvalLinkCreated($one, 2, 72);
+        $two = SocialApprovalLink::create(['user_id' => $user->id]);
+        ProductEvents::approvalLinkCreated($two, 1, null);
+
+        $m = ae()->assertCapturedWithKeys('first_approval_sent', ['plan', 'signup_source', 'minutes_since_signup', 'link_id', 'posts_count']);
+        expect($m['properties'])->toMatchArray(['link_id' => $one->ulid, 'posts_count' => 2]);
+    });
+
+    it('sends first_post_published once across destinations and redelivered webhooks', function () {
+        config(['services.social.provider' => 'postforme']);
+        $user = aePaidUser();
+        $ig = SocialAccount::factory()->for($user)->create(['platform' => 'instagram']);
+        $tt = SocialAccount::factory()->for($user)->create(['platform' => 'tiktok']);
+        $post = SocialPost::factory()->for($user)->create(['provider_post_id' => 'post_first', 'scheduled_at' => now()->addHour()]);
+        $post->targets()->create(['social_account_id' => $ig->id]);
+        $post->targets()->create(['social_account_id' => $tt->id]);
+        Credits::chargeSend($post);
+
+        $result = fn (SocialAccount $a) => ['event_type' => 'social.post.result.created', 'data' => [
+            'id' => 'res_first_'.$a->id, 'post_id' => 'post_first', 'social_account_id' => $a->provider_account_id, 'success' => true,
+        ]];
+        aeHook($result($ig))->assertOk();
+        aeHook($result($ig))->assertOk();
+        aeHook($result($tt))->assertOk();
+
+        $m = ae()->assertCapturedWithKeys('first_post_published', ['plan', 'signup_source', 'minutes_since_signup', 'post_id', 'network']);
+        expect($m['distinct_id'])->toBe($user->ulid)
+            ->and($m['properties'])->toMatchArray(['post_id' => $post->ulid, 'network' => 'instagram', 'plan' => 'pro']);
+    });
+
+    it('never sends a milestone twice, even when the caller says first again', function () {
+        $user = User::factory()->create();
+
+        ProductEvents::activated($user, 'first_post_published', ['post_id' => 'a']);
+        ProductEvents::activated($user, 'first_post_published', ['post_id' => 'b']);
+        ProductEvents::activated($user, 'first_approval_sent');
+
+        ae()->assertCapturedOnce('first_post_published');
+        ae()->assertCapturedOnce('first_approval_sent');
+        expect(ae()->captured('first_post_published')[0]['properties']['post_id'])->toBe('a');
+    });
+
+    it('ignores names that are not milestones', function () {
+        ProductEvents::activated(User::factory()->create(), 'user_signed_up');
+
+        ae()->assertNotCaptured('user_signed_up');
+    });
+
+    it('sends no milestone for internal accounts', function (array $attrs) {
+        $user = User::factory()->create($attrs);
+        $account = SocialAccount::factory()->for($user)->create();
+        $link = SocialApprovalLink::create(['user_id' => $user->id]);
+
+        ProductEvents::channelConnected($user, $account);
+        ProductEvents::approvalLinkCreated($link, 1, null);
+        foreach (ProductEvents::ACTIVATION as $event) {
+            ProductEvents::activated($user, $event);
+        }
+
+        foreach (ProductEvents::ACTIVATION as $event) {
+            ae()->assertNotCaptured($event);
+        }
+    })->with([
+        'staff' => [['email' => 'ops@example.com', 'is_staff' => true]],
+        'hello@creatif.space' => [['email' => 'hello@creatif.space']],
+    ]);
+
+    it('still sends when the cache is down (the is_first_* check already held)', function () {
+        $user = User::factory()->create();
+        Cache::shouldReceive('add')->andThrow(new RuntimeException('cache down'));
+
+        ProductEvents::activated($user, 'first_channel_connected');
+
+        ae()->assertCapturedOnce('first_channel_connected');
+    });
+});
+
+describe('first-touch attribution on the user (users.signup_attribution)', function () {
+    it('keeps utm_*, referrer host, landing path and signup_source from an email signup', function () {
+        $this->postJson('/auth/register', [
+            'email' => 'touch@example.com', 'password' => 'long-enough-1',
+            'utm_source' => 'instagram', 'utm_medium' => 'bio', 'utm_campaign' => 'nov', 'utm_term' => 'not-kept',
+            'referrer_host' => 'L.Instagram.com', 'landing_path' => '/pricing',
+        ])->assertStatus(202);
+
+        expect(User::query()->sole()->signup_attribution)->toBe([
+            'utm_source' => 'instagram', 'utm_medium' => 'bio', 'utm_campaign' => 'nov',
+            'referrer_host' => 'l.instagram.com', 'landing_path' => '/pricing', 'signup_source' => 'instagram',
+        ]);
+        // The event's keys are unchanged: referrer and path stay on the row.
+        ae()->assertCapturedWithKeys('user_signed_up', ['is_staff', 'signup_source', 'method', 'plan', 'platform', 'utm_source', 'utm_medium', 'utm_campaign', 'utm_term']);
+    });
+
+    it('carries referrer host and landing path through the Google redirect', function () {
+        $this->get('/auth/google/redirect?ref=RANI10&referrer_host=www.google.com&landing_path=/signup')
+            ->assertSessionHas('signup_touch', ['referrer_host' => 'www.google.com', 'landing_path' => '/signup']);
+
+        aeGoogleCallback();
+        $this->get('/auth/google/callback?code=abc')->assertRedirect();
+
+        expect(User::query()->sole()->signup_attribution)->toBe([
+            'referrer_host' => 'www.google.com', 'landing_path' => '/signup', 'signup_source' => 'referral',
+        ]);
+    });
+
+    it('drops a referrer or path that is not a bare host or path, without blocking the signup', function (string $host, string $path) {
+        $this->postJson('/auth/register', [
+            'email' => 'bad@example.com', 'password' => 'long-enough-1', 'referrer_host' => $host, 'landing_path' => $path,
+        ])->assertStatus(202);
+
+        expect(User::query()->sole()->signup_attribution)->toBe(['signup_source' => 'direct']);
+    })->with([
+        'url, query' => ['https://evil.test/x', '/p?email=a@b.c'],
+        'credentials, fragment' => ['user:pw@evil.test', '/p#token'],
+        'port, scheme-relative' => ['evil.test:8080', '//evil.test'],
+        'too long' => [str_repeat('a', 300).'.test', '/'.str_repeat('a', 300)],
+    ]);
+
+    it('is written once: a later login or call changes nothing', function () {
+        $this->postJson('/auth/register', ['email' => 'rani@example.com', 'password' => 'long-enough-1', 'utm_source' => 'first'])->assertStatus(202);
+        $this->get('/auth/google/redirect?utm_source=second&referrer_host=second.test');
+        aeGoogleCallback();
+        $this->get('/auth/google/callback?code=abc')->assertRedirect();
+
+        $user = User::query()->sole();
+        ProductEvents::signedUp($user, 'email', ['utm_source' => 'third']);
+
+        expect($user->fresh()->signup_attribution)->toBe(['utm_source' => 'first', 'signup_source' => 'first']);
+    });
+
+    it('is never serialized: hidden on the model and absent from /me', function () {
+        $user = User::factory()->create(['signup_attribution' => ['utm_source' => 'secret-campaign', 'signup_source' => 'secret-campaign']]);
+
+        expect($user->toArray())->not->toHaveKey('signup_attribution');
+        // fresh(): strict mode wants every column the /me resource reads.
+        $this->actingAs($user->fresh())->getJson('/api/v1/me')->assertOk()->assertDontSee('secret-campaign');
+    });
+
+    it('feeds signup_source into the milestones', function () {
+        $this->postJson('/auth/register', ['email' => 'm@example.com', 'password' => 'long-enough-1', 'ref' => 'RANI10'])->assertStatus(202);
+        $user = User::query()->sole();
+
+        ProductEvents::channelConnected($user, SocialAccount::factory()->for($user)->create());
+
+        expect(ae()->captured('first_channel_connected')[0]['properties']['signup_source'])->toBe('referral');
     });
 });

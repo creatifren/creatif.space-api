@@ -13,6 +13,8 @@ use App\Models\TeamMember;
 use App\Models\User;
 use App\Notifications\AccountExportReady;
 use App\Support\Workspace;
+use Illuminate\Support\Facades\Crypt;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Notification;
 use Illuminate\Support\Facades\Queue;
 use Illuminate\Support\Facades\Storage;
@@ -89,7 +91,10 @@ it('builds the ZIP with every section and emails a 24-hour signed link', functio
     expect($export->status)->toBe('done')
         ->and($export->expires_at->diffInHours(now(), true))->toEqualWithDelta(24, 0.1);
     $files = axUnzip($export);
-    expect(array_keys($files))->toEqualCanonicalizing(['README.txt', 'account.json', 'workspace.json', 'channels.json', 'posts.json', 'approvals.json', 'files.json']);
+    expect(array_keys($files))->toEqualCanonicalizing([
+        'README.txt', 'account.json', 'workspace.json', 'channels.json', 'posts.json', 'approvals.json',
+        'approval_audit.json', 'insight_share_links.json', 'notification_settings.json', 'files.json',
+    ]);
 
     $posts = json_decode($files['posts.json'], true);
     expect($posts[0])->toMatchArray(['caption' => 'Caption of a.test', 'status' => 'scheduled']);
@@ -105,6 +110,52 @@ it('builds the ZIP with every section and emails a 24-hour signed link', functio
 
         return $mail->actionUrl === $export->signedUrl() && str_contains($mail->actionUrl, 'signature=');
     });
+});
+
+it('includes Insight share links, notification settings and the approval audit — never a link token', function () {
+    $owner = axWorkspace('a.test');
+    $tokenHash = str_repeat('f', 64);
+    DB::table('insight_share_links')->insert([
+        'ulid' => (string) str()->ulid(), 'owner_id' => $owner->id, 'user_id' => $owner->id, 'token_hash' => $tokenHash,
+        'period_from' => '2026-10-01', 'period_to' => '2026-10-31', 'period_kind' => 'month', 'channel_ids' => json_encode(['01JCHANNEL0000000000000001']),
+        'recipient_email' => 'boss@client.test', 'recipient_token' => Crypt::encryptString('SHARE_TOKEN_PLAIN'),
+        'expires_at' => now()->addDays(30), 'created_at' => now(), 'updated_at' => now(),
+    ]);
+    $this->actingAs($owner)->patchJson('/api/v1/me/notification-settings', ['weekly_digest' => false, 'timezone' => 'Indian/Maldives'])->assertOk();
+    // The owner, as an approver on someone else's link.
+    $theirs = SocialApprovalLink::create(['user_id' => User::factory()->create()->id, 'title' => 'Their plan', 'approver_email' => 'a.test@owner.test']);
+    SocialApprovalDecision::create([
+        'social_approval_link_id' => $theirs->id, 'social_post_id' => null, 'decision' => 'approved', 'approver_user_id' => $owner->id,
+        'approver_email' => 'a.test@owner.test', 'comment' => 'Looks good', 'source' => 'mcp', 'ip' => '198.51.100.4', 'user_agent' => 'OtherAgent',
+    ]);
+
+    $files = axUnzip(axRun($this, $owner));
+
+    $shares = json_decode($files['insight_share_links.json'], true);
+    expect($shares)->toHaveCount(1)
+        ->and($shares[0])->toMatchArray([
+            'period' => ['from' => '2026-10-01', 'to' => '2026-10-31', 'kind' => 'month'],
+            'channels' => ['01JCHANNEL0000000000000001'],
+            'recipient_email' => 'boss@client.test',
+            'status' => 'live',
+        ]);
+
+    $settings = json_decode($files['notification_settings.json'], true);
+    expect($settings['settings'])->toBe(['publish_failed' => true, 'approval_decided' => true, 'weekly_digest' => false, 'timezone' => 'Indian/Maldives'])
+        ->and(collect($settings['preferences'])->firstWhere('type', 'digest.weekly'))->toBe(['type' => 'digest.weekly', 'email' => false, 'bell' => true]);
+
+    $audit = json_decode($files['approval_audit.json'], true);
+    expect($audit['on_your_links'])->toHaveCount(1)
+        ->and($audit['on_your_links'][0])->toMatchArray(['link_title' => 'Link of a.test', 'decision' => 'changes_requested', 'comment' => 'Swap photo', 'approver_email' => 'client@a.test'])
+        ->and($audit['your_decisions'])->toBe([[
+            'link_id' => $theirs->ulid, 'link_title' => 'Their plan', 'decided_at' => $audit['your_decisions'][0]['decided_at'],
+            'decision' => 'approved', 'comment' => 'Looks good', 'source' => 'mcp',
+        ]]);
+
+    $all = implode("\n", $files);
+    foreach ([$tokenHash, 'SHARE_TOKEN_PLAIN', 'recipient_token', '198.51.100.4', 'OtherAgent'] as $secret) {
+        expect($all)->not->toContain($secret);
+    }
 });
 
 it('never includes tokens, secrets, provider ids, IPs or user agents', function () {

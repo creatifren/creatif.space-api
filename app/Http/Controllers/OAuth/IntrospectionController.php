@@ -15,7 +15,10 @@ use Illuminate\Http\Request;
  *   X-MCP-Secret: <MCP_INTROSPECT_SECRET>
  *   {"token": "<OAuth access token or cs_live_ API key>"}
  *
- *   → {active, user_ulid, scopes[], client_id, client_name, token_type, exp}
+ *   → {active, user_ulid, scopes[], client_id, client_name, client_surface, token_type, exp}
+ *
+ * client_surface is 'chatgpt' for ChatGPT (by DCR name or redirect host),
+ * else 'other': the MCP server words plan errors neutrally for ChatGPT.
  *
  * Anything that does not resolve — expired, revoked, unknown, a suspended
  * account — is `{"active": false}` and nothing more.
@@ -48,6 +51,7 @@ class IntrospectionController extends Controller
             'scopes' => $context->scopes,
             'client_id' => $context->clientId,
             'client_name' => $context->clientName,
+            'client_surface' => $context->clientSurface,
             'token_type' => $context->kind,
             'exp' => $context->expiresAt,
         ], 200, ['Cache-Control' => 'no-store']);

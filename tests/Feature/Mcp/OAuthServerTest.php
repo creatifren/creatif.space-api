@@ -173,7 +173,8 @@ describe('authorization code + PKCE', function () {
             ->assertOk()
             ->assertSee('Claude wants to connect to your account')
             ->assertSee(config('mcp.scopes.draft'))
-            ->assertSee('rizal@example.test');
+            ->assertSee('ri***@example.test')
+            ->assertDontSee('rizal@example.test');
     });
 
     it('issues a 1 h access token and a 30 d rotating refresh token', function () {

@@ -284,6 +284,22 @@ is in [`docs/tool-justifications.md`](docs/tool-justifications.md).
 `test/annotations.test.ts` checks these rules and that file, and pins every
 tool's hints in a snapshot.
 
+## Plan errors and ChatGPT
+
+No tool description names prices, plan tiers or upgrading, for any client
+(`test/no-upsell.test.ts`). When the OAuth client is ChatGPT — the API's
+introspection says `client_surface: "chatgpt"` (DCR name or a
+`chatgpt.com` / `openai.com` redirect host), or the client name says
+ChatGPT / OpenAI — any 402 or `plan_required` becomes:
+
+```json
+{ "error": { "code": "not_available_on_plan", "message": "This isn’t available on this account’s plan.", "next_step": "…no plan change or purchase…", "details": { "tool": "…" } } }
+```
+
+with no upgrade link or pricing step; other errors lose billing / top-up
+links. Other clients get the API's message and links unchanged
+(`test/chatgpt-surface.test.ts`).
+
 ## Rate limits (429)
 
 Every tool turns an API 429 into the same envelope:
@@ -399,6 +415,7 @@ registry workflow, which only publishes `mcp/server.json`.
 | `POSTHOG_KEY` | — | unset → no analytics |
 | `POSTHOG_HOST` | `https://us.i.posthog.com` | |
 | `GLAMA_CLAIM` | the published claim | served at `GET /.well-known/glama.json` and `GET /mcp/.well-known/glama.json` (public, must stay published) |
+| `OPENAI_APPS_CHALLENGE` | — | OpenAI Apps domain-verification token, served as `text/plain` at `GET /.well-known/openai-apps-challenge`; unset → 404 |
 | `MCP_PUBLIC_DISCOVERY` | off | `true` lets `initialize`, `notifications/initialized`, `ping` and `tools/list` answer **without a token** (registry crawlers, client previews; 30/min per IP). `tools/call` and everything else still get the 401 + `WWW-Authenticate` (`resource_metadata`) sign-in challenge; a request with a token always takes normal auth. Leave off until QA has verified it. |
 
 ## Develop

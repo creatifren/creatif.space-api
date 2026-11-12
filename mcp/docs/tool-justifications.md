@@ -46,7 +46,7 @@ is destructive previews first and acts only on `confirm: true`.
 | `list_top_posts` | List top posts | yes | no | no | Reads the best-performing posts. |
 | `get_best_times` | Get best times to post | yes | no | no | Reads when the user's audience engages most. |
 | `get_insight_report_link` | Get an Insight PDF link | yes | no | no | Returns a short-lived private link to a PDF report. |
-| `get_insight_csv_link` | Get an Insight CSV link | yes | no | no | Returns a 24-hour private link to the Insight numbers as CSV. |
+| `get_insight_csv_link` | Get an Insight CSV link | yes | no | no | Returns a short-lived private link to the user's own post numbers as CSV. |
 | `create_insight_share_link` | Share an Insight report | no | no | no | Creates an unlisted link for the user to send their client; posts nothing publicly. |
 | `revoke_insight_share_link` | Revoke a shared Insight report | no | yes | no | Turns a share link off for good. |
 | `list_conversations` | List Engage conversations | yes | no | no | Reads comments and DMs on the user's channels. |
