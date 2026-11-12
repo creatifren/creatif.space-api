@@ -12,6 +12,7 @@ import { insightTools } from './tools/insight.js';
 import { insightReportTools } from './tools/insightReport.js';
 import { insightShareTools } from './tools/insightShare.js';
 import { m2Tools } from './tools/m2.js';
+import { contentPlanTools } from './tools/contentPlan.js';
 import { mediaTools } from './tools/media.js';
 import { engageTools } from './tools/engage.js';
 import { storageTools } from './tools/storage.js';
@@ -65,7 +66,7 @@ export interface AppDeps {
 export function buildMcpServer(auth: CallerAuth, deps: AppDeps): McpServer {
   const server = new McpServer(SERVER_INFO, { instructions: INSTRUCTIONS });
   const v1 = new V1Client(deps.v1ApiUrl, auth.token, deps.fetchImpl);
-  const tools = [...m1Tools, ...m2Tools, ...mediaTools, ...engageTools, ...aiTools, ...storageTools, ...housekeepingTools, ...approverTools, ...insightTools, ...insightReportTools, ...spaceTools, ...auditTools, ...connectTools, ...feedbackTools, ...insightShareTools, ...calendarTools];
+  const tools = [...m1Tools, ...m2Tools, ...mediaTools, ...engageTools, ...aiTools, ...storageTools, ...housekeepingTools, ...approverTools, ...insightTools, ...insightReportTools, ...spaceTools, ...auditTools, ...connectTools, ...feedbackTools, ...insightShareTools, ...calendarTools, ...contentPlanTools];
   for (const tool of tools) {
     registerTool(server, tool, { auth, v1, analytics: deps.analytics });
   }
