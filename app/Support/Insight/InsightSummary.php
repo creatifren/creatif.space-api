@@ -47,14 +47,11 @@ final class InsightSummary
                 'username' => $c['username'],
                 'available' => $c['available'],
                 ...self::numbers($c['current']),
-                'likes' => $c['current']['likes'],
-                'comments' => $c['current']['comments'],
-                'shares' => $c['current']['shares'],
-                'saves' => $c['current']['saves'],
                 'followers' => [
                     'start' => $c['followers']['start'],
                     'end' => $c['followers']['end'],
                     'change' => $c['followers']['delta'],
+                    'previous_change' => $c['followers_prev_delta'],
                     'history_since' => $c['followers']['since'],
                 ],
                 'previous' => self::numbers($c['previous']),
@@ -84,6 +81,7 @@ final class InsightSummary
             'workflow' => [
                 ...self::workflow($wf),
                 'previous' => self::workflow($wfPrev),
+                'change_pct' => self::workflowChanges(self::workflow($wf), self::workflow($wfPrev)),
             ],
             'notes' => array_values(array_unique(array_map(function (array $note): string {
                 $params = $note['params'];
@@ -109,7 +107,7 @@ final class InsightSummary
 
     /**
      * @param  array<string, mixed>  $m
-     * @return array{posts: int|null, reach: int|null, impressions: int|null, engagement: int|null, engagement_rate: float|null}
+     * @return array{posts: int|null, reach: int|null, impressions: int|null, engagement: int|null, engagement_rate: float|null, likes: int|null, comments: int|null, shares: int|null, saves: int|null}
      */
     private static function numbers(array $m): array
     {
@@ -119,6 +117,10 @@ final class InsightSummary
             'impressions' => $m['views'],
             'engagement' => $m['engagement'],
             'engagement_rate' => $m['rate'] === null ? null : round($m['rate'], 4),
+            'likes' => $m['likes'],
+            'comments' => $m['comments'],
+            'shares' => $m['shares'],
+            'saves' => $m['saves'],
         ];
     }
 
@@ -144,6 +146,29 @@ final class InsightSummary
             'impressions' => $pct($cur['views'], $prev['views']),
             'engagement' => $pct($cur['engagement'], $prev['engagement']),
             'engagement_rate' => $pct($cur['rate'], $prev['rate']),
+            'likes' => $pct($cur['likes'], $prev['likes']),
+            'comments' => $pct($cur['comments'], $prev['comments']),
+            'shares' => $pct($cur['shares'], $prev['shares']),
+            'saves' => $pct($cur['saves'], $prev['saves']),
+        ];
+    }
+
+    /**
+     * The workflow against the previous period: only when both have a number
+     * and the previous one is above zero.
+     *
+     * @param  array<string, int|float|null>  $cur
+     * @param  array<string, int|float|null>  $prev
+     * @return array{posts_approved: float|null, avg_approval_hours: float|null, on_time_rate: float|null}
+     */
+    private static function workflowChanges(array $cur, array $prev): array
+    {
+        $pct = fn ($a, $b) => $a !== null && $b !== null && $b > 0 ? round(($a - $b) / $b * 100, 1) : null;
+
+        return [
+            'posts_approved' => $pct($cur['posts_approved'], $prev['posts_approved']),
+            'avg_approval_hours' => $pct($cur['avg_approval_hours'], $prev['avg_approval_hours']),
+            'on_time_rate' => $pct($cur['on_time_rate'], $prev['on_time_rate']),
         ];
     }
 
