@@ -2,6 +2,7 @@ import { createHash } from 'node:crypto';
 import { z } from 'zod';
 import { ToolError } from '../errors.js';
 import { defineTool, describeTool, type ToolContext } from './define.js';
+import { disconnectedDuplicates } from './m1.js';
 import type { V1Post } from './shape.js';
 
 /*
@@ -129,8 +130,11 @@ async function buildPreview(args: Args, { v1 }: ToolContext) {
   if (unknown.length) {
     throw new ToolError('not_found', 'One or more channels are not connected to this workspace.', 'Take channel ids from list_channels, or leave channel_ids out for every channel, then call again.', { channel_ids: unknown });
   }
+  // Without channel_ids, a disconnected copy of a connected account is left
+  // out (as in list_channels): it is not a channel that needs reconnecting.
+  const dupes = disconnectedDuplicates(accounts as unknown as Record<string, unknown>[]);
   const channels = accounts
-    .filter((a) => !wanted || wanted.includes(a.id))
+    .filter((a) => (wanted ? wanted.includes(a.id) : !dupes.has(a.id)))
     .map((a) => ({ id: a.id, platform: a.platform, username: a.username, reconnect_required: a.reconnect_required === true || a.status !== 'connected' }));
 
   const { data: posts } = await v1.get<{ data: V1Post[] }>('/social-posts', {
