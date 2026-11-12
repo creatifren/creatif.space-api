@@ -69,6 +69,9 @@ final class InsightSummary
                 ], array_filter($c['notes'], fn (array $n) => ($n['reason'] ?? null) === 'below_threshold'))),
             ], $data['channels']),
             'top_posts' => array_map(fn (array $p) => [
+                // Ours when it went out through creatif.space (get_post takes it); null otherwise.
+                'post_id' => $p['post_id'],
+                'channel_id' => $p['channel_id'],
                 'network' => $p['network'],
                 'username' => $p['username'],
                 'posted_at' => $p['posted_at'],

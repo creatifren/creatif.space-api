@@ -87,7 +87,7 @@ final class InsightCollector
         foreach ($accounts as $account) {
             $feed = $this->feed($account, $previous->from);
             $feeds[$account->id] = $feed;
-            [$channel, $notes] = $this->channel($account, $feed, $period, $previous);
+            [$channel, $notes] = $this->channel($owner, $account, $feed, $period, $previous);
             $channels[] = $channel;
             array_push($footnotes, ...$notes);
         }
@@ -195,12 +195,13 @@ final class InsightCollector
      * @param  list<array<string, mixed>>|null  $feed
      * @return array{0: array<string, mixed>, 1: list<array<string, mixed>>}
      */
-    private function channel(SocialAccount $account, ?array $feed, InsightPeriod $period, InsightPeriod $previous): array
+    private function channel(User $owner, SocialAccount $account, ?array $feed, InsightPeriod $period, InsightPeriod $previous): array
     {
         $network = InsightStrings::network($account->platform->value);
         $notes = [];
 
         $inPeriod = $feed === null ? null : array_values(array_filter($feed, fn ($p) => $period->contains($p['posted_at'])));
+        $ourId = $this->ourPostIds($owner, $inPeriod ?? []);
         $inPrevious = $feed === null ? null : array_values(array_filter($feed, fn ($p) => $previous->contains($p['posted_at'])));
 
         // A feed cut short at MAX_PAGES: a previous period read only in part
@@ -258,7 +259,7 @@ final class InsightCollector
                 'views' => $p['metrics']['views'],
                 'channel_id' => $account->ulid,
                 // Ours when it went out through creatif.space; null for one posted elsewhere.
-                'post_id' => $p['external_post_id'],
+                'post_id' => $ourId($p),
                 'likes' => $p['metrics']['likes'],
                 'comments' => $p['metrics']['comments'],
                 'shares' => $p['metrics']['shares'],
@@ -397,6 +398,37 @@ final class InsightCollector
         }
 
         return array_map(fn (int $i) => (int) array_sum(array_column($rows, $i)), range(0, $weeks - 1));
+    }
+
+    /**
+     * Our post id for a feed item, as the Insight CSV names it: the
+     * external id the relay echoes back when it is one of the workspace's
+     * posts, else the workspace post with that relay post id. Most feeds
+     * carry no external id, so without the second match every post made
+     * through creatif.space read post_id null (B6). Null for a post made
+     * elsewhere. One query per channel, for the items in the period only.
+     *
+     * @param  list<array{provider_post_id: string, external_post_id: string|null}>  $items
+     * @return \Closure(array<string, mixed>): ?string
+     */
+    private function ourPostIds(User $owner, array $items): \Closure
+    {
+        $external = array_values(array_filter(array_column($items, 'external_post_id')));
+        $provider = array_values(array_filter(array_column($items, 'provider_post_id')));
+        if ($external === [] && $provider === []) {
+            return fn (array $p): ?string => null;
+        }
+
+        $rows = SocialPost::query()
+            ->whereIn('user_id', Workspace::memberIds($owner))
+            ->where(fn ($q) => $q->whereIn('ulid', $external)->orWhereIn('provider_post_id', $provider))
+            ->get(['ulid', 'provider_post_id']);
+        $ours = $rows->pluck('ulid')->flip();
+        $byProvider = $rows->whereNotNull('provider_post_id')->pluck('ulid', 'provider_post_id');
+
+        return fn (array $p): ?string => isset($p['external_post_id'], $ours[$p['external_post_id']])
+            ? $p['external_post_id']
+            : $byProvider->get((string) ($p['provider_post_id'] ?? ''));
     }
 
     /**
