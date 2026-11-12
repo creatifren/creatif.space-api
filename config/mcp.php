@@ -71,6 +71,10 @@ return [
         'api.v1.insight.summary' => 'read',
         // get_insight_report_link: a 15-minute signed PDF link (Pro / Max).
         'api.v1.insight.export-link' => 'read',
+        // create_insight_share_link / revoke_insight_share_link: sharing with
+        // a client, like an approval link (Pro / Max).
+        'api.v1.insight.share.store' => 'approve',
+        'api.v1.insight.share.destroy' => 'approve',
         // Drafts only: EnforceTokenScope refuses a body that would send,
         // schedule or ask for approval.
         'api.v1.social-posts.store' => 'draft',

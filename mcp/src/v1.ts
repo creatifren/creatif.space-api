@@ -43,12 +43,12 @@ export class V1Client {
     return this.request<T>('GET', path, undefined, query);
   }
 
-  post<T = unknown>(path: string, body: unknown): Promise<T> {
-    return this.request<T>('POST', path, body);
-  }
-
   delete<T = unknown>(path: string): Promise<T> {
     return this.request<T>('DELETE', path);
+  }
+
+  post<T = unknown>(path: string, body: unknown): Promise<T> {
+    return this.request<T>('POST', path, body);
   }
 
   /** A GET whose success body is not JSON (e.g. a CSV export): the raw text. Errors are still JSON. */
