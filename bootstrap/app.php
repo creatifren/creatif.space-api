@@ -38,10 +38,24 @@ return Application::configure(basePath: dirname(__DIR__))
         // but may arrive by navigator.sendBeacon, which cannot send the
         // X-XSRF-TOKEN header. SameSite=Lax + Sanctum's own-origin check
         // keep cross-site requests unauthenticated instead. See routes/api/v1.php.
+        //
+        // Public, throttled, unauthenticated POSTs from the marketing site and
+        // public Space pages (creatif.space): that origin is in
+        // SANCTUM_STATEFUL_DOMAINS for the signed-in approver, so Sanctum
+        // treats these browser POSTs as SPA requests and wanted an XSRF
+        // token the static pages never fetch (419, enterprise leads lost).
+        // None changes the signed-in person's account (a contact lead is only
+        // linked to them); throttles, honeypot, validation and
+        // MarketingSiteOrigin stay on the routes. Pinned in PublicMarketingCsrfTest.
         $middleware->validateCsrfTokens(except: [
             'api/v1/a/*/posts/*/decision',
             'api/v1/a/*/posts/*/retract',
             'api/v1/a/*/approve-all',
+            'api/v1/enterprise/contact',
+            'api/v1/waitlist',
+            'api/v1/referrals/*/click',
+            'api/v1/spaces/*/events',
+            'api/v1/profiles/*/spaces/*/unlock',
         ]);
 
         // The visitor's IP may come only from our app server (TRUSTED_PROXIES),
