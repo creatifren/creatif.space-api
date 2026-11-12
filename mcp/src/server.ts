@@ -23,11 +23,12 @@ import { auditTools } from './tools/audit.js';
 import { connectTools } from './tools/connect.js';
 import { feedbackTools } from './tools/feedback.js';
 import { V1Client } from './v1.js';
+import { VERSION } from './version.js';
 import { mcpCors } from './cors.js';
 import { DEFAULT_FREE_RATE_LIMIT, DEFAULT_GLAMA_CLAIM } from './config.js';
 import { mountFree } from './free/server.js';
 
-export const SERVER_INFO = { name: 'creatif.space', version: '0.2.0' };
+export const SERVER_INFO = { name: 'creatif.space', version: VERSION };
 
 export const INSTRUCTIONS =
   'Get content approved & published faster. ' +
