@@ -134,7 +134,7 @@ final class OpenApi
         ];
     }
 
-    /** @return array<string, mixed> */
+    /** @return array<int|string, mixed> status code (an int key once PHP sees '401') or '2XX' => response */
     private static function responses(bool $authenticated): array
     {
         $error = fn (string $d) => ['description' => $d, 'content' => ['application/json' => ['schema' => ['$ref' => '#/components/schemas/Error']]]];
