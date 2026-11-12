@@ -49,7 +49,7 @@ Rate limit: 60 requests / minute / token (429 + `Retry-After`).
 
 | Tool | Scope | V1 endpoint |
 | --- | --- | --- |
-| `list_channels` | read | `GET /social-accounts` |
+| `list_channels` — channels that need reconnecting carry `reconnect` {reason, next_step} and are listed in `needs_reconnect` | read | `GET /social-accounts` |
 | `list_posts` (status, from, to, channel_id, limit) | read | `GET /social-posts?status&from&to&account_id&limit` |
 | `get_post` | read | `GET /social-posts/{id}` |
 | `list_files` (search, type, folder_id, limit) | read | `GET /files` |
@@ -78,6 +78,7 @@ Rate limit: 60 requests / minute / token (429 + `Retry-After`).
 | `publish_space` (space_id, confirm) — Pro/Max | publish | preview `GET /spaces/{id}/publish-preview`; `confirm: true` → `POST /spaces/{id}/publish` |
 | `get_approval_audit` (link_id) — every decision on one of the user's links: who, post, when, decision, comment; rows and CSV | read | `GET /social-approval-links/{id}/audit.csv` |
 | `list_shared_with_me` — "Reports shared with you": Content Plans other users sent to this user's email | approvals:decide | `GET /me/reports/shared` |
+| `get_connect_link` (network) — the app's connect page (`https://creatif.space/social/connect?network=…`) with the steps; no token in the response; a new network on a full plan → `plan_required` | read | `GET /social-accounts` + `GET /credits` (never `POST /social-accounts/auth-url`) |
 
 **Media upload.** `request_media_upload` → the client PUTs the exact bytes to
 the URL (Content-Type and Content-Length are signed) → `confirm_media_upload`
