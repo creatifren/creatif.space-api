@@ -52,7 +52,7 @@ class InboxController extends Controller
         $user = $request->user();
         self::firstSync($user);
 
-        $rows = SocialConversation::query()
+        $rows = Inbox::liveChannels(SocialConversation::query())
             ->whereIn('user_id', Inbox::userIds($user))
             ->with('account')
             ->when(isset($validated['account']), fn ($q) => $q->whereHas('account', fn ($a) => $a->where('ulid', $validated['account'])))
@@ -229,10 +229,10 @@ class InboxController extends Controller
     {
         $ids = Inbox::userIds($request->user());
 
-        $threads = SocialConversation::query()->whereIn('user_id', $ids)
+        $threads = Inbox::liveChannels(SocialConversation::query())->whereIn('user_id', $ids)
             ->selectRaw('social_account_id, sum(case when unread_count > 0 then 1 else 0 end) as unread_conversations, coalesce(sum(unread_count), 0) as unread_messages, sum(case when status = ? then 1 else 0 end) as open_conversations', [SocialConversation::OPEN])
             ->groupBy('social_account_id')->get()->keyBy('social_account_id');
-        $comments = SocialComment::query()->whereIn('user_id', $ids)
+        $comments = Inbox::liveChannels(SocialComment::query())->whereIn('user_id', $ids)
             ->selectRaw('social_account_id, sum(case when read_at is null then 1 else 0 end) as unread_comments, sum(case when replied_at is null and private_replied_at is null then 1 else 0 end) as unreplied_comments')
             ->groupBy('social_account_id')->get()->keyBy('social_account_id');
 

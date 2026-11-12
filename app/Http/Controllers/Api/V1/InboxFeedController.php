@@ -73,7 +73,7 @@ class InboxFeedController extends Controller
         $ids = Inbox::userIds($user);
 
         $filter = function (Builder $q, string $at, string $kind) use ($validated, $since, $cursor, $ids): void {
-            $q->whereIn('user_id', $ids)
+            Inbox::liveChannels($q)->whereIn('user_id', $ids)
                 ->with('account')
                 ->select('*')
                 ->selectRaw("{$at} as feed_at")
@@ -153,9 +153,10 @@ class InboxFeedController extends Controller
     {
         $row = null;
         if (preg_match('/^(dm|comment)_([0-9A-Za-z]{26})$/', $item, $m) === 1) {
+            // Only channels that are not disconnected (P1), applied per model for the types.
             $query = $m[1] === self::DM
-                ? SocialConversation::query()->with('account')
-                : SocialComment::query()->with(['account', 'post', 'privateReplyConversation']);
+                ? Inbox::liveChannels(SocialConversation::query())->with('account')
+                : Inbox::liveChannels(SocialComment::query())->with(['account', 'post', 'privateReplyConversation']);
             $row = $query->whereIn('user_id', Inbox::userIds($user))->where('ulid', $m[2])->first();
         }
 

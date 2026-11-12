@@ -2,10 +2,13 @@
 
 namespace App\Support;
 
+use App\Enums\SocialAccountStatus;
 use App\Exceptions\InboxUnsupported;
 use App\Exceptions\ProviderRateLimited;
 use App\Models\SocialAccount;
 use App\Models\User;
+use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Database\Eloquent\Model;
 use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Http\Client\RequestException;
 use Illuminate\Http\JsonResponse;
@@ -29,6 +32,30 @@ final class Inbox
     public static function userIds(User $user): array
     {
         return array_values(array_unique([$user->id, Workspace::owner($user)->id]));
+    }
+
+    /**
+     * A disconnected channel's DMs and comments are never listed or read,
+     * in the app or through MCP (P1 privacy): hidden at once, deleted by
+     * InboxPurge.
+     */
+    public static function onLiveChannel(?SocialAccount $account): bool
+    {
+        return $account !== null && $account->status !== SocialAccountStatus::Disconnected;
+    }
+
+    /**
+     * Keeps a conversation or comment query to channels that are not
+     * disconnected.
+     *
+     * @template TModel of Model
+     *
+     * @param  Builder<TModel>  $query
+     * @return Builder<TModel>
+     */
+    public static function liveChannels(Builder $query): Builder
+    {
+        return $query->whereHas('account', fn (Builder $a) => $a->where('status', '!=', SocialAccountStatus::Disconnected->value));
     }
 
     public static function owns(User $user, int $rowUserId): bool

@@ -159,6 +159,12 @@ Schedule::command('ops:daily-digest')->dailyAt('06:20');
 Schedule::command('accounts:purge-deleted')->dailyAt('03:25')->withoutOverlapping();
 
 /*
+ * Engage data of disconnected channels (P1 privacy): deleted at disconnect;
+ * this sweeps up anything a bulk update or a racing webhook left behind.
+ */
+Schedule::command('inbox:purge-disconnected')->dailyAt('03:30')->withoutOverlapping();
+
+/*
  * The same db / queue / storage checks as GET /api/v1/health; a failure is
  * logged as a warning (health.selfcheck_failed) naming the failed checks.
  */
