@@ -20,7 +20,7 @@ return [
     'introspection_secret' => env('MCP_INTROSPECT_SECRET', ''),
 
     'scopes' => [
-        'read' => 'Read your channels, posts, files, Credits balance and Engage inbox (comments and DMs)',
+        'read' => 'Read your channels, posts, files, Credits balance, Engage inbox (comments and DMs) and Insight numbers',
         'draft' => 'Save draft posts and upload media to your library (never sends or schedules them)',
         'approve' => 'Create client approval links for your posts (Free: one client, posts up to 7 days ahead)',
         'publish' => 'Schedule and publish your drafts (at most 20 a day) and reply to comments and DMs, spending Credits',
@@ -67,6 +67,8 @@ return [
         'api.v1.files.index' => 'read',
         'api.v1.credits.show' => 'read',
         'api.v1.me.subscription' => 'read',
+        // get_insight_summary: Pro / Max (402 plan_required on Free).
+        'api.v1.insight.summary' => 'read',
         // Drafts only: EnforceTokenScope refuses a body that would send,
         // schedule or ask for approval.
         'api.v1.social-posts.store' => 'draft',
