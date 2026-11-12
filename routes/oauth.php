@@ -3,6 +3,7 @@
 use App\Http\Controllers\OAuth\ClientRegistrationController;
 use App\Http\Controllers\OAuth\MetadataController;
 use App\Http\Controllers\OAuth\RevocationController;
+use App\Http\Middleware\RefreshTokenErrors;
 use Illuminate\Support\Facades\Route;
 use Laravel\Passport\Http\Controllers\AccessTokenController;
 
@@ -24,7 +25,7 @@ Route::get('/.well-known/oauth-protected-resource/mcp', [MetadataController::cla
 
 Route::prefix('oauth')->group(function () {
     Route::post('/token', [AccessTokenController::class, 'issueToken'])
-        ->middleware('throttle:60,1')
+        ->middleware(['throttle:60,1', RefreshTokenErrors::class])
         ->name('passport.token');
 
     Route::post('/register', ClientRegistrationController::class)
