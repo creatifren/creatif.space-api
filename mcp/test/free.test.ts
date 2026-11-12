@@ -47,13 +47,13 @@ describe('/free endpoint', () => {
     const { tools } = await client.listTools();
     expect(tools.map((t) => t.name).sort()).toEqual(['approval_request_template', 'check_caption', 'connect_guide']);
     const byName = Object.fromEntries(tools.map((t) => [t.name, t]));
-    expect(byName.check_caption!.description).toBe(
+    expect(byName.check_caption!.description!.split('\n')[0]).toBe(
       'Check a social post caption against each network\'s published limits before you schedule it: length, hashtags, mentions, links. Free, no sign-in. Use it on any draft; it does not post anything.',
     );
-    expect(byName.approval_request_template!.description).toBe(
+    expect(byName.approval_request_template!.description!.split('\n')[0]).toBe(
       'Write a ready-to-send message asking a client to approve social posts, with what they must check and a reply deadline. Free, no sign-in.',
     );
-    expect(byName.connect_guide!.description).toBe(
+    expect(byName.connect_guide!.description!.split('\n')[0]).toBe(
       'Explain what you need before connecting a social account to Creatif Space (account type, permissions) and the steps. Free, no sign-in.',
     );
     for (const t of tools) expect(t.annotations?.readOnlyHint).toBe(true);

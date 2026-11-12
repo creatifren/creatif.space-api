@@ -424,3 +424,38 @@ describe('Engage errors (list_conversations / reply_to_conversation)', () => {
     expect(e.next_step).toMatch(/list_conversations/);
   });
 });
+
+describe('402 next steps per Free limit', () => {
+  const plan = (feature: string) =>
+    fail('get_post', { post_id: POST }, { [GET_POST]: v1(402, { code: 'plan_required', message: 'That is past the Free plan limit.', feature }) });
+
+  it('schedule_window → a date within 7 days, or upgrade', async () => {
+    const e = await plan('schedule_window');
+    expect(e).toMatchObject({ code: 'plan_required', details: { feature: 'schedule_window' } });
+    expect(e.next_step).toMatch(/7 days ahead/);
+  });
+
+  it('queue_limit → wait for queued posts, or upgrade', async () => {
+    expect((await plan('queue_limit')).next_step).toMatch(/10 posts can be queued/);
+  });
+
+  it('approval_clients → same client, or upgrade', async () => {
+    expect((await plan('approval_clients')).next_step).toMatch(/one client at a time/);
+  });
+
+  it('any other feature → get_credits, with the Free limits named', async () => {
+    expect((await plan('analytics')).next_step).toMatch(/get_credits.*7 days ahead, 10 queued posts, approval links for one client/);
+  });
+});
+
+describe('/free tools use the same envelope', () => {
+  it('bad arguments → invalid_input with the field', async () => {
+    app = await startApp();
+    const client = await app.connectFree();
+    const res = await client.callTool({ name: 'connect_guide', arguments: { network: 'myspace' } });
+    expect(res.isError).toBe(true);
+    const { error } = payload(res);
+    expect(error).toMatchObject({ code: 'invalid_input', details: { tool: 'connect_guide' } });
+    expect(error.details.issues[0].field).toBe('network');
+  });
+});
