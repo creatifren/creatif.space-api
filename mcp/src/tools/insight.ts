@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { defineTool } from './define.js';
+import { defineTool, describeTool } from './define.js';
 
 const READ_ONLY = { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false } as const;
 
@@ -24,14 +24,18 @@ const period = z
 export const getInsightSummary = defineTool({
   name: 'get_insight_summary',
   title: 'Get Insight numbers',
-  description:
-    'Gets the numbers of a creatif.space Insight report (the same ones the PDF report prints, without the PDF) for a month or a date range of up to 92 days: ' +
-    'per channel and in total — posts published, reach, impressions, engagement (likes + comments + shares + saves), engagement rate (engagement ÷ reach), follower change; ' +
-    'reach per week; the top posts by engagement; and the workflow (posts approved, average approval time, share published on time). ' +
-    'Each figure is compared with the previous period of the same length (change_pct), only when both periods have it. ' +
-    'Numbers come from each network’s API; null means the network did not report that number (never read it as zero) and notes[] says why — pass those notes on. ' +
-    'Insight is on Pro and Max: on Free this returns a plan_required error whose message (with the upgrade link) should be told to the user as it is. ' +
-    'channel_ids (from list_channels) limits it to some channels; by default all connected channels.',
+  description: describeTool({
+    does: 'Gets the numbers of an Insight report (as in the PDF, without it) for a month or up to 92 days: posts, reach, impressions, engagement and its rate, followers, weekly reach, top posts and the approval workflow.',
+    when: 'when the user asks how their channels did over a period, or wants numbers for a client report. Each figure carries change_pct against the previous period of the same length, only when both periods have it. null means the network did not report that number — never read it as zero — and notes[] says why: pass those notes on. channel_ids (from list_channels) limits it to some channels; by default all connected channels.',
+    example: 'get_insight_summary { "period": { "month": "2026-10" } } → { period, totals: { posts: 36, reach: 64900, engagement_rate: 0.089 }, change_pct: { reach: 70.8 }, channels: [...], top_posts: [...], workflow: {...}, notes: ["Saves not available from Facebook API"] }',
+    errors: [
+      ['plan_required', 'Insight is on Pro and Max: tell the user the message as it is (it has the upgrade link); do not retry'],
+      ['invalid_input', 'fix the period (YYYY-MM, or from/to at most 92 days, not in the future) or the channel ids and call again'],
+      ['scope_missing', 'reconnect and allow "read"'],
+      ['unauthorized', 'ask the user to reconnect the creatif.space connector'],
+      ['upstream_unavailable', 'wait a minute and call again'],
+    ],
+  }),
   scope: 'read',
   input: {
     period,
