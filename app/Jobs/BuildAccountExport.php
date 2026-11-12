@@ -2,8 +2,11 @@
 
 namespace App\Jobs;
 
+use App\Enums\NotificationType;
+use App\Http\Controllers\Api\V1\NotificationSettingsController;
 use App\Models\AccountExport;
 use App\Models\File;
+use App\Models\InsightShareLink;
 use App\Models\SocialAccount;
 use App\Models\SocialApprovalDecision;
 use App\Models\SocialApprovalLink;
@@ -108,6 +111,33 @@ class BuildAccountExport implements ShouldQueue
         $links = SocialApprovalLink::query()->whereIn('user_id', $ids)->orderBy('id')->get();
         $decisions = SocialApprovalDecision::query()->whereIn('social_approval_link_id', $links->pluck('id'))->orderBy('id')->get()->groupBy('social_approval_link_id');
 
+        // Decisions this person made as an approver on other people's links:
+        // their own data, without where from (no IP or browser).
+        $mine = SocialApprovalDecision::query()
+            ->where(fn ($q) => $q->where('approver_user_id', $user->id)->orWhere('approver_email', $user->email))
+            ->whereNotIn('social_approval_link_id', $links->pluck('id'))
+            ->with('link:id,ulid,title')
+            ->orderBy('id')->get();
+
+        $onYourLinks = [];
+        foreach ($links as $l) {
+            foreach ($decisions[$l->id] ?? [] as $d) {
+                $onYourLinks[] = [
+                    'link_id' => $l->ulid,
+                    'link_title' => $l->title,
+                    'decided_at' => $at($d->created_at),
+                    'approver_name' => $d->client_name,
+                    'approver_email' => $d->approver_email,
+                    'decision' => $d->decision,
+                    'comment' => $d->comment,
+                    'post_id' => $postUlid[$d->social_post_id] ?? null,
+                    'source' => $d->source,
+                ];
+            }
+        }
+
+        $shares = InsightShareLink::query()->where('owner_id', $owner->id)->orderBy('id')->get();
+
         $library = File::query()->whereIn('user_id', $ids)->where('status', File::STATUS_READY)->orderBy('id')->get();
         $fileExpiry = now()->addDays(AccountExport::FILE_URL_TTL_DAYS);
 
@@ -178,6 +208,39 @@ class BuildAccountExport implements ShouldQueue
                     'source' => $d->source,
                 ])->values()->all(),
             ])->values()->all(),
+            'insight_share_links.json' => $shares->map(fn (InsightShareLink $s) => [
+                'id' => $s->ulid,
+                'period' => ['from' => $s->period_from->toDateString(), 'to' => $s->period_to->toDateString(), 'kind' => $s->period_kind],
+                'channels' => $s->channel_ids,
+                'recipient_email' => $s->recipient_email,
+                'status' => $s->revoked() ? 'revoked' : ($s->expired() ? 'expired' : 'live'),
+                'created_at' => $at($s->created_at),
+                'expires_at' => $at($s->expires_at),
+                'revoked_at' => $at($s->revoked_at),
+            ])->values()->all(),
+            'notification_settings.json' => [
+                // The emails you get (GET /me/notification-settings) and the digest's timezone.
+                'settings' => NotificationSettingsController::settings($user),
+                // Every switch on Settings → Notifications, email and bell.
+                'preferences' => collect(NotificationType::switchable())->map(fn (NotificationType $t) => [
+                    'type' => $t->value,
+                    'email' => $user->wants($t, 'email'),
+                    'bell' => $user->wants($t, 'bell'),
+                ])->values()->all(),
+            ],
+            'approval_audit.json' => [
+                // Every decision on the workspace's links, one row each (also inside approvals.json).
+                'on_your_links' => $onYourLinks,
+                // What you decided on links others sent you.
+                'your_decisions' => $mine->map(fn (SocialApprovalDecision $d) => [
+                    'link_id' => $d->link?->ulid,
+                    'link_title' => $d->link?->title,
+                    'decided_at' => $at($d->created_at),
+                    'decision' => $d->decision,
+                    'comment' => $d->comment,
+                    'source' => $d->source,
+                ])->values()->all(),
+            ],
             'files.json' => [
                 'urls_expire_at' => $fileExpiry->toIso8601String(),
                 'files' => $library->map(fn (File $f) => [
@@ -203,6 +266,9 @@ class BuildAccountExport implements ShouldQueue
             'channels.json   connected social channels (no access tokens)',
             'posts.json      every post in the workspace',
             'approvals.json  approval links and Content Plans, with their decision audit',
+            'approval_audit.json  every approval decision as one list, and your own decisions on links sent to you',
+            'insight_share_links.json  shared Insight report links (no link tokens)',
+            'notification_settings.json  which emails and notifications you get',
             'files.json      library files, each with a download link valid '.AccountExport::FILE_URL_TTL_DAYS.' days',
             '',
             'Passwords, API keys, OAuth tokens and connected-app secrets are never exported.',
