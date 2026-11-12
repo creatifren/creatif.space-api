@@ -85,6 +85,8 @@ return [
         'api.v1.social-posts.send-preview' => 'read',
         // CapTokenSends holds bearer callers to 20 sends a day.
         'api.v1.social-posts.send' => 'publish',
+        // schedule_posts: the same scope as one send (all or none, up to 10).
+        'api.v1.social-posts.send-batch' => 'publish',
         'api.v1.social-approval-links.store' => 'approve',
         'api.v1.social-approval-links.show' => 'read',
         // get_approval_audit: the owner's own link, as CSV.

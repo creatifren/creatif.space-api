@@ -61,6 +61,29 @@ class CapTokenSends
     }
 
     /**
+     * Reserve $n of today's sends at once (a batch), atomically; false and
+     * nothing reserved when they do not all fit. release() gives them back.
+     */
+    public static function reserve(User $user, int $n): bool
+    {
+        $key = self::key($user);
+        Cache::add($key, 0, now('UTC')->addDay()->startOfDay()->addHour());
+
+        if ((int) Cache::increment($key, $n) > self::DAILY_CAP) {
+            Cache::decrement($key, $n);
+
+            return false;
+        }
+
+        return true;
+    }
+
+    public static function release(User $user, int $n): void
+    {
+        Cache::decrement(self::key($user), $n);
+    }
+
+    /**
      * @return array{cap: int, used: int, remaining: int}
      */
     public static function status(User $user): array

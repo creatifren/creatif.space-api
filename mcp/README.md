@@ -61,6 +61,7 @@ Rate limit: 60 requests / minute / token (429 + `Retry-After`).
 | `check_approval_status` (post_id \| link_id) | read | `GET /social-posts/{id}` or `GET /social-approval-links/{id}` |
 | `send_approval_reminder` (link_id) | approve | `POST /social-approval-links/{id}/remind` (one per link per 12 h) |
 | `update_post` (caption, scheduled_at, labels, file_ids \| add_file_ids) | draft (drafts and posts waiting for approval only) | `PATCH /social-posts/{id}` |
+| `schedule_posts` (posts: [{post_id, scheduled_at}] up to 10, confirm) — one preview of every post + total Credits; `confirm: true` schedules all or none | publish | previews `GET /social-posts/{id}/send-preview` each; `confirm: true` → `POST /social-posts/send-batch` (checks all first; a refusal takes back the ones already sent) |
 | `schedule_post` (post_id, scheduled_at, confirm) | publish | preview `GET /social-posts/{id}/send-preview`; `confirm: true` → `POST /social-posts/{id}/send` |
 | `publish_post` (post_id, confirm) | publish | same, sends now |
 | `get_insight_summary` (period: {month} \| {from, to} ≤ 92 days, channel_ids) — Pro / Max; Free → `plan_required` | read | `GET /insight/summary?month \| from&to&channel_ids` |

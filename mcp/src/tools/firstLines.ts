@@ -22,6 +22,7 @@ export const FIRST_LINES: Record<string, string> = {
   update_post: 'Use to change a draft or a post waiting for approval: caption, time, labels or media.',
   discard_draft: 'Use when the user wants a draft deleted for good; previews first, confirm: true deletes.',
   schedule_post: 'Use when the user wants a draft sent later; previews channels and Credits, confirm: true schedules.',
+  schedule_posts: 'Use when the user wants several drafts scheduled together: one preview, then all or none on confirm.',
   publish_post: 'Use when the user wants a draft public now; previews channels and Credits, confirm: true publishes.',
 
   // Approvals

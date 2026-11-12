@@ -51,6 +51,7 @@ use App\Http\Controllers\Api\V1\SocialAccountController;
 use App\Http\Controllers\Api\V1\SocialApprovalController;
 use App\Http\Controllers\Api\V1\SocialFeedController;
 use App\Http\Controllers\Api\V1\SocialPlanLinkController;
+use App\Http\Controllers\Api\V1\SocialPostBatchController;
 use App\Http\Controllers\Api\V1\SocialPostController;
 use App\Http\Controllers\Api\V1\SocialSettingsController;
 use App\Http\Controllers\Api\V1\SocialWebhookController;
@@ -396,6 +397,10 @@ Route::middleware(['auth:sanctum,mcp', EnforceTokenScope::class, EnsureNotPendin
     Route::post('/social-posts/swap', [SocialPostController::class, 'swap'])
         ->middleware('throttle:30,1')
         ->name('api.v1.social-posts.swap');
+    // Up to 10 drafts scheduled together, all or none (MCP schedule_posts).
+    Route::post('/social-posts/send-batch', [SocialPostBatchController::class, 'send'])
+        ->middleware('throttle:10,1')
+        ->name('api.v1.social-posts.send-batch');
     Route::get('/social-posts/{socialPost}/send-preview', [SocialPostController::class, 'sendPreview'])
         ->name('api.v1.social-posts.send-preview');
     Route::post('/social-posts/{socialPost}/send', [SocialPostController::class, 'send'])

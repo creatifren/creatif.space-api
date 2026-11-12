@@ -91,7 +91,7 @@ describe('401 flow', () => {
     expect(tools.map((t) => t.name).sort()).toEqual(
       [
         'draft_post', 'get_account_summary', 'get_credits', 'get_post', 'list_channels', 'list_files', 'list_posts',
-        'create_approval_link', 'create_content_plan', 'check_approval_status', 'send_approval_reminder', 'update_post', 'schedule_post', 'publish_post',
+        'create_approval_link', 'create_content_plan', 'check_approval_status', 'send_approval_reminder', 'update_post', 'schedule_post', 'schedule_posts', 'publish_post',
         'request_media_upload', 'confirm_media_upload',
         'list_conversations', 'reply_to_conversation',
         'suggest_caption',

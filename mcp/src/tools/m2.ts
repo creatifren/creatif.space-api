@@ -12,7 +12,7 @@ const confirm = z
   .default(false)
   .describe('Leave false first: you get a preview (channels and Credit cost). Set true only after the user explicitly agreed to that preview.');
 
-interface SendPreview {
+export interface SendPreview {
   post_id: string;
   sendable: boolean;
   status: string;
@@ -70,7 +70,7 @@ export class PreviewTokens {
 
 export const previewTokens = new PreviewTokens();
 
-async function preview(ctx: ToolContext, postId: string, scheduledAt?: string): Promise<SendPreview> {
+export async function preview(ctx: ToolContext, postId: string, scheduledAt?: string): Promise<SendPreview> {
   // With the slot, the plan's limits (scheduling window, queue) answer
   // plan_required here, before the user is asked to confirm anything.
   const { data } = await ctx.v1.get<{ data: SendPreview }>(

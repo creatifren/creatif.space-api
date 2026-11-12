@@ -36,6 +36,7 @@ exports[`tool first lines > match the snapshot 1`] = `
   "request_media_upload": "Use to add a NEW image or video you hold the bytes of: step 1, gives the upload URL.",
   "revoke_insight_share_link": "Use when a shared Insight report link must stop working now.",
   "schedule_post": "Use when the user wants a draft sent later; previews channels and Credits, confirm: true schedules.",
+  "schedule_posts": "Use when the user wants several drafts scheduled together: one preview, then all or none on confirm.",
   "send_approval_reminder": "Use when the client has not answered: emails the approver once more (send_for_approval follow-up).",
   "send_feedback": "Use when the user reports a bug or an idea for creatif.space.",
   "suggest_caption": "Use when the user wants a caption written in their style; the plan_week prompt drafts with it.",
