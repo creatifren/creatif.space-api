@@ -48,16 +48,58 @@ describe('/free endpoint', () => {
     const { tools } = await client.listTools();
     expect(tools.map((t) => t.name).sort()).toEqual(['approval_request_template', 'check_caption', 'connect_guide']);
     const byName = Object.fromEntries(tools.map((t) => [t.name, t]));
-    expect(byName.check_caption!.description).toBe(
+    expect(byName.check_caption!.description!.split('\n')[0]).toBe(
       'Check a social post caption against each network\'s published limits before you schedule it: length, hashtags, mentions, links. Free, no sign-in. Use it on any draft; it does not post anything.',
     );
-    expect(byName.approval_request_template!.description).toBe(
+    expect(byName.approval_request_template!.description!.split('\n')[0]).toBe(
       'Write a ready-to-send message asking a client to approve social posts, with what they must check and a reply deadline. Free, no sign-in.',
     );
-    expect(byName.connect_guide!.description).toBe(
+    expect(byName.connect_guide!.description!.split('\n')[0]).toBe(
       'Explain what you need before connecting a social account to Creatif Space (account type, permissions) and the steps. Free, no sign-in.',
     );
     for (const t of tools) expect(t.annotations?.readOnlyHint).toBe(true);
+  });
+
+  it('every tool description has the agent shape: what, When to use, Example, Errors → next step', async () => {
+    app = await startApp();
+    const { tools } = await (await app.connectFree()).listTools();
+    for (const t of tools) {
+      const lines = t.description!.split('\n');
+      expect(lines, t.name).toHaveLength(4);
+      expect(lines[1], t.name).toMatch(/^When to use: /);
+      expect(lines[2], t.name).toMatch(new RegExp(`^Example: ${t.name} \\{`));
+      expect(lines[3], t.name).toMatch(/^Errors → next step: invalid_input → .+; internal_error → .+\.$/);
+      // No sign-in here: no plan, permission or reconnect errors.
+      expect(t.description, t.name).not.toMatch(/plan_required|forbidden|scope_missing|unauthorized/);
+    }
+  });
+
+  it('bad arguments answer in the {code, message, next_step, details} envelope, for every tool', async () => {
+    app = await startApp();
+    const client = await app.connectFree();
+    const bad = [
+      { name: 'check_caption', arguments: { caption: 'Hi', networks: ['myspace'] } },
+      { name: 'approval_request_template', arguments: { client_name: 'Maya', posts_count: 0, period: 'next week', deadline: 'Friday' } },
+      { name: 'connect_guide', arguments: { network: 'myspace' } },
+    ];
+    for (const call of bad) {
+      const r = await client.callTool(call);
+      expect(r.isError, call.name).toBe(true);
+      const { error } = JSON.parse(text(r)) as { error: Record<string, unknown> };
+      expect(error, call.name).toMatchObject({ code: 'invalid_input', message: expect.any(String), next_step: expect.any(String), details: { tool: call.name } });
+      expect((error.details as { issues: unknown[] }).issues.length, call.name).toBeGreaterThan(0);
+    }
+  });
+
+  it('an unknown tool answers unknown_tool listing the free tools', async () => {
+    app = await startApp();
+    const r = await (await app.connectFree()).callTool({ name: 'publish_post', arguments: {} });
+    expect(r.isError).toBe(true);
+    expect((JSON.parse(text(r)) as { error: unknown }).error).toMatchObject({
+      code: 'unknown_tool',
+      next_step: expect.any(String),
+      details: { requested: 'publish_post', available_tools: ['check_caption', 'approval_request_template', 'connect_guide'] },
+    });
   });
 
   it('answers 200 to a raw POST with no token, and no WWW-Authenticate challenge', async () => {
