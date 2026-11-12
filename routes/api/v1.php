@@ -109,6 +109,12 @@ Route::get('/me/export/{export}/download', [AccountExportController::class, 'dow
     ->middleware(['signed', 'throttle:10,1'])
     ->name('api.v1.me.export.download');
 
+// A signed Insight CSV link (POST /insight/export-csv-link, 24 hours): the
+// signature is the credential; the plan is checked again on use.
+Route::get('/insight/export.csv/signed', [InsightExportController::class, 'signed'])
+    ->middleware(['signed', 'throttle:10,1'])
+    ->name('api.v1.insight.export.csv.signed');
+
 // A signed Insight PDF link (POST /insight/export-link, 15 minutes): the
 // signature is the credential; the plan is checked again on use.
 Route::get('/insight/export.pdf/signed', [InsightPdfExportController::class, 'signed'])
@@ -639,6 +645,10 @@ Route::middleware(['auth:sanctum,mcp', EnforceTokenScope::class, EnsureNotPendin
     // Settings → Insight: the monthly email (opt-in, owner, Pro / Max).
     Route::get('/me/insight-settings', [InsightSettingsController::class, 'show'])->name('api.v1.me.insight-settings.show');
     Route::patch('/me/insight-settings', [InsightSettingsController::class, 'update'])->name('api.v1.me.insight-settings.update');
+    // A 24-hour signed CSV link (MCP: get_insight_csv_link).
+    Route::post('/insight/export-csv-link', [InsightExportController::class, 'link'])
+        ->middleware('throttle:30,1')
+        ->name('api.v1.insight.export-csv-link');
     Route::post('/insight/export-link', [InsightPdfExportController::class, 'link'])
         ->middleware('throttle:20,1')
         ->name('api.v1.insight.export-link');

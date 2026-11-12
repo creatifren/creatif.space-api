@@ -17,19 +17,19 @@ exports[`tool annotations > match the snapshot 1`] = `
   "create_approval_link": {
     "destructive": false,
     "idempotent": false,
-    "openWorld": true,
+    "openWorld": false,
     "readOnly": false,
   },
   "create_content_plan": {
     "destructive": false,
     "idempotent": false,
-    "openWorld": true,
+    "openWorld": false,
     "readOnly": false,
   },
   "create_insight_share_link": {
     "destructive": false,
     "idempotent": false,
-    "openWorld": true,
+    "openWorld": false,
     "readOnly": false,
   },
   "create_space_from_files": {
@@ -39,9 +39,9 @@ exports[`tool annotations > match the snapshot 1`] = `
     "readOnly": false,
   },
   "decide_approval": {
-    "destructive": false,
+    "destructive": true,
     "idempotent": true,
-    "openWorld": true,
+    "openWorld": false,
     "readOnly": false,
   },
   "discard_draft": {
@@ -89,6 +89,12 @@ exports[`tool annotations > match the snapshot 1`] = `
   "get_credits": {
     "destructive": false,
     "idempotent": true,
+    "openWorld": false,
+    "readOnly": true,
+  },
+  "get_insight_csv_link": {
+    "destructive": false,
+    "idempotent": false,
     "openWorld": false,
     "readOnly": true,
   },
@@ -239,7 +245,7 @@ exports[`tool annotations > match the snapshot 1`] = `
   "send_approval_reminder": {
     "destructive": false,
     "idempotent": false,
-    "openWorld": true,
+    "openWorld": false,
     "readOnly": false,
   },
   "send_feedback": {
@@ -255,7 +261,7 @@ exports[`tool annotations > match the snapshot 1`] = `
     "readOnly": true,
   },
   "unkeep_file": {
-    "destructive": false,
+    "destructive": true,
     "idempotent": true,
     "openWorld": false,
     "readOnly": false,

@@ -188,7 +188,7 @@ export const createApprovalLink = defineTool({
     client_name: z.string().trim().max(120).optional().describe('Private note on who it is for; the client never sees it'),
     expires_in_hours: z.union([z.literal(48), z.literal(168), z.literal(720)]).optional().describe('48, 168 (7 days) or 720 (30 days); omit for no expiry'),
   },
-  annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: true },
+  annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false },
   notFound: { what: 'A post or channel', next: 'Check the post ids with list_posts (status draft) and channel ids with list_channels, then call again.' },
   run: async (args, ctx) => {
     const plan = args.date_from !== undefined || args.date_to !== undefined;
@@ -374,7 +374,7 @@ export const sendApprovalReminder = defineTool({
   input: {
     link_id: ulid('Approval link'),
   },
-  annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: true },
+  annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false },
   notFound: { what: 'That approval link', next: 'Check the link id: it comes from create_approval_link (or check_approval_status). Call again with a valid id.' },
   run: async (args, { v1 }) => {
     try {

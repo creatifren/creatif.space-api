@@ -57,6 +57,7 @@
         "get_best_times",
         "get_connect_link",
         "get_credits",
+        "get_insight_csv_link",
         "get_insight_report_link",
         "get_insight_summary",
         "get_notification_settings",

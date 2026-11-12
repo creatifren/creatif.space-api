@@ -11,14 +11,14 @@ const start = async (routes: Record<string, unknown>, token = TOKEN_FULL) => {
   app = await startApp({ routes: routes as never });
   return app.connect(token);
 };
-const ON = { publish_failed: true, approval_decided: true, weekly_digest: true };
+const ON = { publish_failed: true, approval_decided: true, weekly_digest: true, timezone: 'Asia/Jakarta' };
 
 describe('get_notification_settings', () => {
   it('returns the three switches and what each means', async () => {
     const client = await start({ 'GET /me/notification-settings': () => ({ body: { data: ON } }) });
     const out = payload(await client.callTool({ name: 'get_notification_settings', arguments: {} }));
     expect(out.settings).toEqual(ON);
-    expect(Object.keys(out.meaning)).toEqual(['publish_failed', 'approval_decided', 'weekly_digest']);
+    expect(Object.keys(out.meaning)).toEqual(['publish_failed', 'approval_decided', 'weekly_digest', 'timezone']);
   });
 
   it('works with read only', async () => {
@@ -33,6 +33,13 @@ describe('update_notification_settings', () => {
     const out = payload(await client.callTool({ name: 'update_notification_settings', arguments: { weekly_digest: false } }));
     expect(app!.v1.calls[0]).toMatchObject({ method: 'PATCH', path: '/me/notification-settings', body: { weekly_digest: false } });
     expect(out.settings.weekly_digest).toBe(false);
+  });
+
+  it('sets the digest timezone', async () => {
+    const client = await start({ 'PATCH /me/notification-settings': () => ({ body: { data: { ...ON, timezone: 'Indian/Maldives' } } }) });
+    const out = payload(await client.callTool({ name: 'update_notification_settings', arguments: { timezone: 'Indian/Maldives' } }));
+    expect(app!.v1.calls[0]!.body).toEqual({ timezone: 'Indian/Maldives' });
+    expect(out.settings.timezone).toBe('Indian/Maldives');
   });
 
   it('refuses an empty change without calling the API', async () => {

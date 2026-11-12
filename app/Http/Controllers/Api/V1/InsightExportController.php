@@ -6,15 +6,18 @@ use App\Enums\SocialAccountStatus;
 use App\Http\Controllers\Controller;
 use App\Models\SocialAccount;
 use App\Models\SocialPost;
+use App\Models\User;
 use App\Support\Insight\PostMetrics;
 use App\Support\PlanQuota;
 use App\Support\SocialProviders;
 use App\Support\Workspace;
 use Carbon\CarbonImmutable;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Date;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\URL;
 use Illuminate\Validation\ValidationException;
 use Symfony\Component\HttpFoundation\StreamedResponse;
 use Throwable;
@@ -43,25 +46,62 @@ class InsightExportController extends Controller
     /** Feed pages read per channel, at most (25 posts a page). */
     public const MAX_PAGES = 40;
 
+    /** POST /insight/export-csv-link: how long the signed CSV link works. */
+    public const LINK_TTL_HOURS = 24;
+
     public function __invoke(Request $request, SocialProviders $providers): StreamedResponse
     {
-        PlanQuota::requireFeature($request->user(), 'insight');
+        return $this->export($request->user(), $request, $providers);
+    }
 
-        $validated = $request->validate([
-            'from' => ['required', 'date_format:Y-m-d'],
-            'to' => ['required', 'date_format:Y-m-d', 'after_or_equal:from'],
-            'channels' => ['sometimes', 'nullable'],
+    /**
+     * POST /insight/export-csv-link {from, to, channels?} — a signed link to
+     * this same CSV that works for LINK_TTL_HOURS without a login (MCP:
+     * get_insight_csv_link). The signature is the credential, for that
+     * user, range and channels only; the plan is checked again on use.
+     */
+    public function link(Request $request): JsonResponse
+    {
+        $user = $request->user();
+        PlanQuota::requireFeature($user, 'insight');
+        [$from, $to, $channels] = $this->range($request);
+        // Unknown channels fail now, not when the link is opened.
+        $accounts = $this->accounts(Workspace::memberIds(Workspace::owner($user)), $channels);
+
+        $expires = now()->addHours(self::LINK_TTL_HOURS);
+        $url = URL::temporarySignedRoute('api.v1.insight.export.csv.signed', $expires, array_filter([
+            'u' => $user->ulid,
+            'from' => $from->toDateString(),
+            'to' => $to->toDateString(),
+            'channels' => $channels === null ? null : $accounts->pluck('ulid')->implode(','),
+        ], fn ($v) => $v !== null));
+
+        return response()->json([
+            'url' => $url,
+            'expires_at' => $expires->utc()->toIso8601String(),
+            'file_name' => "insight-{$from->toDateString()}-to-{$to->toDateString()}.csv",
+            'columns' => self::COLUMNS,
         ]);
+    }
 
-        $from = Date::parse($validated['from'])->startOfDay()->toImmutable();
-        $to = Date::parse($validated['to'])->endOfDay()->toImmutable();
+    /** GET /insight/export.csv/signed — the link above; 403 once expired or altered. */
+    public function signed(Request $request, SocialProviders $providers): StreamedResponse
+    {
+        $user = User::query()->where('ulid', (string) $request->query('u'))->first();
+        abort_if($user === null, 404);
 
-        if ($from->diffInDays($to) >= self::MAX_DAYS) {
-            throw ValidationException::withMessages(['to' => 'Export at most '.self::MAX_DAYS.' days at a time.']);
-        }
+        return $this->export($user, $request, $providers);
+    }
 
-        $workspace = Workspace::memberIds(Workspace::owner($request->user()));
-        $accounts = $this->accounts($workspace, $validated['channels'] ?? null);
+    private function export(User $user, Request $request, SocialProviders $providers): StreamedResponse
+    {
+        // Fail closed: also on a signed link made before the plan changed.
+        PlanQuota::requireFeature($user, 'insight');
+
+        [$from, $to, $channels] = $this->range($request);
+
+        $workspace = Workspace::memberIds(Workspace::owner($user));
+        $accounts = $this->accounts($workspace, $channels);
 
         // Posts made through us, to name our post id beside the platform's.
         $posts = SocialPost::query()->whereIn('user_id', $workspace);
@@ -98,6 +138,27 @@ class InsightExportController extends Controller
 
             fclose($out);
         }, $name, ['Content-Type' => 'text/csv; charset=UTF-8', 'Cache-Control' => 'no-store']);
+    }
+
+    /**
+     * @return array{0: CarbonImmutable, 1: CarbonImmutable, 2: mixed}
+     */
+    private function range(Request $request): array
+    {
+        $validated = $request->validate([
+            'from' => ['required', 'date_format:Y-m-d'],
+            'to' => ['required', 'date_format:Y-m-d', 'after_or_equal:from'],
+            'channels' => ['sometimes', 'nullable'],
+        ]);
+
+        $from = Date::parse($validated['from'])->startOfDay()->toImmutable();
+        $to = Date::parse($validated['to'])->endOfDay()->toImmutable();
+
+        if ($from->diffInDays($to) >= self::MAX_DAYS) {
+            throw ValidationException::withMessages(['to' => 'Export at most '.self::MAX_DAYS.' days at a time.']);
+        }
+
+        return [$from, $to, $validated['channels'] ?? null];
     }
 
     /**

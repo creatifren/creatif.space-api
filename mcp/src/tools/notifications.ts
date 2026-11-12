@@ -13,12 +13,15 @@ interface Settings {
   publish_failed: boolean;
   approval_decided: boolean;
   weekly_digest: boolean;
+  /** Where the weekly digest's Monday 08:00 is (IANA). */
+  timezone: string;
 }
 
 const MEANING = {
   publish_failed: 'an email when a post fails to publish',
   approval_decided: 'an email when a client approves or asks for changes',
   weekly_digest: 'a Monday 08:00 summary of last week (published, waiting approvals, failures)',
+  timezone: 'the zone the weekly digest’s Monday 08:00 is in',
 } as const;
 
 export const getNotificationSettings = defineTool({
@@ -27,7 +30,7 @@ export const getNotificationSettings = defineTool({
   description: describeTool({
     does: 'Returns which creatif.space emails the user gets: publish_failed, approval_decided and weekly_digest (true = on; all default on).',
     when: 'when the user asks which emails they get, or before changing one with update_notification_settings.',
-    example: 'get_notification_settings {} → { settings: { publish_failed: true, approval_decided: true, weekly_digest: false }, meaning }',
+    example: 'get_notification_settings {} → { settings: { publish_failed: true, approval_decided: true, weekly_digest: false, timezone: "Asia/Jakarta" }, meaning }',
     rules: 'Read-only. Email only: the in-app bell is not part of these. Billing and storage emails cannot be turned off and are not listed.',
     errors: [
       ['scope_missing', 'reconnect and allow "read"'],
@@ -48,12 +51,12 @@ export const updateNotificationSettings = defineTool({
   name: 'update_notification_settings',
   title: 'Turn creatif.space emails on or off',
   description: describeTool({
-    does: 'Turns the user’s publish_failed, approval_decided or weekly_digest email on or off and returns all three settings.',
+    does: 'Turns the user’s publish_failed, approval_decided or weekly_digest email on or off, or sets the timezone of the weekly digest (Monday 08:00 there), and returns all settings.',
     when: 'when the user asks to stop or start one of these emails (e.g. "stop the weekly summary"). To only see them, use get_notification_settings.',
     example: 'update_notification_settings { "weekly_digest": false } → { settings: { publish_failed: true, approval_decided: true, weekly_digest: false } }',
-    rules: 'Give at least one of the three as true or false; the others stay as they are. Only change what the user asked for. Email only: the in-app bell stays. Billing and storage emails cannot be turned off.',
+    rules: 'Give at least one of the three as true or false, or timezone (IANA, e.g. "Asia/Jakarta"; null resets it); the rest stay as they are. Only change what the user asked for. Email only: the in-app bell stays. Billing and storage emails cannot be turned off.',
     errors: [
-      ['invalid_input', 'pass at least one of publish_failed, approval_decided, weekly_digest as true/false'],
+      ['invalid_input', 'pass at least one of publish_failed, approval_decided, weekly_digest as true/false, or a valid IANA timezone'],
       ['scope_missing', 'reconnect and allow "draft"'],
       ['unauthorized', 'reconnect creatif.space'],
       ['upstream_unavailable', 'call again in a minute'],
@@ -64,14 +67,15 @@ export const updateNotificationSettings = defineTool({
     publish_failed: z.boolean().optional().describe('Email when a post fails to publish'),
     approval_decided: z.boolean().optional().describe('Email when a client approves or asks for changes'),
     weekly_digest: z.boolean().optional().describe('The Monday 08:00 weekly summary email'),
+    timezone: z.string().trim().min(1).max(64).nullable().optional().describe('IANA timezone for the weekly digest, e.g. "Asia/Jakarta"; null resets it'),
   },
   annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false },
   run: async (args, { v1 }) => {
-    const body = Object.fromEntries(Object.entries(args).filter(([, v]) => typeof v === 'boolean'));
+    const body: Record<string, unknown> = Object.fromEntries(Object.entries(args).filter(([k, v]) => typeof v === 'boolean' || (k === 'timezone' && v !== undefined)));
     if (Object.keys(body).length === 0) {
       throw new ToolError(
         'invalid_input',
-        'Nothing to change: give publish_failed, approval_decided or weekly_digest as true or false.',
+        'Nothing to change: give publish_failed, approval_decided or weekly_digest as true or false, or a timezone.',
         'Ask the user which email to turn on or off, then call again with that one.',
       );
     }
