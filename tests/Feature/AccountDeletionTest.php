@@ -279,7 +279,7 @@ describe('the purge', function () {
             'path' => 'insight/rina/report.pdf', 'created_at' => now(), 'updated_at' => now(),
         ]);
         Storage::disk('s3')->put('insight/rina/report.pdf', 'pdf');
-        DB::table('feedback')->insert(['user_id' => $user->id, 'kind' => 'idea', 'message' => 'Private idea', 'source' => 'web', 'created_at' => now(), 'updated_at' => now()]);
+        DB::table('feedback')->insert(['ulid' => $ulid(), 'user_id' => $user->id, 'kind' => 'idea', 'message' => 'Private idea', 'source' => 'web', 'created_at' => now(), 'updated_at' => now()]);
         DB::table('account_exports')->insert(['ulid' => $ulid(), 'user_id' => $user->id, 'status' => 'done', 'path' => 'exports/rina.zip', 'created_at' => now(), 'updated_at' => now()]);
         Storage::disk('s3')->put('exports/rina.zip', 'zip');
         DB::table('ai_style_profiles')->insert(['user_id' => $user->id, 'tone' => 'warm', 'created_at' => now(), 'updated_at' => now()]);
