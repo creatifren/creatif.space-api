@@ -74,6 +74,12 @@ exports[`tool annotations > match the snapshot 1`] = `
     "openWorld": false,
     "readOnly": true,
   },
+  "get_best_times": {
+    "destructive": false,
+    "idempotent": true,
+    "openWorld": false,
+    "readOnly": true,
+  },
   "get_connect_link": {
     "destructive": false,
     "idempotent": true,
@@ -93,6 +99,12 @@ exports[`tool annotations > match the snapshot 1`] = `
     "readOnly": true,
   },
   "get_insight_summary": {
+    "destructive": false,
+    "idempotent": true,
+    "openWorld": false,
+    "readOnly": true,
+  },
+  "get_notification_settings": {
     "destructive": false,
     "idempotent": true,
     "openWorld": false,
@@ -243,6 +255,12 @@ exports[`tool annotations > match the snapshot 1`] = `
     "readOnly": true,
   },
   "unkeep_file": {
+    "destructive": false,
+    "idempotent": true,
+    "openWorld": false,
+    "readOnly": false,
+  },
+  "update_notification_settings": {
     "destructive": false,
     "idempotent": true,
     "openWorld": false,

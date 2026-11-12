@@ -30,6 +30,13 @@ final class InsightCache
     public const TTL_MINUTES = 5;
 
     /**
+     * The collector's answer shape: bump it when collect() returns new
+     * fields (top_ranked, best_times …), so a deploy never reads an answer
+     * cached by the code before it.
+     */
+    public const SHAPE = 2;
+
+    /**
      * @param  Collection<int, SocialAccount>  $accounts
      * @param  Closure(): array<string, mixed>  $compute
      * @return array<string, mixed>
@@ -38,6 +45,7 @@ final class InsightCache
     {
         $key = implode(':', [
             'insight',
+            's'.self::SHAPE,
             $owner->id,
             'v'.self::version($owner->id),
             $period->kind,

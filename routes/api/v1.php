@@ -24,6 +24,7 @@ use App\Http\Controllers\Api\V1\HealthController;
 use App\Http\Controllers\Api\V1\InboxCommentController;
 use App\Http\Controllers\Api\V1\InboxController;
 use App\Http\Controllers\Api\V1\InboxFeedController;
+use App\Http\Controllers\Api\V1\InsightBestTimesController;
 use App\Http\Controllers\Api\V1\InsightExportController;
 use App\Http\Controllers\Api\V1\InsightPdfExportController;
 use App\Http\Controllers\Api\V1\InsightReportController;
@@ -36,6 +37,7 @@ use App\Http\Controllers\Api\V1\McpApprovalController;
 use App\Http\Controllers\Api\V1\MeController;
 use App\Http\Controllers\Api\V1\MyProfileController;
 use App\Http\Controllers\Api\V1\NotificationController;
+use App\Http\Controllers\Api\V1\NotificationSettingsController;
 use App\Http\Controllers\Api\V1\OpenApiController;
 use App\Http\Controllers\Api\V1\OutstandConnectController;
 use App\Http\Controllers\Api\V1\PinterestBoardController;
@@ -655,6 +657,10 @@ Route::middleware(['auth:sanctum,mcp', EnforceTokenScope::class, EnsureNotPendin
     Route::get('/insight/top-posts', InsightTopPostsController::class)
         ->middleware('throttle:30,1')
         ->name('api.v1.insight.top-posts');
+    // Best weekday + hour slots from the workspace's own posts (MCP: get_best_times).
+    Route::get('/insight/best-times', InsightBestTimesController::class)
+        ->middleware('throttle:30,1')
+        ->name('api.v1.insight.best-times');
 
     // Proof of delivery. Deliberately not gated on a plan: "on every plan"
     // is what the screen promises, and evidence is not an upsell.
@@ -714,4 +720,11 @@ Route::middleware(['auth:sanctum,mcp', EnforceTokenScope::class, EnsureNotPendin
     Route::post('/me/notifications/read', [NotificationController::class, 'read'])->name('api.v1.me.notifications.read');
     Route::get('/me/notification-preferences', [NotificationController::class, 'preferences'])->name('api.v1.me.notification-preferences');
     Route::patch('/me/notification-preferences', [NotificationController::class, 'updatePreferences'])->name('api.v1.me.notification-preferences.update');
+    // The three email switches (MCP get/update_notification_settings).
+    Route::get('/me/notification-settings', [NotificationSettingsController::class, 'show'])
+        ->middleware('throttle:60,1')
+        ->name('api.v1.me.notification-settings');
+    Route::patch('/me/notification-settings', [NotificationSettingsController::class, 'update'])
+        ->middleware('throttle:30,1')
+        ->name('api.v1.me.notification-settings.update');
 });

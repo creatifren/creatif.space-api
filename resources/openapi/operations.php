@@ -166,6 +166,7 @@ return [
     'api.v1.me.insight-settings.update' => 'Update Insight settings',
     'api.v1.insight.export-link' => 'A short-lived signed link to an Insight PDF',
     'api.v1.insight.top-posts' => 'The top five posts of a period by engagement',
+    'api.v1.insight.best-times' => 'Best times to post, from the workspace’s own posts',
     'api.v1.insight.clients' => 'Insight clients (workspaces you report on)',
     'api.v1.insight.reports.store' => 'Build an Insight report',
     'api.v1.insight.reports.show' => 'Status and download of an Insight report',
@@ -194,4 +195,6 @@ return [
     'api.v1.me.notifications.read' => 'Mark notifications read',
     'api.v1.me.notification-preferences' => 'Notification preferences',
     'api.v1.me.notification-preferences.update' => 'Update notification preferences',
+    'api.v1.me.notification-settings' => 'Email settings: publish_failed, approval_decided, weekly_digest',
+    'api.v1.me.notification-settings.update' => 'Turn the publish_failed, approval_decided or weekly_digest email on or off',
 ];

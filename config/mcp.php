@@ -71,6 +71,8 @@ return [
         'api.v1.insight.summary' => 'read',
         // list_top_posts: the top five posts by engagement (Pro / Max).
         'api.v1.insight.top-posts' => 'read',
+        // get_best_times: best weekday + hour slots from the workspace's own posts (Pro / Max).
+        'api.v1.insight.best-times' => 'read',
         // get_insight_report_link: a 15-minute signed PDF link (Pro / Max).
         'api.v1.insight.export-link' => 'read',
         // create_insight_share_link / revoke_insight_share_link: sharing with
@@ -87,12 +89,18 @@ return [
         'api.v1.social-posts.send-preview' => 'read',
         // CapTokenSends holds bearer callers to 20 sends a day.
         'api.v1.social-posts.send' => 'publish',
+        // get_notification_settings / update_notification_settings: the
+        // user's own three email switches.
+        'api.v1.me.notification-settings' => 'read',
+        'api.v1.me.notification-settings.update' => 'draft',
         // retry_post: the preview reads; the retry spends Credits like a send.
         'api.v1.social-posts.retry-preview' => 'read',
         'api.v1.social-posts.retry' => 'publish',
         // schedule_posts: the same scope as one send (all or none, up to 10).
         'api.v1.social-posts.send-batch' => 'publish',
         'api.v1.social-approval-links.store' => 'approve',
+        // send_approval_reminder: one email per link per 12 h (in the controller).
+        'api.v1.social-approval-links.remind' => 'approve',
         'api.v1.social-approval-links.show' => 'read',
         // get_approval_audit: the owner's own link, as CSV.
         'api.v1.social-approval-links.audit' => 'read',
