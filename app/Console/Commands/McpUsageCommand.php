@@ -61,7 +61,7 @@ class McpUsageCommand extends Command
         $report = $this->report($rows, $days, $since->utc()->toIso8601ZuluString());
 
         if ($this->option('json')) {
-            $this->line((string) json_encode($report, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES));
+            $this->line((string) json_encode($report, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_PRESERVE_ZERO_FRACTION));
 
             return self::SUCCESS;
         }
