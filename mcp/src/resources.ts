@@ -55,7 +55,7 @@ export function registerResources(server: McpServer, auth: CallerAuth, v1: V1Cli
 
   const [channels, schedule] = RESOURCES;
   server.registerResource(channels.name, channels.uri, { title: channels.title, description: channels.description, mimeType: 'application/json' }, (uri) =>
-    read(uri, 'channels', (ctx) => listChannels.run({ limit: 100 }, ctx)),
+    read(uri, 'channels', (ctx) => listChannels.run({ limit: 100, include_disconnected: false }, ctx)),
   );
   server.registerResource(schedule.name, schedule.uri, { title: schedule.title, description: schedule.description, mimeType: 'application/json' }, (uri) =>
     read(uri, 'schedule', async (ctx) => {

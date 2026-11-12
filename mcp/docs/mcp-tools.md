@@ -63,7 +63,7 @@ Lists the user's connected social channels and their ids, the first step of the 
 
 Lists the social channels (Instagram, Facebook, TikTok, LinkedIn, X, Threads, YouTube, Pinterest, Bluesky…) connected to the user’s creatif.space workspace, with each channel’s id and whether it can be posted to.
 
-When to use: first, before draft_post, list_posts by channel or any send — it is the only source of channel ids. A channel with reconnect_required=true (or status other than "connected") cannot be posted to until the user reconnects it: such channels carry a reconnect block, and needs_reconnect lists them — call get_connect_link with the channel’s platform for the link to send the user. To add a new network, use get_connect_link too.
+When to use: first, before draft_post, list_posts by channel or any send — it is the only source of channel ids. A channel with reconnect_required=true (or status other than "connected") cannot be posted to until the user reconnects it: such channels carry a reconnect block, and needs_reconnect lists them — call get_connect_link with the channel’s platform for the link to send the user. To add a new network, use get_connect_link too. A disconnected copy of an account that is also connected (same network and username) is left out; hidden_duplicates counts them, include_disconnected: true shows them.
 
 Example: list_channels {} → { channels: [{ id: "01JD…", platform: "instagram", username: "studio", status: "connected", reconnect_required: false }, { id: "01JE…", platform: "x", status: "expired", reconnect_required: true, reconnect: { reason, next_step } }], needs_reconnect: ["01JE…"] }
 
@@ -71,6 +71,7 @@ Errors → next step: scope_missing → reconnect and allow "read"; unauthorized
 
 | Input | Type | Required | Description |
 |---|---|---|---|
+| `include_disconnected` | boolean | no | true: also list disconnected copies of accounts that are connected too (hidden by default) |
 | `limit` | integer | no | At most this many channels per page (1–100, default 50) |
 | `cursor` | string | no | next_cursor from the previous page of this same list (same filters); omit for the first page |
 

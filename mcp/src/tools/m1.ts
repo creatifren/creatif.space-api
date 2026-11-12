@@ -14,7 +14,7 @@ export const listChannels = defineTool({
   title: 'List connected channels',
   description: describeTool({
     does: "Lists the social channels (Instagram, Facebook, TikTok, LinkedIn, X, Threads, YouTube, Pinterest, Bluesky…) connected to the user’s creatif.space workspace, with each channel’s id and whether it can be posted to.",
-    when: "first, before draft_post, list_posts by channel or any send — it is the only source of channel ids. A channel with reconnect_required=true (or status other than \"connected\") cannot be posted to until the user reconnects it: such channels carry a reconnect block, and needs_reconnect lists them — call get_connect_link with the channel’s platform for the link to send the user. To add a new network, use get_connect_link too.",
+    when: "first, before draft_post, list_posts by channel or any send — it is the only source of channel ids. A channel with reconnect_required=true (or status other than \"connected\") cannot be posted to until the user reconnects it: such channels carry a reconnect block, and needs_reconnect lists them — call get_connect_link with the channel’s platform for the link to send the user. To add a new network, use get_connect_link too. A disconnected copy of an account that is also connected (same network and username) is left out; hidden_duplicates counts them, include_disconnected: true shows them.",
     example: "list_channels {} → { channels: [{ id: \"01JD…\", platform: \"instagram\", username: \"studio\", status: \"connected\", reconnect_required: false }, { id: \"01JE…\", platform: \"x\", status: \"expired\", reconnect_required: true, reconnect: { reason, next_step } }], needs_reconnect: [\"01JE…\"] }",
     errors: [
       ["scope_missing", "reconnect and allow \"read\""],
@@ -23,13 +23,21 @@ export const listChannels = defineTool({
     ],
   }),
   scope: 'read',
-  input: pageInput(100, 50, 'channels'),
+  input: {
+    include_disconnected: z
+      .boolean()
+      .default(false)
+      .describe('true: also list disconnected copies of accounts that are connected too (hidden by default)'),
+    ...pageInput(100, 50, 'channels'),
+  },
   annotations: READ_ONLY,
   run: async (args, { v1 }) => {
     const res = await v1.get<{ data: Record<string, unknown>[] }>('/social-accounts');
-    const { page, next_cursor } = pageOf('list_channels', {}, res.data, args.limit, args.cursor);
+    const dupes = args.include_disconnected ? new Set<unknown>() : disconnectedDuplicates(res.data);
+    const rows = res.data.filter((a) => !dupes.has(a.id));
+    const { page, next_cursor } = pageOf('list_channels', { include_disconnected: args.include_disconnected }, rows, args.limit, args.cursor);
     const channels = page.map((a) => {
-      const reconnect = a.reconnect_required === true || a.status !== 'connected';
+      const reconnect = needsReconnect(a);
       return {
         id: a.id,
         platform: a.platform,
@@ -47,6 +55,12 @@ export const listChannels = defineTool({
     return {
       channels,
       next_cursor,
+      ...(dupes.size
+        ? {
+            hidden_duplicates: dupes.size,
+            note: `${dupes.size} disconnected cop${dupes.size === 1 ? 'y' : 'ies'} of a connected account ${dupes.size === 1 ? 'is' : 'are'} left out; post to the connected one. include_disconnected: true lists ${dupes.size === 1 ? 'it' : 'them'}.`,
+          }
+        : {}),
       ...(needs.length
         ? {
             needs_reconnect: needs,
@@ -56,6 +70,21 @@ export const listChannels = defineTool({
     };
   },
 });
+
+const needsReconnect = (a: Record<string, unknown>) => a.reconnect_required === true || a.status !== 'connected';
+const accountKey = (a: Record<string, unknown>) =>
+  typeof a.username === 'string' && a.username.trim() !== '' ? `${String(a.platform)}:${a.username.trim().replace(/^@/, '').toLowerCase()}` : null;
+
+/**
+ * Ids of disconnected rows that copy a connected account (same network and
+ * username, e.g. an old connection of @loyaldigicard next to the working
+ * one). A disconnected account with no working copy is never hidden: the
+ * user still has to reconnect it.
+ */
+export function disconnectedDuplicates(accounts: Record<string, unknown>[]): Set<unknown> {
+  const connected = new Set(accounts.filter((a) => !needsReconnect(a)).map(accountKey).filter((k) => k !== null));
+  return new Set(accounts.filter((a) => { const k = accountKey(a); return needsReconnect(a) && k !== null && connected.has(k); }).map((a) => a.id));
+}
 
 /** Why a channel needs reconnecting, in words the user understands, and the one next step. */
 function reconnectHint(a: Record<string, unknown>) {
