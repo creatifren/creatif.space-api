@@ -261,6 +261,63 @@ describe('the purge', function () {
         expect($fake->deletedPersons)->toBe([$user->ulid]);
     });
 
+    it('removes Insight share links and reports, feedback, exports and the AI style; anonymises the approver audit she left on others\' links', function () {
+        [$user] = adFull();
+        $other = User::factory()->create();
+        $ulid = fn () => (string) str()->ulid();
+        $share = fn (int $owner, ?string $recipient = null) => DB::table('insight_share_links')->insertGetId([
+            'ulid' => $ulid(), 'owner_id' => $owner, 'user_id' => $owner, 'token_hash' => hash('sha256', $ulid()),
+            'period_from' => '2026-10-01', 'period_to' => '2026-10-31', 'period_kind' => 'month', 'channel_ids' => '[]',
+            'recipient_email' => $recipient, 'recipient_token' => $recipient ? 'enc' : null,
+            'expires_at' => now()->addDays(30), 'created_at' => now(), 'updated_at' => now(),
+        ]);
+        $mine = $share($user->id);
+        $sharedWithHer = $share($other->id, 'rina@studio.test');
+        DB::table('insight_reports')->insert([
+            'ulid' => $ulid(), 'user_id' => $user->id, 'owner_id' => $user->id, 'client_id' => 'c1', 'format' => 'onepage', 'locale' => 'en',
+            'period_from' => '2026-10-01', 'period_to' => '2026-10-31', 'options' => '{}', 'status' => 'done',
+            'path' => 'insight/rina/report.pdf', 'created_at' => now(), 'updated_at' => now(),
+        ]);
+        Storage::disk('s3')->put('insight/rina/report.pdf', 'pdf');
+        DB::table('feedback')->insert(['ulid' => $ulid(), 'user_id' => $user->id, 'kind' => 'idea', 'message' => 'Private idea', 'source' => 'web', 'created_at' => now(), 'updated_at' => now()]);
+        DB::table('account_exports')->insert(['ulid' => $ulid(), 'user_id' => $user->id, 'status' => 'done', 'path' => 'exports/rina.zip', 'created_at' => now(), 'updated_at' => now()]);
+        Storage::disk('s3')->put('exports/rina.zip', 'zip');
+        DB::table('ai_style_profiles')->insert(['user_id' => $user->id, 'tone' => 'warm', 'created_at' => now(), 'updated_at' => now()]);
+        // Signed in as an approver on someone else's link: account, IP and browser on the row.
+        $theirLink = SocialApprovalLink::create(['user_id' => $other->id, 'approver_email' => 'someone@else.test']);
+        DB::table('social_approval_decisions')->insert([
+            'social_approval_link_id' => $theirLink->id, 'social_post_id' => null, 'decision' => 'changes_requested',
+            'approver_user_id' => $user->id, 'approver_email' => 'rina+work@studio.test', 'ip' => '203.0.113.9', 'user_agent' => 'Firefox',
+            'comment' => 'Swap the photo', 'created_at' => now(),
+        ]);
+
+        Carbon::setTestNow(now()->addDays(31));
+        $this->artisan('accounts:purge-deleted')->assertSuccessful();
+
+        expect(DB::table('insight_share_links')->where('id', $mine)->exists())->toBeFalse()
+            ->and(DB::table('insight_reports')->where('owner_id', $user->id)->count())->toBe(0)
+            ->and(DB::table('feedback')->where('user_id', $user->id)->count())->toBe(0)
+            ->and(DB::table('account_exports')->where('user_id', $user->id)->count())->toBe(0)
+            ->and(DB::table('ai_style_profiles')->where('user_id', $user->id)->count())->toBe(0);
+        Storage::disk('s3')->assertMissing('insight/rina/report.pdf');
+        Storage::disk('s3')->assertMissing('exports/rina.zip');
+
+        // The other owner's link stays theirs, without her address.
+        $theirs = DB::table('insight_share_links')->where('id', $sharedWithHer)->first();
+        expect($theirs)->not->toBeNull()
+            ->and($theirs->recipient_email)->toBeNull()
+            ->and($theirs->recipient_token)->toBeNull();
+
+        // The audit row stays for the other owner — decision and comment — but not who she was.
+        $row = DB::table('social_approval_decisions')->where('social_approval_link_id', $theirLink->id)->first();
+        expect($row->decision)->toBe('changes_requested')
+            ->and($row->comment)->toBe('Swap the photo')
+            ->and($row->approver_user_id)->toBeNull()
+            ->and($row->approver_email)->toBe('deleted+'.strtolower($user->ulid).'@invalid')
+            ->and($row->ip)->toBeNull()
+            ->and($row->user_agent)->toBeNull();
+    });
+
     it('does nothing on a re-run', function () {
         [$user] = adFull();
         Carbon::setTestNow(now()->addDays(31));
