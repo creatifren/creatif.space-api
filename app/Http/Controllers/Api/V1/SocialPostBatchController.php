@@ -47,7 +47,9 @@ class SocialPostBatchController extends Controller
         ]);
         /** @var User $user */
         $user = $request->user();
-        $items = collect($validated['posts'])->values();
+        /** @var list<array{post_id: string, scheduled_at: string, confirm_token?: string|null}> $rows */
+        $rows = array_values($validated['posts']);
+        $items = collect($rows);
 
         // The user's own posts only; anything else reads as not found.
         $posts = SocialPost::query()->where('user_id', $user->id)
