@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { PROMPT_TOOLS } from '../src/prompts.js';
 import { startApp, TOKEN_FULL, TOKEN_READ } from './helpers.js';
 
-/* prompts/list and prompts/get: three workflows, each naming only tools the server has. */
+/* prompts/list and prompts/get: four workflows, each naming only tools the server has. */
 
 let app: Awaited<ReturnType<typeof startApp>> | undefined;
 afterEach(async () => {
@@ -19,15 +19,16 @@ const IG = '01JACCTACCTACCTACCTACCTIG1';
 const text = (r: { messages: { content: { type: string; text?: string } }[] }) => r.messages[0]!.content.text!;
 
 describe('prompts/list', () => {
-  it('lists exactly Plan next week, Send to client for approval and Weekly results, with descriptions and arguments', async () => {
+  it('lists exactly Plan next week, Send to client for approval, Weekly results and Monthly report, with descriptions and arguments', async () => {
     const c = await client();
     expect(c.getServerCapabilities()?.prompts).toBeDefined();
     const { prompts } = await c.listPrompts();
-    expect(prompts.map((p) => p.name).sort()).toEqual(['plan_week', 'send_for_approval', 'weekly_results']);
+    expect(prompts.map((p) => p.name).sort()).toEqual(['monthly_report', 'plan_week', 'send_for_approval', 'weekly_results']);
     expect(Object.fromEntries(prompts.map((p) => [p.name, p.title]))).toEqual({
       plan_week: 'Plan next week',
       send_for_approval: 'Send to client for approval',
       weekly_results: 'Weekly results',
+      monthly_report: 'Monthly report',
     });
     const by = Object.fromEntries(prompts.map((p) => [p.name, p]));
     for (const p of prompts) {
@@ -38,11 +39,20 @@ describe('prompts/list', () => {
     expect(args('plan_week')).toEqual({ channel_id: true, week_start: false, theme: false, posts: false });
     expect(args('send_for_approval')).toEqual({ approver_email: true, post_ids: false, client_name: false });
     expect(args('weekly_results')).toEqual({ month: false, share: false });
+    expect(args('monthly_report')).toEqual({ month: false, share: false });
+  });
+
+  it('prompt names, titles and arguments are stable (clients call them by name)', async () => {
+    const { prompts } = await (await client()).listPrompts();
+    const shape = prompts
+      .map((p) => ({ name: p.name, title: p.title, arguments: (p.arguments ?? []).map((a) => `${a.name}${a.required ? '' : '?'}`) }))
+      .sort((a, b) => a.name.localeCompare(b.name));
+    expect(shape).toMatchSnapshot();
   });
 
   it('is there whatever scopes the connection has (prompts call no API)', async () => {
     const { prompts } = await (await client(TOKEN_READ)).listPrompts();
-    expect(prompts).toHaveLength(3);
+    expect(prompts).toHaveLength(4);
     expect(app!.v1.calls).toHaveLength(0);
   });
 });
@@ -88,9 +98,17 @@ describe('prompts/get', () => {
     expect(app!.v1.calls).toHaveLength(0);
   });
 
-  it('monthly_report is gone: weekly_results covers a month', async () => {
+  it('monthly_report: last month by default, a month when given, no link when share=no', async () => {
     const c = await client();
-    await expect(c.getPrompt({ name: 'monthly_report', arguments: {} })).rejects.toThrow();
+    const last = text(await c.getPrompt({ name: 'monthly_report', arguments: {} }));
+    expect(last).toMatch(/monthly report for last month/);
+    expect(last).toMatch(/period \{ "month": … \}/);
+    expect(last).toMatch(/get_insight_summary.*create_insight_share_link/s);
+    const oct = text(await c.getPrompt({ name: 'monthly_report', arguments: { month: '2026-10', share: 'no' } }));
+    expect(oct).toContain('"2026-10"');
+    expect(oct).not.toMatch(/create_insight_share_link/);
+    await expect(c.getPrompt({ name: 'monthly_report', arguments: { month: '2026-13' } })).rejects.toThrow();
+    expect(app!.v1.calls).toHaveLength(0);
   });
 
   it('refuses a missing required argument or a bad value', async () => {
@@ -113,6 +131,7 @@ describe('prompts/get', () => {
       plan_week: [{ channel_id: IG }],
       send_for_approval: [{ approver_email: 'client@example.com', post_ids: 'A' }, { approver_email: 'client@example.com' }],
       weekly_results: [{}, { month: '2026-10' }],
+      monthly_report: [{}, { month: '2026-10' }],
     };
     for (const [prompt, named] of Object.entries(PROMPT_TOOLS)) {
       expect(named.filter((n) => !tools.has(n)), prompt).toEqual([]);

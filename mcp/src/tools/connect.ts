@@ -31,13 +31,31 @@ export function connectUrl(network: ConnectNetwork): string {
   return url.toString();
 }
 
+const lcFirst = (s: string) => s.charAt(0).toLowerCase() + s.slice(1);
+const noStop = (s: string) => s.replace(/[.\s]+$/, '');
+
+/**
+ * One line on the account a network needs, from the same data as /free's
+ * connect_guide: what the code confirms, then what to check on the connect
+ * screen. So the AI can say it before the user clicks.
+ */
+export function accountNeeded(network: ConnectNetwork): string {
+  const g = CONNECT_GUIDES.networks[network];
+  const confirmed = g.account_type.filter((a) => a.status === 'confirmed').map((a) => noStop(a.text));
+  const check = g.account_type.filter((a) => a.status === 'check in app').map((a) => lcFirst(noStop(a.text)));
+  const head = confirmed.length
+    ? `For ${g.name} you need ${confirmed.map(lcFirst).join('; ')}.`
+    : `For ${g.name} no particular account type is known to be required.`;
+  return check.length ? `${head} Check on the connect screen: ${check.join('; ')}.` : head;
+}
+
 export const getConnectLink = defineTool({
   name: 'get_connect_link',
   title: 'Get a link to connect a channel',
   description: describeTool({
     does: 'Returns the creatif.space link that starts connecting (or reconnecting) a network, with the steps the user will see. The link holds no token: the user signs in themselves.',
-    when: 'when list_channels shows a channel with reconnect_required, or the user wants to add a network. Send the user the url; you cannot connect a channel for them. Then call list_channels to check it shows as connected.',
-    example: 'get_connect_link { "network": "instagram" } → { network, url: "https://creatif.space/social/connect?network=instagram", steps: [...], requirements: [...], existing: [...], room: { used, limit }, next_step }',
+    when: 'when list_channels shows a channel with reconnect_required, or the user wants to add a network. Tell the user account_needed (the account type the network needs) before they click, then send them the url; you cannot connect a channel for them. Then call list_channels to check it shows as connected.',
+    example: 'get_connect_link { "network": "instagram" } → { network, url: "https://creatif.space/social/connect?network=instagram", account_needed: "For Instagram you need …", account_type: [...], steps: [...], requirements: [...], existing: [...], room: { used, limit }, next_step }',
     rules: 'Plans limit how many channels can be connected; reconnecting one that is already listed does not need room.',
     errors: [
       ['plan_required', 'the plan’s channel limit is reached: the user can disconnect a channel in creatif.space; do not retry'],
@@ -81,12 +99,15 @@ export const getConnectLink = defineTool({
     return {
       network,
       url: connectUrl(network),
+      account_needed: accountNeeded(network),
+      account_type: guide.account_type,
       steps: guide.steps,
       requirements: guide.requirements,
       common_errors: guide.common_errors,
       existing,
       ...(room ? { room: { used: room.used, limit: room.limit } } : {}),
       next_step:
+        'Before the user clicks, tell them account_needed in your own words. ' +
         (reconnecting
           ? `Send the user this link to reconnect ${name}: they sign in on ${name} again and the channel comes back. `
           : `Send the user this link to connect ${name}. `) +

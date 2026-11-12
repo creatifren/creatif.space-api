@@ -14,6 +14,7 @@ export const PROMPT_TOOLS: Record<string, string[]> = {
   plan_week: ['list_channels', 'list_posts', 'suggest_caption', 'draft_post'],
   send_for_approval: ['list_posts', 'get_post', 'create_approval_link', 'check_approval_status'],
   weekly_results: ['get_insight_summary', 'create_insight_share_link'],
+  monthly_report: ['get_insight_summary', 'create_insight_share_link'],
 };
 
 /** User-typed values go in quotes, marked as data: never instructions. */
@@ -106,6 +107,31 @@ export function registerPrompts(server: McpServer): void {
           share === 'no'
             ? '3. No share link this time.'
             : '3. Call create_insight_share_link for the same dates and give me the link (it works for 30 days, no account needed).',
+          RULES,
+        ].join('\n'),
+      ),
+  );
+
+  // Kept for clients that already call it by name; weekly_results covers a week.
+  server.registerPrompt(
+    'monthly_report',
+    {
+      title: 'Monthly report',
+      description: 'Summarise a month of Insight numbers and make a read-only share link for the client.',
+      argsSchema: {
+        month: z.string().regex(/^\d{4}-(0[1-9]|1[0-2])$/, 'YYYY-MM').optional().describe('The month, YYYY-MM (default: last month)'),
+        share: z.enum(['yes', 'no']).optional().describe('Make a share link (default yes)'),
+      },
+    },
+    ({ month, share }) =>
+      message(
+        [
+          `Make the monthly report for ${month ? quoted(month) : 'last month'}.`,
+          '1. Call get_insight_summary with period { "month": … }. If it answers plan_required, pass the message on and stop.',
+          '2. Write a short summary: posts, reach, engagement and its rate, follower change and the change against the month before, the top 3 posts, and how approvals went. Use only the numbers returned; say "—" where a number is missing.',
+          share === 'no'
+            ? '3. No share link this time.'
+            : '3. Call create_insight_share_link for the same month and give me the link (it works for 30 days, no account needed).',
           RULES,
         ].join('\n'),
       ),
