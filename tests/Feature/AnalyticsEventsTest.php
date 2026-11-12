@@ -1186,7 +1186,8 @@ describe('first-touch attribution on the user (users.signup_attribution)', funct
         $user = User::factory()->create(['signup_attribution' => ['utm_source' => 'secret-campaign', 'signup_source' => 'secret-campaign']]);
 
         expect($user->toArray())->not->toHaveKey('signup_attribution');
-        $this->actingAs($user)->getJson('/api/v1/me')->assertOk()->assertDontSee('secret-campaign');
+        // fresh(): strict mode wants every column the /me resource reads.
+        $this->actingAs($user->fresh())->getJson('/api/v1/me')->assertOk()->assertDontSee('secret-campaign');
     });
 
     it('feeds signup_source into the milestones', function () {
