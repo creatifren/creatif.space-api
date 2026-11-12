@@ -36,7 +36,6 @@ export const listChannels = defineTool({
         username: a.username,
         status: a.status,
         reconnect_required: reconnect,
-        connected_at: a.connected_at,
         ...(reconnect ? { reconnect: reconnectHint(a) } : {}),
         // Posting works; replying to DMs needs a fresh sign-in with messages allowed.
         ...(!reconnect && a.needs_reconnect_for_messages === true
