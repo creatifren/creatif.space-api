@@ -89,6 +89,8 @@ return [
         'api.v1.social-approval-links.show' => 'read',
         // get_approval_audit: the owner's own link, as CSV.
         'api.v1.social-approval-links.audit' => 'read',
+        // get_approval_history: one post's decisions, email masked.
+        'api.v1.social-posts.approval-audit' => 'read',
         // get_plan_calendar_link: reads the plan's feed URL (turning it on or
         // off stays in the app).
         'api.v1.social-approval-links.calendar.show' => 'read',
