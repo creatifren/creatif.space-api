@@ -1,6 +1,7 @@
 import { ToolError } from '../errors.js';
 import { CONNECT_GUIDES, connectGuide, connectInput, type ConnectNetwork } from '../free/connect.js';
 import { defineTool, describeTool } from './define.js';
+import { disconnectedDuplicates } from './m1.js';
 
 /*
  * get_connect_link: the creatif.space app page that starts connecting a
@@ -56,7 +57,7 @@ export const getConnectLink = defineTool({
     does: 'Returns the creatif.space link that starts connecting (or reconnecting) a network, with the steps the user will see. The link holds no token: the user signs in themselves.',
     when: 'when list_channels shows a channel with reconnect_required, or the user wants to add a network. Tell the user account_needed (the account type the network needs) before they click, then send them the url; you cannot connect a channel for them. Then call list_channels to check it shows as connected.',
     example: 'get_connect_link { "network": "instagram" } → { network, url: "https://creatif.space/social/connect?network=instagram", account_needed: "For Instagram you need …", account_type: [...], steps: [...], requirements: [...], existing: [...], room: { used, limit }, next_step }',
-    rules: 'Plans limit how many channels can be connected; reconnecting one that is already listed does not need room.',
+    rules: 'Plans limit how many channels can be connected; reconnecting one that is already listed does not need room. existing leaves out a disconnected copy of an account that is also connected, as list_channels does.',
     errors: [
       ['plan_required', 'the plan’s channel limit is reached: the user can disconnect a channel in creatif.space; do not retry'],
       ['invalid_input', 'use one of the networks in the input schema'],
@@ -72,8 +73,9 @@ export const getConnectLink = defineTool({
       v1.get<{ data: Account[] }>('/social-accounts'),
       v1.get<{ data: { limits?: Limits } }>('/credits'),
     ]);
+    const dupes = disconnectedDuplicates(accounts.data as unknown as Record<string, unknown>[]);
     const existing = accounts.data
-      .filter((a) => a.platform === network)
+      .filter((a) => a.platform === network && !dupes.has(a.id))
       .map((a) => ({
         id: a.id,
         username: a.username,

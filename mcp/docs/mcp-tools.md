@@ -809,7 +809,7 @@ When to use: when list_channels shows a channel with reconnect_required, or the 
 
 Example: get_connect_link { "network": "instagram" } → { network, url: "https://creatif.space/social/connect?network=instagram", account_needed: "For Instagram you need …", account_type: [...], steps: [...], requirements: [...], existing: [...], room: { used, limit }, next_step }
 
-Plans limit how many channels can be connected; reconnecting one that is already listed does not need room.
+Plans limit how many channels can be connected; reconnecting one that is already listed does not need room. existing leaves out a disconnected copy of an account that is also connected, as list_channels does.
 
 Errors → next step: plan_required → the plan’s channel limit is reached: the user can disconnect a channel in creatif.space; do not retry; invalid_input → use one of the networks in the input schema; scope_missing → reconnect and allow "read"; upstream_unavailable → wait a minute and call again; forbidden (403) → this seat or connection may not do this (e.g. a viewer, or a permission the connection was not given): the workspace owner or an editor can, or the user does it in creatif.space; do not retry; not_found (404) → the id is not in this workspace: take a fresh id from the matching list tool and call again.
 
@@ -940,7 +940,7 @@ When to use: at the start of a conversation or when onboarding a user, to know w
 
 Example: get_account_summary {} → { plan: { key: "free", name }, limits: { monthly_posts: { used, limit, left }, connected_accounts, queued_posts, approval_clients, schedule_window_days }, credits: { left, monthly, topup, resets_at }, channels: { connected, needs_reconnect, reconnect: [...] }, storage: { used_bytes, quota_bytes, percent_used }, failed_posts: 2, approvals: { waiting: 3, changes_requested: 1 }, next_steps }
 
-Read-only. limit null means no limit (left null); limits depend on the plan (on some plans: 3 channels, up to 7 days ahead, 10 queued posts, one approval client). connected counts channels that can be posted to now. failed_posts is the list_failed_posts count; approvals counts the user’s posts waiting for approval and those sent back with changes (up to 100 each).
+Read-only. limit null means no limit (left null); limits depend on the plan (on some plans: 3 channels, up to 7 days ahead, 10 queued posts, one approval client). connected counts channels that can be posted to now; a disconnected copy of an account that is also connected is not counted as needing a reconnect (hidden_duplicates counts them, as list_channels does). failed_posts is the list_failed_posts count; approvals counts the user’s posts waiting for approval and those sent back with changes (up to 100 each).
 
 Errors → next step: scope_missing → reconnect and allow "read"; unauthorized → ask the user to reconnect the creatif.space connector; upstream_unavailable → wait a minute and call again; plan_required (402) → a plan limit, or a feature this account's plan does not include (on some plans: posts scheduled at most 7 days ahead, at most 10 queued posts, approval links for one client); tell the user it is not available on their plan, and do not retry; forbidden (403) → this seat or connection may not do this (e.g. a viewer, or a permission the connection was not given): the workspace owner or an editor can, or the user does it in creatif.space; do not retry; not_found (404) → the id is not in this workspace: take a fresh id from the matching list tool and call again.
 
