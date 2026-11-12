@@ -148,6 +148,20 @@ class Space extends Model implements WorkspaceOwned
     }
 
     /**
+     * creatif.space/{handle}/{slug} — where a client opens it once it is
+     * published. Null while the owner has no handle: without one there is
+     * no address to resolve.
+     */
+    public function publicUrl(): ?string
+    {
+        $handle = $this->user->handle?->name;
+
+        return $handle === null
+            ? null
+            : rtrim((string) config('app.public_url'), '/').'/'.$handle.'/'.$this->slug;
+    }
+
+    /**
      * Slug from the title, unique per user — dedup includes trashed rows,
      * because a deleted Space's link must never be reissued.
      */

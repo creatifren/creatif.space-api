@@ -500,6 +500,10 @@ Route::middleware(['auth:sanctum,mcp', EnforceTokenScope::class, EnsureNotPendin
     Route::post('/spaces/{space}/items', [SpaceController::class, 'addItems'])
         ->middleware('throttle:60,1')
         ->name('api.v1.spaces.items.store');
+    // What publishing would put live; a connected app's confirm_token (publish_space).
+    Route::get('/spaces/{space}/publish-preview', [SpaceController::class, 'publishPreview'])
+        ->middleware('throttle:60,1')
+        ->name('api.v1.spaces.publish-preview');
     Route::post('/spaces/{space}/publish', [SpaceController::class, 'publish'])->name('api.v1.spaces.publish');
     Route::post('/spaces/{space}/unpublish', [SpaceController::class, 'unpublish'])->name('api.v1.spaces.unpublish');
     Route::post('/spaces/{space}/archive', [SpaceController::class, 'archive'])->name('api.v1.spaces.archive');
