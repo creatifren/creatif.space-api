@@ -49,14 +49,15 @@ Rate limit: 60 requests / minute / token (429 + `Retry-After`).
 
 | Tool | Scope | V1 endpoint |
 | --- | --- | --- |
-| `list_channels` | read | `GET /social-accounts` |
+| `list_channels` — channels that need reconnecting carry `reconnect` {reason, next_step} and are listed in `needs_reconnect` | read | `GET /social-accounts` |
 | `list_posts` (status, from, to, channel_id, limit) | read | `GET /social-posts?status&from&to&account_id&limit` |
 | `get_post` | read | `GET /social-posts/{id}` |
 | `list_files` (search, type, folder_id, limit) | read | `GET /files` |
 | `draft_post` (caption, channel_ids, file_ids, media_urls, captions_by_channel, type) | draft | `POST /social-posts` with `draft: true` |
-| `get_credits` | read | `GET /credits` |
+| `get_credits` — plan, limits, Credits; `spend` (this cycle by action: publish, reply, ai) and `renewal` (resets_at, days_until) | read | `GET /credits` (`limits.spend`) |
 | `create_approval_link` (post_ids — or a Content Plan: date_from, date_to, timezone, channel_ids — **approver_email** (required — the client signs in with it to decide), title, client_name, expires_in_hours) — every plan; Free: one client (by approver_email), 7-day window, 10 queued | approve | `POST /social-approval-links` (drafts accepted) |
 | `check_approval_status` (post_id \| link_id) | read | `GET /social-posts/{id}` or `GET /social-approval-links/{id}` |
+| `send_approval_reminder` (link_id) | approve | `POST /social-approval-links/{id}/remind` (one per link per 12 h) |
 | `update_post` (caption, scheduled_at, labels, file_ids \| add_file_ids) | draft (drafts and posts waiting for approval only) | `PATCH /social-posts/{id}` |
 | `schedule_post` (post_id, scheduled_at, confirm) | publish | preview `GET /social-posts/{id}/send-preview`; `confirm: true` → `POST /social-posts/{id}/send` |
 | `publish_post` (post_id, confirm) | publish | same, sends now |
@@ -77,7 +78,9 @@ Rate limit: 60 requests / minute / token (429 + `Retry-After`).
 | `create_space_from_files` (title, file_ids 1–100, view_mode) — always a Draft+Private Space, never published; Pro/Max | draft | `POST /spaces` with `file_ids` (checked before anything is created) |
 | `publish_space` (space_id, confirm) — Pro/Max | publish | preview `GET /spaces/{id}/publish-preview`; `confirm: true` → `POST /spaces/{id}/publish` |
 | `get_approval_audit` (link_id) — every decision on one of the user's links: who, post, when, decision, comment; rows and CSV | read | `GET /social-approval-links/{id}/audit.csv` |
+| `send_feedback` (kind bug\|idea\|other, message, page) — to the creatif.space team; nothing public, no Credits; 10 an hour per user | draft | `POST /feedback` |
 | `list_shared_with_me` — "Reports shared with you": Content Plans other users sent to this user's email | approvals:decide | `GET /me/reports/shared` |
+| `get_connect_link` (network) — the app's connect page (`https://creatif.space/social/connect?network=…`) with the steps; no token in the response; a new network on a full plan → `plan_required` | read | `GET /social-accounts` + `GET /credits` (never `POST /social-accounts/auth-url`) |
 
 **Media upload.** `request_media_upload` → the client PUTs the exact bytes to
 the URL (Content-Type and Content-Length are signed) → `confirm_media_upload`
