@@ -68,7 +68,7 @@ export const listWaitingApprovals = defineTool({
   title: 'List posts waiting for your approval',
   description: describeTool({
     does: 'Lists posts that OTHER creatif.space users sent to this user for approval (links and Content Plans addressed to the user’s verified email) that still wait for a decision.',
-    when: 'when the user asks what they have to approve, or before decide_approval to get the link id and post id. To follow a link the user created themselves, use check_approval_status instead.',
+    when: 'when the user asks what they have to approve, or before decide_approval to get the link id and post id. For posts the user sent to THEIR clients, use list_pending_approvals (all of them) or check_approval_status (one link) instead.',
     example: 'list_waiting_approvals {} → { waiting: [{ link: { id, title, from, kind, url, expires_at }, waiting, posts: [{ id, caption, scheduled_at, decidable }] }] }',
     rules: 'Pass the link id to decide_approval as `link`. On a Free sender’s plan only posts in the next 7 days can be decided; decidable is false for the rest.',
     errors: [

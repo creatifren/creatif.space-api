@@ -355,6 +355,10 @@ Route::middleware(['auth:sanctum,mcp', EnforceTokenScope::class, EnsureNotPendin
         ->name('api.v1.social-comments.apply');
     Route::get('/social-posts/{socialPost}/approval-link', [SocialApprovalController::class, 'linkFor'])
         ->name('api.v1.social-posts.approval-link');
+    // The owner's approval loop: posts held for a client, with the latest
+    // client feedback (MCP list_pending_approvals).
+    Route::get('/social-approvals/pending', [SocialApprovalController::class, 'pending'])
+        ->name('api.v1.social-approvals.pending');
     Route::get('/social-approval-links', [SocialApprovalController::class, 'links'])
         ->name('api.v1.social-approval-links.index');
     Route::post('/social-approval-links', [SocialApprovalController::class, 'link'])

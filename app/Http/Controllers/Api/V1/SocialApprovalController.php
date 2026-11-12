@@ -682,6 +682,90 @@ class SocialApprovalController extends Controller
         ];
     }
 
+    /** Comment roles written by the client side of a link. */
+    private const CLIENT_ROLES = ['APPROVER', 'COMMENTER'];
+
+    /**
+     * GET /social-approvals/pending — the owner's side of the approval loop:
+     * this workspace's posts held for a client, oldest slot first. `state`:
+     * waiting (client has not answered), changes_requested (client asked for
+     * changes), or all (default). Each post carries the link it is on and the
+     * client's latest open feedback, so an agent can follow up without
+     * opening every link. Read-only.
+     */
+    public function pending(Request $request): JsonResponse
+    {
+        $validated = $request->validate([
+            'state' => ['sometimes', 'string', Rule::in(['waiting', 'changes_requested', 'all'])],
+            'limit' => ['sometimes', 'integer', 'min:1', 'max:100'],
+        ]);
+        $state = $validated['state'] ?? 'all';
+
+        // Every live link of the workspace — fixed lists and Content Plans
+        // alike (PlanScope) — and the posts on it still held for the client.
+        $links = SocialApprovalLink::query()
+            ->whereIn('user_id', self::workspaceIds($request->user()))
+            ->live()
+            ->latest('id')
+            ->limit(200)
+            ->get();
+
+        /** @var array<int, SocialApprovalLink> $linkFor post id => the newest live link it is on */
+        $linkFor = [];
+        foreach ($links as $link) {
+            $held = array_map(fn (SocialPostApproval $a) => $a->value, PlanScope::decidableFrom($link));
+            $wanted = match ($state) {
+                'waiting' => array_values(array_diff($held, [SocialPostApproval::Revision->value])),
+                'changes_requested' => [SocialPostApproval::Revision->value],
+                default => $held,
+            };
+            $ids = PlanScope::posts($link)
+                ->where('social_posts.status', SocialPostStatus::Scheduled)
+                ->whereNull('social_posts.provider_post_id')
+                ->whereIn('social_posts.approval', $wanted)
+                ->pluck('social_posts.id');
+            foreach ($ids as $id) {
+                $linkFor[$id] ??= $link;
+            }
+        }
+
+        $posts = SocialPost::query()
+            ->whereIn('id', array_keys($linkFor))
+            ->with(['comments' => fn ($q) => $q->whereNull('resolved_at')->whereIn('role', self::CLIENT_ROLES)->latest('id')])
+            ->orderBy('scheduled_at')
+            ->limit($validated['limit'] ?? 50)
+            ->get();
+
+        return response()->json(['data' => $posts->map(function (SocialPost $p) use ($linkFor) {
+            $link = $linkFor[$p->id] ?? null;
+            /** @var SocialPostComment|null $last */
+            $last = $p->comments->first();
+
+            return [
+                'id' => $p->ulid,
+                'caption' => str($p->caption)->limit(280)->toString(),
+                'scheduled_at' => $p->scheduled_at?->toIso8601String(),
+                'state' => $p->approval === SocialPostApproval::Revision ? 'changes_requested' : 'waiting',
+                'link' => $link ? [
+                    'id' => $link->ulid,
+                    'url' => $link->url(),
+                    'title' => $link->title,
+                    'approver_email' => $link->approver_email,
+                    'kind' => $link->isScoped() ? 'plan' : 'list',
+                    'expires_at' => $link->expires_at?->toIso8601String(),
+                ] : null,
+                'open_feedback' => $p->comments->count(),
+                'latest_feedback' => $last ? [
+                    'id' => $last->ulid,
+                    'author' => $last->author_name,
+                    'body' => str($last->body)->limit(500)->toString(),
+                    'suggestion' => $last->suggestion,
+                    'created_at' => $last->created_at?->toIso8601String(),
+                ] : null,
+            ];
+        })->all()]);
+    }
+
     /**
      * GET /me/approvals/waiting — "Waiting your approval": live links sent
      * to my verified email that still have posts waiting on my decision.

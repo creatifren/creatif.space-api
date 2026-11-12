@@ -109,6 +109,14 @@ a gated feature) and the tool error is `plan_required` with those fields in
 `details`. `schedule_post` sends its `scheduled_at` with the preview, so the
 limit answers before the user is asked to confirm.
 
+**Approval loop (owner).** `list_pending_approvals` wraps
+`GET /social-approvals/pending` (the workspace's posts held for a client on any live link, fixed list or Content Plan —
+`waiting` or `changes_requested` — each with its link and the client's latest
+open feedback); `get_client_feedback` wraps `GET /social-posts/{id}/comments`
+(the full thread, client vs team, suggested captions). Both need `read`.
+`/me/approvals/waiting` is the other side — links sent *to* the caller as
+approver — and is not used here.
+
 **Engage.** `list_conversations` / `reply_to_conversation` read and answer the
 same rows as the app's Engage (comments and Instagram/Facebook DMs via the
 Outstand relay), with the same ownership (another workspace's id → `not_found`),

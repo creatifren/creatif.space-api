@@ -79,6 +79,9 @@ return [
         'api.v1.social-posts.send' => 'publish',
         'api.v1.social-approval-links.store' => 'approve',
         'api.v1.social-approval-links.show' => 'read',
+        // The owner's approval loop: what is waiting on clients, and what they said.
+        'api.v1.social-approvals.pending' => 'read',
+        'api.v1.social-posts.comments.index' => 'read',
 
         // Media (request_media_upload / confirm_media_upload): the same
         // presign and complete as the app — limits, quota and the
