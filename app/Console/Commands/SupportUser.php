@@ -7,6 +7,7 @@ use App\Models\SocialAccount;
 use App\Models\SocialPostTarget;
 use App\Models\User;
 use App\Support\PlanQuota;
+use App\Support\SignupAttribution;
 use App\Support\Workspace;
 use Illuminate\Console\Command;
 use Illuminate\Support\Number;
@@ -18,7 +19,9 @@ use Illuminate\Support\Number;
  *   php artisan support:user someone@example.com
  *
  * Prints the plan (the workspace owner's), the billing platform, connected
- * channels, queued posts, storage used, and the last five publish failures
+ * channels, queued posts, storage used, when they signed up and their
+ * first-touch attribution (utm_*, referrer host, landing path — support
+ * only, never shown to other users), and the last five publish failures
  * with their person-readable reason and code. Never a token, a secret, a
  * payment id or the relay's raw error text (fail_reason only — the same
  * sentence the user saw).
@@ -67,6 +70,8 @@ class SupportUser extends Command
             ['Queued posts', PlanQuota::queuedPosts($owner).' (limit '.(PlanQuota::queueLimit($owner) ?? 'none').')'],
             ['Storage', Number::fileSize($used, 1).' of '.($limit === null ? 'unlimited' : Number::fileSize($limit, 1))],
             ['Account status', $user->status->value.($user->suspended_at !== null ? ' since '.$user->suspended_at->toDateString() : '')],
+            ['Signed up', $user->created_at?->utc()->format('Y-m-d H:i').' UTC'],
+            ['First touch', $this->attribution($user)],
         ]);
 
         $failures = SocialPostTarget::query()
@@ -95,6 +100,27 @@ class SupportUser extends Command
         ])->all());
 
         return self::SUCCESS;
+    }
+
+    /**
+     * The first-touch attribution kept at signup (SignupAttribution), on one
+     * line: source, then each utm_* / referrer / landing path it has.
+     */
+    private function attribution(User $user): string
+    {
+        $a = $user->signup_attribution;
+        if (! is_array($a) || $a === []) {
+            return 'not recorded (account made before attribution was kept)';
+        }
+
+        $parts = ['source '.($a['signup_source'] ?? SignupAttribution::UNKNOWN)];
+        foreach (['utm_source', 'utm_medium', 'utm_campaign', 'referrer_host', 'landing_path'] as $key) {
+            if (isset($a[$key])) {
+                $parts[] = $key.'='.$a[$key];
+            }
+        }
+
+        return implode(', ', $parts);
     }
 
     /** Where the plan is billed: the Android app (Google Play) or the web (Creem). */

@@ -96,3 +96,28 @@ it('fails with a message for an unknown email', function () {
 
     expect($code)->toBe(1)->and($out)->toContain('No account with the email nobody@example.test.');
 });
+
+it('shows when they signed up and their first-touch attribution', function () {
+    User::factory()->create([
+        'email' => 'touch@example.test',
+        'created_at' => '2026-11-12 09:30:00',
+        'signup_attribution' => [
+            'utm_source' => 'instagram', 'utm_medium' => 'bio', 'utm_campaign' => 'nov',
+            'referrer_host' => 'l.instagram.com', 'landing_path' => '/pricing', 'signup_source' => 'instagram',
+        ],
+    ]);
+
+    [$code, $out] = supportOutput('touch@example.test');
+
+    expect($code)->toBe(0)
+        ->and($out)->toContain('2026-11-12 09:30 UTC')
+        ->toContain('source instagram, utm_source=instagram, utm_medium=bio, utm_campaign=nov, referrer_host=l.instagram.com, landing_path=/pricing');
+});
+
+it('says when an older account has no attribution', function () {
+    User::factory()->create(['email' => 'old@example.test']);
+
+    [, $out] = supportOutput('old@example.test');
+
+    expect($out)->toContain('not recorded (account made before attribution was kept)');
+});

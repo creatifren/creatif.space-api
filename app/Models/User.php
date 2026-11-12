@@ -25,6 +25,7 @@ use Spatie\Permission\Traits\HasRoles;
  * @property string $email
  * @property string|null $google_id
  * @property string|null $avatar_url
+ * @property array<string, string>|null $signup_attribution
  * @property string $locale
  * @property bool $insight_monthly_email
  * @property string|null $insight_monthly_sent_for
@@ -88,6 +89,8 @@ class User extends Authenticatable implements FilamentUser
         'password',
         'remember_token',
         'signup_next_path',
+        // First-touch attribution (SignupAttribution): support and analytics only.
+        'signup_attribution',
     ];
 
     /**
@@ -109,6 +112,7 @@ class User extends Authenticatable implements FilamentUser
             'storage_blocks' => 'integer',
             'storage_rental_ended_at' => 'datetime',
             'social_settings' => 'array',
+            'signup_attribution' => 'array',
             'password' => 'hashed',
             'status' => UserStatus::class,
         ];
