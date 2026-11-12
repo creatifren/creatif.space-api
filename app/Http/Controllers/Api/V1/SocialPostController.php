@@ -53,7 +53,8 @@ class SocialPostController extends Controller
             'from' => ['sometimes', 'date'],
             'to' => ['sometimes', 'date'],
             'account_id' => ['sometimes', 'string', 'max:26'],
-            'limit' => ['sometimes', 'required_with:offset', 'integer', 'min:1', 'max:100'],
+            // No `sometimes`: it would skip required_with when limit is absent.
+            'limit' => ['required_with:offset', 'integer', 'min:1', 'max:100'],
             // Paging for the MCP list_posts cursor: skip this many (with limit).
             'offset' => ['sometimes', 'integer', 'min:0', 'max:100000'],
         ]);
@@ -81,7 +82,8 @@ class SocialPostController extends Controller
                     fn ($a) => $a->where('ulid', $account),
                 ))
                 ->when($validated['limit'] ?? null, fn ($q, $limit) => $q->limit((int) $limit))
-                ->when($validated['offset'] ?? null, fn ($q, $offset) => $q->offset((int) $offset))
+                // OFFSET is only valid SQL after a LIMIT.
+                ->when(isset($validated['limit']) ? ($validated['offset'] ?? null) : null, fn ($q, $offset) => $q->offset((int) $offset))
                 // Threads ride along: the Feed shows every post's conversation
                 // at once, so one request beats one per card.
                 ->with(['targets.account', 'comments.replies', 'user:id,name'])
