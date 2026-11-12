@@ -25,6 +25,7 @@ use App\Http\Controllers\Api\V1\InsightExportController;
 use App\Http\Controllers\Api\V1\InsightPdfExportController;
 use App\Http\Controllers\Api\V1\InsightReportController;
 use App\Http\Controllers\Api\V1\InsightSettingsController;
+use App\Http\Controllers\Api\V1\InsightShareController;
 use App\Http\Controllers\Api\V1\InsightSummaryController;
 use App\Http\Controllers\Api\V1\McpActivityController;
 use App\Http\Controllers\Api\V1\McpApprovalController;
@@ -36,6 +37,7 @@ use App\Http\Controllers\Api\V1\PinterestBoardController;
 use App\Http\Controllers\Api\V1\ProfileFontController;
 use App\Http\Controllers\Api\V1\PublicApprovalController;
 use App\Http\Controllers\Api\V1\PublicHealthController;
+use App\Http\Controllers\Api\V1\PublicInsightController;
 use App\Http\Controllers\Api\V1\PublicProfileController;
 use App\Http\Controllers\Api\V1\PublicSpaceController;
 use App\Http\Controllers\Api\V1\SocialAccountController;
@@ -81,6 +83,12 @@ Route::get('/plans', [SubscriptionController::class, 'plans'])
 Route::get('/health', PublicHealthController::class)
     ->middleware('throttle:60,1')
     ->name('api.v1.health');
+
+// A shared Insight page's data ({frontend}/report/{token}): the token is
+// the credential. 410 when expired, 404 when unknown or revoked.
+Route::get('/public/insight/{token}', PublicInsightController::class)
+    ->middleware('throttle:60,1')
+    ->name('api.v1.public.insight.show');
 
 // A signed Insight PDF link (POST /insight/export-link, 15 minutes): the
 // signature is the credential; the plan is checked again on use.
@@ -528,6 +536,13 @@ Route::middleware(['auth:sanctum,mcp', EnforceTokenScope::class, EnsureNotPendin
     Route::get('/insight/export.pdf', [InsightPdfExportController::class, 'download'])
         ->middleware('throttle:10,1')
         ->name('api.v1.insight.export.pdf');
+    // Shareable Insight links (Pro / Max): make, list, revoke.
+    Route::post('/insight/share', [InsightShareController::class, 'store'])
+        ->middleware('throttle:20,1')
+        ->name('api.v1.insight.share.store');
+    Route::get('/insight/share', [InsightShareController::class, 'index'])->name('api.v1.insight.share.index');
+    Route::delete('/insight/share/{insightShareLink}', [InsightShareController::class, 'destroy'])->name('api.v1.insight.share.destroy');
+
     // Settings → Insight: the monthly email (opt-in, owner, Pro / Max).
     Route::get('/me/insight-settings', [InsightSettingsController::class, 'show'])->name('api.v1.me.insight-settings.show');
     Route::patch('/me/insight-settings', [InsightSettingsController::class, 'update'])->name('api.v1.me.insight-settings.update');
