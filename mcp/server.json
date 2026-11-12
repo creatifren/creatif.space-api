@@ -40,6 +40,7 @@
         "check_approval_status",
         "confirm_media_upload",
         "create_approval_link",
+        "create_content_plan",
         "create_insight_share_link",
         "create_space_from_files",
         "decide_approval",

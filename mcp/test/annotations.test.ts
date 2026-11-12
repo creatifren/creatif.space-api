@@ -15,7 +15,7 @@ import { startApp, TOKEN_FULL } from './helpers.js';
 
 const READ_PREFIXES = /^(list|get|check)_/;
 const DESTRUCTIVE = ['publish_post', 'schedule_post', 'reply_to_conversation', 'discard_draft', 'publish_space', 'revoke_insight_share_link'];
-const OPEN_WORLD = ['publish_post', 'schedule_post', 'reply_to_conversation', 'publish_space', 'create_approval_link', 'send_approval_reminder', 'decide_approval', 'create_insight_share_link'];
+const OPEN_WORLD = ['publish_post', 'schedule_post', 'reply_to_conversation', 'publish_space', 'create_approval_link', 'create_content_plan', 'send_approval_reminder', 'decide_approval', 'create_insight_share_link'];
 
 let app: Awaited<ReturnType<typeof startApp>> | undefined;
 afterEach(async () => {

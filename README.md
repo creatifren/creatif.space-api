@@ -28,6 +28,7 @@ in [mcp/README.md](mcp/README.md).
 | Posts | `publish_post` | Publish a draft now after a preview | All, spends Credits |
 | Posts | `suggest_caption` | AI caption + hashtags in the user's style | Pro / Max |
 | Approvals | `create_approval_link` | Approval link for posts or a Content Plan | All (Free: one client) |
+| Approvals | `create_content_plan` | Content Plan for a date range, emailed to the approver after a preview | All (Free: one client) |
 | Approvals | `check_approval_status` | Where approval stands for a post or a link | All |
 | Approvals | `list_approval_links` | The workspace's approval links and their status | All |
 | Approvals | `send_approval_reminder` | Email the approver a reminder | All |
