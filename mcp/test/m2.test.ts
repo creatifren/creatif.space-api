@@ -442,14 +442,16 @@ describe('plan and Credit limits are passed on verbatim', () => {
     app = await startApp();
     const { tools } = await (await app.connect(TOKEN_FULL)).listTools();
     const d = (n: string) => tools.find((t) => t.name === n)!.description!;
-    expect(d('create_approval_link')).toMatch(/Every plan: on Free, links are for one client at a time/);
+    expect(d('create_approval_link')).toMatch(/On some plans, links are for one client at a time/);
     expect(d('create_approval_link')).toMatch(/approval_clients, schedule_window or queue_limit/);
     expect(d('create_approval_link')).not.toMatch(/Pro and Max plans only/);
     expect(d('schedule_post')).toMatch(/at most 7 days ahead and at most 10 posts/);
     expect(d('get_credits')).toMatch(/approval clients used vs allowed/);
     expect(d('publish_post')).toMatch(/insufficient_credits or quota_exceeded/);
     expect(d('schedule_post')).toMatch(/Monthly Credits first/);
-    expect(d('get_credits')).toMatch(/Free included/);
+    expect(d('get_credits')).toMatch(/Every plan can use this server/);
+    // No plan names in any description (directory rule); limits are stated neutrally.
+    for (const t of tools) expect(t.description, t.name).not.toMatch(/\bFree\b/);
   });
 });
 

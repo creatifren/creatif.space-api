@@ -8,7 +8,7 @@ import { startApp, TOKEN_FULL } from './helpers.js';
  */
 const UPSELL = /upgrad|\bpric(e|es|ing)\b|\btrial\b|subscription|billing|\bpaid\b|\$\s?\d|\btop up\b|\bbuy\b|purchase/i;
 /** Plan tier names, case-sensitive ("max" is a limit, "Max" a plan). */
-const TIERS = /\b(Pro|Max|Business|Premium)\b/;
+const TIERS = /\b(Free|Pro|Max|Enterprise|Business|Premium|Starter)\b/;
 
 let app: Awaited<ReturnType<typeof startApp>> | undefined;
 afterEach(async () => {

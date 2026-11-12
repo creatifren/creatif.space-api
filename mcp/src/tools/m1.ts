@@ -196,7 +196,7 @@ export const draftPost = defineTool({
   name: 'draft_post',
   title: 'Draft a post',
   description: describeTool({
-    does: "Saves a DRAFT post in creatif.space for the given channels — nothing is published or scheduled and no Credits are spent (every plan, Free included).",
+    does: "Saves a DRAFT post in creatif.space for the given channels — nothing is published or scheduled and no Credits are spent (on every plan).",
     when: "to create any new post; it is always the safe first step. The user reviews and sends it from creatif.space, or you send it later with schedule_post / publish_post (with the user’s explicit agreement) or share it with create_approval_link. To change an existing draft, use update_post instead of drafting again.",
     example: "draft_post { \"caption\": \"Winter set is live\", \"channel_ids\": [\"01JD…\"], \"file_ids\": [\"01JE…\"], \"captions_by_channel\": { \"01JF…\": \"Shorter for X\" } }",
     rules: "Media: library file ids (from list_files, or from confirm_media_upload for a file you just uploaded) and/or public https media URLs, 10 items in all. captions_by_channel overrides the caption for channels that are also in channel_ids. type picks the placement on Facebook, Instagram and Threads.",
@@ -294,7 +294,7 @@ export const getCredits = defineTool({
     does: "Gets the workspace’s creatif.space plan, its limits and its Credits — everything that decides what can be sent.",
     when: "before schedule_post or publish_post when the user asks what they can afford or why something was refused. It returns, as set on the plan: plan name; this month’s posts vs the plan’s monthly figure; connected channels used vs allowed; scheduling (days ahead allowed, queued posts — scheduled or waiting for approval — used vs allowed); approval clients used vs allowed; features (approval links, analytics, AI captions, Spaces…); Credits (Monthly, when they reset, Top-up balance, total, committed to scheduled posts); the Credits each send uses, by platform; how many sends connected apps have left today (cap 20/day); this month’s Credit spend by action (publish, reply, ai — AI captions are free today, so ai is 0); and the days until the Monthly Credits renew.",
     example: "get_credits {} → { plan: { key: \"free\" }, credits: { monthly, topup, resets_at, committed }, price_per_send, scheduling, approval_clients, mcp_daily_sends, spend: { since, by_action: { publish, reply, ai }, total }, renewal: { resets_at, days_until } }",
-    rules: "Every plan, Free included, can use this server: sending spends Credits. Free schedules up to 7 days ahead, holds up to 10 queued posts and has approval links for one client; null means no limit.",
+    rules: "Every plan can use this server: sending spends Credits. Some plans schedule up to 7 days ahead, hold up to 10 queued posts and have approval links for one client; null means no limit.",
     errors: [
       ["unauthorized", "ask the user to reconnect the creatif.space connector"],
       ["upstream_unavailable", "wait a minute and call again"],
