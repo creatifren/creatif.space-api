@@ -1130,6 +1130,9 @@ describe('activation: first_* milestones, once per user (CS activation funnel)',
 });
 
 describe('first-touch attribution on the user (users.signup_attribution)', function () {
+    // toEqual, not toBe: MySQL's JSON column returns object keys in its own
+    // order (length, then name), sqlite in the written one. The keys and
+    // values are the contract, not their order.
     it('keeps utm_*, referrer host, landing path and signup_source from an email signup', function () {
         $this->postJson('/auth/register', [
             'email' => 'touch@example.com', 'password' => 'long-enough-1',
@@ -1137,7 +1140,7 @@ describe('first-touch attribution on the user (users.signup_attribution)', funct
             'referrer_host' => 'L.Instagram.com', 'landing_path' => '/pricing',
         ])->assertStatus(202);
 
-        expect(User::query()->sole()->signup_attribution)->toBe([
+        expect(User::query()->sole()->signup_attribution)->toEqual([
             'utm_source' => 'instagram', 'utm_medium' => 'bio', 'utm_campaign' => 'nov',
             'referrer_host' => 'l.instagram.com', 'landing_path' => '/pricing', 'signup_source' => 'instagram',
         ]);
@@ -1152,7 +1155,7 @@ describe('first-touch attribution on the user (users.signup_attribution)', funct
         aeGoogleCallback();
         $this->get('/auth/google/callback?code=abc')->assertRedirect();
 
-        expect(User::query()->sole()->signup_attribution)->toBe([
+        expect(User::query()->sole()->signup_attribution)->toEqual([
             'referrer_host' => 'www.google.com', 'landing_path' => '/signup', 'signup_source' => 'referral',
         ]);
     });
@@ -1162,7 +1165,7 @@ describe('first-touch attribution on the user (users.signup_attribution)', funct
             'email' => 'bad@example.com', 'password' => 'long-enough-1', 'referrer_host' => $host, 'landing_path' => $path,
         ])->assertStatus(202);
 
-        expect(User::query()->sole()->signup_attribution)->toBe(['signup_source' => 'direct']);
+        expect(User::query()->sole()->signup_attribution)->toEqual(['signup_source' => 'direct']);
     })->with([
         'url, query' => ['https://evil.test/x', '/p?email=a@b.c'],
         'credentials, fragment' => ['user:pw@evil.test', '/p#token'],
@@ -1179,7 +1182,7 @@ describe('first-touch attribution on the user (users.signup_attribution)', funct
         $user = User::query()->sole();
         ProductEvents::signedUp($user, 'email', ['utm_source' => 'third']);
 
-        expect($user->fresh()->signup_attribution)->toBe(['utm_source' => 'first', 'signup_source' => 'first']);
+        expect($user->fresh()->signup_attribution)->toEqual(['utm_source' => 'first', 'signup_source' => 'first']);
     });
 
     it('is never serialized: hidden on the model and absent from /me', function () {
