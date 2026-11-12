@@ -37,6 +37,7 @@ timing — no arguments or results).
 | `mcp_audit_logs` (DB) | one row per MCP / API-key call: tool, status, timing | `mcp.audit_retention_days`, default 90 days (`PruneMcpAuditLogs`, daily 02:50) |
 | `directory_reviewer_logins` (DB) | reviewer sign-in attempts, address hashed | until the account is deleted |
 | `activity_log` (DB) | the user's own Activity screen | until the account is deleted |
+| `social_conversations`, `social_messages`, `social_comments` (DB) | Engage: DMs and comments of a channel | while the channel is connected. Disconnecting it (the user, the relay, or deleting the account) deletes them at once and they are never listed or read after (`App\Support\InboxPurge`; `inbox:purge-disconnected` sweeps leftovers daily 03:30). After a reconnect, Engage shows only what the next sync reads from the platform. |
 
 Deleting an account removes its `mcp_audit_logs`, `activity_log` and
 `directory_reviewer_logins` rows (`App\Support\AccountDeletion`).
