@@ -8,6 +8,7 @@ use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Once;
 use Laravel\Passport\Client;
 use Laravel\Passport\ClientRepository;
 use Throwable;
@@ -113,6 +114,10 @@ class ClientMetadataDocuments
             $client = app(ClientRepository::class)->createAuthorizationCodeGrantClient($name, $redirects, false);
         } else {
             $client->forceFill(['name' => $name, 'redirect_uris' => $redirects])->save();
+            // Passport memoizes client lookups with once() for the life of the
+            // process: drop that, or a long-running worker keeps the old
+            // redirect URIs after the document changed.
+            Once::flush();
         }
 
         $now = now();

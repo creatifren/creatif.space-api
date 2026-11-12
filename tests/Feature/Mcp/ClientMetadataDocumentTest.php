@@ -106,7 +106,7 @@ it('refuses a redirect_uri the document does not list', function () {
 
     $response = cimdAuthorize($this, User::factory()->create(), 'https://evil.example/cb')['response'];
 
-    expect($response->status())->toBeGreaterThanOrEqual(400)->toBeLessThan(500);
+    expect($response->getStatusCode())->toBeGreaterThanOrEqual(400)->toBeLessThan(500);
 });
 
 it('refetches once the cached copy expires, and follows the document', function () {
