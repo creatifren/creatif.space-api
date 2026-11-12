@@ -21,6 +21,7 @@ const app = createApp({
   rateLimiter: new TokenRateLimiter(config.rateLimitPerMinute),
   glamaClaim: config.glamaClaim,
   publicDiscovery: config.publicDiscovery,
+  openaiAppsChallenge: config.openaiAppsChallenge,
 });
 
 const server = app.listen(config.port, config.host, () => {
