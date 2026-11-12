@@ -4,6 +4,7 @@ import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/
 import type { AuthInfo } from '@modelcontextprotocol/sdk/server/auth/types.js';
 import { noopAnalytics, type Analytics, type FreeAnalytics } from './analytics.js';
 import { bearerAuth, metadataUrls, protectedResourceMetadata, type CallerAuth } from './auth/middleware.js';
+import { publicDiscovery } from './auth/discovery.js';
 import type { FetchLike, Introspector } from './auth/introspection.js';
 import { TokenRateLimiter } from './rateLimit.js';
 import { registerTool, structureSdkErrors } from './tools/define.js';
@@ -60,6 +61,10 @@ export interface AppDeps {
   /** /free calls per IP per minute. */
   freeRateLimiter?: TokenRateLimiter;
   freeRateLimitPerMinute?: number;
+  /** initialize + tools/list without a token (tools/call stays behind OAuth). Default off. */
+  publicDiscovery?: boolean;
+  /** Anonymous discovery calls per IP per minute. */
+  discoveryRateLimiter?: TokenRateLimiter;
 }
 
 export function buildMcpServer(auth: CallerAuth, deps: AppDeps): McpServer {
@@ -157,8 +162,15 @@ export function createApp(deps: AppDeps) {
     });
   };
 
+  const discovery = publicDiscovery({
+    enabled: deps.publicDiscovery === true,
+    resourceUrl: deps.resourceUrl,
+    limiter: deps.discoveryRateLimiter ?? new TokenRateLimiter(DEFAULT_FREE_RATE_LIMIT),
+    handle,
+  });
+
   for (const path of ['/mcp', '/']) {
-    app.post(path, auth, limiter.middleware(), express.json({ limit: '1mb' }), handle);
+    app.post(path, discovery, auth, limiter.middleware(), express.json({ limit: '1mb' }), handle);
     app.get(path, auth, notAllowed);
     app.delete(path, auth, notAllowed);
   }

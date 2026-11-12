@@ -65,6 +65,8 @@ export async function startApp(opts: {
   introspector?: Introspector;
   rateLimit?: number;
   freeRateLimit?: number;
+  publicDiscovery?: boolean;
+  discoveryRateLimit?: number;
 } = {}) {
   const v1 = mockV1(opts.routes ?? {});
   const rec = recordingAnalytics();
@@ -80,6 +82,8 @@ export async function startApp(opts: {
     fetchImpl: v1.fetchImpl,
     freeAnalytics,
     ...(opts.freeRateLimit ? { freeRateLimitPerMinute: opts.freeRateLimit } : {}),
+    ...(opts.publicDiscovery !== undefined ? { publicDiscovery: opts.publicDiscovery } : {}),
+    ...(opts.discoveryRateLimit ? { discoveryRateLimiter: new TokenRateLimiter(opts.discoveryRateLimit) } : {}),
   });
   const server: Server = await new Promise((resolve) => {
     const s = app.listen(0, '127.0.0.1', () => resolve(s));
@@ -97,6 +101,14 @@ export async function startApp(opts: {
     return client;
   };
 
+  /** An MCP client on /mcp with no Authorization header at all. */
+  const connectAnonymous = async () => {
+    const client = new Client({ name: 'test', version: '1.0.0' });
+    await client.connect(new StreamableHTTPClientTransport(new URL(`${base}/mcp`)));
+    clients.push(client);
+    return client;
+  };
+
   /** An MCP client on /free with no Authorization header at all. */
   const connectFree = async () => {
     const client = new Client({ name: 'test', version: '1.0.0' });
@@ -110,7 +122,7 @@ export async function startApp(opts: {
     await new Promise<void>((r) => server.close(() => r()));
   };
 
-  return { base, v1, events: rec.events, freeEvents, connect, connectFree, close };
+  return { base, v1, events: rec.events, freeEvents, connect, connectAnonymous, connectFree, close };
 }
 
 /** Parse a tool result's JSON text. */

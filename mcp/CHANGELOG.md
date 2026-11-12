@@ -28,6 +28,7 @@ Prompts (new): `plan_week`, `send_for_approval`, `monthly_report` (`prompts/list
 
 Changed:
 
+- `MCP_PUBLIC_DISCOVERY` (off by default): `initialize` and `tools/list` without a token; `tools/call` stays behind OAuth (401 + `WWW-Authenticate`).
 - Every `list_*` tool takes `limit` + `cursor` and returns `next_cursor` (null at the end).
 - The 10 most-used read tools declare an `outputSchema` and return `structuredContent` (text block kept).
 - `/free` `connect_guide` returns `account_type` per network: `confirmed` from the code, or `check in app` where the code does not prove it.

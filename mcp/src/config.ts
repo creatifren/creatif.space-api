@@ -19,6 +19,12 @@ export interface Config {
   introspectionTtlMs: number;
   /** Calls per token per minute. */
   rateLimitPerMinute: number;
+  /**
+   * MCP_PUBLIC_DISCOVERY=true: initialize and tools/list answer without a
+   * token (registry crawlers, client previews); tools/call and everything
+   * else still need OAuth. Off unless set to exactly "true".
+   */
+  publicDiscovery: boolean;
 }
 
 /** Not a secret: Glama reads it from a public URL to verify we own the connector. */
@@ -56,5 +62,6 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
     glamaClaim: env.GLAMA_CLAIM || DEFAULT_GLAMA_CLAIM,
     introspectionTtlMs: 60_000,
     rateLimitPerMinute: 60,
+    publicDiscovery: env.MCP_PUBLIC_DISCOVERY === 'true',
   };
 }

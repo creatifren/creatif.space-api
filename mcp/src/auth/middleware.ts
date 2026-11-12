@@ -45,7 +45,7 @@ export function protectedResourceMetadata(resourceUrl: string, authorizationServ
   };
 }
 
-function challenge(res: Response, resourceUrl: string, error?: string, description?: string) {
+export function challenge(res: Response, resourceUrl: string, error?: string, description?: string) {
   const parts = [`resource_metadata="${metadataUrls(resourceUrl).pathForm}"`];
   if (error) parts.push(`error="${error}"`);
   if (description) parts.push(`error_description="${description}"`);

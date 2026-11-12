@@ -369,6 +369,7 @@ registry workflow, which only publishes `mcp/server.json`.
 | `POSTHOG_KEY` | — | unset → no analytics |
 | `POSTHOG_HOST` | `https://us.i.posthog.com` | |
 | `GLAMA_CLAIM` | the published claim | served at `GET /.well-known/glama.json` and `GET /mcp/.well-known/glama.json` (public, must stay published) |
+| `MCP_PUBLIC_DISCOVERY` | off | `true` lets `initialize`, `notifications/initialized`, `ping` and `tools/list` answer **without a token** (registry crawlers, client previews; 30/min per IP). `tools/call` and everything else still get the 401 + `WWW-Authenticate` (`resource_metadata`) sign-in challenge; a request with a token always takes normal auth. Leave off until QA has verified it. |
 
 ## Develop
 
