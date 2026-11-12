@@ -27,6 +27,7 @@ in [mcp/README.md](mcp/README.md).
 | Posts | `schedule_post` | Schedule a draft after a preview | All, spends Credits |
 | Posts | `schedule_posts` | Schedule up to 10 drafts after one preview, all or none | All, spends Credits |
 | Posts | `publish_post` | Publish a draft now after a preview | All, spends Credits |
+| Posts | `retry_post` | Send a post's failed channels again after a preview | All, spends Credits |
 | Posts | `suggest_caption` | AI caption + hashtags in the user's style | Pro / Max |
 | Approvals | `create_approval_link` | Approval link for posts or a Content Plan | All (Free: one client) |
 | Approvals | `create_content_plan` | Content Plan for a date range, emailed to the approver after a preview | All (Free: one client) |
@@ -48,6 +49,7 @@ in [mcp/README.md](mcp/README.md).
 | Channels | `list_channels` | Connected channels; marks ones to reconnect | All |
 | Channels | `get_connect_link` | App link to connect or reconnect a network (no token) | All |
 | Insight | `get_insight_summary` | Insight numbers for a month or up to 92 days | Pro / Max |
+| Insight | `list_top_posts` | The five most engaging posts of a period, with links | Pro / Max |
 | Insight | `get_insight_report_link` | 15-minute download link to the Insight PDF | Pro / Max |
 | Insight | `create_insight_share_link` | Read-only report link for 30 days; optional recipient (emailed) | Pro / Max |
 | Insight | `revoke_insight_share_link` | Turn a shared report link off | Pro / Max |

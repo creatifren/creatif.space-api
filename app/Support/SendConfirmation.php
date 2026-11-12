@@ -2,6 +2,7 @@
 
 namespace App\Support;
 
+use App\Enums\SocialPostTargetStatus;
 use App\Models\SocialPost;
 use App\Models\SocialPostTarget;
 use App\Models\User;
@@ -17,10 +18,18 @@ use Illuminate\Http\Request;
  * user saw the preview, the send is refused as preview_stale (409) and the
  * user has to see the new numbers first. The app, signed in with the
  * session cookie, never needs one.
+ *
+ * A retry (GET /social-posts/{post}/retry-preview) gets its own kind of
+ * token, over the failed destinations only: a send token cannot confirm a
+ * retry, nor the other way round.
  */
 final class SendConfirmation
 {
     public const TTL_MINUTES = 10;
+
+    public const SEND = 'send';
+
+    public const RETRY = 'retry';
 
     /** A bearer-token caller (MCP / API key) — the same test the daily cap uses. */
     public static function viaToken(Request $request): bool
@@ -33,23 +42,25 @@ final class SendConfirmation
      *
      * @return list<array{target: SocialPostTarget, credits: int}>
      */
-    public static function priced(SocialPost $post): array
+    public static function priced(SocialPost $post, string $kind = self::SEND): array
     {
-        return $post->targets()->with('account')->orderBy('id')->get()
+        return $post->targets()->with('account')->orderBy('id')
+            ->when($kind === self::RETRY, fn ($q) => $q->where('status', SocialPostTargetStatus::Failed))
+            ->get()
             ->map(fn (SocialPostTarget $t) => ['target' => $t, 'credits' => Credits::priceFor($post, $t)])
             ->values()
             ->all();
     }
 
-    public static function issue(User $user, SocialPost $post): string
+    public static function issue(User $user, SocialPost $post, string $kind = self::SEND): string
     {
-        $body = self::encode(self::claims($user, $post) + ['exp' => now()->addMinutes(self::TTL_MINUTES)->getTimestamp()]);
+        $body = self::encode(self::claims($user, $post, $kind) + ['exp' => now()->addMinutes(self::TTL_MINUTES)->getTimestamp()]);
 
         return $body.'.'.self::sign($body);
     }
 
     /** Does the token confirm what this send would do right now? */
-    public static function matches(User $user, SocialPost $post, string $token): bool
+    public static function matches(User $user, SocialPost $post, string $token, string $kind = self::SEND): bool
     {
         $parts = explode('.', $token);
         if (count($parts) !== 2 || ! hash_equals(self::sign($parts[0]), $parts[1])) {
@@ -62,21 +73,23 @@ final class SendConfirmation
         }
         unset($claims['exp']);
 
-        return $claims === self::claims($user, $post);
+        return $claims === self::claims($user, $post, $kind);
     }
 
     /**
-     * @return array{u: int, p: string, t: list<int>, c: int}
+     * @return array<string, int|string|list<int>>
      */
-    private static function claims(User $user, SocialPost $post): array
+    private static function claims(User $user, SocialPost $post, string $kind): array
     {
-        $priced = self::priced($post);
+        $priced = self::priced($post, $kind);
 
         return [
             'u' => $user->id,
             'p' => $post->ulid,
             't' => array_map(fn ($p) => $p['target']->id, $priced),
             'c' => (int) array_sum(array_column($priced, 'credits')),
+            // Send tokens keep their old shape.
+            ...($kind === self::RETRY ? ['k' => self::RETRY] : []),
         ];
     }
 

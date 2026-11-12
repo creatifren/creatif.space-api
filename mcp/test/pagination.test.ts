@@ -22,6 +22,7 @@ function world(count: number): Record<string, { routes: Record<string, Route>; i
   const spaces = Array.from({ length: count }, (_, i) => ({ id: ulid('SPACE', i + 1), title: `S${i}`, status: 'draft' }));
   const waiting = Array.from({ length: count }, (_, i) => ({ link: { id: ulid('WAIT', i + 1) }, waiting: 1, posts: [] }));
   const shared = Array.from({ length: count }, (_, i) => ({ report_id: ulid('SHARE', i + 1), kind: 'plan', title: 't', period: null, owner: { name: 'Bro' }, url: 'https://x' }));
+  const top = Array.from({ length: count }, (_, i) => ({ url: `https://example.test/p/${i + 1}`, engagement: 100 - i }));
   const byId = (k: string) => (out: Record<string, unknown[]>) => (out[k] as { id: string }[]).map((x) => x.id);
 
   return {
@@ -55,6 +56,12 @@ function world(count: number): Record<string, { routes: Record<string, Route>; i
       all: waiting.map((w) => w.link.id),
     },
     list_shared_with_me: { routes: { 'GET /me/reports/shared': () => ({ body: { data: shared } }) }, ids: byId('shared'), all: shared.map((s) => s.report_id) },
+    list_top_posts: {
+      routes: { 'GET /insight/top-posts': () => ({ body: { data: top, meta: { ranked_by: 'engagement', limit: 5 } } }) },
+      args: { period: { month: '2026-10' } },
+      ids: (out) => (out.data as { url: string }[]).map((p) => p.url),
+      all: top.map((p) => p.url),
+    },
   };
 }
 

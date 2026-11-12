@@ -7,17 +7,17 @@ Versions of the remote MCP server at `https://mcp.creatif.space/mcp`
 
 ## 0.3.0 — 2026-11-12
 
-40 tools (was 11). Every description follows the agent shape (what / when to
+42 tools (was 11). Every description follows the agent shape (what / when to
 use / example / errors → next step, #78), and every error is
 `{code, message, next_step, details}` (#76).
 
-Added (29):
+Added (31):
 
-- **Posts:** `schedule_posts` (up to 10 drafts, one preview, all or none), `discard_draft` (preview first; drafts only), `suggest_caption` (AI caption + hashtags; `not_enabled` while the flag is off)
+- **Posts:** `schedule_posts` (up to 10 drafts, one preview, all or none), `discard_draft` (preview first; drafts only), `retry_post` (the failed channels of a post again, preview first; each failure with a stable `failure_code`), `suggest_caption` (AI caption + hashtags; `not_enabled` while the flag is off)
 - **Approvals:** `create_content_plan` (preview → `confirm: true` creates a Content Plan and emails the approver), `send_approval_reminder`, `list_approval_links`, `get_approval_audit`, `get_approval_history` (one post’s decisions, email masked), `get_plan_calendar_link` (Content Plan ICS feed, read-only); approver side `list_waiting_approvals`, `decide_approval`, `list_shared_with_me` (scope `approvals:decide`)
 - **Media:** `request_media_upload`, `confirm_media_upload`, `get_storage_usage`, `keep_file`, `unkeep_file`
 - **Channels:** `get_connect_link` (app link, no token); `list_channels` marks channels to reconnect
-- **Insight:** `get_insight_summary`, `get_insight_report_link`, `create_insight_share_link` (optional `recipient_email`: emailed, and listed in their `list_shared_with_me`), `revoke_insight_share_link` (scope `approve`)
+- **Insight:** `get_insight_summary` (per-channel threshold notes; previous period + change for every number), `list_top_posts` (top five by engagement), `get_insight_report_link`, `create_insight_share_link` (optional `recipient_email`: emailed, and listed in their `list_shared_with_me`), `revoke_insight_share_link` (scope `approve`)
 - **Spaces:** `list_spaces`, `create_space_from_files`, `publish_space`
 - **Engage:** `list_conversations`, `reply_to_conversation`
 - **Feedback:** `send_feedback`
@@ -33,6 +33,7 @@ Changed:
 - `serverInfo.icons` and the registry entry's `icons`: the Pen Rocket, 512×512 PNG at `https://creatif.space/icons/icon-512.png` (registry entry 1.2.0).
 - Every tool description opens with a “Use …” line (≤ 120 chars) saying when to use it, naming the prompt (`plan_week`, `send_for_approval`, `monthly_report`) that walks through it.
 - Registry entry 1.2.1: `repository` → `https://github.com/creatifren/creatif.space-api` (subfolder `mcp`). Not published from here: the registry workflow is Rizal's to run.
+- Confirms of `publish_post`, `schedule_post` and `retry_post`, and `create_approval_link`, send an `Idempotency-Key` (one per confirm), so a double submit sends, charges or creates once.
 - Every `list_*` tool takes `limit` + `cursor` and returns `next_cursor` (null at the end).
 - The 10 most-used read tools declare an `outputSchema` and return `structuredContent` (text block kept).
 - `/free` `connect_guide` returns `account_type` per network: `confirmed` from the code, or `check in app` where the code does not prove it.

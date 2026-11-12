@@ -24,6 +24,7 @@ export const FIRST_LINES: Record<string, string> = {
   schedule_post: 'Use when the user wants a draft sent later; previews channels and Credits, confirm: true schedules.',
   schedule_posts: 'Use when the user wants several drafts scheduled together: one preview, then all or none on confirm.',
   publish_post: 'Use when the user wants a draft public now; previews channels and Credits, confirm: true publishes.',
+  retry_post: 'Use when a post failed on some channels and the user wants to try again; previews reasons and Credits.',
 
   // Approvals
   create_approval_link: 'Use to get client approval on posts or a period; the send_for_approval prompt makes the link with it.',
@@ -48,6 +49,7 @@ export const FIRST_LINES: Record<string, string> = {
 
   // Insight
   get_insight_summary: 'Use for a period’s numbers (reach, engagement, top posts); the monthly_report prompt starts with it.',
+  list_top_posts: 'Use when the user asks which posts did best in a period: the top five by engagement, with links.',
   get_insight_report_link: 'Use when the user wants the Insight PDF; a monthly_report alternative to the share link.',
   create_insight_share_link: 'Use to share a report with a client, no account needed; the monthly_report prompt ends with it.',
   revoke_insight_share_link: 'Use when a shared Insight report link must stop working now.',

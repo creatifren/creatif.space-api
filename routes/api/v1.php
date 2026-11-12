@@ -30,6 +30,7 @@ use App\Http\Controllers\Api\V1\InsightReportController;
 use App\Http\Controllers\Api\V1\InsightSettingsController;
 use App\Http\Controllers\Api\V1\InsightShareController;
 use App\Http\Controllers\Api\V1\InsightSummaryController;
+use App\Http\Controllers\Api\V1\InsightTopPostsController;
 use App\Http\Controllers\Api\V1\McpActivityController;
 use App\Http\Controllers\Api\V1\McpApprovalController;
 use App\Http\Controllers\Api\V1\MeController;
@@ -46,6 +47,7 @@ use App\Http\Controllers\Api\V1\PublicHealthController;
 use App\Http\Controllers\Api\V1\PublicInsightController;
 use App\Http\Controllers\Api\V1\PublicProfileController;
 use App\Http\Controllers\Api\V1\PublicSpaceController;
+use App\Http\Controllers\Api\V1\PublishRetryController;
 use App\Http\Controllers\Api\V1\ReminderOptOutController;
 use App\Http\Controllers\Api\V1\SocialAccountController;
 use App\Http\Controllers\Api\V1\SocialApprovalController;
@@ -68,6 +70,7 @@ use App\Http\Middleware\CapTokenSends;
 use App\Http\Middleware\EnforceTokenScope;
 use App\Http\Middleware\EnsureInboxEnabled;
 use App\Http\Middleware\EnsureNotPendingDeletion;
+use App\Http\Middleware\IdempotencyKey;
 use App\Http\Middleware\MarketingSiteOrigin;
 use App\Http\Middleware\ScopeToWorkspace;
 use Illuminate\Http\Request;
@@ -399,13 +402,20 @@ Route::middleware(['auth:sanctum,mcp', EnforceTokenScope::class, EnsureNotPendin
         ->name('api.v1.social-posts.swap');
     // Up to 10 drafts scheduled together, all or none (MCP schedule_posts).
     Route::post('/social-posts/send-batch', [SocialPostBatchController::class, 'send'])
-        ->middleware('throttle:10,1')
+        ->middleware(['throttle:10,1', IdempotencyKey::class])
         ->name('api.v1.social-posts.send-batch');
     Route::get('/social-posts/{socialPost}/send-preview', [SocialPostController::class, 'sendPreview'])
         ->name('api.v1.social-posts.send-preview');
     Route::post('/social-posts/{socialPost}/send', [SocialPostController::class, 'send'])
-        ->middleware(['throttle:30,1', CapTokenSends::class])
+        ->middleware(['throttle:30,1', IdempotencyKey::class, CapTokenSends::class])
         ->name('api.v1.social-posts.send');
+    // Try a failed publish again (MCP retry_post: preview → confirm).
+    Route::get('/social-posts/{socialPost}/retry-preview', [PublishRetryController::class, 'preview'])
+        ->middleware('throttle:60,1')
+        ->name('api.v1.social-posts.retry-preview');
+    Route::post('/social-posts/{socialPost}/retry', [PublishRetryController::class, 'store'])
+        ->middleware(['throttle:30,1', IdempotencyKey::class, CapTokenSends::class])
+        ->name('api.v1.social-posts.retry');
     Route::delete('/social-posts/{socialPost}/draft', [SocialPostController::class, 'discard'])
         ->name('api.v1.social-posts.discard');
     Route::post('/social-posts/{socialPost}/approve', [SocialApprovalController::class, 'approve'])
@@ -431,7 +441,7 @@ Route::middleware(['auth:sanctum,mcp', EnforceTokenScope::class, EnsureNotPendin
         ->middleware('throttle:60,1')
         ->name('api.v1.social-approval-links.index');
     Route::post('/social-approval-links', [SocialApprovalController::class, 'link'])
-        ->middleware('throttle:30,1')
+        ->middleware(['throttle:30,1', IdempotencyKey::class])
         ->name('api.v1.social-approval-links.store');
     Route::get('/social-approval-links/{socialApprovalLink}', [SocialApprovalController::class, 'show'])
         ->middleware('throttle:60,1')
@@ -641,6 +651,10 @@ Route::middleware(['auth:sanctum,mcp', EnforceTokenScope::class, EnsureNotPendin
     Route::get('/insight/summary', InsightSummaryController::class)
         ->middleware('throttle:30,1')
         ->name('api.v1.insight.summary');
+    // The top five posts by engagement (MCP: list_top_posts).
+    Route::get('/insight/top-posts', InsightTopPostsController::class)
+        ->middleware('throttle:30,1')
+        ->name('api.v1.insight.top-posts');
 
     // Proof of delivery. Deliberately not gated on a plan: "on every plan"
     // is what the screen promises, and evidence is not an upsell.

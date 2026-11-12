@@ -69,6 +69,8 @@ return [
         'api.v1.me.subscription' => 'read',
         // get_insight_summary: Pro / Max (402 plan_required on Free).
         'api.v1.insight.summary' => 'read',
+        // list_top_posts: the top five posts by engagement (Pro / Max).
+        'api.v1.insight.top-posts' => 'read',
         // get_insight_report_link: a 15-minute signed PDF link (Pro / Max).
         'api.v1.insight.export-link' => 'read',
         // create_insight_share_link / revoke_insight_share_link: sharing with
@@ -85,6 +87,9 @@ return [
         'api.v1.social-posts.send-preview' => 'read',
         // CapTokenSends holds bearer callers to 20 sends a day.
         'api.v1.social-posts.send' => 'publish',
+        // retry_post: the preview reads; the retry spends Credits like a send.
+        'api.v1.social-posts.retry-preview' => 'read',
+        'api.v1.social-posts.retry' => 'publish',
         // schedule_posts: the same scope as one send (all or none, up to 10).
         'api.v1.social-posts.send-batch' => 'publish',
         'api.v1.social-approval-links.store' => 'approve',

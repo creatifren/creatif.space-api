@@ -74,6 +74,7 @@ describe('schedule_posts', () => {
     expect(body.posts.map((p) => [p.post_id, p.scheduled_at])).toEqual([[P1, T1], [P2, T2]]);
     expect(body.posts.every((p) => /^tok-/.test(p.confirm_token))).toBe(true);
     expect(batchCalls()[0]!.headers.get('x-mcp-tool')).toBe('schedule_posts');
+    expect(batchCalls()[0]!.headers.get('idempotency-key')).toEqual(expect.any(String));
     expect(out.scheduled.map((p: { id: string }) => p.id)).toEqual([P1, P2]);
 
     // Used up: confirming again previews again and sends nothing more.

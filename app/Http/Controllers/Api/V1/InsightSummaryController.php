@@ -4,15 +4,11 @@ namespace App\Http\Controllers\Api\V1;
 
 use App\Http\Controllers\Controller;
 use App\Support\Insight\InsightCache;
-use App\Support\Insight\InsightClients;
 use App\Support\Insight\InsightCollector;
-use App\Support\Insight\InsightPeriod;
+use App\Support\Insight\InsightScope;
 use App\Support\Insight\InsightSummary;
-use App\Support\PlanQuota;
-use App\Support\Workspace;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
-use Illuminate\Validation\ValidationException;
 
 /**
  * The numbers of an Insight report without the PDF — what the MCP tool
@@ -33,36 +29,9 @@ class InsightSummaryController extends Controller
 
     public function __invoke(Request $request, InsightCollector $collector): JsonResponse
     {
-        $user = $request->user();
+        $scope = InsightScope::fromRequest($request);
 
-        // Pro / Max (plans v2): 402 plan_required, feature "insight".
-        PlanQuota::requireFeature($user, 'insight');
-
-        $validated = $request->validate([
-            'month' => ['required_without_all:from,to', 'nullable', 'string', 'regex:/^\d{4}-(0[1-9]|1[0-2])$/'],
-            'from' => ['required_without:month', 'nullable', 'date_format:Y-m-d'],
-            'to' => ['required_without:month', 'nullable', 'date_format:Y-m-d'],
-            'channel_ids' => ['sometimes', 'nullable', 'string', 'max:2000'],
-        ]);
-
-        $period = InsightPeriod::fromInput($validated, '');
-        $owner = Workspace::owner($user);
-        $accounts = InsightClients::accounts($owner);
-
-        $asked = array_values(array_filter(array_map('trim', explode(',', (string) ($validated['channel_ids'] ?? '')))));
-        if ($asked !== []) {
-            $unknown = array_diff($asked, $accounts->pluck('ulid')->all());
-            if ($unknown !== []) {
-                throw ValidationException::withMessages(['channel_ids' => 'These channels are not connected to this workspace: '.implode(', ', $unknown).'.']);
-            }
-            $accounts = $accounts->filter(fn ($a) => in_array($a->ulid, $asked, true))->values();
-        }
-
-        if ($accounts->isEmpty()) {
-            throw ValidationException::withMessages(['channel_ids' => 'Connect a channel first: there is nothing to report on.']);
-        }
-
-        $data = InsightSummary::present($collector->collectCached($owner, $accounts, $period));
+        $data = InsightSummary::present($collector->collectCached($scope->owner, $scope->accounts, $scope->period));
 
         return response()->json(['data' => $data]);
     }

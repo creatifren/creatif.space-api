@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { defineTool, describeTool } from './define.js';
+import { pageInput, pageOf } from './paging.js';
 
 const READ_ONLY = { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false } as const;
 
@@ -51,4 +52,37 @@ export const getInsightSummary = defineTool({
   },
 });
 
-export const insightTools = [getInsightSummary];
+export const listTopPosts = defineTool({
+  name: 'list_top_posts',
+  title: 'List top posts',
+  description: describeTool({
+    does: 'Lists the five posts with the most engagement (likes + comments + shares + saves, as each network reports them) in a month or up to 92 days, highest first, with each one’s numbers and link.',
+    when: 'when the user asks which posts did best, or wants examples for a client report. post_id is set when the post went out through creatif.space (use get_post for details) and null for one posted elsewhere. A post whose network reports no engagement is left out, never ranked as 0. channel_ids (from list_channels) limits it to some channels; use get_insight_summary for totals instead.',
+    example: 'list_top_posts { "period": { "month": "2026-10" } } → { data: [{ network: "TikTok", engagement: 4680, likes: 4100, url, caption, posted_at, post_id }, ...], next_cursor: null, meta: { ranked_by: "engagement", limit: 5 } }',
+    errors: [
+      ['plan_required', 'Insight is on Pro and Max: tell the user the message as it is (it has the upgrade link); do not retry'],
+      ['invalid_input', 'fix the period (YYYY-MM, or from/to at most 92 days, not in the future) or the channel ids and call again'],
+      ['scope_missing', 'reconnect and allow "read"'],
+      ['unauthorized', 'ask the user to reconnect the creatif.space connector'],
+      ['upstream_unavailable', 'wait a minute and call again'],
+    ],
+  }),
+  scope: 'read',
+  input: {
+    period,
+    channel_ids: z.array(z.string().trim().min(10).max(26)).min(1).max(50).optional().describe('Only these channels (ids from list_channels)'),
+    ...pageInput(5, 5, 'posts'),
+  },
+  annotations: READ_ONLY,
+  run: async ({ period, channel_ids, limit, cursor }, { v1 }) => {
+    const query = {
+      ...('month' in period ? { month: period.month } : { from: period.from, to: period.to }),
+      channel_ids: channel_ids?.join(','),
+    };
+    const res = await v1.get<{ data: unknown[]; meta: Record<string, unknown> }>('/insight/top-posts', query);
+    const { page, next_cursor } = pageOf('list_top_posts', query, res.data, limit, cursor);
+    return { data: page, next_cursor, meta: res.meta };
+  },
+});
+
+export const insightTools = [getInsightSummary, listTopPosts];

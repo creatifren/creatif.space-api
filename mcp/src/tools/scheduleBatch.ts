@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto';
 import { z } from 'zod';
 import { ToolError, type ErrorCode } from '../errors.js';
-import { V1Error } from '../v1.js';
+import { idempotencyKey, V1Error } from '../v1.js';
 import { defineTool, describeTool, type ToolContext } from './define.js';
 import { preview, type SendPreview } from './m2.js';
 import { shapePost, type V1Post } from './shape.js';
@@ -144,8 +144,10 @@ export const schedulePosts = defineTool({
     }
 
     try {
-      const { data } = await ctx.v1.post<{ data: { scheduled: V1Post[] } }>('/social-posts/send-batch', {
-        posts: posts.map((p) => ({ post_id: p.post_id, scheduled_at: p.scheduled_at, confirm_token: tokens[p.post_id] })),
+      const body = { posts: posts.map((p) => ({ post_id: p.post_id, scheduled_at: p.scheduled_at, confirm_token: tokens[p.post_id] })) };
+      // One key per confirm: a retried request is replayed, never a second batch.
+      const { data } = await ctx.v1.post<{ data: { scheduled: V1Post[] } }>('/social-posts/send-batch', body, {
+        idempotencyKey: idempotencyKey('send-batch', ctx.auth.extra.userUlid, JSON.stringify(body)),
       });
       batchPreviews.forget(key);
       return {

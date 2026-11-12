@@ -83,6 +83,8 @@ describe('throttles (numbers as in the PR body)', function () {
         'api.v1.social-approval-links.calendar.destroy' => '30,1',
         'api.v1.social-posts.approval-link' => '60,1',
         'api.v1.social-posts.approval-audit' => '60,1',
+        'api.v1.social-posts.retry-preview' => '60,1',
+        'api.v1.social-posts.retry' => '30,1',
         'api.v1.social-posts.approve' => '30,1',
         // Content Plan share links, calendar feed, reminder opt-out
         'api.v1.plan-links.show' => '60,1',

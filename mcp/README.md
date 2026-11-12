@@ -64,7 +64,9 @@ Rate limit: 60 requests / minute / token (429 + `Retry-After`).
 | `schedule_posts` (posts: [{post_id, scheduled_at}] up to 10, confirm) — one preview of every post + total Credits; `confirm: true` schedules all or none | publish | previews `GET /social-posts/{id}/send-preview` each; `confirm: true` → `POST /social-posts/send-batch` (checks all first; a refusal takes back the ones already sent) |
 | `schedule_post` (post_id, scheduled_at, confirm) | publish | preview `GET /social-posts/{id}/send-preview`; `confirm: true` → `POST /social-posts/{id}/send` |
 | `publish_post` (post_id, confirm) | publish | same, sends now |
+| `retry_post` (post_id, confirm) — the failed channels of a post again; preview shows each `failure_code` and reason | publish | preview `GET /social-posts/{id}/retry-preview`; `confirm: true` → `POST /social-posts/{id}/retry` |
 | `get_insight_summary` (period: {month} \| {from, to} ≤ 92 days, channel_ids) — Pro / Max; Free → `plan_required` | read | `GET /insight/summary?month \| from&to&channel_ids` |
+| `list_top_posts` (period: {month} \| {from, to} ≤ 92 days, channel_ids, limit, cursor) — Pro / Max; Free → `plan_required` | read | `GET /insight/top-posts?month \| from&to&channel_ids` |
 | `get_insight_report_link` (from, to ≤ 92 days, format onepage\|deck\|details, channel_ids, locale) — a 15-minute signed download link to the Insight PDF (one page, 16:9 deck or detailed); Pro / Max | read | `POST /insight/export-link` |
 | `create_insight_share_link` (from, to ≤ 92 days, channel_ids, recipient_email) — a read-only web link to an Insight report, open without an account for 30 days; with `recipient_email` that person is emailed once and sees it in `list_shared_with_me` | approve | `POST /insight/share` |
 | `revoke_insight_share_link` (share_id) — turns a shared Insight link off at once | approve | `DELETE /insight/share/{id}` |
@@ -268,7 +270,7 @@ And on the owner's side, later:
 Every tool sets the four MCP hints. `list_*`, `get_*` and `check_*` are
 `readOnlyHint`. Anything that goes public or removes something is
 `destructiveHint`: `publish_post`, `schedule_post`, `reply_to_conversation`,
-`discard_draft`, `publish_space`, `revoke_insight_share_link`. Tools that
+`discard_draft`, `publish_space`, `revoke_insight_share_link`, `retry_post`. Tools that
 reach outside creatif.space (platforms, the client's inbox, public links) are
 `openWorldHint`. `test/annotations.test.ts` checks these rules and pins every
 tool's hints in a snapshot.
@@ -282,6 +284,22 @@ Every tool turns an API 429 into the same envelope:
 - **`retry_after_seconds`:** taken from the body's `retry_after`, else the `Retry-After` header (the token limit in `EnforceTokenScope` sends only the header), else 60.
 
 Two 429s keep their own codes: `upload_limit` (uploads paused for today) and `daily_cap_reached` (20 sends a day from connected apps). `test/ratelimit.test.ts` sends a 429 to every tool.
+
+## Idempotency (double submit)
+
+The API runs a `POST` that carries an `Idempotency-Key` once per user and
+key for 24 hours. A repeat gets the first answer back (with
+`Idempotent-Replayed: true`) and does nothing again. This applies to
+publish/schedule (`/send`), `/retry` and approval-link create. The server
+sends one key per confirm:
+
+- `publish_post`, `schedule_post` and `retry_post` derive the key from the
+  confirmed preview's token. A confirm sent twice is one send and one charge.
+- `create_approval_link` derives the key from its arguments within a
+  10-minute window. Asking for the same link twice makes it once.
+
+The key is a hash: it never carries the token or the arguments. Only a 2xx
+answer is kept, so a refused confirm can be sent again once its cause is fixed.
 
 ## Pagination
 

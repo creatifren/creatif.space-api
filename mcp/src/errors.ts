@@ -19,6 +19,7 @@ export type ErrorCode =
   | 'not_schedulable'
   | 'not_editable'
   | 'not_draft'
+  | 'not_failed'
   | 'not_approvable'
   | 'not_a_plan'
   | 'link_inactive'

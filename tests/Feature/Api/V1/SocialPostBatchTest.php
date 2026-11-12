@@ -205,3 +205,17 @@ it('holds a Free plan to its queue room for the whole batch', function () {
         expect($p->fresh()->status->value)->toBe('draft');
     }
 });
+
+it('runs once per Idempotency-Key: a repeated request replays, nothing is sent twice', function () {
+    sbRelay();
+    $user = sbUser();
+    $items = sbItems($this, $user, [sbDraft($user)]);
+
+    $first = $this->actingAs($user)->withToken('cs_live_test')->withHeader('Idempotency-Key', 'batch-1')
+        ->postJson('/api/v1/social-posts/send-batch', ['posts' => $items])->assertOk();
+    $again = $this->actingAs($user)->withToken('cs_live_test')->withHeader('Idempotency-Key', 'batch-1')
+        ->postJson('/api/v1/social-posts/send-batch', ['posts' => $items])->assertOk()->assertHeader('Idempotent-Replayed', 'true');
+
+    expect($again->json())->toBe($first->json());
+    expect(Http::recorded(fn (HttpRequest $r) => $r->method() === 'POST')->count())->toBe(1);
+});
