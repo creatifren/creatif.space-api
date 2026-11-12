@@ -210,8 +210,11 @@ jobs:
   # The MCP server and the API together, no mocks: tools/list in the
   # describeTool shape (#78) and the {code, message, next_step, details}
   # envelope for a real 402 / 403 / 404 (#76). scripts/mcp-contract-smoke.sh.
+  # Either side can break the contract, so it runs when PHP or mcp/ changed.
   mcp-contract:
     name: MCP contract smoke (API + MCP, sqlite)
+    needs: changes
+    if: needs.changes.outputs.php == 'true' || needs.changes.outputs.mcp == 'true'
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     steps:
