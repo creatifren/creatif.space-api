@@ -69,6 +69,11 @@ final class Onboarding
     public static function nudge(User $user, ?CarbonImmutable $now = null): bool
     {
         $now ??= CarbonImmutable::now();
+        // A model just made in memory (create()) does not carry the columns
+        // left to their database defaults, status among them: read the row.
+        if (! array_key_exists('status', $user->getAttributes())) {
+            $user->refresh();
+        }
         $attributes = $user->getAttributes();
 
         if (($attributes['connect_nudge_sent_at'] ?? null) !== null
