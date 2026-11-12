@@ -95,6 +95,7 @@ describe('401 flow', () => {
         'request_media_upload', 'confirm_media_upload',
         'list_conversations', 'reply_to_conversation',
         'suggest_caption',
+        'get_storage_usage', 'keep_file', 'unkeep_file',
         'list_waiting_approvals', 'decide_approval', 'list_shared_with_me',
         'get_insight_summary',
         'get_insight_report_link',

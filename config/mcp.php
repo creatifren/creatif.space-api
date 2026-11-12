@@ -103,6 +103,12 @@ return [
         // like writing a draft; AI_CAPTION_ENABLED and the plan gate stay in
         // AiCaptionController (404 while off, 402 on Free).
         'api.v1.ai.caption' => 'draft',
+
+        // Media housekeeping (get_storage_usage / keep_file / unkeep_file).
+        // Quota and plan rules stay in MediaQuota: Keep is paid, 402 when full.
+        'api.v1.files.usage' => 'read',
+        'api.v1.files.keep' => 'draft',
+        'api.v1.files.unkeep' => 'draft',
         // Approver side (decide_approval / list_waiting_approvals): only
         // links whose approver_email is this account's verified email.
         'api.v1.me.approvals.waiting' => 'approvals:decide',
