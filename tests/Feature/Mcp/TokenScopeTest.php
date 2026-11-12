@@ -52,7 +52,7 @@ describe('the scope fence', function () {
             ->assertForbidden()
             ->assertJsonPath('error', 'not_available');
     })->with([
-        ['GET', '/api/v1/spaces'],
+        ['GET', '/api/v1/me/storage'],
         ['POST', '/api/v1/credits/top-up'],
         ['DELETE', '/api/v1/social-accounts/{account}'],
         ['POST', '/api/v1/social-posts/{post}/approve'],
@@ -117,7 +117,7 @@ describe('the scope fence', function () {
         $tokens = oauthTokens($this, $user, mcpClient(), 'read');
 
         bearer($this, $tokens['access_token'])->getJson('/api/v1/credits')->assertOk();
-        bearer($this, $tokens['access_token'])->getJson('/api/v1/spaces')->assertForbidden();
+        bearer($this, $tokens['access_token'])->getJson('/api/v1/me/storage')->assertForbidden();
         bearer($this, $tokens['access_token'])
             ->postJson('/api/v1/social-posts', ['caption' => 'x', 'account_ids' => ['a'], 'draft' => true])
             ->assertForbidden()
@@ -172,7 +172,7 @@ describe('rate limit and audit', function () {
             ->withHeaders(['X-MCP-Tool' => 'draft_post', 'X-MCP-Client' => 'Claude Desktop'])
             ->postJson('/api/v1/social-posts', ['caption' => 'Secret launch caption', 'account_ids' => [$ig->ulid], 'draft' => true])
             ->assertCreated();
-        bearer($this, $key)->getJson('/api/v1/spaces')->assertForbidden();
+        bearer($this, $key)->getJson('/api/v1/me/storage')->assertForbidden();
 
         $rows = McpAuditLog::query()->orderBy('id')->get();
         expect($rows)->toHaveCount(2)

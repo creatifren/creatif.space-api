@@ -26,6 +26,8 @@ use Spatie\Permission\Traits\HasRoles;
  * @property string|null $google_id
  * @property string|null $avatar_url
  * @property string $locale
+ * @property bool $insight_monthly_email
+ * @property string|null $insight_monthly_sent_for
  * @property string $theme
  * @property UserStatus $status
  * @property bool $is_staff
@@ -59,6 +61,8 @@ class User extends Authenticatable implements FilamentUser
         'avatar_url',
         'locale',
         'theme',
+        // Monthly Insight email (opt-in, Pro / Max owners).
+        'insight_monthly_email',
         // Managed from the Filament admin panel only — API requests never
         // mass-assign these (API input is whitelisted per endpoint).
         'status',
@@ -94,6 +98,7 @@ class User extends Authenticatable implements FilamentUser
             'suspended_at' => 'datetime',
             'deletion_requested_at' => 'datetime',
             'is_staff' => 'boolean',
+            'insight_monthly_email' => 'boolean',
             'storage_blocks' => 'integer',
             'storage_rental_ended_at' => 'datetime',
             'social_settings' => 'array',
