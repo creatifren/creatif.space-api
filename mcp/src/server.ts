@@ -15,6 +15,7 @@ import { mediaTools } from './tools/media.js';
 import { engageTools } from './tools/engage.js';
 import { storageTools } from './tools/storage.js';
 import { aiTools } from './tools/ai.js';
+import { housekeepingTools } from './tools/housekeeping.js';
 import { approverTools } from './tools/approver.js';
 import { spaceTools } from './tools/spaces.js';
 import { auditTools } from './tools/audit.js';
@@ -53,7 +54,7 @@ export interface AppDeps {
 export function buildMcpServer(auth: CallerAuth, deps: AppDeps): McpServer {
   const server = new McpServer(SERVER_INFO, { instructions: INSTRUCTIONS });
   const v1 = new V1Client(deps.v1ApiUrl, auth.token, deps.fetchImpl);
-  const tools = [...m1Tools, ...m2Tools, ...mediaTools, ...engageTools, ...aiTools, ...storageTools, ...approverTools, ...insightTools, ...insightReportTools, ...spaceTools, ...auditTools];
+  const tools = [...m1Tools, ...m2Tools, ...mediaTools, ...engageTools, ...aiTools, ...storageTools, ...housekeepingTools, ...approverTools, ...insightTools, ...insightReportTools, ...spaceTools, ...auditTools];
   for (const tool of tools) {
     registerTool(server, tool, { auth, v1, analytics: deps.analytics });
   }

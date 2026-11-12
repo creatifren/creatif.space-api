@@ -109,6 +109,12 @@ return [
         'api.v1.files.usage' => 'read',
         'api.v1.files.keep' => 'draft',
         'api.v1.files.unkeep' => 'draft',
+
+        // Post housekeeping. discard_draft: SocialPostController::discard
+        // deletes a draft and nothing else (422 otherwise). list_approval_links:
+        // the links list, read like the single link above.
+        'api.v1.social-posts.discard' => 'draft',
+        'api.v1.social-approval-links.index' => 'read',
         // Approver side (decide_approval / list_waiting_approvals): only
         // links whose approver_email is this account's verified email.
         'api.v1.me.approvals.waiting' => 'approvals:decide',
