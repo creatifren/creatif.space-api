@@ -4,6 +4,9 @@ use App\Http\Controllers\Api\V1\ProfileFontController;
 use App\Http\Controllers\Auth\ApproverLinkController;
 use App\Http\Controllers\Auth\GoogleAuthController;
 use App\Http\Controllers\Auth\PasswordAuthController;
+use App\Http\Controllers\OAuth\SwitchAccountController;
+use App\Http\Middleware\BindAuthRequestToSession;
+use App\Http\Middleware\RememberPendingAuthorization;
 use App\Http\Middleware\RequirePkce;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Route;
@@ -55,14 +58,21 @@ Route::post('/auth/logout', function () {
 // two buttons. Session-based, like the rest of web.php; a guest is sent to
 // the frontend's login and comes back through /oauth/resume.
 Route::get('/oauth/authorize', [AuthorizationController::class, 'authorize'])
-    ->middleware([RequirePkce::class, 'throttle:60,1'])
+    ->middleware([RequirePkce::class, 'throttle:60,1', RememberPendingAuthorization::class])
     ->name('passport.authorizations.authorize');
 Route::middleware('auth')->group(function () {
     Route::post('/oauth/authorize', [ApproveAuthorizationController::class, 'approve'])
+        ->middleware(BindAuthRequestToSession::class)
         ->name('passport.authorizations.approve');
     Route::delete('/oauth/authorize', [DenyAuthorizationController::class, 'deny'])
         ->name('passport.authorizations.deny');
 });
+
+// "Not you? Use another account" on the consent screen: signs out of this
+// app only and returns to the same authorize URL. CSRF like any web POST.
+Route::post('/oauth/switch-account', SwitchAccountController::class)
+    ->middleware('throttle:30,1')
+    ->name('oauth.switch-account');
 
 // Back from the frontend's login to the authorize request that sent the
 // person there. Only ever an /oauth/authorize URL on this host.
