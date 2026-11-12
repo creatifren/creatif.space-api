@@ -41,6 +41,7 @@ use App\Http\Controllers\Api\V1\PublicHealthController;
 use App\Http\Controllers\Api\V1\PublicInsightController;
 use App\Http\Controllers\Api\V1\PublicProfileController;
 use App\Http\Controllers\Api\V1\PublicSpaceController;
+use App\Http\Controllers\Api\V1\ReminderOptOutController;
 use App\Http\Controllers\Api\V1\SocialAccountController;
 use App\Http\Controllers\Api\V1\SocialApprovalController;
 use App\Http\Controllers\Api\V1\SocialFeedController;
@@ -225,6 +226,17 @@ Route::withoutMiddleware([EnsureFrontendRequestsAreStateful::class])
         Route::post('/a/{token}/email-link', [PublicApprovalController::class, 'emailLink'])
             ->middleware('throttle:5,1')
             ->name('api.v1.approval-links.email-link');
+    });
+
+// Content Plan reminder opt-out, from the reminder email: the signed URL is
+// the credential (one link, expires). GET shows a button, POST turns it off.
+Route::withoutMiddleware([EnsureFrontendRequestsAreStateful::class])
+    ->middleware(['signed', 'throttle:20,1'])
+    ->group(function () {
+        Route::get('/approval-reminders/{link}/off', [ReminderOptOutController::class, 'show'])
+            ->name('api.v1.approval-links.reminders-off');
+        Route::post('/approval-reminders/{link}/off', [ReminderOptOutController::class, 'store'])
+            ->name('api.v1.approval-links.reminders-off.store');
     });
 
 // Content Plan share link — read-only, the token is the credential.

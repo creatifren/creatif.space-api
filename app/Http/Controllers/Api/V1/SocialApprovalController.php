@@ -283,6 +283,8 @@ class SocialApprovalController extends Controller
             'timezone' => ['sometimes', 'nullable', 'string', 'timezone:all'],
             'channel_ids' => ['sometimes', 'nullable', 'array', 'max:20'],
             'channel_ids.*' => ['string', 'max:26', 'distinct'],
+            // Content Plan reminder email to the approver, on or off.
+            'reminders' => ['sometimes', 'boolean'],
         ]);
 
         $link = $socialApprovalLink;
@@ -341,6 +343,9 @@ class SocialApprovalController extends Controller
 
         DB::transaction(function () use ($link, $validated, $add, $remove, $scope): void {
             $fields = array_intersect_key($validated, array_flip(['title', 'client_name', 'approver_email']));
+            if (array_key_exists('reminders', $validated)) {
+                $fields['reminders_enabled'] = (bool) $validated['reminders'];
+            }
             if (isset($fields['approver_email'])) {
                 // Re-addressed by the owner: no longer a first-use binding.
                 $fields['approver_bound_at'] = null;
@@ -675,6 +680,10 @@ class SocialApprovalController extends Controller
                 PlanScope::STATE_DRAFT => (int) ($link->draft_count ?? 0),
                 PlanScope::STATE_PUBLISHED => (int) ($link->published_count ?? 0),
             ],
+            // Content Plans: one email to the approver 24 h before the first
+            // undecided post (PATCH reminders: false turns it off).
+            'reminders' => $link->remindersOn(),
+            'reminded_at' => isset($link->getAttributes()['reminded_at']) ? $link->reminded_at?->toIso8601String() : null,
             'expires_at' => $link->expires_at?->toIso8601String(),
             'extended_at' => $link->extended_at?->toIso8601String(),
             'revoked_at' => $link->revoked_at?->toIso8601String(),
