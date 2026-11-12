@@ -81,7 +81,7 @@ describe('402 / 403 / 404 and the Free limits in every description', () => {
   it('a tool’s own step for a code wins over the default, and no code is listed twice', async () => {
     const list = await tools();
     const keep = list.find((t) => t.name === 'keep_file')!.description!;
-    expect(errorsLine(keep)).toMatch(/plan_required → Keep is on Pro and Max/);
+    expect(errorsLine(keep)).toMatch(/plan_required → Keep is not included on this plan/);
     expect(errorsLine(keep)).not.toMatch(/plan_required \(402\)/);
     for (const t of list) {
       // "code → step" pairs; a step may itself contain "; ", so match codes right before "→".

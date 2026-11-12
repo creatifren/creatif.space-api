@@ -14,7 +14,7 @@ export const getInsightReportLink = defineTool({
     when: 'when the user wants the report as a file to open, download or forward. The link works without signing in until it expires, so hand it to the user rather than posting it anywhere public. For the numbers themselves use get_insight_summary. channel_ids (from list_channels) limits the report to some channels; by default all connected channels.',
     example: 'get_insight_report_link { "from": "2026-10-01", "to": "2026-10-31", "format": "deck" } → { url: "https://api.creatif.space/api/v1/insight/export.pdf/signed?…", expires_at, file_name: "studio-2026-10-deck.pdf" }',
     errors: [
-      ['plan_required', 'Insight is on Pro and Max: tell the user the message as it is (it has the upgrade link); do not retry'],
+      ['plan_required', 'Insight is not included on this plan: tell the user it is not available on their plan; do not retry'],
       ['invalid_input', 'fix the dates (at most 92 days, not in the future), the format or the channel ids and call again'],
       ['scope_missing', 'reconnect and allow "read"'],
       ['unauthorized', 'ask the user to reconnect the creatif.space connector'],
@@ -55,7 +55,7 @@ export const getInsightCsvLink = defineTool({
     when: 'when the user wants the raw post numbers in a spreadsheet. The link works without signing in until it expires, so hand it to the user rather than posting it anywhere public. For a formatted report use get_insight_report_link; for totals get_insight_summary. channel_ids (from list_channels) limits it to some channels; by default all connected channels.',
     example: 'get_insight_csv_link { "from": "2026-10-01", "to": "2026-10-31" } → { url: "https://api.creatif.space/api/v1/insight/export.csv/signed?…", expires_at, file_name: "insight-2026-10-01-to-2026-10-31.csv", columns: ["date", ...] }',
     errors: [
-      ['plan_required', 'Insight is on Pro and Max: tell the user the message as it is (it has the upgrade link); do not retry'],
+      ['plan_required', 'Insight is not included on this plan: tell the user it is not available on their plan; do not retry'],
       ['invalid_input', 'fix the dates (to on or after from, at most 366 days) or the channel ids and call again'],
       ['scope_missing', 'reconnect and allow "read"'],
       ['unauthorized', 'ask the user to reconnect the creatif.space connector'],

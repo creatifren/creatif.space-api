@@ -115,7 +115,7 @@ describe('get_storage_usage', () => {
   it('Free: used vs 1 GB, nearly full → next step to free up space; Keep is not offered', async () => {
     const out = payload(await (await client(fakeFiles({ tier: 'free', files: [file(1, { auto_delete_at: '2026-11-13T00:00:00Z' })] }))).callTool({ name: 'get_storage_usage', arguments: {} }));
     expect(out.quota).toMatchObject({ used_bytes: 900 * 1024 ** 2, quota_bytes: GB, percent_used: 87.9 });
-    expect(out.next_step).toMatch(/Keep is on Pro and Max/);
+    expect(out.next_step).toMatch(/Keep is not included on Free/);
     expect(out.next_step).not.toMatch(/keep_file stops/);
   });
 

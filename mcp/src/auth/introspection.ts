@@ -7,6 +7,8 @@ export interface Introspection {
   scopes?: string[];
   client_id?: string;
   client_name?: string;
+  /** 'chatgpt' when the OAuth client is ChatGPT (by its registered name or redirect host); see clientSurface(). */
+  client_surface?: 'chatgpt' | 'other';
   token_type?: 'oauth' | 'api_key';
   /** Unix seconds; null/absent for a key that does not expire. */
   exp?: number | null;
