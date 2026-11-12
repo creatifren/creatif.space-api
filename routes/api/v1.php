@@ -41,6 +41,7 @@ use App\Http\Controllers\Api\V1\PublicHealthController;
 use App\Http\Controllers\Api\V1\PublicInsightController;
 use App\Http\Controllers\Api\V1\PublicProfileController;
 use App\Http\Controllers\Api\V1\PublicSpaceController;
+use App\Http\Controllers\Api\V1\ReminderOptOutController;
 use App\Http\Controllers\Api\V1\SocialAccountController;
 use App\Http\Controllers\Api\V1\SocialApprovalController;
 use App\Http\Controllers\Api\V1\SocialFeedController;
@@ -225,6 +226,17 @@ Route::withoutMiddleware([EnsureFrontendRequestsAreStateful::class])
         Route::post('/a/{token}/email-link', [PublicApprovalController::class, 'emailLink'])
             ->middleware('throttle:5,1')
             ->name('api.v1.approval-links.email-link');
+    });
+
+// Content Plan reminder opt-out, from the reminder email: the signed URL is
+// the credential (one link, expires). GET shows a button, POST turns it off.
+Route::withoutMiddleware([EnsureFrontendRequestsAreStateful::class])
+    ->middleware(['signed', 'throttle:20,1'])
+    ->group(function () {
+        Route::get('/approval-reminders/{link}/off', [ReminderOptOutController::class, 'show'])
+            ->name('api.v1.approval-links.reminders-off');
+        Route::post('/approval-reminders/{link}/off', [ReminderOptOutController::class, 'store'])
+            ->name('api.v1.approval-links.reminders-off.store');
     });
 
 // Content Plan share link — read-only, the token is the credential.
@@ -616,7 +628,7 @@ Route::middleware(['auth:sanctum,mcp', EnforceTokenScope::class, EnsureNotPendin
     Route::post('/me/approvals/{post}/decision', [McpApprovalController::class, 'decide'])
         ->middleware('throttle:30,1')
         ->name('api.v1.me.approvals.decide');
-    // "Reports shared with you": Content Plans sent to my verified email (Insight share links: not built yet).
+    // "Reports shared with you": Content Plans sent to my verified email (Insight share links are token-only, addressed to nobody, so they are not listed).
     Route::get('/me/reports/shared', [SocialApprovalController::class, 'sharedReports'])->name('api.v1.me.reports.shared');
     // Show a draft to the client on a Content Plan covering its date.
     Route::post('/social-posts/{socialPost}/review', [SocialApprovalController::class, 'markForReview'])

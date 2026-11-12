@@ -16,6 +16,7 @@ use App\Jobs\ReleaseCommissions;
 use App\Jobs\RenewMonthlyCredits;
 use App\Jobs\RetryRateLimitedPublishes;
 use App\Jobs\SendApprovedHeldPosts;
+use App\Jobs\SendContentPlanReminders;
 use App\Jobs\SendMonthlyInsightReports;
 use App\Jobs\SnapshotFollowerCounts;
 use App\Jobs\SyncInboxes;
@@ -164,3 +165,10 @@ Schedule::command('health:selfcheck')->everyFiveMinutes()->withoutOverlapping();
  * switched it on in Settings → Insight.
  */
 Schedule::job(new SendMonthlyInsightReports)->monthlyOn(1, '09:00')->timezone(config('app.timezone'));
+
+/*
+ * Content Plan reminders: one email to the approver when posts still wait
+ * and the first goes out within 24 hours (once per link, opt-out per link).
+ * Every 15 minutes, so the email lands close to the 24-hour mark.
+ */
+Schedule::job(new SendContentPlanReminders)->everyFifteenMinutes()->withoutOverlapping();

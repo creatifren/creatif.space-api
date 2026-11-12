@@ -96,6 +96,11 @@ it('refuses when there is nothing to remind about or no one to remind', function
     $this->actingAs($owner4)->postJson("/api/v1/social-approval-links/{$expired->ulid}/remind")
         ->assertStatus(422)->assertJsonPath('code', 'link_not_live');
 
+    [$owner5, $optedOut] = rmLink();
+    $optedOut->update(['reminders_enabled' => false]);
+    $this->actingAs($owner5)->postJson("/api/v1/social-approval-links/{$optedOut->ulid}/remind")
+        ->assertStatus(422)->assertJsonPath('code', 'reminders_off');
+
     Notification::assertNothingSent();
     expect($answered->fresh()->last_reminded_at)->toBeNull();
 });

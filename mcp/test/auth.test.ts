@@ -94,11 +94,15 @@ describe('401 flow', () => {
         'create_approval_link', 'check_approval_status', 'send_approval_reminder', 'update_post', 'schedule_post', 'publish_post',
         'request_media_upload', 'confirm_media_upload',
         'list_conversations', 'reply_to_conversation',
+        'suggest_caption',
+        'get_storage_usage', 'keep_file', 'unkeep_file',
+        'discard_draft', 'list_approval_links',
         'list_waiting_approvals', 'decide_approval', 'list_shared_with_me',
         'get_insight_summary',
         'get_insight_report_link',
         'list_spaces', 'create_space_from_files', 'publish_space',
         'get_approval_audit',
+        'get_connect_link',
       ].sort(),
     );
     for (const tool of tools) {

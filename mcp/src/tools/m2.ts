@@ -350,10 +350,10 @@ export const sendApprovalReminder = defineTool({
     does: "Emails the client (the link's approver) a reminder to review the posts still waiting on an approval link — the same link, sent once more.",
     when: "when the user wants to nudge a client who has not answered yet. Use check_approval_status with link_id first to see what is still waiting; do not make a new link to remind someone.",
     example: "send_approval_reminder { \"link_id\": \"01JL…\" } → { reminder: { link_id, reminded_at, next_reminder_at, waiting } }",
-    rules: "At most one reminder per link every 12 hours. Only a live link (not revoked or expired) with an approver email and at least one post still waiting can be reminded.",
+    rules: "At most one reminder per link every 12 hours. Only a live link (not revoked or expired) with an approver email, reminders not turned off by the client, and at least one post still waiting can be reminded.",
     errors: [
       ["rate_limited", "details.reason reminder_too_soon: a reminder already went out; tell the user the next one can go at details.next_reminder_at, do not retry before then"],
-      ["invalid_input", "details.reason nothing_waiting, no_approver or link_not_live: tell the user (nothing left to answer, no approver email on an old link, or the link is revoked/expired), do not retry"],
+      ["invalid_input", "details.reason nothing_waiting, no_approver, reminders_off or link_not_live: tell the user (nothing left to answer, no approver email on an old link, the client turned reminders off, or the link is revoked/expired), do not retry"],
       ["not_found", "link ids come from create_approval_link"],
       ["scope_missing", "reconnect and allow \"approve\""],
       ["upstream_unavailable", "check_approval_status shows last_reminded_at before calling again"],
@@ -386,7 +386,7 @@ export const sendApprovalReminder = defineTool({
           { reason: 'reminder_too_soon', next_reminder_at: e.body?.next_reminder_at ?? null, retryable: false },
         );
       }
-      if (e instanceof V1Error && e.status === 422 && (code === 'nothing_waiting' || code === 'no_approver' || code === 'link_not_live')) {
+      if (e instanceof V1Error && e.status === 422 && (code === 'nothing_waiting' || code === 'no_approver' || code === 'link_not_live' || code === 'reminders_off')) {
         throw new ToolError('invalid_input', message ?? 'This link cannot be reminded.', 'Tell the user this message as it is; do not retry.', {
           reason: code,
           link_id: args.link_id,
