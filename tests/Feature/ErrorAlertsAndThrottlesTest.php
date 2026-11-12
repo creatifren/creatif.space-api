@@ -106,11 +106,13 @@ describe('throttles (numbers as in the PR body)', function () {
         'api.v1.files.complete' => '60,1',
         'api.v1.files.versions.presign' => '30,1',
         'api.v1.files.versions.complete' => '60,1',
-        // MCP OAuth (per-token traffic: EnforceTokenScope, mcp.rate_limit_per_minute)
-        'oauth.register' => '10,1',
-        'passport.token' => '60,1',
-        'passport.authorizations.authorize' => '60,1',
-        'oauth.revoke' => '60,1',
+        // MCP OAuth: named limiters (App\OAuth\OAuthRateLimits; numbers in
+        // config('mcp.oauth_rate_limits'), pinned in OAuthHardeningTest).
+        // Per-token traffic: EnforceTokenScope, mcp.rate_limit_per_minute.
+        'oauth.register' => 'oauth-register',
+        'passport.token' => 'oauth-token',
+        'passport.authorizations.authorize' => 'oauth-authorize',
+        'oauth.revoke' => 'oauth-revoke',
         'api.v1.oauth.introspect' => '600,1',
     ];
 
