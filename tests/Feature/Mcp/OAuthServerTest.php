@@ -333,7 +333,7 @@ describe('revocation', function () {
         auth()->forgetGuards();
         DB::enableQueryLog();
         bearer($this, $tokens['access_token'])->getJson('/api/v1/me')->assertOk();
-        $writes = collect(DB::getQueryLog())->filter(fn ($q) => str_contains(strtolower($q['query']), 'update "oauth_access_tokens"'));
+        $writes = collect(DB::getQueryLog())->filter(fn ($q) => preg_match('/^\s*update\W+oauth_access_tokens\W/i', $q['query']) === 1);
         DB::disableQueryLog();
         expect($writes)->toHaveCount(0);
         expect(Carbon\Carbon::parse($token()->getAttribute('last_used_at'))->equalTo($first))->toBeTrue();
