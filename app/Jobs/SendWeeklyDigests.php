@@ -56,7 +56,7 @@ class SendWeeklyDigests implements ShouldQueue
         }
 
         $monday = $local->toDateString();
-        if ($user->weekly_digest_sent_on === $monday
+        if (($user->getAttributes()['weekly_digest_sent_on'] ?? null) === $monday
             || Analytics::isInternal($user)
             || ! $user->wants(NotificationType::WeeklyDigest, 'email')) {
             return;

@@ -24,8 +24,10 @@ final class WeeklyDigest
     /** The zone the digest runs in: the user's, else their latest Content Plan's, else the app's. */
     public static function timezone(User $user): string
     {
-        if ($user->timezone) {
-            return $user->timezone;
+        // Raw read: a user built in memory (not reloaded) may not carry the column.
+        $own = $user->getAttributes()['timezone'] ?? null;
+        if (is_string($own) && $own !== '') {
+            return $own;
         }
 
         $plan = SocialApprovalLink::query()->where('user_id', $user->id)->whereNotNull('scope_timezone')->latest('id')->value('scope_timezone');
