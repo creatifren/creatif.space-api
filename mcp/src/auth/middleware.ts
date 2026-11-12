@@ -52,6 +52,9 @@ export function protectedResourceMetadata(resourceUrl: string, authorizationServ
     bearer_methods_supported: ['header'],
     resource_name: 'creatif.space',
     resource_documentation: 'https://creatif.space/docs/mcp',
+    // RFC 9728: the same privacy and terms pages the consent screen links to.
+    resource_policy_uri: 'https://creatif.space/privacy',
+    resource_tos_uri: 'https://creatif.space/terms',
   };
 }
 

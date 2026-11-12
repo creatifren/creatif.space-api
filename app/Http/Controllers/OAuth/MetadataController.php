@@ -39,6 +39,8 @@ class MetadataController extends Controller
             'revocation_endpoint_auth_methods_supported' => ['none', 'client_secret_post', 'client_secret_basic'],
 
             'service_documentation' => 'https://creatif.space/docs/mcp',
+            'op_policy_uri' => (string) config('mcp.privacy_url'),
+            'op_tos_uri' => (string) config('mcp.terms_url'),
         ]);
     }
 
@@ -51,6 +53,8 @@ class MetadataController extends Controller
             'bearer_methods_supported' => ['header'],
             'resource_name' => 'Creatif Space',
             'resource_documentation' => 'https://creatif.space/docs/mcp',
+            'resource_policy_uri' => (string) config('mcp.privacy_url'),
+            'resource_tos_uri' => (string) config('mcp.terms_url'),
         ]);
     }
 

@@ -40,6 +40,8 @@
         .switch form { display: inline; margin: 0; }
         .link { padding: 0; border: 0; background: none; font: inherit; font-weight: 600; color: var(--ink); text-decoration: underline; text-underline-offset: 2px; cursor: pointer; }
         .lead { color: var(--ink); font-weight: 500; margin-bottom: 8px; }
+        .legal { color: var(--muted); font-size: 13px; margin-top: 16px; }
+        .legal a { color: inherit; text-decoration: underline; }
         ul { list-style: none; padding: 0; margin: 0 0 16px; border-top: 1px solid var(--line); }
         li { padding: 12px 0; border-bottom: 1px solid var(--line); }
         li strong { display: block; color: var(--ink); font-weight: 600; }
@@ -104,6 +106,11 @@
             <button type="submit" class="approve">Allow</button>
         </form>
     </div>
+    <p class="legal">
+        By allowing, you agree to the creatif.space
+        <a href="{{ config('mcp.terms_url') }}" target="_blank" rel="noopener">Terms</a>
+        and <a href="{{ config('mcp.privacy_url') }}" target="_blank" rel="noopener">Privacy Policy</a>.
+    </p>
 </main>
 </body>
 </html>

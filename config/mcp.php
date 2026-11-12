@@ -42,6 +42,12 @@ return [
     // Requests per minute, per token (OAuth access token or API key).
     'rate_limit_per_minute' => (int) env('MCP_RATE_LIMIT_PER_MINUTE', 120),
 
+    // Public pages named on the consent screen and in OAuth discovery
+    // (RFC 8414 op_policy_uri / op_tos_uri, RFC 9728 resource_*_uri).
+    'website_url' => 'https://creatif.space',
+    'privacy_url' => env('MCP_PRIVACY_URL', 'https://creatif.space/privacy'),
+    'terms_url' => env('MCP_TERMS_URL', 'https://creatif.space/terms'),
+
     // MCP audit log rows are deleted after this many days (privacy page).
     'audit_retention_days' => (int) env('MCP_AUDIT_RETENTION_DAYS', 90),
 
