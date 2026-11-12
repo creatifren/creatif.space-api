@@ -65,6 +65,16 @@ in [mcp/README.md](mcp/README.md).
 | `approval_request_template` | A ready-to-send client approval message |
 | `connect_guide` | What is needed to connect a network, and the steps |
 
+## API reference (OpenAPI)
+
+The public v1 API is described as OpenAPI 3.1 at
+[`GET /api/v1/openapi.json`](https://api.creatif.space/api/v1/openapi.json),
+built from the route table (`App\Support\OpenApi`), so paths, methods, auth,
+API-token scope (`x-token-scope`) and rate limits (`x-rate-limit`) are always
+current. Each operation's summary lives in `resources/openapi/operations.php`;
+`tests/Feature/OpenApiTest.php` fails when a v1 route has none. Provider
+webhooks and MCP token introspection are left out on purpose.
+
 ## Approve from your AI chat
 
 Clients can review and decide on posts sent to them from Claude or ChatGPT
