@@ -32,6 +32,20 @@ describe('tool first lines', () => {
     expect(Object.keys(FIRST_LINES).sort()).toEqual(tools.map((t) => t.name).sort());
   });
 
+  it('every first line is one sentence and names no price or plan (description lint)', async () => {
+    const tools = await served();
+    const problems = tools.flatMap((t) => {
+      const first = t.description!.split('\n')[0]!;
+      const out: string[] = [];
+      // One sentence: the only sentence end is the final full stop (no ". X", "! X", "? X" inside).
+      if (/[.!?]\s+\S/.test(first.slice(0, -1))) out.push(`${t.name}: more than one sentence — "${first}"`);
+      if (/\b(Free|Pro|Max|Business|Premium|Starter|Plus)\b/.test(first)) out.push(`${t.name}: names a plan — "${first}"`);
+      if (/\$\s?\d|\bUSD\b|\bIDR\b|\bRp\s?\d|\bpric(e|es|ing)\b|upgrad|trial|subscription|billing/i.test(first)) out.push(`${t.name}: price or upgrade wording — "${first}"`);
+      return out;
+    });
+    expect(problems, `Fix these lines in mcp/src/tools/firstLines.ts:\n${problems.join('\n')}`).toEqual([]);
+  });
+
   it('points to the matching prompt: every tool a prompt walks through names it', () => {
     // Every tool a prompt names is covered…
     for (const [prompt, tools] of Object.entries(PROMPT_TOOLS)) {
