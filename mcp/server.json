@@ -91,9 +91,9 @@
         "update_post"
       ],
       "prompts": [
-        "monthly_report",
         "plan_week",
-        "send_for_approval"
+        "send_for_approval",
+        "weekly_results"
       ]
     }
   }

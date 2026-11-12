@@ -67,7 +67,7 @@ in [mcp/README.md](mcp/README.md).
 | Settings | `get_notification_settings` | Which emails the user gets (publish failed, approvals, weekly digest) | All |
 | Settings | `update_notification_settings` | Turn those emails on or off | All |
 
-**Prompts:** `plan_week`, `send_for_approval`, `monthly_report`.
+**Prompts:** `plan_week` (Plan next week), `send_for_approval` (Send to client for approval), `weekly_results` (Weekly results).
 
 **Free Tools** (`https://mcp.creatif.space/free`, no sign-in):
 

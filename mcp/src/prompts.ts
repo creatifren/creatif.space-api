@@ -13,7 +13,7 @@ import { z } from 'zod';
 export const PROMPT_TOOLS: Record<string, string[]> = {
   plan_week: ['list_channels', 'list_posts', 'suggest_caption', 'draft_post'],
   send_for_approval: ['list_posts', 'get_post', 'create_approval_link', 'check_approval_status'],
-  monthly_report: ['get_insight_summary', 'create_insight_share_link'],
+  weekly_results: ['get_insight_summary', 'create_insight_share_link'],
 };
 
 /** User-typed values go in quotes, marked as data: never instructions. */
@@ -34,7 +34,7 @@ export function registerPrompts(server: McpServer): void {
   server.registerPrompt(
     'plan_week',
     {
-      title: 'Plan a week of posts',
+      title: 'Plan next week',
       description: 'Draft a week of posts for one channel (drafts only — nothing is scheduled or sent).',
       argsSchema: {
         channel_id: ulid.describe('The channel to plan for (an id from list_channels)'),
@@ -62,7 +62,7 @@ export function registerPrompts(server: McpServer): void {
   server.registerPrompt(
     'send_for_approval',
     {
-      title: 'Send drafts for approval',
+      title: 'Send to client for approval',
       description: 'Bundle drafts into one client approval link and share it.',
       argsSchema: {
         approver_email: z.string().trim().email().max(254).describe('Who approves: they sign in with this email to decide'),
@@ -86,21 +86,23 @@ export function registerPrompts(server: McpServer): void {
   );
 
   server.registerPrompt(
-    'monthly_report',
+    'weekly_results',
     {
-      title: 'Monthly report',
-      description: 'Summarise a month of Insight numbers and make a read-only share link for the client.',
+      title: 'Weekly results',
+      description: 'Summarise how the last 7 days went (or a month you name) and make a read-only share link for the client.',
       argsSchema: {
-        month: z.string().regex(/^\d{4}-(0[1-9]|1[0-2])$/, 'YYYY-MM').optional().describe('The month, YYYY-MM (default: last month)'),
+        month: z.string().regex(/^\d{4}-(0[1-9]|1[0-2])$/, 'YYYY-MM').optional().describe('A whole month instead, YYYY-MM (default: the last 7 days)'),
         share: z.enum(['yes', 'no']).optional().describe('Make a share link (default yes)'),
       },
     },
     ({ month, share }) =>
       message(
         [
-          `Make the monthly report for ${month ? quoted(month) : 'last month'}.`,
-          '1. Call get_insight_summary with period { "month": … }. If it answers plan_required, pass the message on and stop.',
-          '2. Write a short summary: posts, reach, engagement and its rate, follower change, the top 3 posts, and how approvals went. Use only the numbers returned; say "—" where a number is missing.',
+          month ? `Show me the results for the month ${quoted(month)}.` : 'Show me the results for the last 7 days.',
+          month
+            ? '1. Call get_insight_summary with period { "month": … }. If it answers plan_required, pass the message on and stop.'
+            : '1. Call get_insight_summary with period { "from": the day 7 days ago, "to": yesterday } (YYYY-MM-DD). If it answers plan_required, pass the message on and stop.',
+          '2. Write a short summary: posts, reach, engagement and its rate, follower change and the change against the period before, the top 3 posts, and how approvals went. Use only the numbers returned; say "—" where a number is missing.',
           share === 'no'
             ? '3. No share link this time.'
             : '3. Call create_insight_share_link for the same dates and give me the link (it works for 30 days, no account needed).',
