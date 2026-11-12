@@ -169,7 +169,11 @@ class McpUsageCommand extends Command
             ->sortByDesc('p95_ms')->values()->all();
     }
 
-    /** Nearest-rank percentile of an ascending list. @param Collection<int, int> $sorted */
+    /**
+     * Nearest-rank percentile of an ascending list.
+     *
+     * @param  Collection<int, int>  $sorted
+     */
     private static function percentile(Collection $sorted, int $p): int
     {
         $n = $sorted->count();
