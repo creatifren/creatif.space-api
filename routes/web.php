@@ -4,6 +4,7 @@ use App\Http\Controllers\Api\V1\ProfileFontController;
 use App\Http\Controllers\Auth\ApproverLinkController;
 use App\Http\Controllers\Auth\GoogleAuthController;
 use App\Http\Controllers\Auth\PasswordAuthController;
+use App\Http\Controllers\Auth\ReviewerLoginController;
 use App\Http\Middleware\RequirePkce;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Route;
@@ -39,6 +40,13 @@ Route::middleware('throttle:5,1')->group(function () {
     Route::post('/auth/forgot-password', [PasswordAuthController::class, 'forgot'])->name('password.email');
     Route::post('/auth/reset-password', [PasswordAuthController::class, 'reset'])->name('password.update');
 });
+// Directory reviewers only (staff-set flag, `php artisan reviewer:grant`):
+// password sign-in with no verification step. Every other account is
+// refused here, whatever its password. Throttled per IP and per address.
+Route::post('/auth/reviewer/login', ReviewerLoginController::class)
+    ->middleware('throttle:10,1')
+    ->name('auth.reviewer.login');
+
 Route::get('/auth/email/verify/{id}/{hash}', [PasswordAuthController::class, 'verify'])
     ->middleware('throttle:10,1')
     ->name('verification.verify');
