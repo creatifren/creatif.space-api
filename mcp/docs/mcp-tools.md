@@ -2,7 +2,7 @@
 
 <!-- Generated from the served tool list by `npm run docs:tools` (in mcp/). Do not edit by hand: test/tools-doc.test.ts fails in CI when this file is out of date. -->
 
-48 tools on `https://mcp.creatif.space/mcp`, in the order `tools/list` gives them. Scope is the OAuth permission a tool needs; the hints are its MCP annotations.
+49 tools on `https://mcp.creatif.space/mcp`, in the order `tools/list` gives them. Scope is the OAuth permission a tool needs; the hints are its MCP annotations.
 
 | Tool | Title | Scope | Read-only | Destructive |
 |---|---|---|---|---|
@@ -28,6 +28,7 @@
 | [`unkeep_file`](#unkeep_file) | Un-keep a file | `draft` | no | yes |
 | [`discard_draft`](#discard_draft) | Discard a draft | `draft` | no | yes |
 | [`list_approval_links`](#list_approval_links) | List approval links | `read` | yes | no |
+| [`revoke_approval_link`](#revoke_approval_link) | Revoke an approval link | `approve` | no | yes |
 | [`list_waiting_approvals`](#list_waiting_approvals) | List posts waiting for your approval | `approvals:decide` | yes | no |
 | [`decide_approval`](#decide_approval) | Approve or request changes on a post sent to you | `approvals:decide` | no | yes |
 | [`list_shared_with_me`](#list_shared_with_me) | List reports shared with you | `approvals:decide` | yes | no |
@@ -193,7 +194,7 @@ When to use: when the user wants a client to approve posts before they go out �
 
 Example: create_approval_link { "post_ids": ["01JD…"], "approver_email": "client@example.com", "title": "November posts", "expires_in_hours": 168 } → { link: { id, url, posts }, skipped? }; Content Plan: { "date_from": "2026-12-01", "date_to": "2026-12-31", "approver_email": "client@example.com" }
 
-Two kinds: a fixed list (post_ids: drafts, or posts already held for approval) or a Content Plan (date_from + date_to, optionally channel_ids): the client sees every post in those dates on those channels, including posts added later. Give post_ids OR date_from/date_to, never both. Content Plan dates are YYYY-MM-DD, both included, at most 93 days, in timezone (default the account's). approver_email is required: only that person, signed in with that address (Google or a one-time email link on the approval page), can approve or ask for changes; ask the user for it if you do not have it. On some plans, links are for one client at a time (the approver_email tells clients apart; links to the same address are fine), posts scheduled at most 7 days ahead, and at most 10 queued posts (on a Content Plan, the client can then decide only posts in the next 7 days; the rest show). Fixed-list posts that cannot be approved are left off and listed in skipped with their status and reason.
+Two kinds: a fixed list (post_ids: drafts, or posts already held for approval) or a Content Plan (date_from + date_to, optionally channel_ids): the client sees every post in those dates on those channels, including posts added later. Give post_ids OR date_from/date_to, never both. Content Plan dates are YYYY-MM-DD, both included, at most 93 days, in timezone (default the account's). approver_email is required: only that person, signed in with that address (Google or a one-time email link on the approval page), can approve or ask for changes; ask the user for it if you do not have it. On some plans, links are for one client at a time (the approver_email tells clients apart; links to the same address are fine), posts scheduled at most 7 days ahead, and at most 10 queued posts (on a Content Plan, the client can then decide only posts in the next 7 days; the rest show). Fixed-list posts that cannot be approved are left off and listed in skipped with their status and reason. Posts on a link read status "waiting_for_approval" ("changes_requested" once the client sends one back). Approving never publishes at once: a post goes out at its scheduled time, and one with no time cannot be approved until update_post sets scheduled_at. To withdraw a link use revoke_approval_link; to take one post off, discard_draft.
 
 Errors → next step: invalid_input → give either post_ids or both date_from and date_to; not_approvable → none of the posts can go on a link (details.refused gives each post’s status and reason): list_posts status "draft", or draft_post a new one, then call again; plan_required → details.feature approval_clients, schedule_window or queue_limit — pass the message to the user as it is (it names the limit), do not retry; not_found → check ids with list_posts / list_channels; scope_missing → reconnect and allow "approve"; upstream_unavailable → check list_posts / check_approval_status before calling again; forbidden (403) → this seat or connection may not do this (e.g. a viewer, or a permission the connection was not given): the workspace owner or an editor can, or the user does it in creatif.space; do not retry.
 
@@ -487,19 +488,19 @@ Errors → next step: not_found → take the id from list_files; forbidden → t
 
 Deletes one of the user's drafts for good, after showing them what will go.
 
-Deletes a draft post for good. Refuses anything scheduled, published, failed or cancelled.
+Deletes a draft post for good — also one waiting for approval on a link (status "waiting_for_approval" or "changes_requested"), which takes it off that link. Refuses anything scheduled with a time, published, failed or cancelled.
 
-When to use: when the user wants to throw a draft away. Without confirm you get a preview of what will be deleted; call again with confirm: true only after the user agrees. To change a draft instead, use update_post; scheduled posts are cancelled in creatif.space, not here.
+When to use: when the user wants to throw a draft away, or take a post off an approval link. Without confirm you get a preview of what will be deleted; call again with confirm: true only after the user agrees. To change a draft instead, use update_post; to close a whole link, revoke_approval_link; scheduled posts are cancelled in creatif.space, not here.
 
 Example: discard_draft { "post_id": "01JD…" } → { preview: { post, warnings }, next_step }; then discard_draft { "post_id": "01JD…", "confirm": true } → { deleted: true, post_id }
 
-Cannot be undone. A draft that is on an approval link disappears from that link too (the preview warns).
+Cannot be undone. A post on an approval link disappears from that link too (the preview warns). No Credits were spent on it: it never went out.
 
 Errors → next step: not_draft → it is scheduled or published: nothing was deleted; follow next_step (cancel in creatif.space, or update_post); not_found → take the id from list_posts status "draft"; forbidden → only the workspace owner can discard this draft; tell the user; scope_missing → reconnect with "draft" allowed; plan_required (402) → a plan limit, or a feature this account's plan does not include (on some plans: posts scheduled at most 7 days ahead, at most 10 queued posts, approval links for one client); tell the user it is not available on their plan, and do not retry.
 
 | Input | Type | Required | Description |
 |---|---|---|---|
-| `post_id` | string | yes | The draft’s post id, from list_posts (status "draft") or draft_post |
+| `post_id` | string | yes | The post id, from list_posts (status "draft" or "waiting") or draft_post |
 | `confirm` | boolean | no | Leave false first to see what will be deleted. Set true only after the user explicitly agreed. |
 
 ## list_approval_links
@@ -523,6 +524,27 @@ Errors → next step: unauthorized → ask the user to reconnect the creatif.spa
 | `status` | "active" \| "expired" \| "revoked" \| "all" | no | Which links: "active" (open, default), "expired", "revoked" or "all" |
 | `limit` | integer | no | At most this many links per page (1–200, default 50) |
 | `cursor` | string | no | next_cursor from the previous page of this same list (same filters); omit for the first page |
+
+## revoke_approval_link
+
+**Revoke an approval link** · scope `approve` · read-only no · destructive yes · idempotent yes · open world no
+
+Revokes one of the user's client approval links for good, after showing them which link.
+
+Revokes a client approval link for good: the client can no longer open it or decide. Posts the client had not answered come back to the user (approval "awaiting"); posts already approved stay approved.
+
+When to use: when the user wants to withdraw a link (wrong client, wrong posts, sent by mistake). Without confirm you get a preview of the link; call again with confirm: true only after the user agrees. To take one post off a link instead, use discard_draft on it; to make a new link, create_approval_link.
+
+Example: revoke_approval_link { "link_id": "01JD…" } → { confirmation_required: true, preview: { link: { id, title, approver_email, status, post_count, counts } }, next_step }; then the same with "confirm": true → { revoked: true, link_id }
+
+Cannot be undone: a revoked link stays revoked (make a new one instead). Revoking a link that is already revoked changes nothing. Nothing is published or deleted.
+
+Errors → next step: not_found → take the id from list_approval_links; forbidden → viewers cannot revoke links; tell the user; scope_missing → reconnect with "approve" allowed; plan_required (402) → a plan limit, or a feature this account's plan does not include (on some plans: posts scheduled at most 7 days ahead, at most 10 queued posts, approval links for one client); tell the user it is not available on their plan, and do not retry.
+
+| Input | Type | Required | Description |
+|---|---|---|---|
+| `link_id` | string | yes | The link id, from list_approval_links or create_approval_link |
+| `confirm` | boolean | no | Leave false first to see the link. Set true only after the user explicitly agreed to revoke it. |
 
 ## list_waiting_approvals
 
@@ -557,9 +579,9 @@ When to use: when the user wants to approve or send back a post that is waiting 
 
 Example: decide_approval { "link": "01JD…", "post_id": "01JE…", "decision": "approve" } → preview; then the same with "confirm": true → { decided }
 
-Two steps: call with confirm false (default) for a preview; show it to the user and only after they explicitly agree call again with the same arguments and confirm: true. Approving sends the post at its scheduled time on the sender’s channels — it goes public. The confirm decides exactly what the preview showed (a signed token, valid 10 minutes). Only links sent to this user’s email. Deciding the same way twice changes nothing.
+Two steps: call with confirm false (default) for a preview; show it to the user and only after they explicitly agree call again with the same arguments and confirm: true. Approving sends the post at its scheduled time on the sender’s channels — it goes public; it never publishes at once. A post with no time cannot be approved (needs_time) until the sender sets one. The confirm decides exactly what the preview showed (a signed token, valid 10 minutes). Only links sent to this user’s email. Deciding the same way twice changes nothing.
 
-Errors → next step: preview_stale → the post changed since the preview: show the user the new preview in details, then confirm again only if they agree; forbidden → the link was sent to another email (details.expected_hint): tell the user, do not retry; invalid_input → revise needs a reason; or the post is outside the decidable window (details.decidable_from): tell the user; not_found → check ids with list_waiting_approvals; scope_missing → reconnect and allow "approvals:decide"; plan_required (402) → a plan limit, or a feature this account's plan does not include (on some plans: posts scheduled at most 7 days ahead, at most 10 queued posts, approval links for one client); tell the user it is not available on their plan, and do not retry.
+Errors → next step: preview_stale → the post changed since the preview: show the user the new preview in details, then confirm again only if they agree; needs_time → the post has no publish time yet: nothing was decided; tell the user the sender has to set a time first (or send it back with decision "revise"); forbidden → the link was sent to another email (details.expected_hint): tell the user, do not retry; invalid_input → revise needs a reason; or the post is outside the decidable window (details.decidable_from): tell the user; not_found → check ids with list_waiting_approvals; scope_missing → reconnect and allow "approvals:decide"; plan_required (402) → a plan limit, or a feature this account's plan does not include (on some plans: posts scheduled at most 7 days ahead, at most 10 queued posts, approval links for one client); tell the user it is not available on their plan, and do not retry.
 
 | Input | Type | Required | Description |
 |---|---|---|---|

@@ -41,6 +41,7 @@ exports[`tool first lines > match the snapshot 1`] = `
   "reply_to_conversation": "Answers a comment or DM on the platform for the user, after they agree to the reply.",
   "request_media_upload": "Starts adding a new image or video to the user's library by giving the upload link (step 1 of 2).",
   "retry_post": "Sends a post again on the channels where it failed, after the user agrees to the reasons and Credit cost.",
+  "revoke_approval_link": "Revokes one of the user's client approval links for good, after showing them which link.",
   "revoke_insight_share_link": "Turns off a shared Insight report link at once for everyone who has it.",
   "schedule_post": "Schedules a draft to go out later, after the user agrees to its channels and Credit cost.",
   "schedule_posts": "Schedules up to 10 drafts at once, all or none, after the user agrees to one preview of all of them.",

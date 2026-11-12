@@ -20,6 +20,7 @@ export type ErrorCode =
   | 'not_schedulable'
   | 'not_editable'
   | 'not_draft'
+  | 'needs_time'
   | 'not_failed'
   | 'not_approvable'
   | 'not_a_plan'

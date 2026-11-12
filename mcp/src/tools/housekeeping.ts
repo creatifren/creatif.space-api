@@ -2,17 +2,19 @@ import { z } from 'zod';
 import { ToolError } from '../errors.js';
 import { V1Error } from '../v1.js';
 import { defineTool, describeTool } from './define.js';
-import type { V1Post } from './shape.js';
+import { displayStatus, type V1Post } from './shape.js';
 import { pageInput, pageOf } from './paging.js';
 
 /*
  * Post housekeeping over existing V1 routes:
  * discard_draft → GET /social-posts/{id}, then DELETE /social-posts/{id}/draft
- * (SocialPostController::discard: drafts only, 422 otherwise);
- * list_approval_links → GET /social-approval-links.
+ * (SocialPostController::discard: drafts, and posts held for approval that
+ * never reached the networks — a draft shared on a link — 422 otherwise);
+ * list_approval_links → GET /social-approval-links;
+ * revoke_approval_link → GET then DELETE /social-approval-links/{id}.
  */
 
-const postId = z.string().trim().min(10).max(26).describe('The draft’s post id, from list_posts (status "draft") or draft_post');
+const postId = z.string().trim().min(10).max(26).describe('The post id, from list_posts (status "draft" or "waiting") or draft_post');
 
 /** Why a post that is not a draft cannot be discarded here, and what to do instead. */
 const NOT_DRAFT_NEXT: Record<string, string> = {
@@ -35,10 +37,10 @@ export const discardDraft = defineTool({
   name: 'discard_draft',
   title: 'Discard a draft',
   description: describeTool({
-    does: 'Deletes a draft post for good. Refuses anything scheduled, published, failed or cancelled.',
-    when: 'when the user wants to throw a draft away. Without confirm you get a preview of what will be deleted; call again with confirm: true only after the user agrees. To change a draft instead, use update_post; scheduled posts are cancelled in creatif.space, not here.',
+    does: 'Deletes a draft post for good — also one waiting for approval on a link (status "waiting_for_approval" or "changes_requested"), which takes it off that link. Refuses anything scheduled with a time, published, failed or cancelled.',
+    when: 'when the user wants to throw a draft away, or take a post off an approval link. Without confirm you get a preview of what will be deleted; call again with confirm: true only after the user agrees. To change a draft instead, use update_post; to close a whole link, revoke_approval_link; scheduled posts are cancelled in creatif.space, not here.',
     example: 'discard_draft { "post_id": "01JD…" } → { preview: { post, warnings }, next_step }; then discard_draft { "post_id": "01JD…", "confirm": true } → { deleted: true, post_id }',
-    rules: 'Cannot be undone. A draft that is on an approval link disappears from that link too (the preview warns).',
+    rules: 'Cannot be undone. A post on an approval link disappears from that link too (the preview warns). No Credits were spent on it: it never went out.',
     errors: [
       ['not_draft', 'it is scheduled or published: nothing was deleted; follow next_step (cancel in creatif.space, or update_post)'],
       ['not_found', 'take the id from list_posts status "draft"'],
@@ -56,15 +58,17 @@ export const discardDraft = defineTool({
   run: async ({ post_id, confirm }, { v1 }) => {
     const path = `/social-posts/${encodeURIComponent(post_id)}`;
     const { data: post } = await v1.get<{ data: V1Post }>(path);
-    if (post.status !== 'draft') throw notDraft(post_id, post.status);
+    const shown = displayStatus(post);
+    const held = shown === 'waiting_for_approval' || shown === 'changes_requested';
+    if (post.status !== 'draft' && !held) throw notDraft(post_id, post.status);
 
     if (!confirm) {
-      const warnings = post.approval ? [`It is on a client approval link (approval "${post.approval}"); discarding removes it from that link.`] : [];
+      const warnings = post.approval ? [`It is on a client approval link (approval "${post.approval}"); discarding deletes it and removes it from that link.`] : [];
       return {
         preview: {
           post: {
             id: post.id,
-            status: post.status,
+            status: shown,
             caption: post.caption.length > 200 ? `${post.caption.slice(0, 200)}…` : post.caption,
             scheduled_at: post.scheduled_at,
             channels: (post.targets ?? []).map((t) => ({ platform: t.account.platform, username: t.account.username })),
@@ -147,4 +151,50 @@ export const listApprovalLinks = defineTool({
   },
 });
 
-export const housekeepingTools = [discardDraft, listApprovalLinks];
+export const revokeApprovalLink = defineTool({
+  name: 'revoke_approval_link',
+  title: 'Revoke an approval link',
+  description: describeTool({
+    does: 'Revokes a client approval link for good: the client can no longer open it or decide. Posts the client had not answered come back to the user (approval "awaiting"); posts already approved stay approved.',
+    when: 'when the user wants to withdraw a link (wrong client, wrong posts, sent by mistake). Without confirm you get a preview of the link; call again with confirm: true only after the user agrees. To take one post off a link instead, use discard_draft on it; to make a new link, create_approval_link.',
+    example: 'revoke_approval_link { "link_id": "01JD…" } → { confirmation_required: true, preview: { link: { id, title, approver_email, status, post_count, counts } }, next_step }; then the same with "confirm": true → { revoked: true, link_id }',
+    rules: 'Cannot be undone: a revoked link stays revoked (make a new one instead). Revoking a link that is already revoked changes nothing. Nothing is published or deleted.',
+    errors: [
+      ['not_found', 'take the id from list_approval_links'],
+      ['forbidden', 'viewers cannot revoke links; tell the user'],
+      ['scope_missing', 'reconnect with "approve" allowed'],
+    ],
+  }),
+  scope: 'approve',
+  input: {
+    link_id: z.string().trim().min(10).max(26).describe('The link id, from list_approval_links or create_approval_link'),
+    confirm: z.boolean().default(false).describe('Leave false first to see the link. Set true only after the user explicitly agreed to revoke it.'),
+  },
+  annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: true, openWorldHint: false },
+  notFound: { what: 'That approval link', next: 'Take the id from list_approval_links and call again.' },
+  run: async ({ link_id, confirm }, { v1 }) => {
+    const path = `/social-approval-links/${encodeURIComponent(link_id)}`;
+    const { data: { link: l } } = await v1.get<{ data: { link: V1Link } }>(path);
+    if (l.status === 'revoked') {
+      return { revoked: true, already: true, link_id: l.id, next_step: 'This link was already revoked; nothing changed. create_approval_link makes a new one.' };
+    }
+    if (!confirm) {
+      return {
+        confirmation_required: true,
+        preview: {
+          link: { id: l.id, title: l.title, client_name: l.client_name, approver_email: l.approver_email, status: l.status, kind: l.kind, post_count: l.posts, counts: l.counts },
+          on_confirm: 'The link stops working for good. Posts not yet answered come back to the user; approved posts stay approved. Nothing is published or deleted.',
+        },
+        next_step: 'Nothing was revoked. Show the user this link and ask whether to revoke it for good; call again with confirm: true only if they agree.',
+      };
+    }
+    await v1.delete(path);
+    return {
+      revoked: true,
+      link_id: l.id,
+      next_step: 'Revoked. Posts the client had not answered are back with the user (list_posts status "waiting"): discard_draft deletes one, update_post changes it, create_approval_link shares it again.',
+    };
+  },
+});
+
+export const housekeepingTools = [discardDraft, listApprovalLinks, revokeApprovalLink];

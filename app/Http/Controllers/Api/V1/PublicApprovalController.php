@@ -45,6 +45,9 @@ use Throwable;
  */
 class PublicApprovalController extends Controller
 {
+    /** What the approver reads when a post has no time yet (needs_time). */
+    public const NEEDS_TIME = 'This post has no publish time yet, so it cannot be approved: approving would publish it at once. The sender has to set a time first.';
+
     /** The link this request resolved (postArray reads its rules). */
     private ?SocialApprovalLink $link = null;
 
@@ -161,6 +164,15 @@ class PublicApprovalController extends Controller
                 'message' => 'This post can be decided closer to its date.',
                 'reason' => 'outside_window',
                 'decidable_from' => $window['decidable_from'],
+            ], 422);
+        }
+
+        // No time on the post: a yes would publish it at once (the relay
+        // sends a post without a slot now). Refused; the sender sets a time.
+        if ($validated['decision'] === 'approve' && $socialPost->scheduled_at === null) {
+            return response()->json([
+                'message' => self::NEEDS_TIME,
+                'reason' => 'needs_time',
             ], 422);
         }
 
@@ -344,6 +356,11 @@ class PublicApprovalController extends Controller
      */
     private function approveFor(SocialApprovalLink $link, SocialPost $post, string $name, SocialPostRelay $relay): bool|string
     {
+        // Approve-all included: a post with no time is never sent by a yes.
+        if ($post->scheduled_at === null) {
+            return self::NEEDS_TIME;
+        }
+
         try {
             $approved = $relay->approve($post, $name, PlanScope::decidableFrom($link), holdBeyondHorizon: true);
 

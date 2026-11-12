@@ -34,6 +34,7 @@ in [mcp/README.md](mcp/README.md).
 | Approvals | `create_content_plan` | Content Plan for a date range, emailed to the approver after a preview | All (Free: one client) |
 | Approvals | `check_approval_status` | Where approval stands for a post or a link | All |
 | Approvals | `list_approval_links` | The workspace's approval links and their status | All |
+| Approvals | `revoke_approval_link` | Revoke a client approval link (preview, then confirm) | All |
 | Approvals | `send_approval_reminder` | Email the approver a reminder | All |
 | Approvals | `get_approval_audit` | Every decision on one link, with CSV | All |
 | Approvals | `get_approval_history` | Every decision on one post (email masked) | All |
