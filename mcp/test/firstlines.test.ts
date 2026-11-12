@@ -39,7 +39,7 @@ describe('tool first lines', () => {
       const out: string[] = [];
       // One sentence: the only sentence end is the final full stop (no ". X", "! X", "? X" inside).
       if (/[.!?]\s+\S/.test(first.slice(0, -1))) out.push(`${t.name}: more than one sentence — "${first}"`);
-      if (/\b(Free|Pro|Max|Business|Premium|Starter|Plus)\b/.test(first)) out.push(`${t.name}: names a plan — "${first}"`);
+      if (/\b(Free|Pro|Max|Enterprise|Business|Premium|Starter|Plus)\b/.test(first)) out.push(`${t.name}: names a plan — "${first}"`);
       if (/\$\s?\d|\bUSD\b|\bIDR\b|\bRp\s?\d|\bpric(e|es|ing)\b|upgrad|trial|subscription|billing/i.test(first)) out.push(`${t.name}: price or upgrade wording — "${first}"`);
       return out;
     });

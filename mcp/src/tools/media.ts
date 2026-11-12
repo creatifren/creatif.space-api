@@ -46,7 +46,7 @@ export const requestMediaUpload = defineTool({
     does: "Step 1 of 2 to put a NEW image or video into the user’s creatif.space library: returns a file_id and a presigned upload_url (valid about 15 minutes).",
     when: "when you have the file’s bytes (generated, or given to you) and no public https URL for it. If the file is already in the library, use list_files; if it is at a public https URL, pass that URL to draft_post media_urls. Then: (1) HTTP PUT the exact bytes to upload_url with the Content-Type header given — the size must equal size_bytes; (2) call confirm_media_upload with the file_id; (3) pass that id in draft_post or update_post file_ids.",
     example: "request_media_upload { \"filename\": \"launch.jpg\", \"mime\": \"image/jpeg\", \"size_bytes\": 482113 } → { file_id, upload: { method: \"PUT\", url, headers: { \"Content-Type\": \"image/jpeg\" } }, expires_at }",
-    rules: "Accepted: JPEG, PNG, WebP, GIF, MP4, MOV (also SVG and PDF for the library). The workspace’s plan limits apply (total storage and per-file size are set by the plan; Free: 1 GB in total).",
+    rules: "Accepted: JPEG, PNG, WebP, GIF, MP4, MOV (also SVG and PDF for the library). The workspace’s plan limits apply (total storage and per-file size are set by the plan, from 1 GB in total).",
     errors: [
       ["storage_full", "tell the user to free up space (link given); do not retry"],
       ["file_too_large", "make the file smaller and request again"],

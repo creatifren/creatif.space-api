@@ -42,7 +42,7 @@ export const getAccountSummary = defineTool({
     does: 'Gets the workspace at a glance in one call: plan, what its limits leave (posts this month, channels, queued posts, approval clients), Credits left, channels connected and needing reconnect, and media storage used.',
     when: 'at the start of a conversation or when onboarding a user, to know what they can do before planning. For Credits per send and this month’s spend, use get_credits; for which files will be deleted, get_storage_usage; for channel ids to post to, list_channels.',
     example: 'get_account_summary {} → { plan: { key: "free", name }, limits: { monthly_posts: { used, limit, left }, connected_accounts, queued_posts, approval_clients, schedule_window_days }, credits: { left, monthly, topup, resets_at }, channels: { connected, needs_reconnect, reconnect: [...] }, storage: { used_bytes, quota_bytes, percent_used }, next_steps }',
-    rules: 'Read-only. limit null means no limit (left null). Free: 3 channels, up to 7 days ahead, 10 queued posts, one approval client. connected counts channels that can be posted to now.',
+    rules: 'Read-only. limit null means no limit (left null); limits depend on the plan (on some plans: 3 channels, up to 7 days ahead, 10 queued posts, one approval client). connected counts channels that can be posted to now.',
     errors: [
       ['scope_missing', 'reconnect and allow "read"'],
       ['unauthorized', 'ask the user to reconnect the creatif.space connector'],
