@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Middleware\AssignRequestId;
+use App\Http\Middleware\EnsureRateLimitHeaders;
 use App\Http\Middleware\ScopeToWorkspace;
 use App\Http\Middleware\ThrottlePerRoute;
 use App\Http\Middleware\TrustAppServer;
@@ -33,6 +34,10 @@ return Application::configure(basePath: dirname(__DIR__))
     )
     ->withMiddleware(function (Middleware $middleware): void {
         $middleware->statefulApi();
+
+        // Every 429 from the API carries X-RateLimit-Limit / -Remaining and
+        // Retry-After, whichever limit answered it. Outermost in the group.
+        $middleware->api(prepend: [EnsureRateLimitHeaders::class]);
 
         // Approval-link decisions use the session (the signed-in approver)
         // but may arrive by navigator.sendBeacon, which cannot send the

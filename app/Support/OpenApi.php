@@ -119,6 +119,13 @@ final class OpenApi
                     'bearerAuth' => ['type' => 'http', 'scheme' => 'bearer', 'description' => 'API key (Settings → API keys) or OAuth access token'],
                     'sessionCookie' => ['type' => 'apiKey', 'in' => 'cookie', 'name' => (string) config('session.cookie'), 'description' => 'The app session (first-party only)'],
                 ],
+                // On every 429, whichever limit answered it; throttled
+                // operations (x-rate-limit) send Limit/Remaining on success too.
+                'headers' => [
+                    'X-RateLimit-Limit' => ['description' => 'Requests allowed in the window of the limit that applies', 'schema' => ['type' => 'integer']],
+                    'X-RateLimit-Remaining' => ['description' => 'Requests left in the window (0 on a 429)', 'schema' => ['type' => 'integer']],
+                    'Retry-After' => ['description' => 'Seconds to wait before trying again', 'schema' => ['type' => 'integer']],
+                ],
                 'schemas' => [
                     'Error' => [
                         'type' => 'object',
@@ -145,7 +152,13 @@ final class OpenApi
         }
         $out['404'] = $error('Not found (another workspace’s id is 404 too)');
         $out['422'] = $error('Invalid input');
-        $out['429'] = $error('Rate limited; retry_after says when to try again');
+        $out['429'] = $error('Rate limited; retry_after says when to try again') + [
+            'headers' => [
+                'X-RateLimit-Limit' => ['$ref' => '#/components/headers/X-RateLimit-Limit'],
+                'X-RateLimit-Remaining' => ['$ref' => '#/components/headers/X-RateLimit-Remaining'],
+                'Retry-After' => ['$ref' => '#/components/headers/Retry-After'],
+            ],
+        ];
 
         return $out;
     }

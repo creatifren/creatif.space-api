@@ -23,6 +23,7 @@ class MediaRefused extends RuntimeException
 
     /**
      * @param  array<string, mixed>  $extra
+     * @param  array<string, string>  $headers  sent as response headers (a 429's rate-limit headers)
      */
     public function __construct(
         string $message,
@@ -30,6 +31,7 @@ class MediaRefused extends RuntimeException
         public readonly string $reason,
         public readonly array $extra = [],
         public readonly ?string $field = null,
+        public readonly array $headers = [],
     ) {
         parent::__construct($message);
     }
@@ -85,9 +87,19 @@ class MediaRefused extends RuntimeException
         );
     }
 
-    public static function uploadLimit(): self
+    /**
+     * The caps are internal: the 429 says when to try again (Retry-After)
+     * but never the number — X-RateLimit-Limit is the route's public
+     * throttle, filled in by EnsureRateLimitHeaders.
+     *
+     * @param  int  $retryAfter  seconds until it opens again
+     */
+    public static function uploadLimit(int $retryAfter): self
     {
-        return new self(self::UPLOAD_LIMIT_MESSAGE, 429, 'upload_limit');
+        return new self(self::UPLOAD_LIMIT_MESSAGE, 429, 'upload_limit', headers: [
+            'Retry-After' => (string) max(1, $retryAfter),
+            'X-RateLimit-Remaining' => '0',
+        ]);
     }
 
     public function render(): JsonResponse
@@ -98,7 +110,7 @@ class MediaRefused extends RuntimeException
             ...$this->extra,
             // The app's form layer reads `errors`; keep it for 422s.
             'errors' => $this->field === null ? null : [$this->field => [$this->getMessage()]],
-        ], fn ($v) => $v !== null), $this->status);
+        ], fn ($v) => $v !== null), $this->status, $this->headers);
     }
 
     private static function human(int $bytes): string
