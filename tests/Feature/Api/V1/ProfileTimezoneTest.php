@@ -19,9 +19,11 @@ it('saves an IANA zone and reads it back on /me/profile and /me', function () {
         ->assertOk()
         ->assertJsonPath('data.timezone', 'Asia/Jakarta');
 
-    expect($user->fresh()->timezone)->toBe('Asia/Jakarta');
-    $this->actingAs($user)->getJson('/api/v1/me/profile')->assertJsonPath('data.timezone', 'Asia/Jakarta');
-    $this->actingAs($user)->getJson('/api/v1/me')->assertJsonPath('data.timezone', 'Asia/Jakarta');
+    // Read back as the stored row (the in-memory $user is the one the test made).
+    $fresh = $user->fresh();
+    expect($fresh->timezone)->toBe('Asia/Jakarta');
+    $this->actingAs($fresh)->getJson('/api/v1/me/profile')->assertJsonPath('data.timezone', 'Asia/Jakarta');
+    $this->actingAs($fresh)->getJson('/api/v1/me')->assertJsonPath('data.timezone', 'Asia/Jakarta');
 });
 
 it('reads null until one is set, and null clears it again', function () {
@@ -29,7 +31,7 @@ it('reads null until one is set, and null clears it again', function () {
     $this->actingAs($user)->getJson('/api/v1/me/profile')->assertOk()->assertJsonPath('data.timezone', null);
 
     $user->forceFill(['timezone' => 'America/New_York'])->save();
-    $this->actingAs($user)->patchJson('/api/v1/me/profile', ['timezone' => null])->assertOk()->assertJsonPath('data.timezone', null);
+    $this->actingAs($user->fresh())->patchJson('/api/v1/me/profile', ['timezone' => null])->assertOk()->assertJsonPath('data.timezone', null);
     expect($user->fresh()->timezone)->toBeNull();
 });
 
