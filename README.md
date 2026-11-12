@@ -9,6 +9,40 @@
 <a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/l/laravel/framework" alt="License"></a>
 </p>
 
+## MCP tools
+
+The Creatif Space MCP server (`https://mcp.creatif.space/mcp`, OAuth or API key) lets an AI assistant draft, get client approval and publish for the user. Every plan can use it, Free included; sending spends Credits. Free limits: posts scheduled at most 7 days ahead, 10 queued posts, approval links for one client. Details for developers: [`mcp/README.md`](mcp/README.md).
+
+| Tool | What it does | Plan |
+|---|---|---|
+| `list_channels` | Lists the connected social channels and whether each can be posted to | All plans |
+| `list_posts` | Lists drafts, scheduled, published and failed posts, with filters | All plans |
+| `get_post` | One post in full: caption, media, schedule, delivery per channel, review thread | All plans |
+| `list_files` | Lists files in the media library | All plans |
+| `request_media_upload` | Starts uploading a new image or video to the library | All plans (storage limits by plan) |
+| `confirm_media_upload` | Finishes an upload so the file can go on a post | All plans (storage limits by plan) |
+| `draft_post` | Saves a draft for one or more channels; never publishes, no Credits | All plans |
+| `update_post` | Edits a draft or a post waiting for approval | All plans |
+| `create_approval_link` | Shares posts with a client on an approval link | All plans (Free: one client, 7 days ahead, 10 queued posts) |
+| `check_approval_status` | Where a post or approval link stands: approved, waiting, changes requested | All plans |
+| `list_pending_approvals` | Every post still waiting on a client or sent back with changes ¹ | All plans |
+| `get_client_feedback` | The client's comments and suggested captions on a post ¹ | All plans |
+| `schedule_post` | Schedules a draft after the user confirms the Credit cost | All plans, spends Credits (Free: 7 days ahead, 10 queued posts) |
+| `publish_post` | Publishes a draft now after the user confirms the Credit cost | All plans, spends Credits |
+| `get_credits` | Plan, limits and Credit balance | All plans |
+| `list_conversations` | Comments and DMs from the connected channels (Engage) | All plans |
+| `reply_to_conversation` | Replies to a comment or DM after the user confirms | All plans, spends Credits |
+
+¹ Ships with PR #83 (not on mcp.creatif.space yet).
+
+Free tools, no account needed (`https://mcp.creatif.space/free`):
+
+| Tool | What it does | Plan |
+|---|---|---|
+| `check_caption` | Checks a caption against each network's limits (length, hashtags, mentions, links) | Free, no sign-in |
+| `approval_request_template` | Writes a ready-to-send message asking a client to approve posts | Free, no sign-in |
+| `connect_guide` | What you need before connecting a social account, and the steps | Free, no sign-in |
+
 ## Android app (Capacitor shell)
 
 - **Google sign-in:** `GET /sanctum/csrf-cookie`, then `POST /auth/google/native` with `X-XSRF-TOKEN` and `{"id_token": "<Credential Manager ID token>", "next": "/spaces"}` (`next` optional). Answers `200 {"redirect": "…"}`, `422 invalid_token`, `403 suspended | google_not_linked`, `429`, or `503 google_unavailable`. The token's `aud` must be `GOOGLE_CLIENT_ID` (the web client, used as `serverClientId`) or one of `GOOGLE_NATIVE_EXTRA_AUDIENCES`. Details: `GoogleAuthController::native`.
