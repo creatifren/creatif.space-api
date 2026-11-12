@@ -23,6 +23,9 @@ final class ApprovalMailFooter
 
     public static function on(MailMessage $mail): MailMessage
     {
-        return $mail->viewData(['approvalFooter' => true] + $mail->viewData);
+        // MailMessage::data() merges this public array into the view data.
+        $mail->viewData['approvalFooter'] = true;
+
+        return $mail;
     }
 }
