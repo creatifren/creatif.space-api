@@ -43,7 +43,8 @@ export function mockV1(routes: Record<string, Handler>) {
       headers,
     };
     calls.push(call);
-    const handler = routes[`${call.method} ${path}`];
+    // "*" answers any route not listed (e.g. a 402 for every call).
+    const handler = routes[`${call.method} ${path}`] ?? routes['*'];
     if (!handler) return new Response(JSON.stringify({ message: 'Not Found' }), { status: 404 });
     const { status = 200, body = null, text, contentType, headers: extra } = await handler(call);
     return new Response(text ?? (body === null ? null : JSON.stringify(body)), {
