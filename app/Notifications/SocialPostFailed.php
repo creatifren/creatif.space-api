@@ -36,10 +36,27 @@ class SocialPostFailed extends Notification implements ShouldQueue
             ->subject('Post didn’t publish: '.$caption)
             ->greeting('Hi '.$notifiable->name.',')
             ->line('Your post “'.$caption.'” couldn’t be published to any of its accounts.')
-            ->line($this->post->fail_reason ?? 'The provider didn’t say why.')
+            ->line(self::reason($this->post->fail_reason))
             ->action('Open social posts', config('app.frontend_url').'/social')
             ->line('The post is still there — you can edit and try again.');
     }
+
+    /**
+     * The reason as the user may read it: never the name of the service we
+     * publish through. A reason that carries one (raw detail passed along)
+     * gives way to a plain line.
+     */
+    public static function reason(?string $reason): string
+    {
+        if ($reason === null || trim($reason) === '' || preg_match(self::VENDORS, $reason) === 1) {
+            return 'No reason was given.';
+        }
+
+        return $reason;
+    }
+
+    /** The publishing services behind the app — never named to a user. */
+    public const VENDORS = '/out\s*stand|post\s*-?\s*for\s*-?\s*me|upload-?post|ayrshare/i';
 
     /** The caption on one line — it lands in a subject, which must not break. */
     private function caption(): string
@@ -56,7 +73,7 @@ class SocialPostFailed extends Notification implements ShouldQueue
             'type' => NotificationType::SocialPostFailed->value,
             'post_id' => $this->post->ulid,
             'caption' => $this->caption(),
-            'fail_reason' => $this->post->fail_reason,
+            'fail_reason' => self::reason($this->post->fail_reason),
         ];
     }
 }

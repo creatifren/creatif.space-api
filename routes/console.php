@@ -5,6 +5,7 @@ use App\Jobs\ApplyMediaRetention;
 use App\Jobs\BackfillFileChecksums;
 use App\Jobs\ExpireSubscriptions;
 use App\Jobs\NotifyKeptFilesDowngrade;
+use App\Jobs\NotifyMissedPosts;
 use App\Jobs\PruneAccountExports;
 use App\Jobs\PruneActivityLog;
 use App\Jobs\PruneInsightReports;
@@ -17,9 +18,9 @@ use App\Jobs\ReleaseCommissions;
 use App\Jobs\RenewMonthlyCredits;
 use App\Jobs\RetryRateLimitedPublishes;
 use App\Jobs\SendApprovedHeldPosts;
+use App\Jobs\SendConnectNudges;
 use App\Jobs\SendContentPlanReminders;
 use App\Jobs\SendMonthlyInsightReports;
-use App\Jobs\SendConnectNudges;
 use App\Jobs\SendWeeklyDigests;
 use App\Jobs\SnapshotFollowerCounts;
 use App\Jobs\SyncInboxes;
@@ -186,3 +187,7 @@ Schedule::job(new SendWeeklyDigests)->hourly()->withoutOverlapping();
 // Day 2 with no channel connected: one "connect your first channel" email
 // per account, ever (App\Support\Onboarding).
 Schedule::job(new SendConnectNudges)->hourly()->withoutOverlapping();
+
+// A scheduled post whose time passed 30 minutes ago and has not gone out:
+// one "Post missed" email per post, on the publish_failed switch.
+Schedule::job(new NotifyMissedPosts)->everyFiveMinutes()->withoutOverlapping();

@@ -14,7 +14,9 @@ use Illuminate\Http\Request;
  * can turn off, as plain switches (MCP get_notification_settings /
  * update_notification_settings):
  *
- * - publish_failed:   a post failed to publish (SocialPostFailed)
+ * - publish_failed:   "Post missed / failed" — a scheduled post missed its
+ *                     time (SocialPostMissed) or failed to publish
+ *                     (SocialPostFailed); one email per post
  * - approval_decided: a client approved or asked for changes (SocialPostDecided)
  * - weekly_digest:    Monday's summary of the week (WeeklyDigest)
  *
