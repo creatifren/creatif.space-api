@@ -294,10 +294,12 @@ Route::post('/spaces/{space}/events', SpaceEventController::class)
 // Session only (Sanctum SPA cookie): a bearer token never manages tokens.
 Route::middleware(['auth:sanctum', EnsureNotPendingDeletion::class])->group(function () {
     // Account deletion (Play Store requirement): the signed-in person only,
-    // never a token. A pending account may reach these two and nothing else.
+    // never a token. A pending account may reach these three and nothing else.
     Route::delete('/me', [AccountDeletionController::class, 'destroy'])
         ->middleware('throttle:5,1')
         ->name('api.v1.me.destroy');
+    Route::get('/me/deletion', [AccountDeletionController::class, 'show'])
+        ->name('api.v1.me.deletion.show');
     Route::post('/me/deletion/cancel', [AccountDeletionController::class, 'cancel'])
         ->middleware('throttle:10,1')
         ->name('api.v1.me.deletion.cancel');

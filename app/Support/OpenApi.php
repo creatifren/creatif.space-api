@@ -54,12 +54,22 @@ final class OpenApi
         return $map;
     }
 
+    /** @return array<string, string> route name => description (optional, resources/openapi/descriptions.php) */
+    public static function descriptions(): array
+    {
+        /** @var array<string, string> $map */
+        $map = require resource_path('openapi/descriptions.php');
+
+        return $map;
+    }
+
     /**
      * @return array<string, mixed>
      */
     public static function document(): array
     {
         $summaries = self::summaries();
+        $descriptions = self::descriptions();
         $scopes = (array) config('mcp.routes', []);
         $paths = [];
 
@@ -88,8 +98,11 @@ final class OpenApi
                 // An API key / OAuth token reaches only the routes in mcp.routes.
                 $operation['x-token-scope'] = $scopes[$name] ?? null;
             }
+            if (isset($descriptions[$name])) {
+                $operation['description'] = $descriptions[$name];
+            }
             if ($signed) {
-                $operation['description'] = 'Signed URL: open the link exactly as it was handed out (signature and expires in the query).';
+                $operation['description'] = trim(($operation['description'] ?? '').' Signed URL: open the link exactly as it was handed out (signature and expires in the query).');
             }
             if (is_string($throttle)) {
                 $operation['x-rate-limit'] = Str::after($throttle, 'throttle:');
