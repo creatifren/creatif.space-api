@@ -206,3 +206,51 @@ jobs:
 
       - name: Build
         run: npm run build
+
+  # The MCP server and the API together, no mocks: tools/list in the
+  # describeTool shape (#78) and the {code, message, next_step, details}
+  # envelope for a real 402 / 403 / 404 (#76). scripts/mcp-contract-smoke.sh.
+  # Either side can break the contract, so it runs when PHP or mcp/ changed.
+  mcp-contract:
+    name: MCP contract smoke (API + MCP, sqlite)
+    needs: changes
+    if: needs.changes.outputs.php == 'true' || needs.changes.outputs.mcp == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - uses: shivammathur/setup-php@eb7c497e18156a6bbabfef1d3a82760b9eda3962 # 2.40.0
+        with:
+          php-version: '8.5'
+          extensions: mbstring, intl, pdo_sqlite, sqlite3, bcmath, gd, zip
+          coverage: none
+          tools: composer:v2
+
+      - name: Composer cache dir
+        id: composer-cache
+        run: echo "dir=$(composer config cache-files-dir)" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ steps.composer-cache.outputs.dir }}
+          key: composer-${{ runner.os }}-php8.5-${{ hashFiles('composer.lock') }}
+          restore-keys: composer-${{ runner.os }}-php8.5-
+
+      - name: Install API
+        run: composer install --no-interaction --prefer-dist --no-progress
+
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: mcp/package-lock.json
+
+      - name: Install and build MCP
+        working-directory: mcp
+        run: |
+          npm ci
+          npm run build
+
+      - name: Contract smoke
+        run: scripts/mcp-contract-smoke.sh
