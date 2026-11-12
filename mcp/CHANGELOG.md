@@ -7,11 +7,11 @@ Versions of the remote MCP server at `https://mcp.creatif.space/mcp`
 
 ## 0.3.0 — 2026-11-12
 
-47 tools (was 11). Every description follows the agent shape (what / when to
+48 tools (was 11). Every description follows the agent shape (what / when to
 use / example / errors → next step, #78), and every error is
 `{code, message, next_step, details}` (#76).
 
-Added (36):
+Added (37):
 
 - **Posts:** `list_failed_posts` (last 30 days, per channel `failure_code` + reason; points to `retry_post`), `schedule_posts` (up to 10 drafts, one preview, all or none), `discard_draft` (preview first; drafts only), `retry_post` (the failed channels of a post again, preview first; each failure with a stable `failure_code`), `suggest_caption` (AI caption + hashtags; `not_enabled` while the flag is off)
 - **Approvals:** `create_content_plan` (preview → `confirm: true` creates a Content Plan and emails the approver), `send_approval_reminder`, `list_approval_links`, `get_approval_audit`, `get_approval_history` (one post’s decisions, email masked), `get_plan_calendar_link` (Content Plan ICS feed, read-only); approver side `list_waiting_approvals`, `decide_approval`, `list_shared_with_me` (scope `approvals:decide`)
@@ -22,7 +22,7 @@ Added (36):
 - **Engage:** `list_conversations`, `reply_to_conversation`
 - **Feedback:** `send_feedback`
 - **Settings:** `get_notification_settings`, `update_notification_settings` (email: publish_failed, approval_decided, weekly_digest)
-- **Account:** `get_account_summary` (plan, limits left, Credits, channels, storage in one call)
+- **Account:** `get_account_summary` (plan, limits left, Credits, channels, storage in one call), `get_onboarding` (the Get started checklist — connect, draft, send, publish — with done/at and the one next step to suggest)
 
 Resources (new): `creatif://channels`, `creatif://schedule/next-7-days` (read-only, scope `read`).
 

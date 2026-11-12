@@ -2,7 +2,7 @@
 
 <!-- Generated from the served tool list by `npm run docs:tools` (in mcp/). Do not edit by hand: test/tools-doc.test.ts fails in CI when this file is out of date. -->
 
-47 tools on `https://mcp.creatif.space/mcp`, in the order `tools/list` gives them. Scope is the OAuth permission a tool needs; the hints are its MCP annotations.
+48 tools on `https://mcp.creatif.space/mcp`, in the order `tools/list` gives them. Scope is the OAuth permission a tool needs; the hints are its MCP annotations.
 
 | Tool | Title | Scope | Read-only | Destructive |
 |---|---|---|---|---|
@@ -53,6 +53,7 @@
 | [`update_notification_settings`](#update_notification_settings) | Turn creatif.space emails on or off | `draft` | no | no |
 | [`schedule_posts`](#schedule_posts) | Schedule several drafts at once | `publish` | no | yes |
 | [`list_failed_posts`](#list_failed_posts) | List failed posts | `read` | yes | no |
+| [`get_onboarding`](#get_onboarding) | Get the setup checklist | `read` | yes | no |
 
 ## list_channels
 
@@ -1047,3 +1048,21 @@ Errors → next step: scope_missing → reconnect and allow "read"; unauthorized
 |---|---|---|---|
 | `limit` | integer | no | At most this many failed posts per page (1–100, default 25) |
 | `cursor` | string | no | next_cursor from the previous page of this same list (same filters); omit for the first page |
+
+## get_onboarding
+
+**Get the setup checklist** · scope `read` · read-only yes · destructive no · idempotent yes · open world no · structured output
+
+Shows which getting-started steps the user has done and the one next step to suggest to them.
+
+Shows the user’s “Get started” checklist in creatif.space — connect a channel, make a post, send one to a client, publish one — which steps are done and when, and the one next step to suggest.
+
+When to use: at the start of a conversation with a new user, or when they ask how to get started or what to do next. Suggest only next.suggest, in your own words; the steps finish themselves when the user does them, here or in the app.
+
+Example: get_onboarding {} → { steps: [{ key: "connect", label, done: true, at }, …], done_count: 1, all_done: false, draft_post_id, next: { step: "draft", tool: "draft_post", suggest } }
+
+Read-only. Counted across the workspace (the owner and its members), from the data itself. at is when the step first happened.
+
+Errors → next step: unauthorized → ask the user to reconnect the creatif.space connector; scope_missing → reconnect with "read" allowed; upstream_unavailable → wait a minute and call again; plan_required (402) → a plan limit, or a feature this account's plan does not include (on some plans: posts scheduled at most 7 days ahead, at most 10 queued posts, approval links for one client); tell the user it is not available on their plan, and do not retry; forbidden (403) → this seat or connection may not do this (e.g. a viewer, or a permission the connection was not given): the workspace owner or an editor can, or the user does it in creatif.space; do not retry; not_found (404) → the id is not in this workspace: take a fresh id from the matching list tool and call again.
+
+No input.

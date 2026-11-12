@@ -16,7 +16,7 @@ const LINK = '01JLINKLINKLINKLINKLINKLI1';
 const FILE = '01JFILEFILEFILEFILEFILEFI1';
 const SPACE = '01JSPACESPACESPACESPACESP1';
 
-const TOOLS = ['list_channels', 'list_posts', 'get_post', 'get_credits', 'list_waiting_approvals', 'check_approval_status', 'get_insight_summary', 'list_files', 'list_spaces', 'get_storage_usage'];
+const TOOLS = ['list_channels', 'list_posts', 'get_post', 'get_credits', 'list_waiting_approvals', 'check_approval_status', 'get_insight_summary', 'list_files', 'list_spaces', 'get_storage_usage', 'get_onboarding'];
 
 const file = { id: FILE, name: 'launch.jpg', mime_type: 'image/jpeg', size_bytes: 1000, status: 'ready', url: 'https://r2.test/f.jpg', is_kept: true, auto_delete_at: null, created_at: '2026-11-01T00:00:00Z', brand_new_field: 'the API may add fields' };
 
@@ -47,6 +47,14 @@ const CASES: Record<string, { args: Record<string, unknown>; routes: Record<stri
   },
   list_files: { args: {}, routes: { 'GET /files': () => ({ body: { data: [file], meta: { total: 1 } } }) } },
   list_spaces: { args: {}, routes: { 'GET /spaces': () => ({ body: { data: [{ id: SPACE, title: 'Winter', slug: 'winter', status: 'draft', visibility: 'private', items_count: 2, public_url: null, has_password: false, expires_at: null, published_at: null, updated_at: '2026-11-10T09:00:00Z' }] } }) } },
+  get_onboarding: {
+    args: {},
+    routes: {
+      'GET /me/onboarding': () => ({
+        body: { data: { connect: { done: true, at: '2026-11-01T09:00:00+00:00' }, draft: { done: false, at: null }, send: { done: false, at: null }, publish: { done: false, at: null }, draft_post_id: null } },
+      }),
+    },
+  },
   get_storage_usage: {
     args: {},
     routes: {
@@ -63,7 +71,7 @@ afterEach(async () => {
 });
 
 describe('outputSchema', () => {
-  it('is declared on exactly the 10 read tools, as an object schema', async () => {
+  it('is declared on exactly the 11 read tools, as an object schema', async () => {
     expect(Object.keys(OUTPUT_SCHEMAS).sort()).toEqual([...TOOLS].sort());
     app = await startApp();
     const { tools } = await (await app.connect(TOKEN)).listTools();

@@ -10,6 +10,7 @@
 
 export const FIRST_LINES: Record<string, string> = {
   // Start here
+  get_onboarding: 'Shows which getting-started steps the user has done and the one next step to suggest to them.',
   get_account_summary: 'Shows the user\'s plan, limits left, Credits, channels and storage in one call, so you know what they can do.',
   list_channels: 'Lists the user\'s connected social channels and their ids, the first step of the plan_week prompt.',
   get_connect_link: 'Gives the user the creatif.space link to connect or reconnect a social network.',
