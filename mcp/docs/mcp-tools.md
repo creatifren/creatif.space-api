@@ -417,7 +417,7 @@ When to use: when the user wants creatif.space’s AI to write or rework a capti
 
 Example: suggest_caption { "brief": "Morning coffee promo, 20% off until Friday", "platform": "instagram" } → { caption, hashtags: ["#coffee", …], next_step }
 
-Not included on every plan, and may not be switched on for every account yet.
+Not included on every plan, and may not be switched on for every account yet: get_credits features.ai_caption is true only when this tool will answer.
 
 Errors → next step: not_enabled → AI captions are not switched on yet: write the caption yourself; do not retry; plan_required → tell the user it is not available on their plan, then offer to write the caption yourself; do not retry; upstream_unavailable → call once more; if it fails again, write the caption yourself; invalid_input → shorten the brief (2000 characters max) or fix the platform; forbidden → the user’s role (viewer) cannot write captions; tell them; scope_missing → reconnect with "draft" allowed; not_found (404) → the id is not in this workspace: take a fresh id from the matching list tool and call again.
 
@@ -436,9 +436,9 @@ Shows how much of the plan’s media storage is used against its quota, and whic
 
 When to use: before a big upload, when an upload failed with storage_full, or when the user asks what will be deleted and when. To keep a file from being deleted use keep_file; to list or search files use list_files.
 
-Example: get_storage_usage {} → { tier, quota: { used_bytes, quota_bytes, percent_used, counts }, files: { kept: { count, bytes }, auto_delete: { count, bytes, next_at, soonest: [...] }, no_auto_delete: {...}, complete } }
+Example: get_storage_usage {} → { tier, quota: { used_bytes, quota_bytes, percent_used, counts, library_used_bytes }, files: { kept: { count, bytes }, auto_delete: { count, bytes, next_at, soonest: [...] }, no_auto_delete: {...}, complete } }
 
-Plans without Keep: 1 GB for everything in the library; files used by a post are removed once it publishes, files on no post 24 h after upload. Plans with Keep have a Keep quota: kept files plus media on drafts and scheduled posts; other post media is removed 30 days after publishing. Large libraries: only the newest 300 files are split (files.complete false).
+Plans without Keep: 1 GB for everything in the library; files used by a post are removed once it publishes, files on no post 24 h after upload. Plans with Keep have a Keep quota: kept files plus media on drafts and scheduled posts; other post media is removed 30 days after publishing. quota.used_bytes is what counts toward the quota (quota.counts says what that is); quota.library_used_bytes is the whole library, Trash included. Large libraries: only the newest 300 files are split (files.complete false).
 
 Errors → next step: unauthorized → ask the user to reconnect the creatif.space connector; scope_missing → reconnect with "read" allowed; upstream_unavailable → wait a minute and call again; plan_required (402) → a plan limit, or a feature this account's plan does not include (on some plans: posts scheduled at most 7 days ahead, at most 10 queued posts, approval links for one client); tell the user it is not available on their plan, and do not retry; forbidden (403) → this seat or connection may not do this (e.g. a viewer, or a permission the connection was not given): the workspace owner or an editor can, or the user does it in creatif.space; do not retry; not_found (404) → the id is not in this workspace: take a fresh id from the matching list tool and call again.
 
@@ -725,7 +725,7 @@ When to use: to find a Space id before publish_space, or to see which Spaces are
 
 Example: list_spaces { "status": "draft" } → { count, spaces: [{ id, title, status, visibility, items_count, url, updated_at }] }
 
-Spaces are not included on every plan. url is set only for a published Space (and only once the account has a username).
+Spaces are not included on every plan. url is set only for a published Space (and only once the account has a username). visibility "private" means link only: once published, anyone with the link can open it, but it is not listed on the profile; "public" is also listed on the profile. A draft opens for nobody, whatever its visibility. visibility_means says it in words for the user.
 
 Errors → next step: plan_required → details.feature spaces — tell the user Spaces are not available on their plan, do not retry; scope_missing → reconnect and allow "read"; unauthorized → ask the user to reconnect the creatif.space connector; upstream_unavailable → wait a minute and call again; forbidden (403) → this seat or connection may not do this (e.g. a viewer, or a permission the connection was not given): the workspace owner or an editor can, or the user does it in creatif.space; do not retry; not_found (404) → the id is not in this workspace: take a fresh id from the matching list tool and call again.
 
@@ -742,7 +742,7 @@ Errors → next step: plan_required → details.feature spaces — tell the user
 
 Puts the user's library files on a new private draft Space.
 
-Creates a new DRAFT Space holding the given library files, in that order — a private draft nobody else can open; it is never published by this tool.
+Creates a new DRAFT Space holding the given library files, in that order — a draft nobody else can open (no link works until it is published); it is never published by this tool.
 
 When to use: when the user wants to share a set of files (a shoot, a delivery, a portfolio) as one page. File ids come from list_files, or confirm_media_upload for a new upload. To put the Space live afterwards, use publish_space; to see existing Spaces, use list_spaces instead.
 
@@ -1045,7 +1045,7 @@ Example: schedule_posts { "posts": [{ "post_id": "01JD…", "scheduled_at": "202
 
 Every post counts against the 20 sends a day connected apps may make. confirm: true without a current preview of the same posts and times (shown in the last 10 minutes) returns a preview again and schedules nothing. Drafts waiting for approval cannot be scheduled here.
 
-Errors → next step: preview_stale → nothing was scheduled: channels or Credits changed since the preview; show the user the new preview in details.preview and confirm again only if they agree; batch_failed → nothing was scheduled: details.failed_post_id was refused (details.reason) and the others were taken back; fix that post or leave it out, preview again; not_schedulable → nothing was scheduled: details.refused names each post that is not a draft or waits for approval; leave them out and preview again; insufficient_credits → nothing was scheduled: the user tops up, or schedules fewer posts; daily_cap_reached → nothing was scheduled: fewer posts, or tomorrow (UTC); plan_required → pass the message to the user as it is (window or queue limit), do not retry; not_found → take draft ids from list_posts status "draft"; scope_missing → reconnect and allow "publish"; forbidden (403) → this seat or connection may not do this (e.g. a viewer, or a permission the connection was not given): the workspace owner or an editor can, or the user does it in creatif.space; do not retry.
+Errors → next step: preview_stale → nothing was scheduled: channels or Credits changed since the preview; show the user the new preview in details.preview and confirm again only if they agree; batch_failed → nothing was scheduled: details.failed_post_id was refused (details.reason) and the others were taken back; fix that post or leave it out, preview again; not_schedulable → nothing was scheduled: details.refused names each post that is not a draft or waits for approval; leave them out and preview again; insufficient_credits → nothing was scheduled: the user tops up, or schedules fewer posts; daily_cap_reached → nothing was scheduled: fewer posts, or tomorrow (UTC); plan_required → pass the message to the user as it is (window or queue limit), do not retry; invalid_input → a post is listed twice (details.post_ids): list each draft once and call again; not_found → take draft ids from list_posts status "draft"; scope_missing → reconnect and allow "publish"; forbidden (403) → this seat or connection may not do this (e.g. a viewer, or a permission the connection was not given): the workspace owner or an editor can, or the user does it in creatif.space; do not retry.
 
 | Input | Type | Required | Description |
 |---|---|---|---|

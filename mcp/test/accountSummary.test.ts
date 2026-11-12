@@ -58,7 +58,7 @@ describe('get_account_summary', () => {
       total: 2, connected: 1, needs_reconnect: 1,
       reconnect: [{ id: X, platform: 'x', username: 'x_user', status: 'expired' }],
     });
-    expect(out.storage).toEqual({ tier: 'free', counts: 'library', used_bytes: 250_000_000, quota_bytes: 1_000_000_000, left_bytes: 750_000_000, percent_used: 25 });
+    expect(out.storage).toEqual({ tier: 'free', counts: 'library', used_bytes: 250_000_000, quota_bytes: 1_000_000_000, library_used_bytes: 250_000_000, left_bytes: 750_000_000, percent_used: 25 });
     expect(out.next_steps).toEqual(['x x_user needs reconnecting: get_connect_link { "network": "x" }.']);
     expect(app!.v1.calls.map((c) => c.path).sort()).toEqual(['/credits', '/files/usage', '/social-accounts', '/social-posts', '/social-posts', '/social-posts']);
     expect(out.failed_posts).toBe(0);

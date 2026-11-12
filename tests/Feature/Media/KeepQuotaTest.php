@@ -23,7 +23,7 @@ it('keeps and unkeeps a file, and reports paid usage', function () {
 
     $this->actingAs($user)->getJson('/api/v1/files/usage')
         ->assertOk()
-        ->assertExactJson(['data' => ['tier' => 'pro', 'keep_used_bytes' => 5_000, 'keep_quota_bytes' => 25 * MEDIA_GB]]);
+        ->assertExactJson(['data' => ['tier' => 'pro', 'keep_used_bytes' => 5_000, 'keep_quota_bytes' => 25 * MEDIA_GB, 'library_used_bytes' => 5_000]]);
 
     $this->actingAs($user)->deleteJson("/api/v1/files/{$file->ulid}/keep")
         ->assertOk()

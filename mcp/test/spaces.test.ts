@@ -82,6 +82,7 @@ describe('list_spaces', () => {
       slug: 'winter-shoot',
       status: 'published',
       visibility: 'private',
+      visibility_means: 'link only — anyone with the link can open it; it is not listed on the profile',
       items_count: 2,
       url: 'https://creatif.space/studio/winter-shoot',
       has_password: false,

@@ -73,6 +73,8 @@ function shapeSpace(s: V1SpaceCard) {
     slug: s.slug,
     status: s.status,
     visibility: s.visibility,
+    // B11: "private" is not "nobody can see it" — a published private Space opens for anyone with the link.
+    visibility_means: VISIBILITY[s.visibility] ?? s.visibility,
     items_count: s.items_count ?? s.items?.length ?? 0,
     url: s.status === 'published' ? s.public_url : null,
     has_password: s.has_password,
@@ -96,7 +98,7 @@ export const listSpaces = defineTool({
     does: 'Lists the user’s creatif.space Spaces (shareable pages of library files), most recently changed first, with status (draft, published, archived), visibility, file count and the link of each published one.',
     when: 'to find a Space id before publish_space, or to see which Spaces are live and their links. To make a new one from library files, use create_space_from_files instead. Archived Spaces are listed only with status "archived".',
     example: 'list_spaces { "status": "draft" } → { count, spaces: [{ id, title, status, visibility, items_count, url, updated_at }] }',
-    rules: 'Spaces are not included on every plan. url is set only for a published Space (and only once the account has a username).',
+    rules: 'Spaces are not included on every plan. url is set only for a published Space (and only once the account has a username). visibility "private" means link only: once published, anyone with the link can open it, but it is not listed on the profile; "public" is also listed on the profile. A draft opens for nobody, whatever its visibility. visibility_means says it in words for the user.',
     errors: [
       ['plan_required', 'details.feature spaces — tell the user Spaces are not available on their plan, do not retry'],
       ['scope_missing', 'reconnect and allow "read"'],
@@ -127,7 +129,7 @@ export const createSpaceFromFiles = defineTool({
   name: 'create_space_from_files',
   title: 'Create a draft Space from library files',
   description: describeTool({
-    does: 'Creates a new DRAFT Space holding the given library files, in that order — a private draft nobody else can open; it is never published by this tool.',
+    does: 'Creates a new DRAFT Space holding the given library files, in that order — a draft nobody else can open (no link works until it is published); it is never published by this tool.',
     when: 'when the user wants to share a set of files (a shoot, a delivery, a portfolio) as one page. File ids come from list_files, or confirm_media_upload for a new upload. To put the Space live afterwards, use publish_space; to see existing Spaces, use list_spaces instead.',
     example: 'create_space_from_files { "title": "Winter shoot — selects", "file_ids": ["01JE…", "01JF…"] } → { space: { id, title, status: "draft", items_count }, note }',
     rules: 'Spaces are not included on every plan. 1 to 100 files, each a ready file in the user’s library; a repeated id is added once. If any id is not usable nothing is created. The design (sections, captions, cover) is edited in creatif.space.',

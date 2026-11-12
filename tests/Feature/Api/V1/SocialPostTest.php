@@ -83,6 +83,11 @@ describe('creating posts', function () {
             ->and($post->targets()->where('social_account_id', $x->id)->first()->configuration)
             ->toBe(['caption' => 'Short one for X.']);
 
+        // B15: get_post reads each channel's own caption back (null = the post's caption).
+        $targets = collect($this->getJson("/api/v1/social-posts/{$post->ulid}")->assertOk()->json('data.targets'))->keyBy('account.id');
+        expect($targets[$x->ulid]['caption'])->toBe('Short one for X.')
+            ->and($targets[$ig->ulid]['caption'])->toBeNull();
+
         Http::assertSent(function ($request) use ($x) {
             $body = $request->data();
 

@@ -48,6 +48,10 @@ class SocialPostResource extends JsonResource
                         'platform' => $target->account->platform,
                         'username' => $target->account->username,
                     ],
+                    // This channel's own caption (captions_by_channel); null = the post's caption.
+                    'caption' => is_array($target->configuration) && isset($target->configuration['caption'])
+                        ? (string) $target->configuration['caption']
+                        : null,
                     'status' => $target->status,
                     'fail_reason' => $target->fail_reason,
                     // PublishFailure reason code (needs_video, missing_board, …).

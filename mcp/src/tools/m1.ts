@@ -394,7 +394,7 @@ export const getCredits = defineTool({
       connected_accounts: limits.connected_accounts,
       scheduling: limits.scheduling,
       approval_clients: limits.approval_clients,
-      features: limits.features,
+      features: aiCaptionHonest(limits.features, limits.ai_caption_ready),
       mcp_daily_sends: limits.mcp_daily_sends,
       urls: limits.urls,
       spend: spendThisMonth(limits.spend as SpendBlock | undefined),
@@ -404,3 +404,14 @@ export const getCredits = defineTool({
 });
 
 export const m1Tools = [listChannels, listPosts, getPost, listFiles, draftPost, getCredits];
+
+/**
+ * B10: the plan can include AI captions while the AI route is still
+ * switched off; then suggest_caption answers not_enabled. features.ai_caption
+ * says what suggest_caption will do, not only what the plan includes.
+ */
+export function aiCaptionHonest(features: unknown, ready: unknown): unknown {
+  if (!features || typeof features !== 'object' || typeof ready !== 'boolean') return features;
+  const f = features as Record<string, unknown>;
+  return { ...f, ai_caption: f.ai_caption === true && ready };
+}

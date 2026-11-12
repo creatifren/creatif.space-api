@@ -14,6 +14,7 @@ use App\Models\User;
 use App\Notifications\StorageAlmostFull;
 use App\Support\AcceptedUploads;
 use App\Support\Media\FileSignature;
+use App\Support\Media\ImageDimensions;
 use App\Support\Media\MediaLimits;
 use App\Support\Media\MediaQuota;
 use App\Support\Media\MediaRetention;
@@ -304,6 +305,14 @@ class FileController extends Controller
             throw MediaRefused::unsupportedFormat();
         }
 
+        // No dimensions from the client (an MCP upload, a script): read them
+        // from the image's own header, so width/height are never left empty.
+        $width = $validated['width'] ?? null;
+        $height = $validated['height'] ?? null;
+        if (($width === null || $height === null) && str_starts_with($detected, 'image/')) {
+            [$width, $height] = ImageDimensions::fromHead(FileSignature::head($disk, $file->path, ImageDimensions::HEAD_BYTES)) ?? [null, null];
+        }
+
         $file->update([
             'size_bytes' => $realSize,
             'mime_type' => $detected,
@@ -312,8 +321,8 @@ class FileController extends Controller
                rests on. Null for a multipart upload, whose ETag is not an
                MD5 (see File::md5FromEtag). */
             'checksum' => File::md5FromEtag($disk->checksum($file->path)),
-            'width' => $validated['width'] ?? null,
-            'height' => $validated['height'] ?? null,
+            'width' => $width,
+            'height' => $height,
             'status' => File::STATUS_READY,
         ]);
 

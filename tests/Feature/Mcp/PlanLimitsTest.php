@@ -104,6 +104,23 @@ describe('GET /credits limits (get_credits)', function () {
             ->assertJsonPath('data.limits.features.approval_links', true)
             ->assertJsonPath('data.limits.connected_accounts.limit', null);
     });
+
+    it('B10: says whether AI captions really answer, apart from the plan including them', function () {
+        $user = User::factory()->create();
+        Subscription::factory()->for($user)->create();
+        $key = planKey($this, $user, ['read']);
+
+        config(['ai.caption.enabled' => false]);
+        bearer($this, $key)->getJson('/api/v1/credits')
+            ->assertJsonPath('data.limits.features.ai_caption', true)
+            ->assertJsonPath('data.limits.ai_caption_ready', false);
+
+        config(['ai.caption.enabled' => true, 'ai.caption.provider' => 'openai', 'ai.openai.key' => null]);
+        bearer($this, $key)->getJson('/api/v1/credits')->assertJsonPath('data.limits.ai_caption_ready', false);
+
+        config(['ai.caption.provider' => 'fake']);
+        bearer($this, $key)->getJson('/api/v1/credits')->assertJsonPath('data.limits.ai_caption_ready', true);
+    });
 });
 
 describe('Free plan through a real API key', function () {
