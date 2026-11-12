@@ -30,6 +30,7 @@ use App\Http\Controllers\Api\V1\InsightReportController;
 use App\Http\Controllers\Api\V1\InsightSettingsController;
 use App\Http\Controllers\Api\V1\InsightShareController;
 use App\Http\Controllers\Api\V1\InsightSummaryController;
+use App\Http\Controllers\Api\V1\InsightTopPostsController;
 use App\Http\Controllers\Api\V1\McpActivityController;
 use App\Http\Controllers\Api\V1\McpApprovalController;
 use App\Http\Controllers\Api\V1\MeController;
@@ -644,6 +645,10 @@ Route::middleware(['auth:sanctum,mcp', EnforceTokenScope::class, EnsureNotPendin
     Route::get('/insight/summary', InsightSummaryController::class)
         ->middleware('throttle:30,1')
         ->name('api.v1.insight.summary');
+    // The top five posts by engagement (MCP: list_top_posts).
+    Route::get('/insight/top-posts', InsightTopPostsController::class)
+        ->middleware('throttle:30,1')
+        ->name('api.v1.insight.top-posts');
 
     // Proof of delivery. Deliberately not gated on a plan: "on every plan"
     // is what the screen promises, and evidence is not an upsell.

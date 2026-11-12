@@ -55,6 +55,9 @@ final class InsightCollector
 
     public const TOP_POSTS = 3;
 
+    /** GET /insight/top-posts (list_top_posts): the top this many by engagement. */
+    public const TOP_RANKED = 5;
+
     public function __construct(private SocialProviders $providers) {}
 
     /**
@@ -96,6 +99,9 @@ final class InsightCollector
         usort($posts, fn (array $a, array $b) => $b['engagement'] <=> $a['engagement']);
         $top = array_slice($posts, 0, self::TOP_POSTS);
 
+        $ranked = array_merge(...array_map(fn (array $c): array => $c['ranked'], $channels));
+        usort($ranked, fn (array $a, array $b) => $b['engagement'] <=> $a['engagement']);
+
         return [
             'period' => [
                 'from' => $period->from->toDateString(),
@@ -113,6 +119,7 @@ final class InsightCollector
             ],
             'weekly_reach' => $this->weeklyTotal($channels, count($period->weeks())),
             'top_posts' => $top,
+            'top_ranked' => array_slice($ranked, 0, self::TOP_RANKED),
             // Every picture the layouts can show (each channel's top posts):
             // thumb_url => the post's media, first image wins.
             'thumbnail_sources' => array_column(
@@ -249,12 +256,21 @@ final class InsightCollector
                 'engagement' => self::engagement($p['metrics']),
                 'reach' => $p['metrics']['reach'],
                 'views' => $p['metrics']['views'],
+                'channel_id' => $account->ulid,
+                // Ours when it went out through creatif.space; null for one posted elsewhere.
+                'post_id' => $p['external_post_id'],
+                'likes' => $p['metrics']['likes'],
+                'comments' => $p['metrics']['comments'],
+                'shares' => $p['metrics']['shares'],
+                'saves' => $p['metrics']['saves'],
             ])
             ->filter(fn (array $p) => $p['engagement'] !== null)
             ->sortByDesc('engagement')
-            ->take(self::TOP_POSTS)
+            ->take(self::TOP_RANKED)
             ->values()
             ->all();
+        $ranked = $top;
+        $top = array_slice($ranked, 0, self::TOP_POSTS);
 
         $weekly = $inPeriod === null || $current['reach'] === null
             ? null
@@ -276,6 +292,7 @@ final class InsightCollector
             'followers' => $followers,
             'followers_prev_delta' => $followersBefore['delta'],
             'top' => $top,
+            'ranked' => $ranked,
             'weekly_reach' => $weekly,
             'notes' => $notes,
         ], $notes];

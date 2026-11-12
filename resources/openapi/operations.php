@@ -164,6 +164,7 @@ return [
     'api.v1.me.insight-settings.show' => 'Insight settings (monthly email)',
     'api.v1.me.insight-settings.update' => 'Update Insight settings',
     'api.v1.insight.export-link' => 'A short-lived signed link to an Insight PDF',
+    'api.v1.insight.top-posts' => 'The top five posts of a period by engagement',
     'api.v1.insight.clients' => 'Insight clients (workspaces you report on)',
     'api.v1.insight.reports.store' => 'Build an Insight report',
     'api.v1.insight.reports.show' => 'Status and download of an Insight report',
