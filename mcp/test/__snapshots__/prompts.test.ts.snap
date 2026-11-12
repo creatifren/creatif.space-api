@@ -1,0 +1,41 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`prompts/list > prompt names, titles and arguments are stable (clients call them by name) 1`] = `
+[
+  {
+    "arguments": [
+      "month?",
+      "share?",
+    ],
+    "name": "monthly_report",
+    "title": "Monthly report",
+  },
+  {
+    "arguments": [
+      "channel_id",
+      "week_start?",
+      "theme?",
+      "posts?",
+    ],
+    "name": "plan_week",
+    "title": "Plan next week",
+  },
+  {
+    "arguments": [
+      "approver_email",
+      "post_ids?",
+      "client_name?",
+    ],
+    "name": "send_for_approval",
+    "title": "Send to client for approval",
+  },
+  {
+    "arguments": [
+      "month?",
+      "share?",
+    ],
+    "name": "weekly_results",
+    "title": "Weekly results",
+  },
+]
+`;

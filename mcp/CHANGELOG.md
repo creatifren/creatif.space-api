@@ -26,7 +26,7 @@ Added (36):
 
 Resources (new): `creatif://channels`, `creatif://schedule/next-7-days` (read-only, scope `read`).
 
-Prompts (new): `plan_week` (“Plan next week”), `send_for_approval` (“Send to client for approval”), `weekly_results` (“Weekly results”: the last 7 days, or a month; replaces `monthly_report`) (`prompts/list`, `prompts/get`).
+Prompts (new): `plan_week` (“Plan next week”), `send_for_approval` (“Send to client for approval”), `weekly_results` (“Weekly results”: the last 7 days, or a month), `monthly_report` (“Monthly report”, kept for clients that call it by name) (`prompts/list`, `prompts/get`; names, titles and arguments snapshot-tested).
 
 Changed:
 
