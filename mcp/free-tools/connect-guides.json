@@ -29,11 +29,13 @@
   "common": {
     "requirements": [
       {
-        "text": "Room on your plan: Free connects up to 3 social accounts; Pro and Max add more.",
+        "text": "Room on your plan: Free connects up to 3 social accounts; Pro and Max have no limit.",
         "evidence": [
           "database/seeders/PlanSeeder.php:125",
-          "app/Http/Controllers/Api/V1/SocialAccountController.php:110",
-          "app/Http/Controllers/Api/V1/SocialAccountController.php:471"
+          "database/seeders/PlanSeeder.php:95-100",
+          "database/seeders/PlanSeeder.php:146",
+          "database/seeders/PlanSeeder.php:157",
+          "app/Http/Controllers/Api/V1/SocialAccountController.php:110"
         ]
       }
     ],
@@ -163,7 +165,8 @@
             "app/Models/SocialComment.php:38"
           ]
         }
-      ]
+      ],
+      "notes": []
     },
     "facebook": {
       "name": "Facebook",
@@ -204,7 +207,8 @@
             "app/Http/Controllers/Api/V1/InboxCommentController.php:106-108"
           ]
         }
-      ]
+      ],
+      "notes": []
     },
     "linkedin": {
       "name": "LinkedIn",
@@ -233,19 +237,22 @@
             "app/Http/Controllers/Api/V1/OutstandConnectController.php:396-403"
           ]
         }
-      ]
+      ],
+      "notes": []
     },
     "x": {
       "name": "X",
       "flow": "oauth",
       "requirements": [],
-      "common_errors": []
+      "common_errors": [],
+      "notes": []
     },
     "tiktok": {
       "name": "TikTok",
       "flow": "oauth",
       "requirements": [],
-      "common_errors": [
+      "common_errors": [],
+      "notes": [
         {
           "text": "Deleting a post in Creatif Space leaves it on TikTok: TikTok does not let apps delete posts.",
           "evidence": [
@@ -259,7 +266,8 @@
       "name": "Threads",
       "flow": "oauth",
       "requirements": [],
-      "common_errors": [
+      "common_errors": [],
+      "notes": [
         {
           "text": "Deleting a post in Creatif Space leaves it on Threads: Threads does not let apps delete posts.",
           "evidence": [
@@ -273,7 +281,8 @@
       "name": "YouTube",
       "flow": "oauth",
       "requirements": [],
-      "common_errors": []
+      "common_errors": [],
+      "notes": []
     },
     "pinterest": {
       "name": "Pinterest",
@@ -300,7 +309,8 @@
             "app/Http/Controllers/Api/V1/PinterestBoardController.php:30-31"
           ]
         }
-      ]
+      ],
+      "notes": []
     },
     "bluesky": {
       "name": "Bluesky",
@@ -329,7 +339,8 @@
             "app/Http/Controllers/Api/V1/SocialAccountController.php:158-160"
           ]
         }
-      ]
+      ],
+      "notes": []
     }
   }
 }

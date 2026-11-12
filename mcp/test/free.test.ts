@@ -222,6 +222,7 @@ describe('connect_guide', () => {
       expect(g.steps.at(-1)).toBe("You're back in Channels with the account listed.");
       expect(g.requirements.length).toBeGreaterThan(0);
       expect(g.common_errors.length).toBeGreaterThan(0);
+      expect(Array.isArray(g.notes)).toBe(true);
       expect(g.help_url).toBe('https://creatif.space/social/connect');
       expect(JSON.stringify(g)).not.toMatch(/\.php|evidence|\{network\}/);
     }
@@ -238,10 +239,29 @@ describe('connect_guide', () => {
     expect(connectGuide({ network: 'x' }).steps).toContain('Sign in on X\'s own page.');
   });
 
+  it('plan room states what PlanSeeder says: Free 3, Pro and Max no limit', () => {
+    const seeder = readFileSync(new URL('../../database/seeders/PlanSeeder.php', import.meta.url), 'utf8').split('\n');
+    expect(seeder[124]).toContain("'social_accounts' => 3,");
+    expect(seeder[99]).toContain("'social_accounts' => null,");
+    expect(seeder[94]).toContain('null = no limit');
+    expect(seeder[145]).toContain('$paidQuotas');
+    expect(seeder[156]).toContain('$paidQuotas');
+    const line = 'Room on your plan: Free connects up to 3 social accounts; Pro and Max have no limit.';
+    for (const network of CONNECT_NETWORKS) expect(connectGuide({ network }).requirements).toContain(line);
+  });
+
+  it('TikTok and Threads delete behaviour is a note, not a connect error', () => {
+    for (const network of ['tiktok', 'threads'] as const) {
+      const g = connectGuide({ network });
+      expect(g.notes.join(' ')).toContain('does not let apps delete posts');
+      expect(g.common_errors.join(' ')).not.toContain('delete posts');
+    }
+  });
+
   it('every evidence reference points at a real file and line in this repo', () => {
     const items = [
       ...Object.values(CONNECT_GUIDES.common).flat(),
-      ...Object.values(CONNECT_GUIDES.networks).flatMap((n) => [...n.requirements, ...n.common_errors]),
+      ...Object.values(CONNECT_GUIDES.networks).flatMap((n) => [...n.requirements, ...n.common_errors, ...n.notes]),
     ];
     for (const item of items) {
       expect(item.evidence.length, item.text).toBeGreaterThan(0);
