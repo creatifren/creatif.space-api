@@ -24,6 +24,7 @@ use App\Jobs\SendMonthlyInsightReports;
 use App\Jobs\SendWeeklyDigests;
 use App\Jobs\SnapshotFollowerCounts;
 use App\Jobs\SyncInboxes;
+use App\Support\SchedulerHeartbeat;
 use Illuminate\Foundation\Inspiring;
 use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\Schedule;
@@ -162,6 +163,9 @@ Schedule::command('accounts:purge-deleted')->dailyAt('03:25')->withoutOverlappin
  * logged as a warning (health.selfcheck_failed) naming the failed checks.
  */
 Schedule::command('health:selfcheck')->everyFiveMinutes()->withoutOverlapping();
+
+// The scheduler's pulse: GET /api/v1/health reports it as scheduler_last_tick.
+Schedule::call(new SchedulerHeartbeat)->everyMinute()->name('scheduler:heartbeat');
 
 /*
  * The monthly Insight email: on the 1st at 09:00 workspace time (the app's
