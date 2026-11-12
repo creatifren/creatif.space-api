@@ -28,6 +28,7 @@ exports[`tool first lines > match the snapshot 1`] = `
   "list_approval_links": "Use to see every approval link of the workspace and how far each one got.",
   "list_channels": "Use first, before any draft or send: the only source of channel ids. Step 1 of the plan_week prompt.",
   "list_conversations": "Use to read comments and DMs on the connected channels, newest first.",
+  "list_failed_posts": "Use when the user asks what did not go out or why: last 30 days, code and reason; then retry_post.",
   "list_files": "Use to attach media already in the library: returns file ids for draft_post or update_post.",
   "list_posts": "Use to find post ids or see what is planned; plan_week and send_for_approval prompts start from it.",
   "list_shared_with_me": "Use when the user asks what others shared with them to look at: plans and reports.",

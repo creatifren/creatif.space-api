@@ -19,6 +19,7 @@ export const FIRST_LINES: Record<string, string> = {
   get_post: 'Use for one post’s full detail and review thread; send_for_approval prompt checks each post with it.',
   suggest_caption: 'Use when the user wants a caption written in their style; the plan_week prompt drafts with it.',
   draft_post: 'Use to save any new post safely as a draft (no send, no Credits); the plan_week prompt saves with it.',
+  list_failed_posts: 'Use when the user asks what did not go out or why: last 30 days, code and reason; then retry_post.',
   update_post: 'Use to change a draft or a post waiting for approval: caption, time, labels or media.',
   discard_draft: 'Use when the user wants a draft deleted for good; previews first, confirm: true deletes.',
   schedule_post: 'Use when the user wants a draft sent later; previews channels and Credits, confirm: true schedules.',
