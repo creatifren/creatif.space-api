@@ -69,6 +69,8 @@ return [
         'api.v1.me.subscription' => 'read',
         // get_insight_summary: Pro / Max (402 plan_required on Free).
         'api.v1.insight.summary' => 'read',
+        // get_insight_report_link: a 15-minute signed PDF link (Pro / Max).
+        'api.v1.insight.export-link' => 'read',
         // Drafts only: EnforceTokenScope refuses a body that would send,
         // schedule or ask for approval.
         'api.v1.social-posts.store' => 'draft',
