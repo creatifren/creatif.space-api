@@ -24,6 +24,7 @@ import { connectTools } from './tools/connect.js';
 import { feedbackTools } from './tools/feedback.js';
 import { V1Client } from './v1.js';
 import { VERSION } from './version.js';
+import { registerPrompts } from './prompts.js';
 import { mcpCors } from './cors.js';
 import { DEFAULT_FREE_RATE_LIMIT, DEFAULT_GLAMA_CLAIM } from './config.js';
 import { mountFree } from './free/server.js';
@@ -66,6 +67,7 @@ export function buildMcpServer(auth: CallerAuth, deps: AppDeps): McpServer {
   for (const tool of tools) {
     registerTool(server, tool, { auth, v1, analytics: deps.analytics });
   }
+  registerPrompts(server);
   structureSdkErrors(server, tools.map((t) => t.name));
   return server;
 }
