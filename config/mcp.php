@@ -83,6 +83,8 @@ return [
         'api.v1.social-posts.send' => 'publish',
         'api.v1.social-approval-links.store' => 'approve',
         'api.v1.social-approval-links.show' => 'read',
+        // get_approval_audit: the owner's own link, as CSV.
+        'api.v1.social-approval-links.audit' => 'read',
 
         // Media (request_media_upload / confirm_media_upload): the same
         // presign and complete as the app — limits, quota and the
