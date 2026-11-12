@@ -7,11 +7,11 @@ Versions of the remote MCP server at `https://mcp.creatif.space/mcp`
 
 ## 0.3.0 — 2026-11-12
 
-38 tools (was 11). Every description follows the agent shape (what / when to
+39 tools (was 11). Every description follows the agent shape (what / when to
 use / example / errors → next step, #78), and every error is
 `{code, message, next_step, details}` (#76).
 
-Added (27):
+Added (28):
 
 - **Posts:** `discard_draft` (preview first; drafts only), `suggest_caption` (AI caption + hashtags; `not_enabled` while the flag is off)
 - **Approvals:** `create_content_plan` (preview → `confirm: true` creates a Content Plan and emails the approver), `send_approval_reminder`, `list_approval_links`, `get_approval_audit`, `get_approval_history` (one post’s decisions, email masked), `get_plan_calendar_link` (Content Plan ICS feed, read-only); approver side `list_waiting_approvals`, `decide_approval`, `list_shared_with_me` (scope `approvals:decide`)
@@ -21,6 +21,7 @@ Added (27):
 - **Spaces:** `list_spaces`, `create_space_from_files`, `publish_space`
 - **Engage:** `list_conversations`, `reply_to_conversation`
 - **Feedback:** `send_feedback`
+- **Account:** `get_account_summary` (plan, limits left, Credits, channels, storage in one call)
 
 Resources (new): `creatif://channels`, `creatif://schedule/next-7-days` (read-only, scope `read`).
 

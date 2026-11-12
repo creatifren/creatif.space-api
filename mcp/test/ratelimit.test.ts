@@ -19,6 +19,7 @@ const ARGS: Record<string, Record<string, unknown>> = {
   get_post: { post_id: ID },
   list_files: {},
   draft_post: { caption: 'Hello', channel_ids: [ID] },
+  get_account_summary: {},
   get_credits: {},
   create_approval_link: { approver_email: 'client@example.com', post_ids: [ID] },
   create_content_plan: { approver_email: 'client@example.com', date_from: '2026-12-01', date_to: '2026-12-07' },
