@@ -26,7 +26,7 @@ exports[`tool first lines > match the snapshot 1`] = `
   "get_storage_usage": "Use before a big upload or when the user asks what will be deleted and when.",
   "keep_file": "Use when a library file must never be deleted automatically.",
   "list_approval_links": "Use to see every approval link of the workspace and how far each one got.",
-  "list_channels": "Use first, before any draft or send: the only source of channel ids. Step 1 of the plan_week prompt.",
+  "list_channels": "Use first, before any draft or send: the only source of channel ids (step 1 of the plan_week prompt).",
   "list_conversations": "Use to read comments and DMs on the connected channels, newest first.",
   "list_failed_posts": "Use when the user asks what did not go out or why: last 30 days, code and reason; then retry_post.",
   "list_files": "Use to attach media already in the library: returns file ids for draft_post or update_post.",
