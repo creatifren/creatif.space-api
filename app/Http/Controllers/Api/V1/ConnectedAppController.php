@@ -5,8 +5,10 @@ namespace App\Http\Controllers\Api\V1;
 use App\Http\Controllers\Controller;
 use App\Mcp\OAuthRevoker;
 use App\Models\User;
+use DateTimeInterface;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Carbon;
 use Laravel\Passport\Client;
 use Laravel\Passport\Token;
 
@@ -15,6 +17,8 @@ use Laravel\Passport\Token;
  * holds a live grant for this user, and a way to cut it off. Disconnecting
  * revokes every access and refresh token the client holds for the user;
  * the client's registration itself stays (other people may use it).
+ * `last_used_at` is the newest use of any of the app's live tokens, written
+ * by McpTokenResolver at most once per 5 minutes per token.
  */
 class ConnectedAppController extends Controller
 {
@@ -43,10 +47,34 @@ class ConnectedAppController extends Controller
                 'scopes' => $grants->pluck('scopes')->flatten()->unique()->values()->all(),
                 'connected_at' => $grants->min('created_at')?->toIso8601String(),
                 'last_authorized_at' => $latest->created_at?->toIso8601String(),
+                // The latest use of any of this app's live tokens; null if
+                // none has called the API since this was recorded.
+                'last_used_at' => self::lastUsed($grants->all()),
             ];
         })->values();
 
         return response()->json(['data' => $apps]);
+    }
+
+    /**
+     * The newest last_used_at among the tokens, ISO 8601, or null.
+     *
+     * @param  array<int, Token>  $tokens
+     */
+    private static function lastUsed(array $tokens): ?string
+    {
+        $newest = null;
+        foreach ($tokens as $token) {
+            $raw = $token->getAttribute('last_used_at');
+            $at = $raw instanceof DateTimeInterface
+                ? Carbon::instance($raw)
+                : (is_string($raw) && $raw !== '' ? Carbon::parse($raw) : null);
+            if ($at !== null && ($newest === null || $at->gt($newest))) {
+                $newest = $at;
+            }
+        }
+
+        return $newest?->toIso8601String();
     }
 
     public function destroy(Request $request, string $clientId, OAuthRevoker $revoker): JsonResponse

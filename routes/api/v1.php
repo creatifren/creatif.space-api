@@ -5,6 +5,7 @@ use App\Http\Controllers\Api\V1\AffiliateController;
 use App\Http\Controllers\Api\V1\AiCaptionController;
 use App\Http\Controllers\Api\V1\AnalyticsController;
 use App\Http\Controllers\Api\V1\ApiKeyController;
+use App\Http\Controllers\Api\V1\ApprovalAuditController;
 use App\Http\Controllers\Api\V1\CaptionAssistController;
 use App\Http\Controllers\Api\V1\ConnectedAppController;
 use App\Http\Controllers\Api\V1\CreditsController;
@@ -22,7 +23,11 @@ use App\Http\Controllers\Api\V1\InboxCommentController;
 use App\Http\Controllers\Api\V1\InboxController;
 use App\Http\Controllers\Api\V1\InboxFeedController;
 use App\Http\Controllers\Api\V1\InsightExportController;
+use App\Http\Controllers\Api\V1\InsightPdfExportController;
 use App\Http\Controllers\Api\V1\InsightReportController;
+use App\Http\Controllers\Api\V1\InsightSettingsController;
+use App\Http\Controllers\Api\V1\InsightShareController;
+use App\Http\Controllers\Api\V1\InsightSummaryController;
 use App\Http\Controllers\Api\V1\McpActivityController;
 use App\Http\Controllers\Api\V1\McpApprovalController;
 use App\Http\Controllers\Api\V1\MeController;
@@ -33,8 +38,10 @@ use App\Http\Controllers\Api\V1\PinterestBoardController;
 use App\Http\Controllers\Api\V1\ProfileFontController;
 use App\Http\Controllers\Api\V1\PublicApprovalController;
 use App\Http\Controllers\Api\V1\PublicHealthController;
+use App\Http\Controllers\Api\V1\PublicInsightController;
 use App\Http\Controllers\Api\V1\PublicProfileController;
 use App\Http\Controllers\Api\V1\PublicSpaceController;
+use App\Http\Controllers\Api\V1\ReminderOptOutController;
 use App\Http\Controllers\Api\V1\SocialAccountController;
 use App\Http\Controllers\Api\V1\SocialApprovalController;
 use App\Http\Controllers\Api\V1\SocialFeedController;
@@ -78,6 +85,18 @@ Route::get('/plans', [SubscriptionController::class, 'plans'])
 Route::get('/health', PublicHealthController::class)
     ->middleware('throttle:60,1')
     ->name('api.v1.health');
+
+// A shared Insight page's data ({frontend}/report/{token}): the token is
+// the credential. 410 when expired, 404 when unknown or revoked.
+Route::get('/public/insight/{token}', PublicInsightController::class)
+    ->middleware('throttle:60,1')
+    ->name('api.v1.public.insight.show');
+
+// A signed Insight PDF link (POST /insight/export-link, 15 minutes): the
+// signature is the credential; the plan is checked again on use.
+Route::get('/insight/export.pdf/signed', [InsightPdfExportController::class, 'signed'])
+    ->middleware(['signed', 'throttle:10,1'])
+    ->name('api.v1.insight.export.signed');
 
 // For an external uptime monitor: every dependency, behind HEALTH_TOKEN
 // (404 when unset). /up stays the cheap public liveness probe.
@@ -207,6 +226,17 @@ Route::withoutMiddleware([EnsureFrontendRequestsAreStateful::class])
         Route::post('/a/{token}/email-link', [PublicApprovalController::class, 'emailLink'])
             ->middleware('throttle:5,1')
             ->name('api.v1.approval-links.email-link');
+    });
+
+// Content Plan reminder opt-out, from the reminder email: the signed URL is
+// the credential (one link, expires). GET shows a button, POST turns it off.
+Route::withoutMiddleware([EnsureFrontendRequestsAreStateful::class])
+    ->middleware(['signed', 'throttle:20,1'])
+    ->group(function () {
+        Route::get('/approval-reminders/{link}/off', [ReminderOptOutController::class, 'show'])
+            ->name('api.v1.approval-links.reminders-off');
+        Route::post('/approval-reminders/{link}/off', [ReminderOptOutController::class, 'store'])
+            ->name('api.v1.approval-links.reminders-off.store');
     });
 
 // Content Plan share link — read-only, the token is the credential.
@@ -363,6 +393,10 @@ Route::middleware(['auth:sanctum,mcp', EnforceTokenScope::class, EnsureNotPendin
         ->name('api.v1.social-approval-links.store');
     Route::get('/social-approval-links/{socialApprovalLink}', [SocialApprovalController::class, 'show'])
         ->name('api.v1.social-approval-links.show');
+    // Who decided what, when, and their comment (MCP get_approval_audit).
+    Route::get('/social-approval-links/{socialApprovalLink}/audit.csv', ApprovalAuditController::class)
+        ->middleware('throttle:30,1')
+        ->name('api.v1.social-approval-links.audit');
     Route::patch('/social-approval-links/{socialApprovalLink}', [SocialApprovalController::class, 'update'])
         ->middleware('throttle:30,1')
         ->name('api.v1.social-approval-links.update');
@@ -500,6 +534,10 @@ Route::middleware(['auth:sanctum,mcp', EnforceTokenScope::class, EnsureNotPendin
     Route::post('/spaces/{space}/items', [SpaceController::class, 'addItems'])
         ->middleware('throttle:60,1')
         ->name('api.v1.spaces.items.store');
+    // What publishing would put live; a connected app's confirm_token (publish_space).
+    Route::get('/spaces/{space}/publish-preview', [SpaceController::class, 'publishPreview'])
+        ->middleware('throttle:60,1')
+        ->name('api.v1.spaces.publish-preview');
     Route::post('/spaces/{space}/publish', [SpaceController::class, 'publish'])->name('api.v1.spaces.publish');
     Route::post('/spaces/{space}/unpublish', [SpaceController::class, 'unpublish'])->name('api.v1.spaces.unpublish');
     Route::post('/spaces/{space}/archive', [SpaceController::class, 'archive'])->name('api.v1.spaces.archive');
@@ -514,6 +552,24 @@ Route::middleware(['auth:sanctum,mcp', EnforceTokenScope::class, EnsureNotPendin
     Route::get('/insight/export.csv', InsightExportController::class)
         ->middleware('throttle:10,1')
         ->name('api.v1.insight.export');
+    // The Insight PDF as a direct download (the app's Export menu), and a
+    // short-lived signed link to it for connected apps (MCP).
+    Route::get('/insight/export.pdf', [InsightPdfExportController::class, 'download'])
+        ->middleware('throttle:10,1')
+        ->name('api.v1.insight.export.pdf');
+    // Shareable Insight links (Pro / Max): make, list, revoke.
+    Route::post('/insight/share', [InsightShareController::class, 'store'])
+        ->middleware('throttle:20,1')
+        ->name('api.v1.insight.share.store');
+    Route::get('/insight/share', [InsightShareController::class, 'index'])->name('api.v1.insight.share.index');
+    Route::delete('/insight/share/{insightShareLink}', [InsightShareController::class, 'destroy'])->name('api.v1.insight.share.destroy');
+
+    // Settings → Insight: the monthly email (opt-in, owner, Pro / Max).
+    Route::get('/me/insight-settings', [InsightSettingsController::class, 'show'])->name('api.v1.me.insight-settings.show');
+    Route::patch('/me/insight-settings', [InsightSettingsController::class, 'update'])->name('api.v1.me.insight-settings.update');
+    Route::post('/insight/export-link', [InsightPdfExportController::class, 'link'])
+        ->middleware('throttle:20,1')
+        ->name('api.v1.insight.export-link');
 
     // Insight → Export PDF (design pick #8). Pro / Max; POST queues a build.
     Route::get('/insight/clients', [InsightReportController::class, 'clients'])->name('api.v1.insight.clients');
@@ -521,6 +577,10 @@ Route::middleware(['auth:sanctum,mcp', EnforceTokenScope::class, EnsureNotPendin
         ->middleware('throttle:10,1')
         ->name('api.v1.insight.reports.store');
     Route::get('/insight/reports/{insightReport}', [InsightReportController::class, 'show'])->name('api.v1.insight.reports.show');
+    // The same numbers without the PDF (MCP: get_insight_summary).
+    Route::get('/insight/summary', InsightSummaryController::class)
+        ->middleware('throttle:30,1')
+        ->name('api.v1.insight.summary');
 
     // Proof of delivery. Deliberately not gated on a plan: "on every plan"
     // is what the screen promises, and evidence is not an upsell.
@@ -564,7 +624,7 @@ Route::middleware(['auth:sanctum,mcp', EnforceTokenScope::class, EnsureNotPendin
     Route::post('/me/approvals/{post}/decision', [McpApprovalController::class, 'decide'])
         ->middleware('throttle:30,1')
         ->name('api.v1.me.approvals.decide');
-    // "Reports shared with you" — not built yet: always [] in its final shape.
+    // "Reports shared with you": Content Plans sent to my verified email (Insight share links are token-only, addressed to nobody, so they are not listed).
     Route::get('/me/reports/shared', [SocialApprovalController::class, 'sharedReports'])->name('api.v1.me.reports.shared');
     // Show a draft to the client on a Content Plan covering its date.
     Route::post('/social-posts/{socialPost}/review', [SocialApprovalController::class, 'markForReview'])

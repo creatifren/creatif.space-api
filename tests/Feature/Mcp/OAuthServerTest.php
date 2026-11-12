@@ -2,6 +2,7 @@
 
 use App\Models\SocialAccount;
 use App\Models\User;
+use Illuminate\Support\Facades\DB;
 use Laravel\Passport\Client;
 use Laravel\Passport\ClientRepository;
 use Laravel\Passport\RefreshToken;
@@ -310,6 +311,58 @@ describe('revocation', function () {
         $this->deleteJson('/api/v1/me/connected-apps/'.$client->getKey())->assertNotFound();
 
         bearer($this, $tokens['access_token'])->getJson('/api/v1/me')->assertUnauthorized();
+    });
+
+    it('records last use of an access token at most once per 5 minutes and lists it', function () {
+        $client = mcpClient();
+        $user = User::factory()->create();
+        $tokens = oauthTokens($this, $user, $client, 'read draft');
+        $token = fn () => Token::query()->where('user_id', $user->getKey())->where('revoked', false)->sole();
+
+        expect($token()->getAttribute('last_used_at'))->toBeNull();
+        $this->actingAs($user, 'web')->getJson('/api/v1/me/connected-apps')->assertJsonPath('data.0.last_used_at', null);
+        auth()->forgetGuards();
+
+        $this->travelTo(now()->startOfMinute());
+        bearer($this, $tokens['access_token'])->getJson('/api/v1/me')->assertOk();
+        $first = Carbon\Carbon::parse($token()->getAttribute('last_used_at'));
+        expect($first->equalTo(now()))->toBeTrue();
+
+        // Within 5 minutes: no new write.
+        $this->travel(4)->minutes();
+        auth()->forgetGuards();
+        DB::enableQueryLog();
+        bearer($this, $tokens['access_token'])->getJson('/api/v1/me')->assertOk();
+        $writes = collect(DB::getQueryLog())->filter(fn ($q) => preg_match('/^\s*update\W+oauth_access_tokens\W/i', $q['query']) === 1);
+        DB::disableQueryLog();
+        expect($writes)->toHaveCount(0);
+        expect(Carbon\Carbon::parse($token()->getAttribute('last_used_at'))->equalTo($first))->toBeTrue();
+
+        // Past 5 minutes: written again.
+        $this->travel(2)->minutes();
+        auth()->forgetGuards();
+        bearer($this, $tokens['access_token'])->getJson('/api/v1/me')->assertOk();
+        $second = Carbon\Carbon::parse($token()->getAttribute('last_used_at'));
+        expect($second->equalTo(now()))->toBeTrue();
+
+        auth()->forgetGuards();
+        $this->actingAs($user, 'web')
+            ->getJson('/api/v1/me/connected-apps')
+            ->assertOk()
+            ->assertJsonPath('data.0.last_used_at', $second->toIso8601String());
+    });
+
+    it('never shows another user\'s use of the same app', function () {
+        $client = mcpClient();
+        $me = User::factory()->create();
+        $other = User::factory()->create();
+        oauthTokens($this, $me, $client);
+        $theirs = oauthTokens($this, $other, $client);
+        auth()->forgetGuards();
+        bearer($this, $theirs['access_token'])->getJson('/api/v1/me')->assertOk();
+        auth()->forgetGuards();
+
+        $this->actingAs($me, 'web')->getJson('/api/v1/me/connected-apps')->assertJsonPath('data.0.last_used_at', null);
     });
 
     it('does not let a suspended account use its tokens', function () {

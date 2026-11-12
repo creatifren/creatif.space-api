@@ -10,7 +10,6 @@ use App\Support\Insight\InsightClients;
 use App\Support\Insight\InsightPeriod;
 use App\Support\PlanQuota;
 use App\Support\Workspace;
-use Carbon\CarbonImmutable;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Validation\ValidationException;
@@ -56,7 +55,7 @@ class InsightReportController extends Controller
             throw ValidationException::withMessages(['client_id' => 'Unknown client.']);
         }
 
-        $period = $this->period($validated['period']);
+        $period = InsightPeriod::fromInput($validated['period']);
 
         $available = InsightClients::accounts($owner)->pluck('ulid')->all();
         $channels = array_values($validated['channel_ids'] ?? $available);
@@ -131,36 +130,5 @@ class InsightReportController extends Controller
             'expired' => $done && $report->expired(),
             'created_at' => $report->created_at?->toIso8601String(),
         ];
-    }
-
-    /**
-     * @param  array<string, mixed>  $input
-     */
-    private function period(array $input): InsightPeriod
-    {
-        $today = CarbonImmutable::now(config('app.timezone'))->startOfDay();
-
-        if (! empty($input['month'])) {
-            $period = InsightPeriod::month($input['month']);
-            if ($period->from->greaterThan($today)) {
-                throw ValidationException::withMessages(['period.month' => 'That month has not started yet.']);
-            }
-
-            return $period;
-        }
-
-        $period = InsightPeriod::range((string) $input['from'], (string) $input['to']);
-
-        if ($period->to->lessThan($period->from)) {
-            throw ValidationException::withMessages(['period.to' => 'The end date is before the start date.']);
-        }
-        if ($period->from->greaterThan($today)) {
-            throw ValidationException::withMessages(['period.from' => 'That period has not started yet.']);
-        }
-        if ($period->days() > InsightPeriod::MAX_DAYS) {
-            throw ValidationException::withMessages(['period.to' => 'A report covers at most '.InsightPeriod::MAX_DAYS.' days.']);
-        }
-
-        return $period;
     }
 }

@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import { account, post } from './fixtures.js';
 import { payload, startApp, TOKEN_ALL, TOKEN_READ, USER } from './helpers.js';
+import { renewal } from '../src/tools/m1.js';
 
 const IG = '01JACCTACCTACCTACCTACCTIG1';
 const X = '01JACCTACCTACCTACCTACCTXX1';
@@ -240,7 +241,39 @@ describe('get_credits', () => {
       features: limits.features,
       mcp_daily_sends: limits.mcp_daily_sends,
       urls: limits.urls,
+      renewal: { resets_at: '2026-12-01T00:00:00+00:00', days_until: expect.any(Number) },
     });
+  });
+
+  it('adds this month’s spend by action from limits.spend', async () => {
+    const res = await call('get_credits', {}, {
+      'GET /credits': () => ({
+        body: { data: { plan: 'pro', limits: { spend: { since: '2026-11-01T00:00:00+00:00', by_action: { publish: 900, reply: 20, ai: 0, total: 920 } } } } },
+      }),
+    });
+    expect(payload(res).spend).toEqual({ since: '2026-11-01T00:00:00+00:00', by_action: { publish: 900, reply: 20, ai: 0 }, total: 920 });
+  });
+
+  it('leaves spend and renewal out when an older API does not send them', async () => {
+    const out = payload(await call('get_credits', {}, { 'GET /credits': () => ({ body: { data: { plan: 'pro', limits: {} } } }) }));
+    expect(out.spend).toBeUndefined();
+    expect(out.renewal).toBeUndefined();
+  });
+
+  it('counts whole days until renewal, 0 on the day', () => {
+    const now = Date.parse('2026-11-12T10:00:00Z');
+    expect(renewal('2026-12-01T00:00:00+00:00', now)).toEqual({ resets_at: '2026-12-01T00:00:00+00:00', days_until: 19 });
+    expect(renewal('2026-11-12T00:00:00Z', now)!.days_until).toBe(0);
+    expect(renewal('2026-11-13T09:00:00Z', now)!.days_until).toBe(1);
+    expect(renewal('not a date', now)).toBeUndefined();
+    expect(renewal(undefined, now)).toBeUndefined();
+  });
+
+  it('says what spend and renewal mean in the description', async () => {
+    app = await startApp();
+    const d = (await (await app.connect()).listTools()).tools.find((t) => t.name === 'get_credits')!.description!;
+    expect(d).toMatch(/spend by action \(publish, reply, ai/);
+    expect(d).toMatch(/days until the Monthly Credits renew/);
   });
 
   it('never passes on committed.rent, even from an older API that still sends it', async () => {

@@ -4,6 +4,7 @@ namespace App\Http\Resources;
 
 use App\Models\User;
 use App\Support\AccountDeletion;
+use App\Support\PlanQuota;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
 
@@ -53,6 +54,9 @@ class UserResource extends JsonResource
             // What this API supports, for an app that ships ahead of it.
             'capabilities' => [
                 'account_deletion' => true,
+                // The Insight PDF export (GET /insight/export.pdf): Pro and
+                // Max — the app shows its Export menu when true.
+                'insight_export' => PlanQuota::hasFeature($this->resource, 'insight'),
             ],
         ];
     }

@@ -6,6 +6,7 @@ export type ErrorCode =
   | 'plan_required'
   | 'not_found'
   | 'unknown_tool'
+  | 'not_enabled'
   | 'invalid_input'
   | 'unauthorized'
   | 'forbidden'
@@ -322,6 +323,15 @@ function mediaError(status: number, body: Record<string, unknown>, message: stri
   const billing = str(body.billing_url);
   const files = str(body.files_url);
 
+  // Keep on Free: not a full quota but a paid feature (Free has no Keep).
+  if (reason === 'quota_exceeded' && body.feature === 'keep_quota' && body.next_step === 'upgrade_pro') {
+    return new ToolError(
+      'plan_required',
+      message,
+      `Nothing was kept. Tell the user Keep is on Pro and Max${billing ? ` (upgrade: ${billing})` : ''}; on Free, files used by a published post are removed after it goes out. Do not retry.`,
+      { reason: 'plan_limit', ...pick(body, ['feature', 'next_step', 'billing_url', 'files_url']) },
+    );
+  }
   if (reason === 'quota_exceeded' && (body.feature === 'media_quota' || body.feature === 'keep_quota')) {
     const freeUp =
       body.feature === 'media_quota'

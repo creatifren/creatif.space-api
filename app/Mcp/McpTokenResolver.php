@@ -4,8 +4,10 @@ namespace App\Mcp;
 
 use App\Enums\UserStatus;
 use App\Models\User;
+use DateTimeInterface;
 use GuzzleHttp\Psr7\ServerRequest;
 use Illuminate\Http\Request;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Log;
 use Laravel\Passport\Client;
 use Laravel\Passport\Token;
@@ -128,6 +130,8 @@ class McpTokenResolver
             return null;
         }
 
+        $this->touchAccessToken($token);
+
         $scopes = array_values(array_intersect(
             (array) $psr->getAttribute('oauth_scopes', []),
             array_keys((array) config('mcp.scopes')),
@@ -143,6 +147,28 @@ class McpTokenResolver
             expiresAt: $token->expires_at?->getTimestamp(),
             issuedAt: $token->created_at?->getTimestamp(),
         );
+    }
+
+    /** How stale last_used_at may get before the next request writes it. */
+    public const LAST_USED_EVERY_SECONDS = 300;
+
+    /**
+     * Records when an OAuth access token was last used (Connected apps:
+     * "Last used …"). The row is already loaded above, so a fresh value
+     * costs nothing; otherwise one UPDATE, at most once per 5 minutes per
+     * token. A plain query update: no model events, no updated_at.
+     */
+    private function touchAccessToken(Token $token): void
+    {
+        $raw = $token->getAttribute('last_used_at');
+        $last = $raw instanceof DateTimeInterface
+            ? Carbon::instance($raw)
+            : (is_string($raw) && $raw !== '' ? Carbon::parse($raw) : null);
+        if ($last !== null && $last->gt(now()->subSeconds(self::LAST_USED_EVERY_SECONDS))) {
+            return;
+        }
+
+        Token::query()->whereKey($token->getKey())->update(['last_used_at' => now()]);
     }
 
     private function usable(User $user): bool
