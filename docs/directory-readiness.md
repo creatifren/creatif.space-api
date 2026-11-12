@@ -13,7 +13,7 @@ Rizal's step. Runbook: [`directory-review.md`](directory-review.md).
 | G5 | Log hygiene: emails, names, tokens and user text redacted; retention documented; internal ids trimmed from MCP output | Done | [#154](https://github.com/creatifren/creatif.space-api/pull/154) `c4b4590` | Any log line: addresses read `[email]`, tokens `[token]`. Retention: [`logging.md`](logging.md). |
 | G6 | Directory test pack: 5 positive, 3 negative prompts for the reviewer account | Done | [#159](https://github.com/creatifren/creatif.space-api/pull/159) `423b0c2` | QA runs [`mcp/docs/directory-test-pack.md`](../mcp/docs/directory-test-pack.md) in Claude and ChatGPT. |
 | G7 | — | Not in this work stream | — | — |
-| G8 | `GET https://mcp.creatif.space/.well-known/openai-apps-challenge` from `OPENAI_APPS_CHALLENGE` | Done (code); value pending | [#155](https://github.com/creatifren/creatif.space-api/pull/155) `d8e4e0e` | `curl -i` that URL: `200 text/plain` with the token once set; `404` until then. |
+| G8 | `GET https://mcp.creatif.space/.well-known/openai-apps-challenge` from `OPENAI_APPS_CHALLENGE` | Done (code); value pending | [#155](https://github.com/creatifren/creatif.space-api/pull/155) `d8e4e0e` | `php artisan mcp:check-openai-challenge` (never prints the token; compares by hash if the API env has it), or `curl -i` that URL: `200 text/plain` once set, `404` until then. |
 | G9 | OAuth hygiene: dead refresh token → `invalid_grant`, refresh rotation, Claude + loopback callbacks, endpoints < 10 s | Done | [#156](https://github.com/creatifren/creatif.space-api/pull/156) `a7ee620` | Reuse a refresh token after one refresh: `400 {"error":"invalid_grant"}`. CI: `OAuthHygieneTest`. |
 | G10 | OAuth Client ID Metadata Documents next to DCR | Done | [#165](https://github.com/creatifren/creatif.space-api/pull/165) `376125e` | `/.well-known/oauth-authorization-server` has `client_id_metadata_document_supported: true` and `registration_endpoint`. CI: `ClientMetadataDocumentTest`. |
 
@@ -25,7 +25,7 @@ These are deliberately not done in code and need a person with production
 access. No values belong in this repository.
 
 1. **`OPENAI_APPS_CHALLENGE`** — paste the token OpenAI gives into the MCP
-   server's environment and restart it; then check the G8 URL returns it.
+   server's environment and restart it; then `php artisan mcp:check-openai-challenge` must say OK.
 2. **Reviewer account** — create the account, add the sample data from the
    test pack, run `php artisan reviewer:grant <email>`, and hand the printed
    password to the directory through its own form only.

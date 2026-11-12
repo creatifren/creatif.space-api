@@ -48,6 +48,11 @@ return [
     'privacy_url' => env('MCP_PRIVACY_URL', 'https://creatif.space/privacy'),
     'terms_url' => env('MCP_TERMS_URL', 'https://creatif.space/terms'),
 
+    // OpenAI Apps domain-verification token, if this environment has it.
+    // Only `php artisan mcp:check-openai-challenge` reads it, to compare
+    // hashes with what the MCP server serves; it is never printed.
+    'openai_apps_challenge' => env('OPENAI_APPS_CHALLENGE'),
+
     // MCP audit log rows are deleted after this many days (privacy page).
     'audit_retention_days' => (int) env('MCP_AUDIT_RETENTION_DAYS', 90),
 
