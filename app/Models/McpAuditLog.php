@@ -17,6 +17,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
  * @property string|null $route
  * @property string $method
  * @property int $status
+ * @property int|null $duration_ms
  * @property string|null $ip
  * @property CarbonImmutable|null $created_at
  */
@@ -30,6 +31,7 @@ class McpAuditLog extends Model
     {
         return [
             'status' => 'integer',
+            'duration_ms' => 'integer',
             'created_at' => 'datetime',
         ];
     }
