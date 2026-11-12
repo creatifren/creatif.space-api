@@ -6,6 +6,7 @@ use App\Models\File;
 use App\Models\FileVersion;
 use App\Models\Folder;
 use App\Models\InsightReport;
+use App\Models\InsightShareLink;
 use App\Models\Plan;
 use App\Models\SocialAccount;
 use App\Models\SocialApprovalLink;
@@ -17,6 +18,7 @@ use App\Models\SocialPostComment;
 use App\Models\Space;
 use App\Models\TeamMember;
 use App\Models\User;
+use App\Support\Insight\InsightPeriod;
 use App\Support\Workspace;
 use Illuminate\Contracts\Routing\UrlRoutable;
 use Illuminate\Routing\Route as RoutingRoute;
@@ -157,6 +159,7 @@ function wsiMake(string $class, User $owner, array $made): WorkspaceOwned
             'options' => ['period_kind' => 'month', 'channel_ids' => [], 'show_logo' => false, 'hide_branding' => false, 'next_month_notes' => null],
             'status' => 'queued', 'file_name' => 'theirs.pdf',
         ]),
+        InsightShareLink::class => InsightShareLink::issue($owner, $owner, InsightPeriod::month('2026-10'), []),
         default => throw new RuntimeException("No fixture for {$class}: add one to wsiMake() so its routes are checked."),
     };
 }

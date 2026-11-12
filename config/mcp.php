@@ -20,10 +20,10 @@ return [
     'introspection_secret' => env('MCP_INTROSPECT_SECRET', ''),
 
     'scopes' => [
-        'read' => 'Read your channels, posts, files, Credits balance, Engage inbox (comments and DMs) and Insight numbers',
-        'draft' => 'Save draft posts and upload media to your library (never sends or schedules them)',
+        'read' => 'Read your channels, posts, files, Spaces, Credits balance, Engage inbox (comments and DMs) and Insight numbers',
+        'draft' => 'Save draft posts and draft Spaces, and upload media to your library (never sends, schedules or publishes them)',
         'approve' => 'Create client approval links for your posts (Free: one client, posts up to 7 days ahead)',
-        'publish' => 'Schedule and publish your drafts (at most 20 a day) and reply to comments and DMs, spending Credits',
+        'publish' => 'Schedule and publish your drafts (at most 20 a day), publish your Spaces, and reply to comments and DMs, spending Credits',
         // The approver side: posts other people sent you for approval.
         'approvals:decide' => 'Approve or request changes on posts sent to you',
     ],
@@ -83,6 +83,8 @@ return [
         'api.v1.social-posts.send' => 'publish',
         'api.v1.social-approval-links.store' => 'approve',
         'api.v1.social-approval-links.show' => 'read',
+        // get_approval_audit: the owner's own link, as CSV.
+        'api.v1.social-approval-links.audit' => 'read',
 
         // Media (request_media_upload / confirm_media_upload): the same
         // presign and complete as the app — limits, quota and the
@@ -106,5 +108,30 @@ return [
         'api.v1.me.approvals.waiting' => 'approvals:decide',
         'api.v1.me.approvals.preview' => 'approvals:decide',
         'api.v1.me.approvals.decide' => 'approvals:decide',
+        // list_shared_with_me: Content Plans sent to this account's email.
+        'api.v1.me.reports.shared' => 'approvals:decide',
+
+        // Spaces (list_spaces / create_space_from_files / publish_space).
+        // Creating makes a Draft+Private Space, never a published one;
+        // publishing needs `publish` and the publish preview's confirm_token.
+        'api.v1.spaces.index' => 'read',
+        'api.v1.spaces.show' => 'read',
+        'api.v1.spaces.store' => 'draft',
+        'api.v1.spaces.publish-preview' => 'read',
+        'api.v1.spaces.publish' => 'publish',
+    ],
+
+    /*
+     * Route name => plan feature a token caller's plan must have, on top of
+     * the scope. Past it: the standard 402 plan_required (PlanFeatureRequired).
+     * The app keeps showing a Free user's existing Spaces; connected apps
+     * get Spaces on Pro and Max only.
+     */
+    'route_features' => [
+        'api.v1.spaces.index' => 'spaces',
+        'api.v1.spaces.show' => 'spaces',
+        'api.v1.spaces.store' => 'spaces',
+        'api.v1.spaces.publish-preview' => 'spaces',
+        'api.v1.spaces.publish' => 'spaces',
     ],
 ];

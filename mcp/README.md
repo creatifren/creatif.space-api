@@ -68,6 +68,11 @@ Rate limit: 60 requests / minute / token (429 + `Retry-After`).
 | `suggest_caption` (brief, platform) — a caption and hashtags in the user's style; saves nothing. Pro/Max; 404 while `AI_CAPTION_ENABLED` is off → `not_enabled` ("write the caption yourself"), Free → `plan_required` | draft | `POST /ai/caption` |
 | `list_waiting_approvals` — posts other users sent to this user for approval | approvals:decide | `GET /me/approvals/waiting` |
 | `decide_approval` (link, post_id, decision approve\|revise, reason, confirm) — the approver side; same rules as the approval page, audited as `mcp` | approvals:decide | preview `GET /me/approvals/{post}/preview`; `confirm: true` → `POST /me/approvals/{post}/decision` |
+| `list_spaces` (status draft\|published\|archived, search, limit) — Pro/Max | read | `GET /spaces?tab&search` |
+| `create_space_from_files` (title, file_ids 1–100, view_mode) — always a Draft+Private Space, never published; Pro/Max | draft | `POST /spaces` with `file_ids` (checked before anything is created) |
+| `publish_space` (space_id, confirm) — Pro/Max | publish | preview `GET /spaces/{id}/publish-preview`; `confirm: true` → `POST /spaces/{id}/publish` |
+| `get_approval_audit` (link_id) — every decision on one of the user's links: who, post, when, decision, comment; rows and CSV | read | `GET /social-approval-links/{id}/audit.csv` |
+| `list_shared_with_me` — "Reports shared with you": Content Plans other users sent to this user's email | approvals:decide | `GET /me/reports/shared` |
 
 **Media upload.** `request_media_upload` → the client PUTs the exact bytes to
 the URL (Content-Type and Content-Length are signed) → `confirm_media_upload`
@@ -100,6 +105,19 @@ approval (or whose client asked for changes) is never sent or scheduled, from
 the app or a token (409 `approval_required`); it can only be held for the
 client again. A token cannot drop the editor's own approval step either. A
 token can only edit drafts and posts waiting for approval (409 `not_editable`).
+
+**Spaces.** Pro and Max only for connected apps: every Spaces route a token
+can reach is listed in `config('mcp.route_features')`, so a Free caller gets
+the standard 402 `plan_required` (`feature: "spaces"`) from `EnforceTokenScope`
+before the controller runs — the app itself still lists a Free user's existing
+Spaces. `publish_space` works like `publish_post`: the preview returns a
+`confirm_token` (HMAC over user + Space + title, address, visibility, password,
+expiry and files; 10 minutes) that this server keeps and sends on
+`confirm: true`; a token publish without one → 422 `confirm_token_required`,
+a changed Space → 409 `preview_stale`. The preview also says what blocks it
+(`active_slots_full`) and what to warn about (`no_handle`: no address yet,
+`empty`, `expired`). A Space's link is `{public_url}/{handle}/{slug}`
+(`public_url` on the Space resources; null without a handle).
 
 **Plan limits are the API's rules too** (one plan definition: `PlanSeeder`,
 enforced by `PlanQuota`). Free schedules at most 7 days ahead (UTC), holds at

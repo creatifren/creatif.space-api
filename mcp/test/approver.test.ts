@@ -149,3 +149,42 @@ describe('decide_approval', () => {
     expect(out.error).toMatchObject({ code: 'forbidden', details: { expected_hint: 'r***@c***.com' } });
   });
 });
+
+describe('list_shared_with_me', () => {
+  it('lists Content Plans shared with the user, with who sent them and the url', async () => {
+    const client = await start({
+      'GET /me/reports/shared': () => ({
+        body: { data: [{
+          report_id: LINK, kind: 'content_plan', title: 'December',
+          period: { from: '2026-12-01', to: '2026-12-31', timezone: 'Asia/Jakarta' },
+          owner: { name: 'Bro' }, url: 'https://creatif.space/a/tok', posts: 6, waiting: 2, expires_at: null,
+        }] },
+      }),
+    });
+    const out = payload(await client.callTool({ name: 'list_shared_with_me', arguments: {} }));
+    expect(out.shared[0]).toEqual({
+      id: LINK, kind: 'content_plan', title: 'December',
+      period: { from: '2026-12-01', to: '2026-12-31', timezone: 'Asia/Jakarta' },
+      from: 'Bro', url: 'https://creatif.space/a/tok', posts: 6, waiting: 2, expires_at: null,
+    });
+    expect(out.note).toMatch(/list_waiting_approvals/);
+  });
+
+  it('says so when nothing is shared', async () => {
+    const client = await start({ 'GET /me/reports/shared': () => ({ body: { data: [] } }) });
+    expect(payload(await client.callTool({ name: 'list_shared_with_me', arguments: {} })).note).toMatch(/Nothing has been shared/);
+  });
+
+  it('needs approvals:decide', async () => {
+    const client = await start({}, TOKEN_FULL);
+    const res = await client.callTool({ name: 'list_shared_with_me', arguments: {} });
+    expect(payload(res).error).toMatchObject({ code: 'scope_missing', details: { required: 'approvals:decide' } });
+    expect(app!.v1.calls).toHaveLength(0);
+  });
+
+  it('turns a 401 into the error envelope with a next step', async () => {
+    const client = await start({ 'GET /me/reports/shared': () => ({ status: 401, body: { message: 'Unauthenticated.' } }) });
+    const err = payload(await client.callTool({ name: 'list_shared_with_me', arguments: {} })).error;
+    expect(err).toMatchObject({ code: expect.any(String), message: expect.any(String), next_step: expect.any(String) });
+  });
+});
