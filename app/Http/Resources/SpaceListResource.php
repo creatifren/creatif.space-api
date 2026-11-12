@@ -33,9 +33,25 @@ class SpaceListResource extends JsonResource
             'has_password' => $this->password_hash !== null,
             'expires_at' => $this->expires_at,
             'items_count' => $this->items->count(),
+            /* Owner-only list, aggregate counts only: no visitor data. Null
+               when the list was loaded without the counts (never a fake 0). */
+            'views_count' => $this->viewsCount(),
             'cover_url' => $firstPhoto?->file?->url(),
             'published_at' => $this->published_at,
             'updated_at' => $this->updated_at,
         ];
+    }
+
+    /** The two halves SpaceController::index loads; null without them. */
+    private function viewsCount(): ?int
+    {
+        $before = $this->resource->getAttribute('views_before_today');
+        $today = $this->resource->getAttribute('views_today');
+
+        if ($before === null && $today === null) {
+            return null;
+        }
+
+        return (int) $before + (int) $today;
     }
 }

@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Api\V1;
 
 use App\Enums\ActivityAction;
+use App\Enums\SpaceEventType;
 use App\Enums\SpaceStatus;
 use App\Enums\SpaceViewMode;
 use App\Http\Controllers\Controller;
@@ -40,6 +41,17 @@ class SpaceController extends Controller
         $user = Workspace::owner($request->user());
 
         $query = $user->spaces()->with(['items.file'])->latest('updated_at');
+
+        /* The card's views: every day the nightly job has closed (daily
+           stats survive the 90-day event prune), plus today's raw views,
+           which it has not. People only — crawlers never count. The split
+           at midnight means a view is never counted twice. */
+        $today = now()->startOfDay();
+        $query->withSum(['dailyStats as views_before_today' => fn ($q) => $q->where('date', '<', $today->toDateString())], 'views')
+            ->withCount(['events as views_today' => fn ($q) => $q
+                ->where('type', SpaceEventType::View)
+                ->where('is_ai_crawler', false)
+                ->where('created_at', '>=', $today)]);
 
         match ($tab) {
             'archived' => $query->where('status', SpaceStatus::Archived),
