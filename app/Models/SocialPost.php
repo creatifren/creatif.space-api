@@ -16,6 +16,7 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Support\Carbon;
 
 /**
  * @property int $id
@@ -31,6 +32,7 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
  * @property CarbonImmutable|null $scheduled_at
  * @property SocialPostStatus $status
  * @property string|null $fail_reason
+ * @property Carbon|null $failure_notified_at
  * @property array<string, mixed>|null $raw_payload
  * @property SocialPostApproval|null $approval
  * @property string|null $approval_by
@@ -75,6 +77,7 @@ class SocialPost extends Model implements WorkspaceOwned
             'media' => 'array',
             // UTC wall time in the column, read as UTC (not Asia/Jakarta).
             'scheduled_at' => UtcDateTime::class,
+            'failure_notified_at' => 'datetime',
             'status' => SocialPostStatus::class,
             'raw_payload' => 'array',
             'approval' => SocialPostApproval::class,
@@ -181,9 +184,21 @@ class SocialPost extends Model implements WorkspaceOwned
             ]);
 
         // Only on the transition into Failed — webhook retries recompute
-        // again and must not notify twice.
-        if (! $anyPublished && ! $wasFailed) {
+        // again and must not notify twice — and only if the owner was not
+        // already told this attempt missed its time (one email per post).
+        if (! $anyPublished && ! $wasFailed && $this->claimFailureNotice()) {
             $this->user->notify(new SocialPostFailed($this));
         }
+    }
+
+    /**
+     * Claim the one missed-or-failed email for this post: true for exactly
+     * one caller, in one conditional update, so two scheduler runs or a
+     * webhook retry can never send it twice. A retry clears the claim.
+     */
+    public function claimFailureNotice(): bool
+    {
+        return self::query()->whereKey($this->getKey())->whereNull('failure_notified_at')
+            ->update(['failure_notified_at' => now()]) === 1;
     }
 }

@@ -581,6 +581,8 @@ class SocialPostRelay
                 if ($post->status === SocialPostStatus::Failed) {
                     $post->update(['status' => SocialPostStatus::Scheduled, 'fail_reason' => null]);
                 }
+                // A new attempt: if it fails too, the owner hears about it again.
+                SocialPost::query()->whereKey($post->id)->update(['failure_notified_at' => null]);
             });
 
             // Only Pending, unpaid destinations are charged: the ones above.
