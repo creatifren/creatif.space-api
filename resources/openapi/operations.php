@@ -93,6 +93,7 @@ return [
     'api.v1.social-approval-links.audit' => 'Approval audit as CSV (who, what, when, decision, comment)',
     'api.v1.social-approval-links.update' => 'Update an approval link (title, approver, expiry, scope, reminders)',
     'api.v1.social-approval-links.approve' => 'Approve a link\'s posts as the owner',
+    'api.v1.social-approval-links.remind' => 'Send the approver a reminder now',
     'api.v1.social-approval-links.destroy' => 'Revoke an approval link',
     'api.v1.social-plan-links.index' => 'List read-only Content Plan share links',
     'api.v1.social-plan-links.store' => 'Create a read-only Content Plan share link',
