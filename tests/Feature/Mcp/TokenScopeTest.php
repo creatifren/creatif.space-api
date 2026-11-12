@@ -250,6 +250,24 @@ describe('V1 additions for MCP', function () {
         $this->getJson('/api/v1/social-posts?limit=1')->assertOk()->assertJsonCount(1, 'data');
     });
 
+    it('pages posts with limit + offset, each post once, newest first', function () {
+        $user = User::factory()->create();
+        // Same created_at for all five: the id tie-break keeps pages stable.
+        $at = now()->subHour();
+        $posts = collect(range(1, 5))->map(fn () => SocialPost::factory()->for($user)->create(['created_at' => $at]));
+
+        $this->actingAs($user, 'web');
+        $seen = [];
+        foreach ([0, 2, 4] as $offset) {
+            $page = $this->getJson('/api/v1/social-posts?limit=2&offset='.$offset)->assertOk()->json('data.*.id');
+            $seen = [...$seen, ...$page];
+        }
+
+        expect($seen)->toBe($posts->sortByDesc('id')->pluck('ulid')->values()->all());
+
+        $this->getJson('/api/v1/social-posts?offset=2')->assertStatus(422)->assertJsonValidationErrors('limit');
+    });
+
     it('builds draft media from library file ids', function () {
         $user = User::factory()->create();
         $ig = SocialAccount::factory()->for($user)->create();

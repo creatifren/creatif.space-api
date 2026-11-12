@@ -27,11 +27,12 @@ const post = loose({
 
 export const OUTPUT_SCHEMAS: Record<string, z.ZodRawShape> = {
   list_channels: {
+    next_cursor: z.string().nullable(),
     channels: z.array(loose({ id: str, platform: str, username: opt(str), status: str, reconnect_required: z.boolean() })),
     needs_reconnect: z.array(str).optional(),
     next_step: str.optional(),
   },
-  list_posts: { count: z.number(), posts: z.array(post) },
+  list_posts: { count: z.number(), posts: z.array(post), next_cursor: z.string().nullable() },
   get_post: { post },
   get_credits: {
     plan: opt(loose({ key: opt(str), name: opt(str) })),
@@ -48,6 +49,7 @@ export const OUTPUT_SCHEMAS: Record<string, z.ZodRawShape> = {
     renewal: opt(loose({ resets_at: str, days_until: z.number() })),
   },
   list_waiting_approvals: {
+    next_cursor: z.string().nullable(),
     waiting: z.array(loose({ link: loose({}), waiting: z.number(), posts: z.array(z.unknown()) })),
     note: str,
   },
@@ -72,10 +74,12 @@ export const OUTPUT_SCHEMAS: Record<string, z.ZodRawShape> = {
     notes: opt(z.array(str)),
   },
   list_files: {
+    next_cursor: z.string().nullable(),
     total: z.number(),
     files: z.array(loose({ id: str, name: str, mime_type: opt(str), status: opt(str), url: opt(str) })),
   },
   list_spaces: {
+    next_cursor: z.string().nullable(),
     count: z.number(),
     spaces: z.array(loose({ id: str, title: opt(str), status: opt(str), url: opt(str) })),
   },

@@ -3,6 +3,7 @@ import { ToolError } from '../errors.js';
 import { V1Error } from '../v1.js';
 import { defineTool, describeTool } from './define.js';
 import type { V1Post } from './shape.js';
+import { pageInput, pageOf } from './paging.js';
 
 /*
  * Post housekeeping over existing V1 routes:
@@ -118,15 +119,16 @@ export const listApprovalLinks = defineTool({
   scope: 'read',
   input: {
     status: z.enum(['active', 'expired', 'revoked', 'all']).default('active').describe('Which links: "active" (open, default), "expired", "revoked" or "all"'),
-    limit: z.number().int().min(1).max(200).default(50).describe('At most this many links (1–200, default 50)'),
+    ...pageInput(200, 50, 'links'),
   },
   annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
-  run: async ({ status, limit }, { v1 }) => {
+  run: async ({ status, limit, cursor }, { v1 }) => {
     const { data } = await v1.get<{ data: V1Link[] }>('/social-approval-links');
     const matching = data.filter((l) => status === 'all' || l.status === status);
+    const { page, next_cursor } = pageOf('list_approval_links', { status }, matching, limit, cursor);
     return {
       total: matching.length,
-      links: matching.slice(0, limit).map((l) => ({
+      links: page.map((l) => ({
         id: l.id,
         title: l.title,
         client_name: l.client_name,
@@ -140,6 +142,7 @@ export const listApprovalLinks = defineTool({
         ...(l.revoked_at ? { revoked_at: l.revoked_at } : {}),
         created_at: l.created_at,
       })),
+      next_cursor,
     };
   },
 });

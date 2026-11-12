@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { ToolError } from '../errors.js';
 import { V1Error } from '../v1.js';
+import { pageInput, pageOf } from './paging.js';
 import { defineTool, describeTool, type ToolContext } from './define.js';
 
 /**
@@ -78,12 +79,14 @@ export const listWaitingApprovals = defineTool({
     ],
   }),
   scope: 'approvals:decide',
-  input: {},
+  input: pageInput(100, 50, 'links'),
   annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
-  run: async (_args, { v1 }) => {
+  run: async (args, { v1 }) => {
     const { data } = await v1.get<{ data: { link: Record<string, unknown>; waiting: number; posts: Record<string, unknown>[] }[] }>('/me/approvals/waiting');
+    const { page, next_cursor } = pageOf('list_waiting_approvals', {}, data, args.limit, args.cursor);
     return {
-      waiting: data.map((row) => ({
+      next_cursor,
+      waiting: page.map((row) => ({
         link: {
           id: row.link.id,
           title: row.link.title,
@@ -243,12 +246,14 @@ export const listSharedWithMe = defineTool({
     ],
   }),
   scope: 'approvals:decide',
-  input: {},
+  input: pageInput(100, 50, 'reports'),
   annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
-  run: async (_args, { v1 }) => {
+  run: async (args, { v1 }) => {
     const { data } = await v1.get<{ data: SharedReportRow[] }>('/me/reports/shared');
+    const { page, next_cursor } = pageOf('list_shared_with_me', {}, data, args.limit, args.cursor);
     return {
-      shared: data.map((r) => ({
+      next_cursor,
+      shared: page.map((r) => ({
         id: r.report_id,
         kind: r.kind,
         title: r.title,

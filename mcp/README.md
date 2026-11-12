@@ -261,6 +261,24 @@ reach outside creatif.space (platforms, the client's inbox, public links) are
 `openWorldHint`. `test/annotations.test.ts` checks these rules and pins every
 tool's hints in a snapshot.
 
+## Pagination
+
+Every `list_*` tool pages the same way. It takes `limit` and `cursor`, and
+returns `next_cursor` (null when there is no more). Pass `next_cursor` back
+as `cursor`, with the same filters, for the next page.
+
+- **Opaque cursor:** it holds the tool, the position and a fingerprint of the
+  filters. A cursor from another list, or reused with other filters, is
+  refused as `invalid_input` with the next step "start again without cursor".
+- **`list_posts`:** pages with `limit` + `offset` on `GET /social-posts`, and
+  asks for one extra row to know whether another page exists.
+- **`list_files`:** follows the API's page numbers. The cursor keeps the page
+  size of the first page.
+- **`list_conversations`:** uses the inbox's own cursor.
+- **The rest:** the API answers whole, and the server pages it.
+
+`src/tools/paging.ts`; tests in `test/pagination.test.ts`.
+
 ## Structured output
 
 `list_channels`, `list_posts`, `get_post`, `get_credits`,

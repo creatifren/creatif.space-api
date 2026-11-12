@@ -56,7 +56,7 @@ describe('list_posts', () => {
     );
     expect(res.isError).toBeFalsy();
     expect(app!.v1.calls[0]!.query).toEqual({
-      status: 'scheduled', from: '2026-11-01T00:00:00Z', to: '2026-11-30T00:00:00Z', account_id: IG, limit: '5',
+      status: 'scheduled', from: '2026-11-01T00:00:00Z', to: '2026-11-30T00:00:00Z', account_id: IG, limit: '6', // one extra row: is there another page?
     });
     const out = payload(res);
     expect(out.count).toBe(1);
@@ -65,9 +65,9 @@ describe('list_posts', () => {
     expect(out.posts[0].comments).toBeUndefined();
   });
 
-  it('defaults the limit to 25', async () => {
+  it('defaults the limit to 25 (asks the API for 26 to know if there is a next page)', async () => {
     await call('list_posts', {}, { 'GET /social-posts': () => ({ body: { data: [] } }) });
-    expect(app!.v1.calls[0]!.query).toEqual({ limit: '25' });
+    expect(app!.v1.calls[0]!.query).toEqual({ limit: '26' });
   });
 
   it('rejects a bad date before calling V1', async () => {
