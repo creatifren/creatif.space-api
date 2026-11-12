@@ -7,6 +7,7 @@ use App\Actions\Auth\ResolveGoogleUser;
 use App\Exceptions\GoogleLoginRefused;
 use App\Exceptions\InvalidGoogleIdToken;
 use App\Http\Controllers\Controller;
+use App\Http\Controllers\OAuth\SwitchAccountController;
 use App\Support\GoogleIdToken;
 use App\Support\ProductEvents;
 use App\Support\SafePath;
@@ -16,6 +17,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Log;
 use Laravel\Socialite\Facades\Socialite;
+use Laravel\Socialite\Two\AbstractProvider;
 use Laravel\Socialite\Two\InvalidStateException;
 use Laravel\Socialite\Two\User as GoogleUser;
 use RuntimeException;
@@ -60,7 +62,20 @@ class GoogleAuthController extends Controller
             $request->session()->put('next_path', SafePath::of($next));
         }
 
-        return Socialite::driver('google')->redirect();
+        $driver = Socialite::driver('google');
+
+        // Back from "Not you? Use another account" on the MCP consent screen:
+        // let them pick the other Google account instead of being signed
+        // straight back in as the one they just left. Their Google session
+        // itself is never touched.
+        // The driver is cached by Socialite, so its parameters are set on
+        // every redirect: the chooser must not stick to the next sign-in.
+        $selectAccount = $request->session()->pull(SwitchAccountController::SELECT_ACCOUNT, false) === true;
+        if ($driver instanceof AbstractProvider) {
+            $driver->with($selectAccount ? ['prompt' => 'select_account'] : []);
+        }
+
+        return $driver->redirect();
     }
 
     /**
