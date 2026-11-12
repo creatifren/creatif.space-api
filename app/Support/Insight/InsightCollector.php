@@ -186,7 +186,7 @@ final class InsightCollector
 
     /**
      * @param  list<array<string, mixed>>|null  $feed
-     * @return array{0: array<string, mixed>, 1: list<array{key: string, params: array<string, string>}>}
+     * @return array{0: array<string, mixed>, 1: list<array<string, mixed>>}
      */
     private function channel(SocialAccount $account, ?array $feed, InsightPeriod $period, InsightPeriod $previous): array
     {
@@ -231,6 +231,9 @@ final class InsightCollector
                     ? ['key' => 'followers_no_history', 'params' => ['network' => $network, 'date' => $followers['since']]]
                     : ['key' => 'followers_no_history_none', 'params' => ['network' => $network]]);
         }
+
+        // Held back by the network until the account is bigger (official rule).
+        array_push($notes, ...InsightThresholds::notes($account->platform->value, $followers['end'], $network));
 
         $top = collect($inPeriod ?? [])
             ->map(fn (array $p) => [
