@@ -21,12 +21,12 @@ const served = async () => {
 };
 
 describe('tool first lines', () => {
-  it('every served tool opens with its "Use …" line (≤ 120 chars), and every line is a served tool', async () => {
+  it('every served tool opens with its one-sentence "what it does for the user" line (≤ 120 chars, starting with a verb), and every line is a served tool', async () => {
     const tools = await served();
     for (const t of tools) {
       const first = t.description!.split('\n')[0]!;
       expect(first, t.name).toBe(FIRST_LINES[t.name]);
-      expect(first, t.name).toMatch(/^Use \S.*\.$/);
+      expect(first, t.name).toMatch(/^[A-Z][a-z]+s \S.*\.$/);
       expect(first.length, t.name).toBeLessThanOrEqual(120);
     }
     expect(Object.keys(FIRST_LINES).sort()).toEqual(tools.map((t) => t.name).sort());

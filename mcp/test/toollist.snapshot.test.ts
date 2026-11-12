@@ -33,8 +33,8 @@ const readmeRows = (): string[] =>
 function describeToolProblems(name: string, description: string): string[] {
   const lines = description.split('\n');
   const problems: string[] = [];
-  if (!/^Use \S/.test(lines[0] ?? '') || (lines[0] ?? '').length > 120) problems.push('line 1 must be the "Use …" line (≤ 120 chars, src/tools/firstLines.ts)');
-  if (!lines[1] || /^(Use |When to use|Example|Errors)/.test(lines[1])) problems.push('line 2 must say what the tool does');
+  if (!/^[A-Z][a-z]+s \S.*\.$/.test(lines[0] ?? '') || (lines[0] ?? '').length > 120) problems.push('line 1 must say what the tool does for the user in one verb-led sentence (≤ 120 chars, src/tools/firstLines.ts)');
+  if (!lines[1] || /^(When to use|Example|Errors)/.test(lines[1])) problems.push('line 2 must say what the tool does');
   if (!/^When to use: \S/.test(lines[2] ?? '')) problems.push('line 3 must start "When to use: "');
   if (!(lines[3] ?? '').startsWith(`Example: ${name} {`)) problems.push(`line 4 must start "Example: ${name} {"`);
   const errors = lines.find((l) => l.startsWith('Errors → next step: '));
@@ -78,12 +78,12 @@ describe('tool list snapshot (README + describeTool)', () => {
   });
 
   it('catches the mistakes it is for', () => {
-    const ok = 'Use when x.\nDoes x.\nWhen to use: now\nExample: x_tool {} → {}\nErrors → next step: not_found → list it.';
+    const ok = 'Shows x for the user.\nDoes x.\nWhen to use: now\nExample: x_tool {} → {}\nErrors → next step: not_found → list it.';
     expect(describeToolProblems('x_tool', ok)).toEqual([]);
-    expect(describeToolProblems('x_tool', 'Does x, a free-text description.')).toHaveLength(5);
+    expect(describeToolProblems('x_tool', 'a free-text description')).toHaveLength(5);
     expect(describeToolProblems('renamed', ok)).toEqual(['line 4 must start "Example: renamed {"']);
-    expect(describeToolProblems('x_tool', ok.replace('Use when x.', `Use ${'x'.repeat(120)}`))).toEqual([
-      'line 1 must be the "Use …" line (≤ 120 chars, src/tools/firstLines.ts)',
+    expect(describeToolProblems('x_tool', ok.replace('Shows x for the user.', `Shows ${'x'.repeat(120)}.`))).toEqual([
+      'line 1 must say what the tool does for the user in one verb-led sentence (≤ 120 chars, src/tools/firstLines.ts)',
     ]);
     expect(readmeRows()).toContain('list_channels');
   });

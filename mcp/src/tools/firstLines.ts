@@ -1,6 +1,7 @@
 /*
- * The first line of every tool description: WHEN to use it, at most 120
- * characters, starting "Use …". Where a ready-made prompt walks through the
+ * The first line of every tool description: in one sentence of at most 120
+ * characters, starting with a verb ("Shows", "Saves", "Schedules"…), WHAT
+ * the tool does for the user. Where a ready-made prompt walks through the
  * tool, the line names it (plan_week, send_for_approval, monthly_report), so
  * an agent finds the workflow from the tool. registerTool puts it above the
  * describeTool text; test/firstlines.test.ts holds every line to these rules
@@ -9,67 +10,67 @@
 
 export const FIRST_LINES: Record<string, string> = {
   // Start here
-  get_account_summary: 'Use first with a new user: plan, limits left, Credits, channels and storage in one call.',
-  list_channels: 'Use first, before any draft or send: the only source of channel ids (step 1 of the plan_week prompt).',
-  get_connect_link: 'Use when a network must be connected or reconnected: gives the creatif.space link to send the user.',
-  get_credits: 'Use when the user asks what they can afford or why a send was refused: plan, limits, Credits per send.',
+  get_account_summary: 'Shows the user\'s plan, limits left, Credits, channels and storage in one call, so you know what they can do.',
+  list_channels: 'Lists the user\'s connected social channels and their ids, the first step of the plan_week prompt.',
+  get_connect_link: 'Gives the user the creatif.space link to connect or reconnect a social network.',
+  get_credits: 'Shows the user\'s plan, limits and Credits, and what each send costs.',
 
   // Posts
-  list_posts: 'Use to find post ids or see what is planned; plan_week and send_for_approval prompts start from it.',
-  get_post: 'Use for one post’s full detail and review thread; send_for_approval prompt checks each post with it.',
-  suggest_caption: 'Use when the user wants a caption written in their style; the plan_week prompt drafts with it.',
-  draft_post: 'Use to save any new post safely as a draft (no send, no Credits); the plan_week prompt saves with it.',
-  list_failed_posts: 'Use when the user asks what did not go out or why: last 30 days, code and reason; then retry_post.',
-  update_post: 'Use to change a draft or a post waiting for approval: caption, time, labels or media.',
-  discard_draft: 'Use when the user wants a draft deleted for good; previews first, confirm: true deletes.',
-  schedule_post: 'Use when the user wants a draft sent later; previews channels and Credits, confirm: true schedules.',
-  schedule_posts: 'Use when the user wants several drafts scheduled together: one preview, then all or none on confirm.',
-  publish_post: 'Use when the user wants a draft public now; previews channels and Credits, confirm: true publishes.',
-  retry_post: 'Use when a post failed on some channels and the user wants to try again; previews reasons and Credits.',
+  list_posts: 'Finds the user\'s posts by status, dates or channel; the plan_week and send_for_approval prompts start here.',
+  get_post: 'Shows one post in full, with each channel\'s status and the review thread; send_for_approval checks posts with it.',
+  suggest_caption: 'Writes a caption and hashtags in the user\'s own style from a short brief, used by the plan_week prompt.',
+  draft_post: 'Saves a new post as a draft without sending it or spending Credits, as the plan_week prompt does.',
+  list_failed_posts: 'Shows which posts failed to publish in the last 30 days and why, so the user can fix them and use retry_post.',
+  update_post: 'Changes a draft or a post waiting for approval: its caption, time, labels or media.',
+  discard_draft: 'Deletes one of the user\'s drafts for good, after showing them what will go.',
+  schedule_post: 'Schedules a draft to go out later, after the user agrees to its channels and Credit cost.',
+  schedule_posts: 'Schedules up to 10 drafts at once, all or none, after the user agrees to one preview of all of them.',
+  publish_post: 'Publishes a draft now, after the user agrees to its channels and Credit cost.',
+  retry_post: 'Sends a post again on the channels where it failed, after the user agrees to the reasons and Credit cost.',
 
   // Approvals
-  create_approval_link: 'Use to get client approval on posts or a period; the send_for_approval prompt makes the link with it.',
-  create_content_plan: 'Use when creatif.space should email a period’s plan to the client; send_for_approval workflow.',
-  check_approval_status: 'Use to see where approval stands on a post or link; send_for_approval prompt ends with it.',
-  send_approval_reminder: 'Use when the client has not answered: emails the approver once more (send_for_approval follow-up).',
-  list_approval_links: 'Use to see every approval link of the workspace and how far each one got.',
-  get_approval_audit: 'Use when the user needs the record of decisions on one approval link or Content Plan (CSV too).',
-  get_approval_history: 'Use when the user asks who approved one post, and when, across every link it was on.',
-  get_plan_calendar_link: 'Use when the user wants a Content Plan in their or their client’s calendar app (ICS feed).',
-  list_waiting_approvals: 'Use when OTHER users sent this user posts to approve: what is still waiting on them.',
-  decide_approval: 'Use when the user approves or sends back a post sent to them; previews first, confirm: true decides.',
-  list_shared_with_me: 'Use when the user asks what others shared with them to look at: plans and reports.',
+  create_approval_link: 'Gets the user\'s client to approve posts or a period, with the link the send_for_approval prompt makes.',
+  create_content_plan: 'Emails a period\'s plan to the user\'s client for approval, in the send_for_approval workflow.',
+  check_approval_status: 'Shows where client approval stands on a post or a link, as the send_for_approval prompt checks.',
+  send_approval_reminder: 'Reminds the user\'s client by email to answer an approval link, a send_for_approval follow-up.',
+  list_approval_links: 'Shows every approval link of the user\'s workspace and how far each one got.',
+  get_approval_audit: 'Gives the user the record of every decision on one approval link or Content Plan, with a CSV.',
+  get_approval_history: 'Shows who approved one post and when, across every link it was on.',
+  get_plan_calendar_link: 'Gives the user a calendar feed of a Content Plan to add to their or their client\'s calendar app.',
+  list_waiting_approvals: 'Lists the posts other people sent this user to approve that still wait for an answer.',
+  decide_approval: 'Approves a post sent to the user, or sends it back with a reason, after showing them the post.',
+  list_shared_with_me: 'Lists the plans and reports other people shared with this user to look at.',
 
   // Media
-  list_files: 'Use to attach media already in the library: returns file ids for draft_post or update_post.',
-  request_media_upload: 'Use to add a NEW image or video you hold the bytes of: step 1, gives the upload URL.',
-  confirm_media_upload: 'Use right after PUTting the bytes from request_media_upload: step 2, makes the file ready to attach.',
-  get_storage_usage: 'Use before a big upload or when the user asks what will be deleted and when.',
-  keep_file: 'Use when a library file must never be deleted automatically.',
-  unkeep_file: 'Use to free Keep quota: the file goes back under the automatic-deletion rules.',
+  list_files: 'Finds files in the user\'s library to attach to a post.',
+  request_media_upload: 'Starts adding a new image or video to the user\'s library by giving the upload link (step 1 of 2).',
+  confirm_media_upload: 'Finishes adding an uploaded image or video so the user can attach it to a post (step 2 of 2).',
+  get_storage_usage: 'Shows how much media storage the user has used and which files will be deleted when.',
+  keep_file: 'Keeps one of the user\'s library files from ever being deleted automatically.',
+  unkeep_file: 'Lets a library file be deleted automatically again, freeing the user\'s Keep space.',
 
   // Insight
-  get_insight_summary: 'Use for a period’s numbers (reach, engagement, top posts); the monthly_report prompt starts with it.',
-  get_best_times: 'Use when the user asks when to post: best weekday + hour per channel, from their own posts.',
-  list_top_posts: 'Use when the user asks which posts did best in a period: the top five by engagement, with links.',
-  get_insight_csv_link: 'Use when the user wants the raw post numbers in a spreadsheet: a 24-hour CSV download link.',
-  get_insight_report_link: 'Use when the user wants the Insight PDF; a monthly_report alternative to the share link.',
-  create_insight_share_link: 'Use to share a report with a client, no account needed; the monthly_report prompt ends with it.',
-  revoke_insight_share_link: 'Use when a shared Insight report link must stop working now.',
+  get_insight_summary: 'Shows the user\'s numbers for a period, like reach and engagement, as the monthly_report prompt starts with.',
+  get_best_times: 'Tells the user the best weekday and hour to post on each channel, from their own posts.',
+  list_top_posts: 'Shows the user\'s five best posts in a period by engagement, with links.',
+  get_insight_csv_link: 'Gives the user a 24-hour link to download their post numbers as a spreadsheet.',
+  get_insight_report_link: 'Gives the user a download link to their Insight PDF report, a monthly_report alternative to sharing.',
+  create_insight_share_link: 'Shares a report with the user\'s client as a link that needs no account, as monthly_report ends with.',
+  revoke_insight_share_link: 'Turns off a shared Insight report link at once for everyone who has it.',
 
   // Spaces
-  list_spaces: 'Use to find the user’s Spaces (shareable pages of library files) and their ids.',
-  create_space_from_files: 'Use to put library files on a new private draft Space.',
-  publish_space: 'Use when the user wants a draft Space open to anyone with its link; previews first.',
+  list_spaces: 'Lists the user\'s Spaces, the shareable pages of their library files.',
+  create_space_from_files: 'Puts the user\'s library files on a new private draft Space.',
+  publish_space: 'Opens a draft Space to anyone with its link, after the user agrees to who can see it.',
 
   // Engage
-  list_conversations: 'Use to read comments and DMs on the connected channels, newest first.',
-  reply_to_conversation: 'Use to answer a comment or DM on the platform; previews first, confirm: true sends.',
+  list_conversations: 'Shows the comments and DMs people sent to the user\'s channels, newest first.',
+  reply_to_conversation: 'Answers a comment or DM on the platform for the user, after they agree to the reply.',
 
   // Feedback
-  send_feedback: 'Use when the user reports a bug or an idea for creatif.space.',
-  get_notification_settings: 'Use when the user asks which creatif.space emails they get, or before changing one.',
-  update_notification_settings: 'Use when the user wants to stop or start a creatif.space email (failed posts, approvals, weekly digest).',
+  send_feedback: 'Sends the user\'s bug report or idea to the creatif.space team.',
+  get_notification_settings: 'Shows which creatif.space emails the user gets.',
+  update_notification_settings: 'Turns a creatif.space email on or off for the user, such as failed posts, approvals or the weekly digest.',
 };
 
 /** Which prompt each tool's first line must name (tools a prompt walks through). */
