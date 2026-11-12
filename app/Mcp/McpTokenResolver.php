@@ -92,6 +92,7 @@ class McpTokenResolver
             clientName: $model->name,
             expiresAt: $model->expires_at?->getTimestamp(),
             issuedAt: $model->created_at?->getTimestamp(),
+            clientSurface: ClientSurface::of($model->name),
         );
     }
 
@@ -146,6 +147,7 @@ class McpTokenResolver
             clientName: $client->name,
             expiresAt: $token->expires_at?->getTimestamp(),
             issuedAt: $token->created_at?->getTimestamp(),
+            clientSurface: ClientSurface::of($client->name, (array) ($client->redirect_uris ?? [])),
         );
     }
 

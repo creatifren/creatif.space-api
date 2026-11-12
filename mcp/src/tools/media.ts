@@ -46,10 +46,10 @@ export const requestMediaUpload = defineTool({
     does: "Step 1 of 2 to put a NEW image or video into the user’s creatif.space library: returns a file_id and a presigned upload_url (valid about 15 minutes).",
     when: "when you have the file’s bytes (generated, or given to you) and no public https URL for it. If the file is already in the library, use list_files; if it is at a public https URL, pass that URL to draft_post media_urls. Then: (1) HTTP PUT the exact bytes to upload_url with the Content-Type header given — the size must equal size_bytes; (2) call confirm_media_upload with the file_id; (3) pass that id in draft_post or update_post file_ids.",
     example: "request_media_upload { \"filename\": \"launch.jpg\", \"mime\": \"image/jpeg\", \"size_bytes\": 482113 } → { file_id, upload: { method: \"PUT\", url, headers: { \"Content-Type\": \"image/jpeg\" } }, expires_at }",
-    rules: "Accepted: JPEG, PNG, WebP, GIF, MP4, MOV (also SVG and PDF for the library). The workspace’s plan limits apply (Free: 1 GB in total; Pro 25 GB / Max 50 GB for media on posts and kept files; per-file caps by plan).",
+    rules: "Accepted: JPEG, PNG, WebP, GIF, MP4, MOV (also SVG and PDF for the library). The workspace’s plan limits apply (total storage and per-file size are set by the plan; Free: 1 GB in total).",
     errors: [
-      ["storage_full", "tell the user to free up space (link given) or upgrade (link given); do not retry"],
-      ["file_too_large", "make it smaller, or upgrade (link given)"],
+      ["storage_full", "tell the user to free up space (link given); do not retry"],
+      ["file_too_large", "make the file smaller and request again"],
       ["unsupported_format", "convert to a format above"],
       ["upload_limit", "stop for today"],
       ["not_found", "the folder_id is unknown: call again without it"],
@@ -100,7 +100,7 @@ export const confirmMediaUpload = defineTool({
     errors: [
       ["upload_incomplete", "the PUT has not arrived; PUT the bytes (or request a new URL if it expired) and call again"],
       ["unsupported_format", "the bytes are not the declared format and the upload was deleted; convert and start over with request_media_upload"],
-      ["file_too_large / storage_full", "as in request_media_upload (smaller file, free up space or upgrade, links given)"],
+      ["file_too_large / storage_full", "as in request_media_upload (smaller file, or free up space)"],
       ["invalid_input", "the upload was refused or abandoned; start over with request_media_upload"],
       ["not_found", "the id is not an upload in this workspace; request a new upload"],
     ],

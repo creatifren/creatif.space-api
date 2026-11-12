@@ -12,7 +12,7 @@ export const FIRST_LINES: Record<string, string> = {
   get_account_summary: 'Use first with a new user: plan, limits left, Credits, channels and storage in one call.',
   list_channels: 'Use first, before any draft or send: the only source of channel ids. Step 1 of the plan_week prompt.',
   get_connect_link: 'Use when a network must be connected or reconnected: gives the creatif.space link to send the user.',
-  get_credits: 'Use when the user asks what they can afford or why a send was refused: plan, limits, Credits, prices.',
+  get_credits: 'Use when the user asks what they can afford or why a send was refused: plan, limits, Credits per send.',
 
   // Posts
   list_posts: 'Use to find post ids or see what is planned; plan_week and send_for_approval prompts start from it.',

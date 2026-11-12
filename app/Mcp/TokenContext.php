@@ -29,6 +29,7 @@ final class TokenContext
         public readonly ?string $clientName,
         public readonly ?int $expiresAt,
         public readonly ?int $issuedAt,
+        public readonly string $clientSurface = ClientSurface::OTHER,
     ) {}
 
     public function can(string $scope): bool

@@ -283,6 +283,22 @@ is in [`docs/tool-justifications.md`](docs/tool-justifications.md).
 `test/annotations.test.ts` checks these rules and that file, and pins every
 tool's hints in a snapshot.
 
+## Plan errors and ChatGPT
+
+No tool description names prices, plan tiers or upgrading, for any client
+(`test/no-upsell.test.ts`). When the OAuth client is ChatGPT — the API's
+introspection says `client_surface: "chatgpt"` (DCR name or a
+`chatgpt.com` / `openai.com` redirect host), or the client name says
+ChatGPT / OpenAI — any 402 or `plan_required` becomes:
+
+```json
+{ "error": { "code": "not_available_on_plan", "message": "This isn’t available on this account’s plan.", "next_step": "…no plan change or purchase…", "details": { "tool": "…" } } }
+```
+
+with no upgrade link or pricing step; other errors lose billing / top-up
+links. Other clients get the API's message and links unchanged
+(`test/chatgpt-surface.test.ts`).
+
 ## Rate limits (429)
 
 Every tool turns an API 429 into the same envelope:

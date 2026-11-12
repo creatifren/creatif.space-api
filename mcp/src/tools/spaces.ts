@@ -96,9 +96,9 @@ export const listSpaces = defineTool({
     does: 'Lists the user’s creatif.space Spaces (shareable pages of library files), most recently changed first, with status (draft, published, archived), visibility, file count and the link of each published one.',
     when: 'to find a Space id before publish_space, or to see which Spaces are live and their links. To make a new one from library files, use create_space_from_files instead. Archived Spaces are listed only with status "archived".',
     example: 'list_spaces { "status": "draft" } → { count, spaces: [{ id, title, status, visibility, items_count, url, updated_at }] }',
-    rules: 'Spaces are on Pro and Max. url is set only for a published Space (and only once the account has a username).',
+    rules: 'Spaces are not included on every plan. url is set only for a published Space (and only once the account has a username).',
     errors: [
-      ['plan_required', 'details.feature spaces — pass the message to the user as it is (it has the trial/upgrade link), do not retry'],
+      ['plan_required', 'details.feature spaces — tell the user Spaces are not available on their plan, do not retry'],
       ['scope_missing', 'reconnect and allow "read"'],
       ['unauthorized', 'ask the user to reconnect the creatif.space connector'],
       ['upstream_unavailable', 'wait a minute and call again'],
@@ -130,7 +130,7 @@ export const createSpaceFromFiles = defineTool({
     does: 'Creates a new DRAFT Space holding the given library files, in that order — a private draft nobody else can open; it is never published by this tool.',
     when: 'when the user wants to share a set of files (a shoot, a delivery, a portfolio) as one page. File ids come from list_files, or confirm_media_upload for a new upload. To put the Space live afterwards, use publish_space; to see existing Spaces, use list_spaces instead.',
     example: 'create_space_from_files { "title": "Winter shoot — selects", "file_ids": ["01JE…", "01JF…"] } → { space: { id, title, status: "draft", items_count }, note }',
-    rules: 'Spaces are on Pro and Max. 1 to 100 files, each a ready file in the user’s library; a repeated id is added once. If any id is not usable nothing is created. The design (sections, captions, cover) is edited in creatif.space.',
+    rules: 'Spaces are not included on every plan. 1 to 100 files, each a ready file in the user’s library; a repeated id is added once. If any id is not usable nothing is created. The design (sections, captions, cover) is edited in creatif.space.',
     errors: [
       ['file_not_ready', 'every id must be a ready library file: take ids from list_files, or confirm_media_upload first; nothing was created'],
       ['plan_required', 'details.feature spaces — pass the message to the user as it is, do not retry'],
@@ -207,7 +207,7 @@ export const publishSpace = defineTool({
     does: 'Publishes a draft Space so anyone with its link can open it, after the user agrees to a preview of the link, who can open it, password, expiry and file count.',
     when: 'only when the user wants the Space live now; create_space_from_files makes the draft and list_spaces finds ids. Two steps: call with confirm false (default) to get the preview; show it to the user, and only after they explicitly agree call again with confirm: true.',
     example: 'publish_space { "space_id": "01JS…" } → preview; then publish_space { "space_id": "01JS…", "confirm": true } → { space: { status: "published", url }, note }',
-    rules: 'The confirm publishes exactly what that preview showed (a signed confirm_token kept by the server, valid 10 minutes). Spaces are on Pro and Max; the plan sets how many can be published at once. Unpublishing is done in creatif.space.',
+    rules: 'The confirm publishes exactly what that preview showed (a signed confirm_token kept by the server, valid 10 minutes). Spaces are not included on every plan; the plan sets how many can be published at once. Unpublishing is done in creatif.space.',
     errors: [
       ['preview_stale', 'nothing was published; show the user the new preview in details.preview and confirm again only if they agree'],
       ['plan_required', 'details.feature spaces — pass the message to the user as it is, do not retry'],

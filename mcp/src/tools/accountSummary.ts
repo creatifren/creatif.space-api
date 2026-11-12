@@ -40,7 +40,7 @@ export const getAccountSummary = defineTool({
   title: 'Get an account summary',
   description: describeTool({
     does: 'Gets the workspace at a glance in one call: plan, what its limits leave (posts this month, channels, queued posts, approval clients), Credits left, channels connected and needing reconnect, and media storage used.',
-    when: 'at the start of a conversation or when onboarding a user, to know what they can do before planning. For prices per send and this month’s spend, use get_credits; for which files will be deleted, get_storage_usage; for channel ids to post to, list_channels.',
+    when: 'at the start of a conversation or when onboarding a user, to know what they can do before planning. For Credits per send and this month’s spend, use get_credits; for which files will be deleted, get_storage_usage; for channel ids to post to, list_channels.',
     example: 'get_account_summary {} → { plan: { key: "free", name }, limits: { monthly_posts: { used, limit, left }, connected_accounts, queued_posts, approval_clients, schedule_window_days }, credits: { left, monthly, topup, resets_at }, channels: { connected, needs_reconnect, reconnect: [...] }, storage: { used_bytes, quota_bytes, percent_used }, next_steps }',
     rules: 'Read-only. limit null means no limit (left null). Free: 3 channels, up to 7 days ahead, 10 queued posts, one approval client. connected counts channels that can be posted to now.',
     errors: [
@@ -100,9 +100,9 @@ export const getAccountSummary = defineTool({
     const next: string[] = [];
     if (channels.total === 0) next.push('No channels yet: call get_connect_link with the network the user wants to connect first.');
     for (const a of channels.reconnect) next.push(`${a.platform} ${a.username ?? ''}`.trim() + ` needs reconnecting: get_connect_link { "network": "${a.platform}" }.`);
-    if (out.limits.connected_accounts?.left === 0) next.push('The plan has no room for another channel: disconnect one, or upgrade (get_credits has the link).');
-    if (out.limits.queued_posts?.left === 0) next.push('The queue is full: wait for posts to go out, or upgrade, before scheduling more.');
-    if (c && c.total <= 0) next.push('No Credits left: sending needs a top-up or the monthly reset (credits.resets_at). Drafts are still free.');
+    if (out.limits.connected_accounts?.left === 0) next.push('The plan has no room for another channel: disconnect one first.');
+    if (out.limits.queued_posts?.left === 0) next.push('The queue is full: wait for posts to go out before scheduling more.');
+    if (c && c.total <= 0) next.push('No Credits left: sending waits for more Credits or the monthly reset (credits.resets_at). Drafts are still free.');
     if (storage.percent_used !== null && storage.percent_used >= 90) next.push('Media storage is 90% used or more: see get_storage_usage before uploading.');
     if (next.length === 0) next.push('Ready: list_channels for channel ids, then draft_post. The plan_week prompt plans a week of posts.');
 

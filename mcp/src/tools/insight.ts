@@ -30,7 +30,7 @@ export const getInsightSummary = defineTool({
     when: 'when the user asks how their channels did over a period, or wants numbers for a client report. Every figure (totals, each channel, the workflow) comes with the previous period of the same length (totals_previous, channels[].previous, workflow.previous, followers.previous_change) and change_pct, only when both periods have it. null means the network did not report that number — never read it as zero — and notes[] says why: pass those notes on. channels[].notes[] marks a metric the network holds back until the account is bigger ({ metric, reason: "below_threshold", threshold, source_url, text }): say it in those words, never as a drop to zero. channel_ids (from list_channels) limits it to some channels; by default all connected channels.',
     example: 'get_insight_summary { "period": { "month": "2026-10" } } → { period, totals: { posts: 36, reach: 64900, engagement_rate: 0.089 }, change_pct: { reach: 70.8 }, channels: [...], top_posts: [...], workflow: {...}, notes: ["Saves not available from Facebook API"] }',
     errors: [
-      ['plan_required', 'Insight is on Pro and Max: tell the user the message as it is (it has the upgrade link); do not retry'],
+      ['plan_required', 'Insight is not included on this plan: tell the user it is not available on their plan; do not retry'],
       ['invalid_input', 'fix the period (YYYY-MM, or from/to at most 92 days, not in the future) or the channel ids and call again'],
       ['scope_missing', 'reconnect and allow "read"'],
       ['unauthorized', 'ask the user to reconnect the creatif.space connector'],
@@ -60,7 +60,7 @@ export const listTopPosts = defineTool({
     when: 'when the user asks which posts did best, or wants examples for a client report. post_id is set when the post went out through creatif.space (use get_post for details) and null for one posted elsewhere. A post whose network reports no engagement is left out, never ranked as 0. channel_ids (from list_channels) limits it to some channels; use get_insight_summary for totals instead.',
     example: 'list_top_posts { "period": { "month": "2026-10" } } → { data: [{ network: "TikTok", engagement: 4680, likes: 4100, url, caption, posted_at, post_id }, ...], next_cursor: null, meta: { ranked_by: "engagement", limit: 5 } }',
     errors: [
-      ['plan_required', 'Insight is on Pro and Max: tell the user the message as it is (it has the upgrade link); do not retry'],
+      ['plan_required', 'Insight is not included on this plan: tell the user it is not available on their plan; do not retry'],
       ['invalid_input', 'fix the period (YYYY-MM, or from/to at most 92 days, not in the future) or the channel ids and call again'],
       ['scope_missing', 'reconnect and allow "read"'],
       ['unauthorized', 'ask the user to reconnect the creatif.space connector'],
@@ -93,7 +93,7 @@ export const getBestTimes = defineTool({
     when: 'when the user asks when to post. It is from their own posts only, never a benchmark: say "from your posts". A channel with fewer than 10 posts with engagement comes back as status "not_enough_data" with no slots: say so, never guess a time. channel_ids (from list_channels) limits it to some channels.',
     example: 'get_best_times { "days": 90 } → { data: [{ network: "Instagram", status: "ok", posts_analyzed: 24, slots: [{ label: "Tue 19:00", posts: 4, avg_engagement: 412.5 }, ...] }], meta: { basis: "from your posts", timezone: "Asia/Jakarta" } }',
     errors: [
-      ['plan_required', 'Insight is on Pro and Max: tell the user the message as it is (it has the upgrade link); do not retry'],
+      ['plan_required', 'Insight is not included on this plan: tell the user it is not available on their plan; do not retry'],
       ['invalid_input', 'days must be 7–92; fix the channel ids and call again'],
       ['scope_missing', 'reconnect and allow "read"'],
       ['unauthorized', 'ask the user to reconnect the creatif.space connector'],
