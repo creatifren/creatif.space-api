@@ -14,9 +14,11 @@ use App\Models\File;
 use App\Models\Space;
 use App\Models\SpaceItem;
 use App\Support\PlanQuota;
+use App\Support\SpacePublishConfirmation;
 use App\Support\Workspace;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Validation\ValidationException;
@@ -40,7 +42,7 @@ class SpaceController extends Controller
         $tab = $validated['tab'] ?? 'all';
         $user = Workspace::owner($request->user());
 
-        $query = $user->spaces()->with(['items.file'])->latest('updated_at');
+        $query = $user->spaces()->with(['items.file', 'user.handle'])->latest('updated_at');
 
         /* The card's views: every day the nightly job has closed (daily
            stats survive the 90-day event prune), plus today's raw views,
@@ -71,6 +73,10 @@ class SpaceController extends Controller
 
     /**
      * New Space modal: name (+ gallery view). Always Draft+Private.
+     *
+     * `file_ids` (optional, library files) fills it in the same call —
+     * create_space_from_files. They are checked before anything is made,
+     * so an unknown id leaves no empty Space behind.
      */
     public function store(Request $request): JsonResponse
     {
@@ -83,6 +89,8 @@ class SpaceController extends Controller
                the setting is for people who answer the same way every
                time, not a replacement for the question. */
             'view_mode' => ['sometimes', 'string', 'in:editorial,grid,board'],
+            'file_ids' => ['sometimes', 'array', 'min:1', 'max:100'],
+            'file_ids.*' => ['string', 'max:26'],
         ]);
 
         $user = Workspace::owner($request->user());
@@ -93,18 +101,31 @@ class SpaceController extends Controller
             ])->status(422);
         }
 
-        $space = $user->spaces()->create([
-            'title' => $validated['title'],
-            'slug' => Space::generateSlug($user, $validated['title']),
-            /* The account's default when the caller named nothing. Read
-               through the profile, which may not exist yet — a Space can
-               be made before the profile screen is ever opened. */
-            'view_mode' => $validated['view_mode']
-                ?? $user->profile?->default_view_mode
-                ?? SpaceViewMode::Editorial,
-            'design' => Space::emptyDesign(),
-            'settings' => Space::defaultSettings(),
-        ]);
+        $files = isset($validated['file_ids'])
+            ? $this->readyFiles($user->id, $validated['file_ids'])
+            : collect();
+
+        $space = DB::transaction(function () use ($user, $validated, $files) {
+            $space = $user->spaces()->create([
+                'title' => $validated['title'],
+                'slug' => Space::generateSlug($user, $validated['title']),
+                /* The account's default when the caller named nothing. Read
+                   through the profile, which may not exist yet — a Space can
+                   be made before the profile screen is ever opened. */
+                'view_mode' => $validated['view_mode']
+                    ?? $user->profile?->default_view_mode
+                    ?? SpaceViewMode::Editorial,
+                'design' => Space::emptyDesign(),
+                'settings' => Space::defaultSettings(),
+            ]);
+
+            $order = 0;
+            foreach ($files as $file) {
+                $space->items()->create(['file_id' => $file->id, 'sort_order' => ++$order]);
+            }
+
+            return $space;
+        });
 
         // refresh(): status/visibility come from column defaults.
         return (new SpaceResource($space->refresh()->load('items.file')))
@@ -187,13 +208,94 @@ class SpaceController extends Controller
     }
 
     /**
-     * Publish — the active-slot gate.
+     * What publishing would put live — publish_space shows this before the
+     * user agrees. The address, who can open it, the lock and expiry, the
+     * file count, and whether an active slot is free. A connected app gets
+     * a confirm_token to bring back to publish (see SpacePublishConfirmation).
      */
-    public function publish(Request $request, Space $space): SpaceResource
+    public function publishPreview(Request $request, Space $space): JsonResponse
+    {
+        PlanQuota::requireFeature($request->user(), 'spaces');
+        abort_unless($space->user_id === Workspace::owner($request->user())->id, 404);
+
+        $space->load('user.handle');
+        $published = $space->isPublished();
+        $items = $space->items()->count();
+        $limit = PlanQuota::activeLimit($request->user());
+        $used = PlanQuota::activeUsed($request->user());
+
+        $blocked = [];
+        if (! Workspace::canWrite($request->user())) {
+            $blocked[] = 'read_only_role';
+        }
+        if (! $published && ! PlanQuota::canPublish($request->user())) {
+            $blocked[] = 'active_slots_full';
+        }
+
+        $warnings = [];
+        if ($space->publicUrl() === null) {
+            $warnings[] = 'no_handle';
+        }
+        if ($items === 0) {
+            $warnings[] = 'empty';
+        }
+        if ($space->isExpired()) {
+            $warnings[] = 'expired';
+        }
+
+        $publishable = ! $published && $blocked === [];
+
+        return response()->json([
+            'data' => [
+                'space_id' => $space->ulid,
+                'title' => $space->title,
+                'status' => $space->status,
+                'publishable' => $publishable,
+                'url' => $space->publicUrl(),
+                'visibility' => $space->visibility,
+                'has_password' => $space->password_hash !== null,
+                'expires_at' => $space->expires_at,
+                'items_count' => $items,
+                'active_slots' => [
+                    'limit' => $limit,
+                    'used' => $used,
+                    'remaining' => $limit === null ? null : max(0, $limit - $used),
+                ],
+                'blocked' => $blocked,
+                'warnings' => $warnings,
+                ...($publishable ? [
+                    'confirm_token' => SpacePublishConfirmation::issue($request->user(), $space),
+                    'confirm_expires_at' => now()->addMinutes(SpacePublishConfirmation::TTL_MINUTES)->toIso8601String(),
+                ] : []),
+            ],
+        ]);
+    }
+
+    /**
+     * Publish — the active-slot gate. A connected app or API key publishes
+     * only what the user saw in the publish preview, at most 10 minutes ago.
+     */
+    public function publish(Request $request, Space $space): SpaceResource|JsonResponse
     {
         PlanQuota::requireFeature($request->user(), 'spaces');
         abort_unless($space->user_id === Workspace::owner($request->user())->id, 404);
         abort_unless(Workspace::canWrite($request->user()), 403);
+
+        if (! $space->isPublished() && SpacePublishConfirmation::viaToken($request)) {
+            $token = $request->input('confirm_token');
+            if (! is_string($token) || $token === '') {
+                return response()->json([
+                    'message' => 'Publishing from a connected app needs the confirm_token from GET /spaces/{space}/publish-preview.',
+                    'code' => 'confirm_token_required',
+                ], 422);
+            }
+            if (! SpacePublishConfirmation::matches($request->user(), $space, $token)) {
+                return response()->json([
+                    'message' => 'The preview is out of date (the Space changed, or 10 minutes passed). Show the user a new preview and confirm again.',
+                    'code' => 'preview_stale',
+                ], 409);
+            }
+        }
 
         if (! $space->isPublished()) {
             if (! PlanQuota::canPublish($request->user())) {
@@ -350,6 +452,33 @@ class SpaceController extends Controller
     }
 
     /**
+     * The caller's ready library files for these ids, in the order given —
+     * or a 422 on file_ids naming nothing else, as addItems always has.
+     *
+     * @param  array<int, string>  $ids
+     * @return Collection<int, File>
+     */
+    private function readyFiles(int $userId, array $ids): Collection
+    {
+        $ulids = array_values(array_unique($ids));
+
+        $files = File::query()
+            ->whereIn('ulid', $ulids)
+            ->where('user_id', $userId)
+            ->where('status', File::STATUS_READY)
+            ->get()
+            ->keyBy('ulid');
+
+        if ($files->count() !== count($ulids)) {
+            throw ValidationException::withMessages([
+                'file_ids' => 'One or more files do not exist in your library.',
+            ]);
+        }
+
+        return collect($ulids)->map(fn (string $ulid) => $files[$ulid])->values();
+    }
+
+    /**
      * Add files to a Space from outside the editor — "Add to Space" on the
      * Files screen.
      *
@@ -375,19 +504,7 @@ class SpaceController extends Controller
             'file_ids.*' => ['string', 'max:26'],
         ]);
 
-        $ulids = array_values(array_unique($validated['file_ids']));
-
-        $files = File::query()
-            ->whereIn('ulid', $ulids)
-            ->where('user_id', $space->user_id)
-            ->where('status', File::STATUS_READY)
-            ->get();
-
-        if ($files->count() !== count($ulids)) {
-            throw ValidationException::withMessages([
-                'file_ids' => 'One or more files do not exist in your library.',
-            ]);
-        }
+        $files = $this->readyFiles($space->user_id, $validated['file_ids']);
 
         $already = $space->items()->pluck('file_id')->all();
         $new = $files->reject(fn (File $file) => in_array($file->id, $already, true));

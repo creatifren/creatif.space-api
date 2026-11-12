@@ -33,6 +33,8 @@ class SpaceListResource extends JsonResource
             'has_password' => $this->password_hash !== null,
             'expires_at' => $this->expires_at,
             'items_count' => $this->items->count(),
+            // Where it opens (or will once published); null without a handle.
+            'public_url' => $this->publicUrl(),
             /* Owner-only list, aggregate counts only: no visitor data. Null
                when the list was loaded without the counts (never a fake 0). */
             'views_count' => $this->viewsCount(),
