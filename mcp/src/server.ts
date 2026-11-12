@@ -22,6 +22,7 @@ import { spaceTools } from './tools/spaces.js';
 import { auditTools } from './tools/audit.js';
 import { connectTools } from './tools/connect.js';
 import { feedbackTools } from './tools/feedback.js';
+import { calendarTools } from './tools/calendar.js';
 import { V1Client } from './v1.js';
 import { VERSION } from './version.js';
 import { registerPrompts } from './prompts.js';
@@ -64,7 +65,7 @@ export interface AppDeps {
 export function buildMcpServer(auth: CallerAuth, deps: AppDeps): McpServer {
   const server = new McpServer(SERVER_INFO, { instructions: INSTRUCTIONS });
   const v1 = new V1Client(deps.v1ApiUrl, auth.token, deps.fetchImpl);
-  const tools = [...m1Tools, ...m2Tools, ...mediaTools, ...engageTools, ...aiTools, ...storageTools, ...housekeepingTools, ...approverTools, ...insightTools, ...insightReportTools, ...spaceTools, ...auditTools, ...connectTools, ...feedbackTools, ...insightShareTools];
+  const tools = [...m1Tools, ...m2Tools, ...mediaTools, ...engageTools, ...aiTools, ...storageTools, ...housekeepingTools, ...approverTools, ...insightTools, ...insightReportTools, ...spaceTools, ...auditTools, ...connectTools, ...feedbackTools, ...insightShareTools, ...calendarTools];
   for (const tool of tools) {
     registerTool(server, tool, { auth, v1, analytics: deps.analytics });
   }

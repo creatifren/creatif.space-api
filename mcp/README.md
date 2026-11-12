@@ -80,6 +80,7 @@ Rate limit: 60 requests / minute / token (429 + `Retry-After`).
 | `list_spaces` (status draft\|published\|archived, search, limit) — Pro/Max | read | `GET /spaces?tab&search` |
 | `create_space_from_files` (title, file_ids 1–100, view_mode) — always a Draft+Private Space, never published; Pro/Max | draft | `POST /spaces` with `file_ids` (checked before anything is created) |
 | `publish_space` (space_id, confirm) — Pro/Max | publish | preview `GET /spaces/{id}/publish-preview`; `confirm: true` → `POST /spaces/{id}/publish` |
+| `get_plan_calendar_link` (link_id) — ICS feed URL of a Content Plan (scheduled posts, first 60 characters of the caption); read-only, stable URL | read | `GET /social-approval-links/{id}/calendar` |
 | `get_approval_audit` (link_id) — every decision on one of the user's links: who, post, when, decision, comment; rows and CSV | read | `GET /social-approval-links/{id}/audit.csv` |
 | `send_feedback` (kind bug\|idea\|other, message, page) — to the creatif.space team; nothing public, no Credits; 10 an hour per user | draft | `POST /feedback` |
 | `list_shared_with_me` — "Reports shared with you": Content Plans other users sent to this user's email | approvals:decide | `GET /me/reports/shared` |
@@ -162,7 +163,7 @@ the SDK answers itself, get the same envelope. Codes: `reconnect_required`,
 `scope_missing`, `plan_required`, `not_found`, `unknown_tool`, `invalid_input`,
 `unauthorized`, `forbidden`, `rate_limited`, `daily_cap_reached`,
 `insufficient_credits`, `quota_exceeded`, `preview_stale`, `not_editable`,
-`not_draft`, `not_approvable`, `approval_required`, `storage_full`,
+`not_draft`, `not_approvable`, `not_a_plan`, `link_inactive`, `approval_required`, `storage_full`,
 `file_too_large`, `unsupported_format`, `upload_limit`, `upload_incomplete`,
 `file_not_ready`, `upstream_unavailable`, `internal_error`, and for Engage
 replies `reply_window_closed`, `reply_rejected`, `reply_not_possible`,
