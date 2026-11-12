@@ -6,6 +6,8 @@ export class V1Error extends Error {
   constructor(
     readonly status: number,
     readonly body: Record<string, unknown> | null,
+    /** Seconds from a Retry-After header (seconds or an HTTP date), when the API sent one. */
+    readonly retryAfter?: number,
   ) {
     super(typeof body?.message === 'string' ? body.message : `V1 API answered ${status}`);
   }
@@ -93,8 +95,19 @@ export class V1Client {
     }
 
     if (!res.ok) {
-      throw new V1Error(res.status, json && typeof json === 'object' ? (json as Record<string, unknown>) : null);
+      throw new V1Error(res.status, json && typeof json === 'object' ? (json as Record<string, unknown>) : null, retryAfter(res.headers.get('retry-after')));
     }
     return json as T;
   }
+}
+
+/** Retry-After as whole seconds: "17" → 17, an HTTP date → seconds from now; anything else → undefined. */
+export function retryAfter(header: string | null, now: number = Date.now()): number | undefined {
+  if (!header) return undefined;
+  const trimmed = header.trim();
+  if (/^\d+$/.test(trimmed)) return Number(trimmed) > 0 ? Number(trimmed) : undefined;
+  const at = Date.parse(trimmed);
+  if (Number.isNaN(at)) return undefined;
+  const secs = Math.ceil((at - now) / 1000);
+  return secs > 0 ? secs : undefined;
 }

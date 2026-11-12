@@ -303,12 +303,15 @@ export function toToolError(e: unknown, notFound: NotFound = DEFAULT_NOT_FOUND):
           );
     }
     case 429: {
-      // The API says how long (bootstrap/app.php: {message, retry_after}).
-      const after = typeof body.retry_after === 'number' && body.retry_after > 0 ? Math.ceil(body.retry_after) : 60;
+      // How long: the body's retry_after (bootstrap/app.php), else the
+      // Retry-After header (the token limit in EnforceTokenScope sends only
+      // the header), else a minute.
+      const fromBody = typeof body.retry_after === 'number' && body.retry_after > 0 ? Math.ceil(body.retry_after) : undefined;
+      const after = fromBody ?? e.retryAfter ?? 60;
       return new ToolError(
         'rate_limited',
-        'creatif.space is rate limiting these requests.',
-        `Wait ${after} seconds (details.retry_after_seconds) before calling again; do not loop.`,
+        typeof body.message === 'string' && body.message !== '' ? body.message : 'creatif.space is rate limiting these requests.',
+        `Nothing was done. Wait ${after} seconds (details.retry_after_seconds) before calling again; do not loop or retry sooner.`,
         { retryable: true, retry_after_seconds: after },
       );
     }

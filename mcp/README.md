@@ -267,6 +267,16 @@ reach outside creatif.space (platforms, the client's inbox, public links) are
 `openWorldHint`. `test/annotations.test.ts` checks these rules and pins every
 tool's hints in a snapshot.
 
+## Rate limits (429)
+
+Every tool turns an API 429 into the same envelope:
+`{code: 'rate_limited', message, next_step, details: {retryable: true, retry_after_seconds}}`.
+
+- **`message`:** the API's own text.
+- **`retry_after_seconds`:** taken from the body's `retry_after`, else the `Retry-After` header (the token limit in `EnforceTokenScope` sends only the header), else 60.
+
+Two 429s keep their own codes: `upload_limit` (uploads paused for today) and `daily_cap_reached` (20 sends a day from connected apps). `test/ratelimit.test.ts` sends a 429 to every tool.
+
 ## Pagination
 
 Every `list_*` tool pages the same way. It takes `limit` and `cursor`, and
