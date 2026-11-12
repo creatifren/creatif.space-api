@@ -1,8 +1,10 @@
 <?php
 
+use App\Models\Plan;
 use App\Models\TeamMember;
 use App\Models\User;
 use App\Support\McpConsent;
+use App\Support\Workspace;
 use Illuminate\Foundation\Http\Middleware\PreventRequestForgery;
 use Laravel\Passport\Client;
 use Laravel\Passport\Token;
@@ -75,9 +77,15 @@ it('shows who is signed in, masked, with the workspace and the permissions', fun
 });
 
 it('names the team owner\'s workspace for a member', function () {
+    // A membership counts only on a plan with seats for it (Team).
     $owner = User::factory()->create(['name' => 'Kopi Senja']);
+    $owner->subscriptions()->create([
+        'plan_id' => Plan::query()->where('key', 'team')->value('id'),
+        'billing_period' => 'monthly', 'seats' => 3, 'status' => 'active',
+    ])->forceFill(['current_period_start' => now()->subDays(10), 'current_period_end' => now()->addDays(20)])->save();
     $member = User::factory()->create(['name' => 'Dewi', 'email' => 'dewi@example.test']);
     TeamMember::factory()->active($member)->create(['owner_id' => $owner->id, 'role' => 'editor']);
+    Workspace::forget();
 
     expect(McpConsent::workspaceName($member))->toBe('Kopi Senja')
         ->and(McpConsent::workspaceName($owner))->toBe('Kopi Senja');

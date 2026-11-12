@@ -68,9 +68,11 @@ class GoogleAuthController extends Controller
         // let them pick the other Google account instead of being signed
         // straight back in as the one they just left. Their Google session
         // itself is never touched.
-        if ($request->session()->pull(SwitchAccountController::SELECT_ACCOUNT, false) === true
-            && $driver instanceof AbstractProvider) {
-            $driver->with(['prompt' => 'select_account']);
+        // The driver is cached by Socialite, so its parameters are set on
+        // every redirect: the chooser must not stick to the next sign-in.
+        $selectAccount = $request->session()->pull(SwitchAccountController::SELECT_ACCOUNT, false) === true;
+        if ($driver instanceof AbstractProvider) {
+            $driver->with($selectAccount ? ['prompt' => 'select_account'] : []);
         }
 
         return $driver->redirect();
