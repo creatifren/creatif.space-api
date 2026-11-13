@@ -14,8 +14,8 @@ use Tests\TestCase;
  * with the URL as client_id; bad documents are invalid_client; DCR is
  * unchanged.
  */
-const CIMD_URL = 'https://app.example-client.com/oauth/client.json';
-const CIMD_REDIRECT = 'https://app.example-client.com/callback';
+const CIMD_URL = 'https://client.example.com/oauth/client.json';
+const CIMD_REDIRECT = 'https://client.example.com/callback';
 
 beforeEach(function () {
     ensurePassportKeys();
@@ -70,7 +70,7 @@ it('runs the whole flow with the document URL as client_id: consent, code, token
     $user = User::factory()->create();
 
     ['response' => $consent, 'verifier' => $verifier] = cimdAuthorize($this, $user);
-    $consent->assertOk()->assertSee('Example Agent')->assertSee('app.example-client.com');
+    $consent->assertOk()->assertSee('Example Agent')->assertSee('client.example.com');
 
     $client = Client::query()->sole();
     expect($client->name)->toBe('Example Agent')
@@ -128,15 +128,15 @@ it('refuses a redirect_uri the document does not list', function () {
 it('refetches once the cached copy expires, and follows the document', function () {
     Http::fakeSequence(CIMD_URL)
         ->push(cimdDocument(), 200, ['Cache-Control' => 'max-age=300'])
-        ->push(cimdDocument(['client_name' => 'Example Agent 2', 'redirect_uris' => ['https://app.example-client.com/cb2']]), 200, ['Cache-Control' => 'max-age=300']);
+        ->push(cimdDocument(['client_name' => 'Example Agent 2', 'redirect_uris' => ['https://client.example.com/cb2']]), 200, ['Cache-Control' => 'max-age=300']);
     $user = User::factory()->create();
 
     cimdAuthorize($this, $user)['response']->assertOk();
     $this->travel(301)->seconds();
-    cimdAuthorize($this, $user, 'https://app.example-client.com/cb2')['response']->assertOk()->assertSee('Example Agent 2');
+    cimdAuthorize($this, $user, 'https://client.example.com/cb2')['response']->assertOk()->assertSee('Example Agent 2');
 
     expect(Client::query()->count())->toBe(1)
-        ->and(Client::query()->sole()->redirect_uris)->toBe(['https://app.example-client.com/cb2']);
+        ->and(Client::query()->sole()->redirect_uris)->toBe(['https://client.example.com/cb2']);
     Http::assertSentCount(2);
 });
 
@@ -176,12 +176,12 @@ it('treats only https URLs with a path as metadata documents', function (mixed $
     expect(ClientMetadataDocuments::isUrl($id))->toBe($isUrl);
 })->with([
     [CIMD_URL, true],
-    ['https://app.example-client.com/', false],
-    ['https://app.example-client.com', false],
-    ['http://app.example-client.com/client.json', false],
-    ['https://user@app.example-client.com/client.json', false],
-    ['https://app.example-client.com/a/../client.json', false],
-    ['https://app.example-client.com/client.json#x', false],
+    ['https://client.example.com/', false],
+    ['https://client.example.com', false],
+    ['http://client.example.com/client.json', false],
+    ['https://user@client.example.com/client.json', false],
+    ['https://client.example.com/a/../client.json', false],
+    ['https://client.example.com/client.json#x', false],
     ['9d1e4b2a-0000-4000-8000-000000000000', false],
     [null, false],
 ]);

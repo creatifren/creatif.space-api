@@ -22,7 +22,7 @@ use Illuminate\Support\Facades\Log;
  */
 
 const GP_AUDIENCE = 'https://api.creatif.test/api/v1/webhooks/google-play';
-const GP_PUSH_SA = 'rtdn-push@creatif-play.iam.gserviceaccount.com';
+const GP_PUSH_SA = 'rtdn-push@example-project.iam.gserviceaccount.com';
 
 beforeEach(function () {
     Cache::flush();
@@ -33,7 +33,7 @@ beforeEach(function () {
     $this->gpSaPath = tempnam(sys_get_temp_dir(), 'gp-sa-');
     file_put_contents($this->gpSaPath, json_encode([
         'type' => 'service_account',
-        'client_email' => 'play-api@creatif-play.iam.gserviceaccount.com',
+        'client_email' => 'play-api@example-project.iam.gserviceaccount.com',
         'private_key' => $this->gpSaKey['private'],
         'token_uri' => 'https://oauth2.googleapis.com/token',
     ]));
@@ -61,7 +61,7 @@ beforeEach(function () {
             // The assertion is signed with the service account's key.
             $claims = JWT::decode($request['assertion'], new Key($this->gpSaKey['public'], 'RS256'));
             expect($claims->scope)->toBe(GooglePlayClient::SCOPE)
-                ->and($claims->iss)->toBe('play-api@creatif-play.iam.gserviceaccount.com');
+                ->and($claims->iss)->toBe('play-api@example-project.iam.gserviceaccount.com');
 
             return Http::response(['access_token' => 'ya29.test-access', 'expires_in' => 3599, 'token_type' => 'Bearer']);
         },

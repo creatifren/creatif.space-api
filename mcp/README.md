@@ -20,7 +20,7 @@ No business logic lives here.
    prompts menu):
    - **“Plan next week: 5 Instagram posts about our winter launch.”** →
      `plan_week` drafts the posts on your channel. Drafts only, nothing goes out.
-   - **“Send my drafts to rani@client.com for approval.”** →
+   - **“Send my drafts to rani@client.example for approval.”** →
      `send_for_approval` makes an approval link for your client to approve or
      ask for changes.
    - **“How did this week go? Give me a link for my client.”** →

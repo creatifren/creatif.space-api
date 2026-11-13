@@ -14,7 +14,7 @@ it('masks email addresses anywhere in a string', function (string $in, string $o
     expect(Redactor::string($in))->toBe($out);
 })->with([
     ['login failed for rani@client.test', 'login failed for [email]'],
-    ['to: First.Last+tag@sub.example.co.id, cc a@b.io', 'to: [email], cc [email]'],
+    ['to: First.Last+tag@sub.example.com, cc a@b.example.org', 'to: [email], cc [email]'],
     ['no address here', 'no address here'],
 ]);
 
@@ -81,7 +81,7 @@ it('redacts a whole Monolog record: message, context and extra', function () {
         level: Level::Info,
         message: 'oauth.client_registered for owner@studio.test',
         context: ['name' => 'Claude', 'client_id' => '9d1e', 'ip' => '203.0.113.9'],
-        extra: ['email' => 'x@y.zz'],
+        extra: ['email' => 'x@y.example'],
     );
 
     $out = (new RedactingProcessor)($record);

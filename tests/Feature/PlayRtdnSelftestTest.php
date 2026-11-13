@@ -29,7 +29,7 @@ it('delivers a test notification through the real webhook and token check', func
 it('checks the push against this install\'s configured audience and service account', function () {
     config([
         'services.google_play.rtdn_audience' => 'https://api.creatif.space/api/v1/webhooks/google-play',
-        'services.google_play.rtdn_service_account_email' => 'rtdn-push@creatif-prod.iam.gserviceaccount.com',
+        'services.google_play.rtdn_service_account_email' => 'rtdn-push@example-project.iam.gserviceaccount.com',
     ]);
 
     $this->artisan('play:rtdn-selftest')->expectsOutputToContain('outcome: test')->assertSuccessful();

@@ -161,7 +161,7 @@ final class ApproverGate
         ];
     }
 
-    /** "rizal@digicard.com" → "r***@d***.com"; never the whole address. */
+    /** "dewi@kopi.example" → "d***@k***.example"; never the whole address. */
     public static function hint(string $email): string
     {
         [$local, $domain] = array_pad(explode('@', mb_strtolower(trim($email)), 2), 2, '');
