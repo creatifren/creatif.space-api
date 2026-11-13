@@ -2,6 +2,7 @@
 
 namespace App\Support;
 
+use App\Jobs\FailUnconfirmedPublishes as FailUnconfirmed;
 use Illuminate\Support\Str;
 
 /**
@@ -36,6 +37,8 @@ final class PublishFailure
         'content_too_long' => 'content',
         'content_rejected' => 'content',
         'platform_unavailable' => 'platform_unavailable',
+        // Sent, but the relay never said published or failed (FailUnconfirmedPublishes).
+        'not_confirmed' => 'unknown',
         'other' => 'other',
         // A refusal that says nothing. The coarse code stays "unknown", as
         // PostHog has always had it.
@@ -44,6 +47,8 @@ final class PublishFailure
 
     /** Specific patterns first: "quota" before a generic limit, a missing board before "media". */
     private const PATTERNS = [
+        // Our own marker, never a platform's words: checked first.
+        'not_confirmed' => '/\[creatif:not_confirmed\]/',
         'quota_exceeded' => '/\b(quota|daily (upload )?limit|upload limit|uploadLimitExceeded)\b/i',
         'rate_limited' => '/\b(rate[ _-]?limit(ed)?|too many requests|429|throttl(ed|ing)|try again later|limit reached)\b/i',
         'missing_board' => '/\bboard(_?ids?)?\b.*\b(required|missing|not found|invalid|must)\b|\b(required|missing|no)\b.*\bboard/i',
@@ -131,6 +136,7 @@ final class PublishFailure
             'content_rejected' => "{$n} refused the content under its rules.",
             'platform_unavailable' => "{$n} was unavailable. Try again in a few minutes.",
             'network_rejected' => "{$n} refused it without saying why. Try again, or contact support.",
+            'not_confirmed' => "{$n} did not confirm the post within ".FailUnconfirmed::AFTER_MINUTES.' minutes, so it was stopped and not charged. Check the account on '.$n.' (on Bluesky: that its app password is still valid), then send it again.',
             default => "{$n} refused it. Try again, or contact support with the post link.",
         };
     }
