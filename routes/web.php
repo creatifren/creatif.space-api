@@ -64,7 +64,7 @@ Route::post('/auth/logout', function () {
     request()->session()->regenerateToken();
 
     return response()->noContent();
-})->middleware('auth')->name('auth.logout');
+})->middleware(['auth', 'throttle:30,1'])->name('auth.logout');
 
 // OAuth 2.1 for MCP clients — the browser half: the consent screen and its
 // two buttons. Session-based, like the rest of web.php; a guest is sent to
@@ -74,10 +74,10 @@ Route::get('/oauth/authorize', [AuthorizationController::class, 'authorize'])
     ->name('passport.authorizations.authorize');
 Route::middleware('auth')->group(function () {
     Route::post('/oauth/authorize', [ApproveAuthorizationController::class, 'approve'])
-        ->middleware([PendingAuthorizations::class, BindAuthRequestToSession::class])
+        ->middleware(['throttle:'.OAuthRateLimits::AUTHORIZE, PendingAuthorizations::class, BindAuthRequestToSession::class])
         ->name('passport.authorizations.approve');
     Route::delete('/oauth/authorize', [DenyAuthorizationController::class, 'deny'])
-        ->middleware(PendingAuthorizations::class)
+        ->middleware(['throttle:'.OAuthRateLimits::AUTHORIZE, PendingAuthorizations::class])
         ->name('passport.authorizations.deny');
 });
 

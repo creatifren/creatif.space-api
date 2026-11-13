@@ -88,6 +88,11 @@ return [
     */
     'trusted_proxies' => env('TRUSTED_PROXIES', ''),
 
+    // Behind Cloudflare: a request from Cloudflare's edge ranges is the
+    // visitor in CF-Connecting-IP (TrustAppServer). On by default — the
+    // header is only read from those ranges.
+    'cloudflare_proxy' => (bool) env('CLOUDFLARE_PROXY', true),
+
     // Rizal's slogan, verbatim: never paraphrase, never env-overridable.
     'slogan' => 'Get content approved & published faster.',
 
