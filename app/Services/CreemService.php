@@ -12,6 +12,7 @@ use Illuminate\Http\Client\RequestException;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 use RuntimeException;
+use Throwable;
 
 /**
  * Creem, by hand. Not the SDK: a handful of endpoints and one HMAC, read
@@ -105,6 +106,27 @@ class CreemService
             'product_id' => $this->product($productId),
             'update_behavior' => 'proration-charge-immediately',
         ]);
+    }
+
+    /**
+     * Undo a scheduled cancellation, so the subscription renews again and
+     * can be changed (Creem refuses an upgrade on one that is ending).
+     *
+     * @throws ConnectionException|RequestException
+     */
+    public function resume(Subscription $subscription): void
+    {
+        $this->api()->post("/subscriptions/{$subscription->creem_subscription_id}/resume");
+    }
+
+    /**
+     * Creem's 400 for a subscription that is not active (e.g. set to end).
+     */
+    public static function isNotActive(Throwable $e): bool
+    {
+        return $e instanceof RequestException
+            && $e->response->status() === 400
+            && str_contains((string) $e->response->body(), 'subscription_not_active');
     }
 
     /**
