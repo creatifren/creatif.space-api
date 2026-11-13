@@ -271,8 +271,9 @@ final class CreemReplay
         $sub->refresh();
         $this->check('active', $sub->status === SubscriptionStatus::Active, $sub->status->value);
         $this->check('account Pro', $this->planOf($sub->user_id) === 'pro', $this->planOf($sub->user_id));
-        $this->check('invoice paid', $invoice->fresh()?->status === InvoiceStatus::Paid && $invoice->fresh()?->creem_transaction_id === $transaction,
-            (string) $invoice->fresh()?->status->value);
+        $after = $invoice->fresh();
+        $this->check('invoice paid', $after !== null && $after->status === InvoiceStatus::Paid && $after->creem_transaction_id === $transaction,
+            (string) $after?->status->value);
     }
 
     // ── Setup, as our own checkout would leave it ────────────────────────
@@ -434,7 +435,7 @@ final class CreemReplay
                 'HTTP_ACCEPT' => 'application/json',
             ], content: json_encode($data, JSON_THROW_ON_ERROR)));
         } finally {
-            Auth::guard('web')->forgetUser();
+            // Drops the guards, and the user set on them, for the next request.
             app('auth')->forgetGuards();
         }
 
