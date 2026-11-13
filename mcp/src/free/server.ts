@@ -7,13 +7,14 @@ import type { FreeAnalytics } from '../analytics.js';
 import { ToolError } from '../errors.js';
 import { structureSdkErrors } from '../tools/define.js';
 import { TokenRateLimiter } from '../rateLimit.js';
+import { SERVER_ICONS } from '../icons.js';
 import { approvalInput, approvalTemplate } from './approval.js';
 import { checkCaption, checkCaptionInput } from './checkCaption.js';
 import { connectGuide, connectInput } from './connect.js';
 import { ctaLine, type FreeToolName } from './cta.js';
 
-/** The Pen Rocket, as in free-tools/server.json (served by the web app). */
-export const FREE_SERVER_ICONS = [{ src: 'https://creatif.space/icons/icon-512.png', mimeType: 'image/png', sizes: ['512x512'] }];
+/** The rocket mark served by this server (src/icons.ts), as in free-tools/server.json. */
+export const FREE_SERVER_ICONS = SERVER_ICONS;
 
 export const FREE_SERVER_INFO = {
   name: 'Creatif Space Free Tools',

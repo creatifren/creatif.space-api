@@ -41,6 +41,7 @@ class MetadataController extends Controller
             'service_documentation' => 'https://creatif.space/docs/mcp',
             'op_policy_uri' => (string) config('mcp.privacy_url'),
             'op_tos_uri' => (string) config('mcp.terms_url'),
+            'logo_uri' => $this->logoUri(),
         ]);
     }
 
@@ -52,10 +53,26 @@ class MetadataController extends Controller
             'scopes_supported' => array_keys((array) config('mcp.scopes')),
             'bearer_methods_supported' => ['header'],
             'resource_name' => 'Creatif Space',
+            'logo_uri' => $this->logoUri(),
             'resource_documentation' => 'https://creatif.space/docs/mcp',
             'resource_policy_uri' => (string) config('mcp.privacy_url'),
             'resource_tos_uri' => (string) config('mcp.terms_url'),
         ]);
+    }
+
+    /**
+     * The connector's icon: the rocket mark the MCP server serves on its own
+     * origin (mcp/public/icon.png), so Claude and ChatGPT show it, not an
+     * old logo. Follows the MCP origin, so staging names its own.
+     */
+    private function logoUri(): string
+    {
+        $resource = (string) config('mcp.resource_url');
+        $scheme = parse_url($resource, PHP_URL_SCHEME) ?: 'https';
+        $host = parse_url($resource, PHP_URL_HOST) ?: 'mcp.creatif.space';
+        $port = parse_url($resource, PHP_URL_PORT);
+
+        return $scheme.'://'.$host.($port ? ':'.$port : '').'/icon.png';
     }
 
     private function issuer(): string
