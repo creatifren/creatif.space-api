@@ -37,7 +37,7 @@ import { VERSION } from './version.js';
 import { registerPrompts } from './prompts.js';
 import { registerResources } from './resources.js';
 import { mcpCors } from './cors.js';
-import { DEFAULT_FREE_RATE_LIMIT, DEFAULT_GLAMA_CLAIM } from './config.js';
+import { DEFAULT_FREE_RATE_LIMIT, DEFAULT_GLAMA_CLAIM, DEFAULT_OPENAI_APPS_CHALLENGE } from './config.js';
 import { mountFree } from './free/server.js';
 
 /** Every tool, in the order it is registered (and listed). */
@@ -81,7 +81,7 @@ export interface AppDeps {
   publicDiscovery?: boolean;
   /** Anonymous discovery calls per IP per minute. */
   discoveryRateLimiter?: TokenRateLimiter;
-  /** OpenAI Apps domain-verification token; unset → 404. */
+  /** OpenAI Apps domain-verification token. Defaults to DEFAULT_OPENAI_APPS_CHALLENGE; null or empty → 404. */
   openaiAppsChallenge?: string | null;
 }
 
@@ -133,10 +133,10 @@ export function createApp(deps: AppDeps) {
     res.type('application/json').send(glama);
   });
 
-  // OpenAI Apps domain verification: the token from OPENAI_APPS_CHALLENGE as
-  // plain text, public, no auth; 404 while it is not set.
+  // OpenAI Apps domain verification: the token (OPENAI_APPS_CHALLENGE, else
+  // DEFAULT_OPENAI_APPS_CHALLENGE) as plain text, public, no auth.
   app.get('/.well-known/openai-apps-challenge', (_req, res) => {
-    const token = deps.openaiAppsChallenge?.trim();
+    const token = (deps.openaiAppsChallenge === undefined ? DEFAULT_OPENAI_APPS_CHALLENGE : deps.openaiAppsChallenge)?.trim();
     if (!token) {
       res.status(404).type('text/plain').send('Not Found');
       return;

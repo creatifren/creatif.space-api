@@ -25,12 +25,18 @@ export interface Config {
    * else still need OAuth. Off unless set to exactly "true".
    */
   publicDiscovery: boolean;
-  /** OpenAI Apps domain-verification token (OPENAI_APPS_CHALLENGE); null → the well-known answers 404. */
+  /** OpenAI Apps domain-verification token (OPENAI_APPS_CHALLENGE, else DEFAULT_OPENAI_APPS_CHALLENGE). */
   openaiAppsChallenge: string | null;
 }
 
 /** Not a secret: Glama reads it from a public URL to verify we own the connector. */
 export const DEFAULT_GLAMA_CLAIM = 'glama_claim_U8l5ipmr_QunqGhWyIg0VXQeWfhkoEky';
+
+/**
+ * Not a secret: OpenAI reads it from https://mcp.creatif.space/.well-known/openai-apps-challenge to verify we own the
+ * domain (ChatGPT Apps directory, 14 Nov 2026). OPENAI_APPS_CHALLENGE still overrides it.
+ */
+export const DEFAULT_OPENAI_APPS_CHALLENGE = 'uYNaMuKD7ghXNsfqvWYJtgy4EnJSE7mSD51RdcYzwDI';
 
 /** /free calls per IP per minute (no env var: a code default, like rateLimitPerMinute). */
 export const DEFAULT_FREE_RATE_LIMIT = 30;
@@ -65,6 +71,6 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
     introspectionTtlMs: 60_000,
     rateLimitPerMinute: 60,
     publicDiscovery: env.MCP_PUBLIC_DISCOVERY === 'true',
-    openaiAppsChallenge: env.OPENAI_APPS_CHALLENGE?.trim() || null,
+    openaiAppsChallenge: env.OPENAI_APPS_CHALLENGE?.trim() || DEFAULT_OPENAI_APPS_CHALLENGE,
   };
 }
