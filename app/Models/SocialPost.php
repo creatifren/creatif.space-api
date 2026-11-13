@@ -8,6 +8,7 @@ use App\Enums\SocialPostStatus;
 use App\Enums\SocialPostTargetStatus;
 use App\Models\Contracts\WorkspaceOwned;
 use App\Notifications\SocialPostFailed;
+use App\Services\DemoSocialProvider;
 use App\Support\Media\MediaLinks;
 use Carbon\CarbonImmutable;
 use Database\Factories\SocialPostFactory;
@@ -186,7 +187,8 @@ class SocialPost extends Model implements WorkspaceOwned
         // Only on the transition into Failed — webhook retries recompute
         // again and must not notify twice — and only if the owner was not
         // already told this attempt missed its time (one email per post).
-        if (! $anyPublished && ! $wasFailed && $this->claimFailureNotice()) {
+        // The demo channel's "nothing is posted" is not news worth an email.
+        if (! $anyPublished && ! $wasFailed && $this->provider !== DemoSocialProvider::NAME && $this->claimFailureNotice()) {
             $this->user->notify(new SocialPostFailed($this));
         }
     }

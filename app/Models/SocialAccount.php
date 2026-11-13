@@ -23,6 +23,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
  * @property string $ulid
  * @property int $user_id
  * @property string $provider
+ * @property bool $is_demo
  * @property SocialPlatform $platform
  * @property string $provider_account_id
  * @property string|null $username
@@ -49,6 +50,7 @@ class SocialAccount extends Model implements WorkspaceOwned
     protected $fillable = [
         'user_id',
         'provider',
+        'is_demo',
         'platform',
         'provider_account_id',
         'username',
@@ -73,6 +75,7 @@ class SocialAccount extends Model implements WorkspaceOwned
     {
         return [
             'platform' => SocialPlatform::class,
+            'is_demo' => 'boolean',
             'status' => SocialAccountStatus::class,
             'connected_at' => 'datetime',
             'messages_scope_at' => 'datetime',
@@ -133,19 +136,20 @@ class SocialAccount extends Model implements WorkspaceOwned
     protected function usable(Builder $query): void
     {
         $query->where('status', SocialAccountStatus::Connected)
-            ->where('provider', self::currentProvider());
+            ->where(fn (Builder $q) => $q->where('provider', self::currentProvider())->orWhere('is_demo', true));
     }
 
     public function isUsable(): bool
     {
         return $this->status === SocialAccountStatus::Connected
-            && $this->provider === self::currentProvider();
+            && ($this->provider === self::currentProvider() || $this->is_demo);
     }
 
-    /** Connected under another relay: the user has to reconnect it. */
+    /** Connected under another relay: the user has to reconnect it. The demo channel never is. */
     public function isLegacy(): bool
     {
         return $this->status === SocialAccountStatus::Connected
+            && ! $this->is_demo
             && $this->provider !== self::currentProvider();
     }
 

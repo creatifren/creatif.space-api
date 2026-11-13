@@ -297,6 +297,8 @@ class SocialAccountController extends Controller
         // this one: it goes too, and is reconnected here.
         $lost = $user->socialAccounts()
             ->where('status', SocialAccountStatus::Connected)
+            // The reviewer's seeded demo channel is no relay's (DemoSocialProvider).
+            ->where('is_demo', false)
             ->where(fn ($q) => $q->where('provider', '!=', $provider->name())
                 ->orWhereNotIn('provider_account_id', $seen))
             ->get()

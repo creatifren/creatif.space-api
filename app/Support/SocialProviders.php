@@ -5,6 +5,7 @@ namespace App\Support;
 use App\Contracts\SocialProvider;
 use App\Models\SocialAccount;
 use App\Models\SocialPost;
+use App\Services\DemoSocialProvider;
 use App\Services\OutstandService;
 use App\Services\PostForMeService;
 use InvalidArgumentException;
@@ -28,6 +29,8 @@ class SocialProviders
         return match ($name) {
             'outstand' => app(OutstandService::class),
             'postforme' => app(PostForMeService::class),
+            // The directory reviewer's seeded channel: never a network call.
+            DemoSocialProvider::NAME => app(DemoSocialProvider::class),
             default => throw new InvalidArgumentException("Unknown social provider [{$name}]."),
         };
     }

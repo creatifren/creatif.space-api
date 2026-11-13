@@ -28,7 +28,7 @@ class ReviewerGrant extends Command
 
     protected $description = 'Set (or revoke) the directory-reviewer flag and password on an existing account';
 
-    public const MIN_LENGTH = 12;
+    public const MIN_LENGTH = DirectoryReviewer::MIN_PASSWORD;
 
     public function handle(): int
     {
@@ -42,8 +42,7 @@ class ReviewerGrant extends Command
         }
 
         if ($this->option('revoke')) {
-            $user->forceFill(['is_directory_reviewer' => false, 'password' => null, 'remember_token' => Str::random(60)])->save();
-            DirectoryReviewer::audit($user, $email, null, DirectoryReviewer::REVOKED);
+            DirectoryReviewer::revoke($user, $email);
             $this->info("{$email} is no longer a directory reviewer; its password is cleared.");
 
             return self::SUCCESS;
@@ -52,19 +51,13 @@ class ReviewerGrant extends Command
         $generated = ! $this->option('password');
         $password = $generated ? Str::password(24, symbols: false) : (string) $this->secret('Password (at least '.self::MIN_LENGTH.' characters)');
 
-        if (mb_strlen($password) < self::MIN_LENGTH || mb_strlen($password) > 72) {
+        if (mb_strlen($password) < self::MIN_LENGTH || mb_strlen($password) > DirectoryReviewer::MAX_PASSWORD) {
             $this->error('The password must be '.self::MIN_LENGTH.' to 72 characters.');
 
             return self::FAILURE;
         }
 
-        $user->forceFill([
-            'is_directory_reviewer' => true,
-            'password' => $password,
-            'email_verified_at' => $user->email_verified_at ?? now(),
-            'remember_token' => Str::random(60),
-        ])->save();
-        DirectoryReviewer::audit($user, $email, null, DirectoryReviewer::GRANTED);
+        DirectoryReviewer::grant($user, $email, $password);
 
         $this->info("{$email} is a directory reviewer. Sign in at POST /auth/reviewer/login.");
         if ($generated) {
