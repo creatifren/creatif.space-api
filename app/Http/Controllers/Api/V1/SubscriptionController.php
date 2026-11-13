@@ -6,6 +6,7 @@ use App\Enums\InvoiceStatus;
 use App\Enums\PlanKey;
 use App\Enums\SubscriptionStatus;
 use App\Exceptions\GooglePlayRefused;
+use App\Exceptions\SubscriptionNotActive;
 use App\Http\Controllers\Controller;
 use App\Http\Resources\InvoiceResource;
 use App\Http\Resources\PlanResource;
@@ -21,12 +22,15 @@ use App\Support\PlanQuota;
 use App\Support\ProductEvents;
 use App\Support\Trial;
 use App\Support\Workspace;
+use Illuminate\Http\Client\RequestException;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
+use Throwable;
 
 /**
  * Settings → Subscription. Checkout is Creem's hosted page; nothing here
@@ -43,6 +47,11 @@ class SubscriptionController extends Controller
         Workspace::ownerOnly($request->user());
         $user = $request->user();
         $subscription = $user->activeSubscription();
+        // Never the placeholder an abandoned checkout leaves (Expired, never
+        // paid): that is Free, not an "expired" plan (QA, staging).
+        if ($subscription?->status === SubscriptionStatus::Expired) {
+            $subscription = null;
+        }
 
         return response()->json([
             'data' => [
@@ -136,7 +145,7 @@ class SubscriptionController extends Controller
                 ]);
             }
 
-            $creem->upgrade($current, (string) Trial::changeProduct($plan, $validated['period']));
+            self::changePlan($creem, $current, (string) Trial::changeProduct($plan, $validated['period']));
             ProductEvents::checkoutStarted($user, 'subscription', $plan->key, $validated['period'], (int) $plan->priceFor($validated['period']), false);
 
             return response()->json(['data' => [
@@ -218,6 +227,62 @@ class SubscriptionController extends Controller
                 'invoice' => (new InvoiceResource($invoice))->toArray($request),
             ],
         ], 201);
+    }
+
+    /**
+     * Upgrade a running Creem subscription. One set to end (cancelled at
+     * period end) is refused by Creem with 400 subscription_not_active, so
+     * it is resumed first and the change tried again; if Creem still says
+     * no, a resume we made is undone and the owner gets a clear 409
+     * (code subscription_not_active), never a 500.
+     */
+    private static function changePlan(CreemService $creem, Subscription $current, string $product): void
+    {
+        $resumed = false;
+        try {
+            if ($current->cancelled_at !== null) {
+                $creem->resume($current);
+                $resumed = true;
+            }
+            $creem->upgrade($current, $product);
+        } catch (RequestException $e) {
+            if ($resumed) {
+                self::refuseChange($creem, $current, true, $e);
+            }
+            if (! CreemService::isNotActive($e)) {
+                throw $e;
+            }
+            try {
+                $creem->resume($current);
+                $resumed = true;
+                $creem->upgrade($current, $product);
+            } catch (RequestException $again) {
+                self::refuseChange($creem, $current, $resumed, $again);
+            }
+        }
+
+        if ($resumed) {
+            // No longer ending: the renewal is back on, as the change needs.
+            $current->forceFill(['cancelled_at' => null])->save();
+        }
+    }
+
+    private static function refuseChange(CreemService $creem, Subscription $current, bool $resumed, RequestException $e): never
+    {
+        if ($resumed) {
+            try {
+                $creem->cancel($current);
+            } catch (Throwable $undo) {
+                Log::error('creem.change_plan.recancel_failed', ['subscription' => $current->id, 'error' => $undo->getMessage()]);
+            }
+        }
+        Log::warning('creem.change_plan.refused', ['subscription' => $current->id, 'status' => $e->response->status(), 'body' => mb_substr((string) $e->response->body(), 0, 500)]);
+
+        throw SubscriptionNotActive::forPlan(
+            (string) $current->plan->name,
+            $current->current_period_end?->toIso8601String(),
+            $current->current_period_end?->format('j M Y'),
+        );
     }
 
     /**
