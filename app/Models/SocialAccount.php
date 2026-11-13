@@ -35,6 +35,11 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
  * @property CarbonImmutable|null $followers_synced_at
  * @property CarbonImmutable|null $messages_scope_at
  * @property CarbonImmutable|null $inbox_synced_at
+ * @property string|null $health_status ChannelHealth::OK / FAILED, null before the first check
+ * @property string|null $health_reason a ChannelHealth::REASONS key when the check failed
+ * @property CarbonImmutable|null $last_verified_at
+ * @property CarbonImmutable|null $health_notified_at
+ * @property CarbonImmutable|null $removed_at a disconnected channel the owner removed: hidden, kept for history
  */
 class SocialAccount extends Model implements WorkspaceOwned
 {
@@ -56,6 +61,7 @@ class SocialAccount extends Model implements WorkspaceOwned
         'followers_synced_at',
         'network_unique_id',
         'network_webhook_reference_id',
+        'removed_at',
     ];
 
     /**
@@ -73,6 +79,9 @@ class SocialAccount extends Model implements WorkspaceOwned
             'inbox_synced_at' => 'datetime',
             'followers_count' => 'integer',
             'followers_synced_at' => 'datetime',
+            'last_verified_at' => 'datetime',
+            'health_notified_at' => 'datetime',
+            'removed_at' => 'datetime',
         ];
     }
 

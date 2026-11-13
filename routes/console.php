@@ -25,6 +25,7 @@ use App\Jobs\SendMonthlyInsightReports;
 use App\Jobs\SendWeeklyDigests;
 use App\Jobs\SnapshotFollowerCounts;
 use App\Jobs\SyncInboxes;
+use App\Jobs\VerifyChannels;
 use App\Support\SchedulerHeartbeat;
 use Illuminate\Foundation\Inspiring;
 use Illuminate\Support\Facades\Artisan;
@@ -141,6 +142,13 @@ Schedule::job(new SyncInboxes)->hourly();
  * failing on the spot; every minute, the ones whose wait is over go again.
  */
 Schedule::job(new RetryRateLimitedPublishes)->everyMinute()->withoutOverlapping();
+
+/*
+ * Channel health: a live read-only check of each connected channel right
+ * after it connects and once a day after that, a few per minute so the
+ * round spreads over the day. A failed check emails the owner once.
+ */
+Schedule::job(new VerifyChannels)->everyMinute()->withoutOverlapping();
 
 /*
  * Posts a client approved while their slot was past the relay's scheduling

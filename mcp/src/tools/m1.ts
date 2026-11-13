@@ -13,7 +13,7 @@ export const listChannels = defineTool({
   name: 'list_channels',
   title: 'List connected channels',
   description: describeTool({
-    does: "Lists the social channels (Instagram, Facebook, TikTok, LinkedIn, X, Threads, YouTube, Pinterest, Bluesky…) connected to the user’s creatif.space workspace, with each channel’s id and whether it can be posted to.",
+    does: "Lists the social channels (Instagram, Facebook, TikTok, LinkedIn, X, Threads, YouTube, Pinterest, Bluesky…) in the user’s creatif.space workspace, with each channel’s id, whether it can be posted to, and its last live check (health_status).",
     when: "first, before draft_post, list_posts by channel or any send — it is the only source of channel ids. A channel with reconnect_required=true (or status other than \"connected\") cannot be posted to until the user reconnects it: such channels carry a reconnect block, and needs_reconnect lists them — call get_connect_link with the channel’s platform for the link to send the user. To add a new network, use get_connect_link too. A disconnected copy of an account that is also connected (same network and username) is left out; hidden_duplicates counts them, include_disconnected: true shows them.",
     example: "list_channels {} → { channels: [{ id: \"01JD…\", platform: \"instagram\", username: \"studio\", status: \"connected\", reconnect_required: false }, { id: \"01JE…\", platform: \"x\", status: \"expired\", reconnect_required: true, reconnect: { reason, next_step } }], needs_reconnect: [\"01JE…\"] }",
     errors: [
@@ -45,6 +45,10 @@ export const listChannels = defineTool({
         status: a.status,
         reconnect_required: reconnect,
         ...(reconnect ? { reconnect: reconnectHint(a) } : {}),
+        // The last live check of the channel (ok | failed | unchecked), why it failed, and when.
+        ...(typeof a.health_status === 'string'
+          ? { health_status: a.health_status, health_reason: a.health_reason ?? null, last_verified_at: a.last_verified_at ?? null }
+          : {}),
         // Posting works; replying to DMs needs a fresh sign-in with messages allowed.
         ...(!reconnect && a.needs_reconnect_for_messages === true
           ? { reconnect_for_messages: { next_step: `Posting works. To reply to DMs, the user reconnects it and allows messages: get_connect_link { "network": "${String(a.platform)}" }.` } }

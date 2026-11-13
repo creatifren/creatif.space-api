@@ -62,7 +62,7 @@
 
 Lists the user's connected social channels and their ids, the first step of the plan_week prompt.
 
-Lists the social channels (Instagram, Facebook, TikTok, LinkedIn, X, Threads, YouTube, Pinterest, Bluesky…) connected to the user’s creatif.space workspace, with each channel’s id and whether it can be posted to.
+Lists the social channels (Instagram, Facebook, TikTok, LinkedIn, X, Threads, YouTube, Pinterest, Bluesky…) in the user’s creatif.space workspace, with each channel’s id, whether it can be posted to, and its last live check (health_status).
 
 When to use: first, before draft_post, list_posts by channel or any send — it is the only source of channel ids. A channel with reconnect_required=true (or status other than "connected") cannot be posted to until the user reconnects it: such channels carry a reconnect block, and needs_reconnect lists them — call get_connect_link with the channel’s platform for the link to send the user. To add a new network, use get_connect_link too. A disconnected copy of an account that is also connected (same network and username) is left out; hidden_duplicates counts them, include_disconnected: true shows them.
 

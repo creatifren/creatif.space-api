@@ -95,6 +95,9 @@ class SocialWebhookController extends Controller
             return;
         }
         $providerId = $fields['provider_account_id'];
+        $status = ($data['status'] ?? 'connected') === 'connected'
+            ? SocialAccountStatus::Connected
+            : SocialAccountStatus::Disconnected;
 
         $row = $user->socialAccounts()->updateOrCreate(
             [
@@ -109,11 +112,9 @@ class SocialWebhookController extends Controller
                 'network_unique_id' => $fields['network_unique_id'],
                 'network_webhook_reference_id' => $fields['network_webhook_reference_id'],
             ], fn ($v) => $v !== null) + [
-                'status' => ($data['status'] ?? 'connected') === 'connected'
-                    ? SocialAccountStatus::Connected
-                    : SocialAccountStatus::Disconnected,
+                'status' => $status,
                 'connected_at' => now(),
-            ],
+            ] + ($status === SocialAccountStatus::Connected ? ['removed_at' => null] : []),
         );
 
         // The row is unique per user + account, so the sync that follows
