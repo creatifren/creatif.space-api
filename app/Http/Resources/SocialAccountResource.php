@@ -36,7 +36,7 @@ class SocialAccountResource extends JsonResource
             // Cached, refreshed in the background at most every 6 h; null
             // when the network does not report it (or not fetched yet).
             'followers_count' => $this->followers_count,
-            // The last live check (ChannelHealth): ok | failed | unchecked,
+            // The last live check (ChannelHealth): ok | failed (null: not checked yet),
             // why it failed, when. A channel that cannot be posted to is
             // failed (needs_attention) whatever the last check said.
             ...ChannelHealth::present($this->resource),

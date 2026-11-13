@@ -25,9 +25,6 @@ class ChannelHealth
 
     public const FAILED = 'failed';
 
-    /** Not checked yet (connected before checks existed, or just now). */
-    public const UNCHECKED = 'unchecked';
-
     /** Why a check failed, in the owner's words — never a vendor's. */
     public const REASONS = [
         'not_found' => 'The network no longer lists this account. Reconnect it to keep posting.',
@@ -84,7 +81,7 @@ class ChannelHealth
      * What the channel list shows: a channel that cannot be posted to
      * needs attention whatever the last check said.
      *
-     * @return array{health_status: string, health_reason: string|null, last_verified_at: mixed, needs_attention: bool}
+     * @return array{health_status: string|null, health_reason: string|null, last_verified_at: mixed, needs_attention: bool}
      */
     public static function present(SocialAccount $account): array
     {
@@ -92,7 +89,8 @@ class ChannelHealth
             // Connected again since the last check: that check is about the old sign-in.
             $stale = $account->last_verified_at !== null && $account->connected_at !== null
                 && $account->last_verified_at->lt($account->connected_at);
-            $status = $stale ? self::UNCHECKED : ($account->health_status ?? self::UNCHECKED);
+            // Not checked yet (or not since it reconnected): null, not a guess.
+            $status = $stale ? null : $account->health_status;
             $reason = $status === self::FAILED ? (self::REASONS[(string) $account->health_reason] ?? null) : null;
         } else {
             $status = self::FAILED;

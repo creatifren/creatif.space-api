@@ -45,9 +45,9 @@ export const listChannels = defineTool({
         status: a.status,
         reconnect_required: reconnect,
         ...(reconnect ? { reconnect: reconnectHint(a) } : {}),
-        // The last live check of the channel (ok | failed | unchecked), why it failed, and when.
-        ...(typeof a.health_status === 'string'
-          ? { health_status: a.health_status, health_reason: a.health_reason ?? null, last_verified_at: a.last_verified_at ?? null }
+        // The last live check of the channel (ok | failed, null before the first), why it failed, and when.
+        ...('health_status' in a
+          ? { health_status: a.health_status ?? null, health_reason: a.health_reason ?? null, last_verified_at: a.last_verified_at ?? null }
           : {}),
         // Posting works; replying to DMs needs a fresh sign-in with messages allowed.
         ...(!reconnect && a.needs_reconnect_for_messages === true

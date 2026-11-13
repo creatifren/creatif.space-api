@@ -94,7 +94,7 @@ describe('the check', function () {
         chRelay(['acc_bsky' => 'connected']);
 
         chList($this, $user)
-            ->assertJsonPath('data.0.health_status', 'unchecked')
+            ->assertJsonPath('data.0.health_status', null)
             ->assertJsonPath('data.0.last_verified_at', null);
 
         chRun();
@@ -185,7 +185,7 @@ describe('the check', function () {
 
         // A reconnect makes the old result moot until the new check.
         $rows = collect(chList($this, $user)->json('data'))->keyBy('id');
-        expect($rows[$reconnected->ulid]['health_status'])->toBe('unchecked')
+        expect($rows[$reconnected->ulid]['health_status'])->toBeNull()
             ->and($rows[$fresh->ulid]['health_status'])->toBe('ok')
             ->and($rows[$gone->ulid])->toMatchArray(['health_status' => 'failed', 'needs_attention' => true, 'health_reason' => ChannelHealth::REASONS['disconnected']])
             ->and($rows[$legacy->ulid])->toMatchArray(['health_status' => 'failed', 'health_reason' => ChannelHealth::REASONS['reconnect_required']])
@@ -253,6 +253,20 @@ describe('POST /social-accounts/{id}/verify', function () {
 
         $this->travel(61)->seconds();
         $this->actingAs($user)->postJson("/api/v1/social-accounts/{$bsky->ulid}/verify")->assertOk();
+    });
+
+    it('answers {data: account} with exactly the contract\'s health fields', function () {
+        $user = User::factory()->create();
+        $bsky = chChannel($user, ['provider_account_id' => 'acc_bsky']);
+        chRelay(['acc_bsky' => 'connected']);
+
+        $data = $this->actingAs($user)->postJson("/api/v1/social-accounts/{$bsky->ulid}/verify")->assertOk()->json('data');
+
+        expect($data['health_status'])->toBeIn(['ok', 'failed'])
+            ->and($data['health_reason'])->toBeNull()
+            ->and($data['last_verified_at'])->toMatch('/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}/');
+        expect(array_keys(chList($this, $user)->json('data.0')))
+            ->toContain('health_status', 'health_reason', 'last_verified_at');
     });
 
     it('keeps the last result when the relay does not answer', function () {
@@ -327,6 +341,21 @@ describe('DELETE a disconnected channel', function () {
 
         $this->actingAs($user)->deleteJson("/api/v1/social-accounts/{$gone->ulid}")->assertNoContent();
         expect($gone->fresh()->removed_at)->not->toBeNull();
+    });
+
+    it('removes a pre-move account even when the old provider\'s disconnect throws', function () {
+        $user = User::factory()->create();
+        $old = chChannel($user, ['provider' => 'outstand', 'provider_account_id' => 'out_bsky']);
+        Http::fake(['*' => Http::response(['message' => 'down'], 500)]);
+
+        expect($old->isLegacy())->toBeTrue();
+        chList($this, $user)->assertJsonPath('data.0.status', 'disconnected');
+
+        $this->actingAs($user)->deleteJson("/api/v1/social-accounts/{$old->ulid}")->assertNoContent();
+
+        expect($old->fresh()->removed_at)->not->toBeNull()
+            ->and($old->fresh()->status)->toBe(SocialAccountStatus::Disconnected);
+        chList($this, $user)->assertJsonCount(0, 'data');
     });
 
     it('comes back when the same account is connected again', function () {

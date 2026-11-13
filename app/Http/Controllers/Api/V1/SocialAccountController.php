@@ -319,7 +319,8 @@ class SocialAccountController extends Controller
      * destination (its 3 Credits come back); one aimed only here goes back
      * to being a draft, pulled from the provider and off any approval link.
      *
-     * An account that is already disconnected is removed instead: the same
+     * An account that is already disconnected (or connected only under
+     * the relay before the move) is removed instead: the same
      * for its posts still to go, then hidden from Channels (removed_at).
      * The row stays for the same history; connecting it again brings it
      * back. Removing it twice is a no-op.
@@ -335,7 +336,9 @@ class SocialAccountController extends Controller
         if ($socialAccount->removed_at !== null) {
             return response()->json(null, 204);
         }
-        $removing = $socialAccount->status !== SocialAccountStatus::Connected;
+        // Disconnected, or connected only under the relay before the move
+        // (listed as disconnected): either way the owner is removing it.
+        $removing = ! $socialAccount->isUsable();
 
         $why = $removing ? 'Its channel was removed' : 'Its account was disconnected';
         $posts = SocialPost::query()
@@ -392,21 +395,23 @@ class SocialAccountController extends Controller
             });
         }
 
-        $provider = $providers->for($socialAccount);
-
         if ($removing) {
-            // The grant is already gone; tidying the relay's copy is best effort
-            // and never keeps the owner from removing it.
+            // The grant is already gone; tidying the relay's copy (the old
+            // relay's, for a pre-move account) is best effort and never keeps
+            // the owner from removing it.
             try {
+                $provider = $providers->for($socialAccount);
+                $provider->disconnect($socialAccount->provider_account_id);
                 $provider->deleteAccount($socialAccount->provider_account_id);
             } catch (Throwable $e) {
-                Log::info('social.remove_relay_cleanup_failed', ['account' => $socialAccount->ulid, 'error' => $e->getMessage()]);
+                Log::warning('social.remove_relay_cleanup_failed', ['account' => $socialAccount->ulid, 'provider' => $socialAccount->provider, 'error' => $e->getMessage()]);
             }
-            $socialAccount->forceFill(['removed_at' => now()])->save();
+            $socialAccount->forceFill(['status' => SocialAccountStatus::Disconnected, 'removed_at' => now()])->save();
 
             return response()->json(null, 204);
         }
 
+        $provider = $providers->for($socialAccount);
         $provider->disconnect($socialAccount->provider_account_id);
         $provider->deleteAccount($socialAccount->provider_account_id);
 
