@@ -183,6 +183,16 @@ function classify(e: unknown, notFound: NotFound, stateTool?: string): ToolError
   const media = mediaError(e.status, body, message);
   if (media) return media;
 
+  // A post with no publish time never goes to a client (API needs_publish_time).
+  if (code === 'needs_publish_time') {
+    const postIds = Array.isArray(body.post_ids) ? body.post_ids : [];
+    return new ToolError(
+      'needs_time',
+      message,
+      `Nothing was sent to the client. Ask the user for a publish time, set it with update_post (scheduled_at) or schedule_post${postIds.length ? ' on the posts in details.post_ids' : ''}, then call again.`,
+      { post_ids: postIds, reason: 'needs_publish_time' },
+    );
+  }
   if (code === 'account_reconnect_required') {
     const accounts = Array.isArray(body.accounts) ? body.accounts : [];
     return new ToolError(

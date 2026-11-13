@@ -102,7 +102,8 @@ it('lists approval links with a read-only token', function () {
 function sharedDraft(TestCase $test, User $user): array
 {
     Subscription::factory()->for($user)->create();
-    $draft = SocialPost::factory()->for($user)->create(['status' => 'draft', 'provider_post_id' => null, 'scheduled_at' => null]);
+    // A post goes to a client with a publish time (needs_publish_time).
+    $draft = SocialPost::factory()->for($user)->create(['status' => 'draft', 'provider_post_id' => null, 'scheduled_at' => now()->addDay()]);
     $linkId = $test->actingAs($user, 'web')
         ->postJson('/api/v1/social-approval-links', ['approver_email' => 'client@example.test', 'post_ids' => [$draft->ulid]])
         ->assertCreated()
@@ -121,7 +122,7 @@ it('discards a draft that is held on an approval link, taking it off the link', 
     bearer($this, $key)->deleteJson("/api/v1/social-posts/{$post->ulid}/draft")->assertNoContent();
 
     expect(SocialPost::query()->whereKey($post->id)->exists())->toBeFalse()
-        ->and(\DB::table('social_approval_link_post')->where('social_post_id', $post->id)->exists())->toBeFalse();
+        ->and(DB::table('social_approval_link_post')->where('social_post_id', $post->id)->exists())->toBeFalse();
     Http::assertNothingSent();
 });
 

@@ -107,6 +107,7 @@ describe('double submit', function () {
     it('creates one approval link', function () {
         $user = ikUser();
         $post = ikDraft($user);
+        $post->update(['scheduled_at' => now()->addDay()]);
         $create = fn () => $this->actingAs($user)
             ->postJson('/api/v1/social-approval-links', ['approver_email' => 'client@example.test', 'post_ids' => [$post->ulid]], ['Idempotency-Key' => 'k-link']);
 

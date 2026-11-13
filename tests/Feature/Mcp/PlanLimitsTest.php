@@ -111,6 +111,7 @@ describe('Free plan through a real API key', function () {
         $user = User::factory()->create();
         $first = planDraft($user);
         $second = planDraft($user);
+        SocialPost::query()->whereKey([$first->id, $second->id])->update(['scheduled_at' => now()->addDay()]);
         $key = planKey($this, $user);
 
         bearer($this, $key)
@@ -135,6 +136,7 @@ describe('Free plan through a real API key', function () {
         $user = User::factory()->create();
         $first = planDraft($user);
         $second = planDraft($user);
+        SocialPost::query()->whereKey([$first->id, $second->id])->update(['scheduled_at' => now()->addDay()]);
 
         $this->actingAs($user)
             ->postJson('/api/v1/social-approval-links', ['approver_email' => 'client@example.test', 'post_ids' => [$first->ulid]])

@@ -127,6 +127,27 @@ describe('create_approval_link', () => {
     expect(payload(res).error.code).toBe('plan_required');
   });
 
+  it('a post with no publish time: needs_time, with the posts and the next step (set a time first)', async () => {
+    const res = await call('create_approval_link', { post_ids: [POST], approver_email: 'rani@client.test' }, {
+      'POST /social-approval-links': () => ({
+        status: 422,
+        body: {
+          message: 'This post has no publish time yet. Set one before you send it for approval — the client approves it for that time.',
+          code: 'needs_publish_time',
+          next_step: 'Set a publish time first.',
+          post_ids: [POST],
+          errors: { post_ids: ['This post has no publish time yet.'] },
+        },
+      }),
+    });
+    const err = payload(res).error;
+    expect(res.isError).toBe(true);
+    expect(err.code).toBe('needs_time');
+    expect(err.message).toContain('no publish time');
+    expect(err.next_step).toMatch(/update_post \(scheduled_at\) or schedule_post/);
+    expect(err.details.post_ids).toEqual([POST]);
+  });
+
   it('refuses an expiry the app does not offer', async () => {
     const res = await call('create_approval_link', { post_ids: [POST], approver_email: 'rani@client.test', expires_in_hours: 5 }, {});
     expect(res.isError).toBe(true);

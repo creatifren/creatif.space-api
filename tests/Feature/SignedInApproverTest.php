@@ -62,7 +62,8 @@ function saFree(): User
 
 function saDraft(User $user): SocialPost
 {
-    return SocialPost::factory()->for($user)->create(['status' => 'draft', 'provider_post_id' => null, 'scheduled_at' => null]);
+    // A post goes to a client with a publish time (needs_publish_time).
+    return SocialPost::factory()->for($user)->create(['status' => 'draft', 'provider_post_id' => null, 'scheduled_at' => now()->addDay()]);
 }
 
 function saDecide($test, SocialApprovalLink $link, SocialPost $post, string $decision = 'approve', array $extra = []): TestResponse
@@ -319,7 +320,7 @@ describe('sign in by email link', function () {
 describe('creating and updating links', function () {
     it('requires approver_email on a new link with a clear field error', function () {
         [$owner, $post] = saLink();
-        $draft = SocialPost::factory()->for($owner)->create(['status' => 'draft', 'provider_post_id' => null, 'scheduled_at' => null]);
+        $draft = SocialPost::factory()->for($owner)->create(['status' => 'draft', 'provider_post_id' => null, 'scheduled_at' => now()->addDay()]);
 
         $this->actingAs($owner)->postJson('/api/v1/social-approval-links', ['post_ids' => [$draft->ulid]])
             ->assertUnprocessable()
@@ -346,7 +347,7 @@ describe('creating and updating links', function () {
     it('takes approver_email through an API key (create_approval_link) and refuses one without it', function () {
         ensurePassportKeys();
         [$owner] = saLink();
-        $draft = SocialPost::factory()->for($owner)->create(['status' => 'draft', 'provider_post_id' => null, 'scheduled_at' => null]);
+        $draft = SocialPost::factory()->for($owner)->create(['status' => 'draft', 'provider_post_id' => null, 'scheduled_at' => now()->addDay()]);
         $key = $this->actingAs($owner, 'web')->postJson('/api/v1/me/api-keys', ['name' => 'k', 'scopes' => ['read', 'approve']])->json('data.key');
         app('auth')->forgetGuards();
 
