@@ -93,7 +93,7 @@ class FailUnconfirmedPublishes implements ShouldQueue
                     'success' => false,
                     'post_id' => (string) $post->provider_post_id,
                     'error' => self::MARKER,
-                ], 'unconfirmed');
+                ], 'job');
             }
 
             Log::warning('unconfirmed_publishes.failed', ['post' => $post->id, 'destinations' => $pending->count(), 'cancelled' => $nothingOut]);
