@@ -1,6 +1,8 @@
 <?php
 
+use App\Http\Middleware\SecurityHeaders;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\Route;
 
 /*
  * Blackbox B13: HSTS (one year, subdomains) and nosniff on every answer
@@ -38,4 +40,19 @@ it('serves security.txt with a contact and an expiry a year out', function () {
         ->toContain('Canonical: https://api.creatif.space/.well-known/security.txt');
 
     Carbon::setTestNow();
+});
+
+it('is the single source of HSTS: one header, a year or more, subdomains included, even over a route\'s own', function () {
+    Route::middleware('api')->get('/api/v1/__test/own-hsts', fn () => response()->json([])
+        ->header('Strict-Transport-Security', 'max-age=300'));
+
+    foreach (['/api/v1/plans', '/api/v1/__test/own-hsts'] as $url) {
+        $values = $this->getJson($url)->headers->all('strict-transport-security');
+
+        expect($values)->toHaveCount(1)
+            ->and($values[0])->toBe(SecurityHeaders::HSTS)
+            ->and($values[0])->toContain('includeSubDomains');
+        preg_match('/max-age=(\d+)/', $values[0], $m);
+        expect((int) $m[1])->toBeGreaterThanOrEqual(31536000);
+    }
 });

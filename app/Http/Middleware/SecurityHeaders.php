@@ -9,7 +9,11 @@ use Symfony\Component\HttpFoundation\Response;
 /**
  * Blackbox B13: every answer from api.creatif.space carries
  * Strict-Transport-Security (one year, subdomains too) and
- * X-Content-Type-Options: nosniff. A header a route already set is kept.
+ * X-Content-Type-Options: nosniff.
+ *
+ * The app is the single source of HSTS: the value is set here, replacing
+ * any a route set, and nginx must not add its own (the retest saw two
+ * headers, nginx's without includeSubDomains).
  */
 class SecurityHeaders
 {
@@ -19,9 +23,7 @@ class SecurityHeaders
     {
         $response = $next($request);
 
-        if (! $response->headers->has('Strict-Transport-Security')) {
-            $response->headers->set('Strict-Transport-Security', self::HSTS);
-        }
+        $response->headers->set('Strict-Transport-Security', self::HSTS);
         if (! $response->headers->has('X-Content-Type-Options')) {
             $response->headers->set('X-Content-Type-Options', 'nosniff');
         }

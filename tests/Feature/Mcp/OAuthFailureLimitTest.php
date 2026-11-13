@@ -1,5 +1,6 @@
 <?php
 
+use App\Models\User;
 use Illuminate\Support\Str;
 
 /*
@@ -99,4 +100,28 @@ describe('API 401', function () {
 
         $this->withToken('cs_live_bad_two')->getJson('/api/v1/me')->assertUnauthorized();
     });
+});
+
+it('gives an unknown client_id one small budget per address (client_id=x, as the retest sent it)', function (string $grant) {
+    foreach (range(1, 20) as $_) {
+        expect($this->post('/oauth/token', ['grant_type' => $grant, 'client_id' => 'x'])->getStatusCode())->toBeIn([400, 401]);
+    }
+
+    foreach (range(21, 25) as $_) {
+        $this->post('/oauth/token', ['grant_type' => $grant, 'client_id' => 'x'])
+            ->assertStatus(429)
+            ->assertJsonPath('error', 'temporarily_unavailable')
+            ->assertHeader('Retry-After');
+    }
+})->with(['client_credentials', 'authorization_code', 'refresh_token']);
+
+it('keeps a registered client\'s good request out of the unknown-client budget', function () {
+    config(['mcp.oauth_rate_limits.failures' => 3]);
+    foreach (range(1, 3) as $_) {
+        $this->post('/oauth/token', ['grant_type' => 'client_credentials', 'client_id' => 'x']);
+    }
+    $this->post('/oauth/token', ['grant_type' => 'client_credentials', 'client_id' => 'x'])->assertStatus(429);
+
+    $tokens = oauthTokens($this, User::factory()->create(), mcpClient());
+    expect($tokens)->toHaveKey('access_token');
 });
