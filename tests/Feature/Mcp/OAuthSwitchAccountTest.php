@@ -62,13 +62,13 @@ function switchQueryOf(string $url): array
 
 it('shows who is signed in, masked, with the workspace and the permissions', function () {
     $client = mcpClient();
-    $user = User::factory()->create(['name' => 'Rizal Ahmad', 'email' => 'rizal@gmail.com']);
+    $user = User::factory()->create(['name' => 'Sam Rivera', 'email' => 'sam.rivera@example.com']);
     [$url] = switchAuthorizeUrl($client, 'read draft approve publish');
 
     $this->actingAs($user, 'web')->get($url)
         ->assertOk()
-        ->assertSeeInOrder(['Signed in as', 'Rizal Ahmad', 'ri***@gmail.com', 'Workspace', 'Rizal Ahmad'])
-        ->assertDontSee('rizal@gmail.com')
+        ->assertSeeInOrder(['Signed in as', 'Sam Rivera', 'sa***@example.com', 'Workspace', 'Sam Rivera'])
+        ->assertDontSee('sam.rivera@example.com')
         ->assertSee('Not you?')
         ->assertSee('Use another account')
         ->assertSee(route('oauth.switch-account'), false)
@@ -94,7 +94,7 @@ it('names the team owner\'s workspace for a member', function () {
 it('masks an address to its first letters and domain', function (string $email, string $masked) {
     expect(McpConsent::maskEmail($email))->toBe($masked);
 })->with([
-    ['rizal@gmail.com', 'ri***@gmail.com'],
+    ['sam.rivera@example.com', 'sa***@example.com'],
     ['ab@x.test', 'a***@x.test'],
     ['a@x.test', 'a***@x.test'],
     ['not-an-email', '***'],

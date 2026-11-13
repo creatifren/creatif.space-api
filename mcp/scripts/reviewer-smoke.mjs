@@ -2,8 +2,8 @@
 /* global process, fetch, URL, console */
 /*
  * Reviewer flow smoke — what a directory reviewer does first, against a live
- * environment (staging or production). QA runs it; see
- * docs/directory-reviewer-smoke.md.
+ * environment (staging or production). QA runs it (the staff runbook is
+ * kept outside this public repo).
  *
  *   1. sign in as the directory reviewer   POST /auth/reviewer/login
  *   2. mint a short-lived API key          POST /api/v1/me/api-keys (read, draft, approve)

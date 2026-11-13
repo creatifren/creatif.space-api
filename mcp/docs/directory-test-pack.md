@@ -1,7 +1,7 @@
 # Directory test pack (G6)
 
-Prompts QA runs on the **directory reviewer account** (see
-`docs/directory-reviewer.md`) in Claude and in ChatGPT before submission,
+Prompts QA runs on the **directory reviewer account** (set up by staff;
+the runbook is kept outside this public repo) in Claude and in ChatGPT before submission,
 and that reviewers are likely to try. Each lists the tools that should be
 triggered (in order; `→` = then) and the behaviour to check. Tool names are
 checked against the live tool list by `test/directory-test-pack.test.ts`.

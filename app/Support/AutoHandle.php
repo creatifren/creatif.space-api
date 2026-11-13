@@ -10,8 +10,8 @@ use Illuminate\Database\UniqueConstraintViolationException;
  * Onboarding without the onboarding screen (Minor Revise UX RF-003).
  *
  * Every account gets an address the moment it first signs in, made from the
- * part of the email before the @ — `rani.p@gmail.com` becomes `ranip`, then
- * `ranip2`, `ranip3`… when taken or reserved. It is a starting point, not a
+ * part of the email before the @ — `jane.doe@example.com` becomes `janedoe`, then
+ * `janedoe2`, `janedoe3`… when taken or reserved. It is a starting point, not a
  * choice: Settings → Domain renames it, and that path keeps its rules.
  *
  * Same side effects as HandleController::claim, so an account made either
