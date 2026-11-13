@@ -22,7 +22,7 @@ describe('slogan', () => {
 
   it('server.json carries the registry description and version 1.2.2', () => {
     const json = JSON.parse(readFileSync(new URL('../server.json', import.meta.url), 'utf8'));
-    expect(json.description).toBe('Get content approved & published faster: draft posts, send client approval links, publish from AI.');
+    expect(json.description).toBe('Get content approved & published faster: draft, get client approval, publish from Claude or ChatGPT.');
     expect(json.description.length).toBeLessThanOrEqual(100);
     expect(json.version).toBe('1.2.2');
   });

@@ -20,11 +20,11 @@ describe('registry entries (server.json files)', () => {
     expect(ENTRIES.main).toMatchObject({
       name: 'io.github.creatifren/creatif-space',
       title: 'Creatif Space',
-      description: 'Get content approved & published faster: draft posts, send client approval links, publish from AI.',
+      description: 'Get content approved & published faster: draft, get client approval, publish from Claude or ChatGPT.',
       websiteUrl: 'https://creatif.space/mcp',
       remotes: [{ type: 'streamable-http', url: 'https://mcp.creatif.space/mcp' }],
     });
-    expect(ENTRIES.main.description).toHaveLength(98);
+    expect(ENTRIES.main.description).toHaveLength(100);
   });
 
   it('free tools entry: creatif-space-free-tools, its title, description, remote and websiteUrl', () => {

@@ -158,18 +158,18 @@ describe('the service', function () {
     it('marks internal accounts by address or domain', function () {
         config([
             'services.posthog.internal_email_domains' => ['creatif.space'],
-            'services.posthog.internal_emails' => ['qa@gmail.com'],
+            'services.posthog.internal_emails' => ['qa@example.com'],
         ]);
 
         expect(Analytics::isInternal(User::factory()->make(['email' => 'ren@creatif.space'])))->toBeTrue()
             ->and(Analytics::isInternal(User::factory()->make(['email' => 'a@mail.creatif.space'])))->toBeTrue()
-            ->and(Analytics::isInternal(User::factory()->make(['email' => 'QA@gmail.com'])))->toBeTrue()
+            ->and(Analytics::isInternal(User::factory()->make(['email' => 'QA@example.com'])))->toBeTrue()
             ->and(Analytics::isInternal(User::factory()->make(['email' => 'ren@notcreatif.space'])))->toBeFalse()
-            ->and(Analytics::isInternal(User::factory()->make(['email' => 'client@gmail.com'])))->toBeFalse();
+            ->and(Analytics::isInternal(User::factory()->make(['email' => 'client@example.com'])))->toBeFalse();
     });
 
     it('reads the internal lists from comma-separated env values', function () {
-        $env = ['ANALYTICS_INTERNAL_EMAIL_DOMAINS' => ' creatif.space, @studio.test ,', 'ANALYTICS_INTERNAL_EMAILS' => 'QA@gmail.com'];
+        $env = ['ANALYTICS_INTERNAL_EMAIL_DOMAINS' => ' creatif.space, @studio.test ,', 'ANALYTICS_INTERNAL_EMAILS' => 'QA@example.com'];
         foreach ($env as $k => $v) {
             putenv("{$k}={$v}");
             $_ENV[$k] = $_SERVER[$k] = $v;
@@ -184,7 +184,7 @@ describe('the service', function () {
         }
 
         expect($services['posthog']['internal_email_domains'])->toBe(['creatif.space', 'studio.test'])
-            ->and($services['posthog']['internal_emails'])->toBe(['qa@gmail.com'])
+            ->and($services['posthog']['internal_emails'])->toBe(['qa@example.com'])
             ->and($services['posthog']['host'])->toBe('https://us.i.posthog.com');
     });
 });
@@ -1002,9 +1002,9 @@ describe('plan, platform, aliases and internal accounts (CS_Product_3, 11 Nov)',
     })->with([
         'hello@creatif.space (always)' => [['email' => 'hello@creatif.space'], []],
         'HELLO@creatif.space, any case' => [['email' => 'HELLO@Creatif.Space'], []],
-        'ANALYTICS_INTERNAL_EMAILS' => [['email' => 'qa@gmail.com'], ['services.posthog.internal_emails' => ['qa@gmail.com']]],
+        'ANALYTICS_INTERNAL_EMAILS' => [['email' => 'qa@example.com'], ['services.posthog.internal_emails' => ['qa@example.com']]],
         'internal domain' => [['email' => 'ren@creatif.space'], ['services.posthog.internal_email_domains' => ['creatif.space']]],
-        'staff' => [['email' => 'staff@gmail.com', 'is_staff' => true], []],
+        'staff' => [['email' => 'staff@example.com', 'is_staff' => true], []],
     ]);
 
     it('skips the waitlist events for an internal address too', function () {
