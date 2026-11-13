@@ -405,6 +405,6 @@ describe('waiting your approval', function () {
 });
 
 it('masks addresses for the hint', function () {
-    expect(ApproverGate::hint('rizal@digicard.com'))->toBe('r***@d***.com')
-        ->and(ApproverGate::hint('a@b.co.id'))->toBe('a***@b***.id');
+    expect(ApproverGate::hint('dewi@kopi.example'))->toBe('d***@k***.example')
+        ->and(ApproverGate::hint('a@b.example.org'))->toBe('a***@b***.org');
 });

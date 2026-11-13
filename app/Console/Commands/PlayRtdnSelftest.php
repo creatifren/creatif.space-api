@@ -54,7 +54,7 @@ class PlayRtdnSelftest extends Command
 
     private const AUDIENCE = 'https://api.creatif.test/api/v1/webhooks/google-play';
 
-    private const PUSH_SA = 'play-rtdn-selftest@creatif.iam.gserviceaccount.com';
+    private const PUSH_SA = 'play-rtdn-selftest@example-project.iam.gserviceaccount.com';
 
     public function handle(Kernel $kernel): int
     {
@@ -93,7 +93,7 @@ class PlayRtdnSelftest extends Command
         $saKey = self::rsaKey();
         $saPath = tempnam(sys_get_temp_dir(), 'rtdn-selftest-sa-');
         file_put_contents($saPath, json_encode([
-            'type' => 'service_account', 'client_email' => 'selftest@creatif.iam.gserviceaccount.com',
+            'type' => 'service_account', 'client_email' => 'selftest@example-project.iam.gserviceaccount.com',
             'private_key' => $saKey['private'], 'token_uri' => GooglePlayClient::TOKEN_URL,
         ]));
         config(['services.google_play.service_account_json_path' => $saPath]);
