@@ -55,6 +55,8 @@ export function protectedResourceMetadata(resourceUrl: string, authorizationServ
     // RFC 9728: the same privacy and terms pages the consent screen links to.
     resource_policy_uri: 'https://creatif.space/privacy',
     resource_tos_uri: 'https://creatif.space/terms',
+    // The rocket mark this server serves (src/icons.ts), as the API's copy names it.
+    logo_uri: `${new URL(resourceUrl).origin}/icon.png`,
   };
 }
 

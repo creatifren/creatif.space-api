@@ -18,6 +18,8 @@ import { accountSummaryTools } from './tools/accountSummary.js';
 import { scheduleBatchTools } from './tools/scheduleBatch.js';
 import { failedPostsTools } from './tools/failedPosts.js';
 import { mediaTools } from './tools/media.js';
+import { registerIcons, SERVER_ICONS } from './icons.js';
+export { SERVER_ICONS };
 import { engageTools } from './tools/engage.js';
 import { storageTools } from './tools/storage.js';
 import { housekeepingTools } from './tools/housekeeping.js';
@@ -42,7 +44,6 @@ import { mountFree } from './free/server.js';
 export const ALL_TOOLS = [...m1Tools, ...m2Tools, ...mediaTools, ...engageTools, ...storageTools, ...housekeepingTools, ...approverTools, ...insightTools, ...insightReportTools, ...spaceTools, ...auditTools, ...connectTools, ...feedbackTools, ...insightShareTools, ...calendarTools, ...contentPlanTools, ...accountSummaryTools, ...retryTools, ...notificationTools, ...scheduleBatchTools, ...failedPostsTools, ...onboardingTools];
 
 /** The Pen Rocket, as listed in server.json for the MCP Registry (served by the web app). */
-export const SERVER_ICONS = [{ src: 'https://creatif.space/icons/icon-512.png', mimeType: 'image/png', sizes: ['512x512'] }];
 /** Public pages: serverInfo carries websiteUrl (MCP Implementation); privacy and terms are in the RFC 9728 metadata. */
 export const WEBSITE_URL = 'https://creatif.space';
 export const PRIVACY_URL = 'https://creatif.space/privacy';
@@ -111,6 +112,9 @@ export function createApp(deps: AppDeps) {
   // Before every route, so the preflight never reaches auth and 401/429
   // answers carry the headers too.
   app.use(mcpCors());
+
+  // The connector's icon (favicon.ico, icon.png, icon.svg): public, no auth.
+  registerIcons(app);
 
   app.get('/health', (_req, res) => {
     res.json({ ok: true, name: SERVER_INFO.name, version: SERVER_INFO.version });

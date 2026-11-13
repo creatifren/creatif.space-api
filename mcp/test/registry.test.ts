@@ -58,8 +58,11 @@ describe('mcp/server.json (official MCP registry)', () => {
     expect(meta.auth.scopes).toEqual([...SCOPES]);
   });
 
-  it('shows the Pen Rocket icon: one 512×512 PNG on creatif.space, the same one serverInfo gives', async () => {
-    expect(server.icons).toEqual([{ src: 'https://creatif.space/icons/icon-512.png', mimeType: 'image/png', sizes: ['512x512'] }]);
+  it('shows the rocket mark: a 512×512 PNG and the SVG on mcp.creatif.space, the same ones serverInfo gives', async () => {
+    expect(server.icons).toEqual([
+      { src: 'https://mcp.creatif.space/icon.png', mimeType: 'image/png', sizes: ['512x512'] },
+      { src: 'https://mcp.creatif.space/icon.svg', mimeType: 'image/svg+xml', sizes: ['any'] },
+    ]);
     expect(server.icons).toEqual(SERVER_ICONS);
     const app = await startApp();
     try {

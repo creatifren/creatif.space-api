@@ -12,10 +12,17 @@
   },
   "icons": [
     {
-      "src": "https://creatif.space/icons/icon-512.png",
+      "src": "https://mcp.creatif.space/icon.png",
       "mimeType": "image/png",
       "sizes": [
         "512x512"
+      ]
+    },
+    {
+      "src": "https://mcp.creatif.space/icon.svg",
+      "mimeType": "image/svg+xml",
+      "sizes": [
+        "any"
       ]
     }
   ],
