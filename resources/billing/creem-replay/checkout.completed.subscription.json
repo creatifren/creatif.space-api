@@ -1,0 +1,20 @@
+{
+    "id": "{{event_id}}",
+    "eventType": "checkout.completed",
+    "object": {
+        "id": "{{checkout_id}}",
+        "object": "checkout",
+        "request_id": "{{request_id}}",
+        "product": "{{product}}",
+        "customer": "{{customer_id}}",
+        "subscription": {
+            "id": "{{subscription_id}}",
+            "object": "subscription",
+            "status": "{{status}}",
+            "product": "{{product}}",
+            "current_period_start_date": "{{period_start}}",
+            "current_period_end_date": "{{period_end}}",
+            "metadata": { "subscription": "{{subscription_ulid}}" }
+        }
+    }
+}

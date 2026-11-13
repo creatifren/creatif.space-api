@@ -1,0 +1,14 @@
+{
+    "id": "{{event_id}}",
+    "eventType": "subscription.scheduled_cancel",
+    "object": {
+        "id": "{{subscription_id}}",
+        "object": "subscription",
+        "product": "{{product}}",
+        "customer": "{{customer_id}}",
+        "status": "scheduled_cancel",
+        "current_period_start_date": "{{period_start}}",
+        "current_period_end_date": "{{period_end}}",
+        "metadata": { "subscription": "{{subscription_ulid}}" }
+    }
+}

@@ -97,6 +97,15 @@ The script refuses to run unless `.env` says `APP_ENV=staging` and
 
 The site comes back up even if a step fails.
 
+## Before a billing deploy
+
+Run the Creem webhook replay on staging; every scenario must pass. See
+"Creem webhook replay" in the main README:
+
+```bash
+php artisan billing:replay-webhooks --env-target=staging
+```
+
 ## Notes
 
 - Use a separate browser profile for staging. Both sites set cookies on

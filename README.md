@@ -171,6 +171,35 @@ This gives that local user a Play purchase, sends the notification and prints th
 
 The command refuses to run when `APP_ENV` is production.
 
+## Creem webhook replay (QA, before every billing deploy)
+
+`php artisan billing:replay-webhooks` replays signed Creem **test-mode** webhooks against the API and checks the account state each one should leave. Run it on staging **before every deploy that touches billing**. A failed scenario means: do not deploy.
+
+| Scenario | What it checks |
+| --- | --- |
+| `cancel_scheduled` | A Pro plan set to cancel stays Pro (active) until its period ends; a replay changes nothing |
+| `change_plan_on_cancel_scheduled` | Pro → Max on a plan set to cancel: 409 `subscription_not_active` with a message, never a 500; still set to cancel, still Pro |
+| `refund` | A full refund marks the invoice refunded, once |
+| `credits_topup` | A paid top-up adds 10,000 Credits and one ledger row; the same event, or the same checkout under a new event id, adds nothing |
+| `change_plan_active` | Pro → Max on an active plan is accepted (202); the Max payment makes the account Max |
+| `checkout_trial` | Checkout with the trial product: trialing, the $0 card check charges nothing |
+| `checkout_notrial` | Checkout with the NOTRIAL product: active and paid at once, never trialing (skipped when `CREEM_PRODUCT_PRO_MONTHLY_NOTRIAL` is empty) |
+
+**On staging** (in `/www/wwwroot/staging-api`, after the deploy script, before deploying billing changes to production):
+
+```bash
+php artisan billing:replay-webhooks --env-target=staging
+php artisan billing:replay-webhooks --env-target=staging --only=credits_topup --only=refund
+```
+
+- **Where things go:** webhooks go over HTTPS to staging's own `APP_URL` + `/api/v1/webhooks/creem`, signed with `CREEM_WEBHOOK_SECRET` from staging's `.env`. The signing secret never lives in git; the fixtures in `resources/billing/creem-replay/` are templates with placeholders only.
+- **The two plan-change scenarios** call the checkout endpoint in-process with Creem's answers stubbed. They test what the API does with Creem's reply; **nothing is sent to Creem**.
+- **Accounts:** each run creates its own throwaway accounts (`creem-replay+<run>-<scenario>@example.com`). They stay in the staging database, marked by that address.
+- **When it refuses to run:** in production, unless `CREEM_TEST_MODE=true`, without a webhook secret, and — for `--env-target=staging` — unless `APP_ENV=staging` and `APP_URL`'s host starts with `staging` (e.g. `staging-api.creatif.space`). It never runs against production.
+- **Exit status:** 0 when every scenario passes or is skipped, 1 otherwise. The failed checks are printed under each scenario.
+
+Locally, the same scenarios run in-process: `php artisan billing:replay-webhooks --env-target=local` (APP_ENV local), and in the test suite (`tests/Feature/Billing/CreemReplayTest.php`, no network).
+
 ## About Laravel
 
 Laravel is a web application framework with expressive, elegant syntax. We believe development must be an enjoyable and creative experience to be truly fulfilling. Laravel takes the pain out of development by easing common tasks used in many web projects, such as:
