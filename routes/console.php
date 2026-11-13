@@ -4,6 +4,7 @@ use App\Jobs\AggregateSpaceStats;
 use App\Jobs\ApplyMediaRetention;
 use App\Jobs\BackfillFileChecksums;
 use App\Jobs\ExpireSubscriptions;
+use App\Jobs\FailUnconfirmedPublishes;
 use App\Jobs\NotifyKeptFilesDowngrade;
 use App\Jobs\NotifyMissedPosts;
 use App\Jobs\PruneAccountExports;
@@ -201,3 +202,8 @@ Schedule::job(new SendConnectNudges)->hourly()->withoutOverlapping();
 // A scheduled post whose time passed 30 minutes ago and has not gone out:
 // one "Post missed" email per post, on the publish_failed switch.
 Schedule::job(new NotifyMissedPosts)->everyFiveMinutes()->withoutOverlapping();
+
+// A sent post still pending 5 minutes after it was due (relay took it but
+// never said published or failed): cancelled at the relay if nothing went
+// out, then failed with a reason and refunded — never left silent.
+Schedule::job(new FailUnconfirmedPublishes)->everyMinute()->withoutOverlapping();
