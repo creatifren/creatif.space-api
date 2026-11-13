@@ -3,7 +3,6 @@
 use App\Http\Controllers\Api\V1\AccountDeletionController;
 use App\Http\Controllers\Api\V1\AccountExportController;
 use App\Http\Controllers\Api\V1\AffiliateController;
-use App\Http\Controllers\Api\V1\AiCaptionController;
 use App\Http\Controllers\Api\V1\AnalyticsController;
 use App\Http\Controllers\Api\V1\ApiKeyController;
 use App\Http\Controllers\Api\V1\ApprovalAuditController;
@@ -412,10 +411,6 @@ Route::middleware(['auth:sanctum,mcp', EnforceTokenScope::class, EnsureNotPendin
     Route::post('/social-captions/assist', CaptionAssistController::class)
         ->middleware('throttle:20,1')
         ->name('api.v1.social-captions.assist');
-    // AI layer (AI_CAPTION_ENABLED; 404 while off).
-    Route::post('/ai/caption', AiCaptionController::class)
-        ->middleware('throttle:20,1')
-        ->name('api.v1.ai.caption');
     Route::post('/social-posts/swap', [SocialPostController::class, 'swap'])
         ->middleware('throttle:30,1')
         ->name('api.v1.social-posts.swap');

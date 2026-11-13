@@ -20,7 +20,6 @@ import { failedPostsTools } from './tools/failedPosts.js';
 import { mediaTools } from './tools/media.js';
 import { engageTools } from './tools/engage.js';
 import { storageTools } from './tools/storage.js';
-import { aiTools } from './tools/ai.js';
 import { housekeepingTools } from './tools/housekeeping.js';
 import { approverTools } from './tools/approver.js';
 import { spaceTools } from './tools/spaces.js';
@@ -40,7 +39,7 @@ import { DEFAULT_FREE_RATE_LIMIT, DEFAULT_GLAMA_CLAIM } from './config.js';
 import { mountFree } from './free/server.js';
 
 /** Every tool, in the order it is registered (and listed). */
-export const ALL_TOOLS = [...m1Tools, ...m2Tools, ...mediaTools, ...engageTools, ...aiTools, ...storageTools, ...housekeepingTools, ...approverTools, ...insightTools, ...insightReportTools, ...spaceTools, ...auditTools, ...connectTools, ...feedbackTools, ...insightShareTools, ...calendarTools, ...contentPlanTools, ...accountSummaryTools, ...retryTools, ...notificationTools, ...scheduleBatchTools, ...failedPostsTools, ...onboardingTools];
+export const ALL_TOOLS = [...m1Tools, ...m2Tools, ...mediaTools, ...engageTools, ...storageTools, ...housekeepingTools, ...approverTools, ...insightTools, ...insightReportTools, ...spaceTools, ...auditTools, ...connectTools, ...feedbackTools, ...insightShareTools, ...calendarTools, ...contentPlanTools, ...accountSummaryTools, ...retryTools, ...notificationTools, ...scheduleBatchTools, ...failedPostsTools, ...onboardingTools];
 
 /** The Pen Rocket, as listed in server.json for the MCP Registry (served by the web app). */
 export const SERVER_ICONS = [{ src: 'https://creatif.space/icons/icon-512.png', mimeType: 'image/png', sizes: ['512x512'] }];

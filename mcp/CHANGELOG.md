@@ -7,7 +7,7 @@ Versions of the remote MCP server at `https://mcp.creatif.space/mcp`
 
 ## 0.3.0 — 2026-11-12
 
-49 tools (was 11). Every description follows the agent shape (what / when to
+48 tools (was 11). Every description follows the agent shape (what / when to
 use / example / errors → next step, #78), and every error is
 `{code, message, next_step, details}` (#76).
 
@@ -41,6 +41,7 @@ Changed:
 - Publishing (live, 13 Nov): a sent post whose channel stays pending 5 minutes after it was due is no longer silent. The API asks the relay first (a late result wins), otherwise cancels the relay post when nothing went out and fails the channel with `failure_code` `not_confirmed` (Credits returned, one failure email). `retry_post` describes the code.
 - Blackbox P3s (13 Nov): B9 `schedule_posts` lists `invalid_input` (a post listed twice), and a test now holds every error code a tool throws itself to its description; B10 `get_credits` `features.ai_caption` is true only when `suggest_caption` will answer (the API's new `limits.ai_caption_ready`: plan and the AI switched on and set up); B11 `list_spaces` adds `visibility_means` ("private" = link only, not hidden) and the Space descriptions say so; B14 uploads without client dimensions (MCP) get width/height read from the image itself, and `get_storage_usage` / `get_account_summary` add `library_used_bytes` beside the quota figure; B15 `get_post` (and every post output) returns the per-channel captions `draft_post` took, as `captions_by_channel` and on each channel.
 - Registry text (13 Nov, not published): main entry `server.json` (1.2.2) description is now "Get content approved & published faster: draft, get client approval, publish from Claude or ChatGPT." (100 characters).
+- AI captions dropped (Rizal, 13 Nov): `suggest_caption` is removed (48 tools): in MCP the user’s own AI writes the caption. `plan_week` no longer names it, and `get_credits` `features.ai_caption` is the plan’s flag again (the app’s Improve with AI / Add hashtags), with no `ai_caption_ready` override. The API drops `POST /ai/caption`; `POST /social-captions/assist` stays as the only AI path, for captions of at least 20 non-whitespace characters.
 - Engage privacy (P1): a disconnected channel's DMs, messages and comments are no longer listed or readable — `list_conversations` and `reply_to_conversation` (and the app's Engage) leave them out at once, and the API deletes them (retention: none; documented in `docs/logging.md`). After a reconnect only what the next sync brings in is listed. Both tools say so; an id of a disconnected channel answers `not_found`.
 - `list_top_posts` and `get_insight_summary.top_posts` name `post_id` for posts that went out through creatif.space (B6): matched by the relay's post id as the Insight CSV does, since most feeds carry no external id (it was null). `get_insight_summary.top_posts` adds `post_id` and `channel_id`; a public shared report never shows either.
 - A disconnected copy of an account that is also connected (hidden by `list_channels` since #204) is no longer reported as needing a reconnect anywhere: `get_account_summary` leaves it out of `needs_reconnect`, `reconnect` and `next_steps` (adds `hidden_duplicates`), `create_content_plan` previews give no reconnect warning for it, and `get_connect_link` leaves it out of `existing`.

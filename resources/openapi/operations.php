@@ -81,7 +81,6 @@ return [
     'api.v1.social-posts.show' => 'One post',
     'api.v1.social-posts.update' => 'Update a post',
     'api.v1.social-captions.assist' => 'Caption help (hashtags, rewrite)',
-    'api.v1.ai.caption' => 'Generate a caption with AI',
     'api.v1.social-posts.swap' => 'Swap two posts\' slots',
     'api.v1.social-posts.send-preview' => 'Preview what sending a post costs and does',
     'api.v1.social-posts.send' => 'Send or schedule a post',

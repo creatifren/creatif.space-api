@@ -372,7 +372,7 @@ export const getCredits = defineTool({
   title: 'Get plan, limits and Credits',
   description: describeTool({
     does: "Gets the workspace’s creatif.space plan, its limits and its Credits — everything that decides what can be sent.",
-    when: "before schedule_post or publish_post when the user asks what they can afford or why something was refused. It returns, as set on the plan: plan name; this month’s posts vs the plan’s monthly figure; connected channels used vs allowed; scheduling (days ahead allowed, queued posts — scheduled or waiting for approval — used vs allowed); approval clients used vs allowed; features (approval links, analytics, AI captions, Spaces…); Credits (Monthly, when they reset, Top-up balance, total, committed to scheduled posts); the Credits each send uses, by platform; how many sends connected apps have left today (cap 20/day); this month’s Credit spend by action (publish, reply, ai — AI captions are free today, so ai is 0); and the days until the Monthly Credits renew.",
+    when: "before schedule_post or publish_post when the user asks what they can afford or why something was refused. It returns, as set on the plan: plan name; this month’s posts vs the plan’s monthly figure; connected channels used vs allowed; scheduling (days ahead allowed, queued posts — scheduled or waiting for approval — used vs allowed); approval clients used vs allowed; features (approval links, analytics, the app’s Improve with AI / Add hashtags, Spaces…); Credits (Monthly, when they reset, Top-up balance, total, committed to scheduled posts); the Credits each send uses, by platform; how many sends connected apps have left today (cap 20/day); this month’s Credit spend by action (publish, reply, ai — the app’s AI help is free today, so ai is 0); and the days until the Monthly Credits renew.",
     example: "get_credits {} → { plan: { key: \"free\" }, credits: { monthly, topup, resets_at, committed }, price_per_send, scheduling, approval_clients, mcp_daily_sends, spend: { since, by_action: { publish, reply, ai }, total }, renewal: { resets_at, days_until } }",
     rules: "Every plan can use this server: sending spends Credits. Some plans schedule up to 7 days ahead, hold up to 10 queued posts and have approval links for one client; null means no limit.",
     errors: [
@@ -398,7 +398,7 @@ export const getCredits = defineTool({
       connected_accounts: limits.connected_accounts,
       scheduling: limits.scheduling,
       approval_clients: limits.approval_clients,
-      features: aiCaptionHonest(limits.features, limits.ai_caption_ready),
+      features: limits.features,
       mcp_daily_sends: limits.mcp_daily_sends,
       urls: limits.urls,
       spend: spendThisMonth(limits.spend as SpendBlock | undefined),
@@ -409,13 +409,3 @@ export const getCredits = defineTool({
 
 export const m1Tools = [listChannels, listPosts, getPost, listFiles, draftPost, getCredits];
 
-/**
- * B10: the plan can include AI captions while the AI route is still
- * switched off; then suggest_caption answers not_enabled. features.ai_caption
- * says what suggest_caption will do, not only what the plan includes.
- */
-export function aiCaptionHonest(features: unknown, ready: unknown): unknown {
-  if (!features || typeof features !== 'object' || typeof ready !== 'boolean') return features;
-  const f = features as Record<string, unknown>;
-  return { ...f, ai_caption: f.ai_caption === true && ready };
-}

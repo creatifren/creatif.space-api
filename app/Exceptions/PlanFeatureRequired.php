@@ -29,7 +29,7 @@ class PlanFeatureRequired extends RuntimeException
     /** What each feature is called in a sentence ("… is on Pro and Max."). */
     private const NAMES = [
         'approval_clients' => 'Approval links for more than one client',
-        'ai_caption' => 'AI captions and hashtags',
+        'ai_caption' => 'Improve with AI and Add hashtags',
         'insight' => 'Insights and analytics',
         'spaces' => 'Creating and editing Spaces and your link in bio',
         'alt_text' => 'AI alt text',

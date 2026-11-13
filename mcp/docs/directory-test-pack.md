@@ -28,7 +28,7 @@ Expected results below assume this data; ids differ per account.
 - behaviour: names the plan, Credits left and the one Instagram channel; read-only, nothing created; no prices or upgrade suggestions.
 
 **P2 — “Draft an Instagram post announcing our new matcha latte, launching Monday. Don’t post it yet.”**
-- tools_triggered: `list_channels` → `draft_post` (optionally `suggest_caption` first)
+- tools_triggered: `list_channels` → `draft_post`
 - behaviour: one new draft on the Instagram channel; the answer says it is a draft, nothing was published and no Credits were spent. `schedule_post` / `publish_post` are **not** called.
 
 **P3 — “Show me my drafts and shorten the weekend promo caption to under 60 characters.”**

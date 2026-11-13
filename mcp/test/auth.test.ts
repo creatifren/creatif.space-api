@@ -94,7 +94,6 @@ describe('401 flow', () => {
         'create_approval_link', 'create_content_plan', 'check_approval_status', 'send_approval_reminder', 'update_post', 'schedule_post', 'schedule_posts', 'publish_post', 'retry_post',
         'request_media_upload', 'confirm_media_upload',
         'list_conversations', 'reply_to_conversation',
-        'suggest_caption',
         'get_storage_usage', 'keep_file', 'unkeep_file',
         'discard_draft', 'list_approval_links', 'revoke_approval_link',
         'list_waiting_approvals', 'decide_approval', 'list_shared_with_me',

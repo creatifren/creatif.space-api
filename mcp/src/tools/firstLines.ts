@@ -19,7 +19,6 @@ export const FIRST_LINES: Record<string, string> = {
   // Posts
   list_posts: 'Finds the user\'s posts by status, dates or channel; the plan_week and send_for_approval prompts start here.',
   get_post: 'Shows one post in full, with each channel\'s status and the review thread; send_for_approval checks posts with it.',
-  suggest_caption: 'Writes a caption and hashtags in the user\'s own style from a short brief, used by the plan_week prompt.',
   draft_post: 'Saves a new post as a draft without sending it or spending Credits, as the plan_week prompt does.',
   list_failed_posts: 'Shows which posts failed to publish in the last 30 days and why, so the user can fix them and use retry_post.',
   update_post: 'Changes a draft or a post waiting for approval: its caption, time, labels or media.',
@@ -79,7 +78,6 @@ export const FIRST_LINES: Record<string, string> = {
 export const FIRST_LINE_PROMPTS: Record<string, string[]> = {
   list_channels: ['plan_week'],
   list_posts: ['plan_week', 'send_for_approval'],
-  suggest_caption: ['plan_week'],
   draft_post: ['plan_week'],
   get_post: ['send_for_approval'],
   create_approval_link: ['send_for_approval'],

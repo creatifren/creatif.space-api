@@ -36,7 +36,6 @@ const ARGS: Record<string, Record<string, unknown>> = {
   confirm_media_upload: { file_id: ID },
   list_conversations: {},
   reply_to_conversation: { conversation_id: `dm_${ID}`, text: 'Thanks!' },
-  suggest_caption: { brief: 'Coffee promo' },
   get_storage_usage: {},
   keep_file: { file_id: ID },
   unkeep_file: { file_id: ID },
