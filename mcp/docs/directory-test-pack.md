@@ -5,6 +5,8 @@ the runbook is kept outside this public repo) in Claude and in ChatGPT before su
 and that reviewers are likely to try. Each lists the tools that should be
 triggered (in order; `→` = then) and the behaviour to check. Tool names are
 checked against the live tool list by `test/directory-test-pack.test.ts`.
+The reviewer-facing version (sign-in, sample data, the same 8 prompts) is
+[`reviewer.md`](reviewer.md).
 
 ## Sample data the reviewer account needs
 
