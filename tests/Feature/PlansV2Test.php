@@ -230,9 +230,7 @@ describe('rule 1 — Free queue (10 scheduled + waiting for approval)', function
 describe('rule 2 — approval on Free', function () {
     it('allows the first client and refuses a second', function () {
         $user = v2Free();
-        $a = v2Draft($user);
-        $b = v2Draft($user);
-        $c = v2Draft($user);
+        [$a, $b, $c] = [v2Draft($user, ['scheduled_at' => now()->addDay()]), v2Draft($user, ['scheduled_at' => now()->addDay()]), v2Draft($user, ['scheduled_at' => now()->addDay()])];
 
         $this->actingAs($user)->postJson('/api/v1/social-approval-links', ['approver_email' => 'acme@client.test', 'post_ids' => [$a->ulid], 'client_name' => 'Acme'])->assertCreated();
         // The same approver again (any case / spacing) is still one client,
@@ -253,7 +251,7 @@ describe('rule 2 — approval on Free', function () {
         expect(PlanQuota::approvalClients($user)->all())->toBe(['name:acme']);
         $this->actingAs($user)->deleteJson("/api/v1/social-approval-links/{$link->ulid}")->assertNoContent();
 
-        $this->actingAs($user)->postJson('/api/v1/social-approval-links', ['approver_email' => 'globex@client.test', 'post_ids' => [v2Draft($user)->ulid], 'client_name' => 'Globex'])->assertCreated();
+        $this->actingAs($user)->postJson('/api/v1/social-approval-links', ['approver_email' => 'globex@client.test', 'post_ids' => [v2Draft($user, ['scheduled_at' => now()->addDay()])->ulid], 'client_name' => 'Globex'])->assertCreated();
         expect($expired->fresh()->revoked_at)->toBeNull();
     });
 
@@ -282,8 +280,8 @@ describe('rule 2 — approval on Free', function () {
     it('counts drafts put on a link against the queue', function () {
         $user = v2Free();
         v2Queue($user, 9);
-        $one = v2Draft($user);
-        $two = v2Draft($user);
+        $one = v2Draft($user, ['scheduled_at' => now()->addDay()]);
+        $two = v2Draft($user, ['scheduled_at' => now()->addDay()]);
 
         v2Assert402($this->actingAs($user)->postJson('/api/v1/social-approval-links', ['approver_email' => 'client@example.test', 'post_ids' => [$one->ulid, $two->ulid]]), 'queue_limit', 10);
         $this->actingAs($user)->postJson('/api/v1/social-approval-links', ['approver_email' => 'client@example.test', 'post_ids' => [$one->ulid]])->assertCreated();

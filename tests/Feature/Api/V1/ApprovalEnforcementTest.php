@@ -88,7 +88,7 @@ describe('a draft that needs client approval', function () {
         $user = aeUser();
         $post = aePost($user, ['approval' => 'client']);
 
-        $this->actingAs($user)->postJson("/api/v1/social-posts/{$post->ulid}/send", ['approval' => 'client'])
+        $this->actingAs($user)->postJson("/api/v1/social-posts/{$post->ulid}/send", ['approval' => 'client', 'scheduled_at' => now()->addDay()->toIso8601String()])
             ->assertOk()
             ->assertJsonPath('data.approval', 'client');
 

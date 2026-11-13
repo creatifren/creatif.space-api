@@ -9,6 +9,7 @@ use App\Enums\SocialPostApproval;
 use App\Enums\SocialPostStatus;
 use App\Enums\SocialPostTargetStatus;
 use App\Exceptions\AccountReconnectRequired;
+use App\Exceptions\NeedsPublishTime;
 use App\Http\Controllers\Controller;
 use App\Http\Middleware\CapTokenSends;
 use App\Http\Resources\SocialPostResource;
@@ -688,6 +689,10 @@ class SocialPostController extends Controller
             isset($validated['approval']) ? SocialPostApproval::from($validated['approval']) : null,
         );
         ScheduleHorizon::require($socialPost->provider, isset($validated['scheduled_at']) ? self::instant($validated['scheduled_at']) : null);
+        // The client approves it for a time; with none they would hit a dead end.
+        if (($validated['approval'] ?? null) === SocialPostApproval::Client->value && ! isset($validated['scheduled_at'])) {
+            throw new NeedsPublishTime([$socialPost->ulid], 'scheduled_at');
+        }
 
         // The relay charges as it sends, and refuses before the provider if
         // the balance is short; a held draft costs nothing yet.

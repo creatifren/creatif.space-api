@@ -147,6 +147,7 @@ describe('approval links from drafts', function () {
         $user = User::factory()->create();
         Subscription::factory()->for($user)->create();
         $post = draftFor($user);
+        $post->update(['scheduled_at' => now()->addDay()]);
 
         $this->actingAs($user)
             ->postJson('/api/v1/social-approval-links', ['approver_email' => 'client@example.test', 'post_ids' => [$post->ulid]])
@@ -164,6 +165,7 @@ describe('approval links from drafts', function () {
         $user = User::factory()->create(); // Free
         $post = draftFor($user);
         $other = draftFor($user);
+        SocialPost::query()->whereKey([$post->id, $other->id])->update(['scheduled_at' => now()->addDay()]);
 
         $this->actingAs($user)
             ->postJson('/api/v1/social-approval-links', ['approver_email' => 'client@example.test', 'post_ids' => [$post->ulid]])

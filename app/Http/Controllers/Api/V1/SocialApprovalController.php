@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Api\V1;
 use App\Enums\SocialPostApproval;
 use App\Enums\SocialPostStatus;
 use App\Exceptions\AccountReconnectRequired;
+use App\Exceptions\NeedsPublishTime;
 use App\Exceptions\NotEnoughCredits;
 use App\Exceptions\PublishPreflightFailed;
 use App\Exceptions\ScheduleBeyondHorizon;
@@ -125,6 +126,7 @@ class SocialApprovalController extends Controller
         self::requireWindow($user, $posts, 'post_ids');
         self::requireHorizon($posts, 'post_ids');
         PlanQuota::requireQueueRoom($user, $posts->where('status', SocialPostStatus::Draft)->count(), 'post_ids');
+        self::requireTimes($posts, 'post_ids');
 
         $hours = $validated['expires_in_hours'] ?? null;
         $link = SocialApprovalLink::create([
@@ -141,6 +143,22 @@ class SocialApprovalController extends Controller
         ProductEvents::approvalLinkCreated($link, $posts->count(), $hours);
 
         return $this->created($link, $validated);
+    }
+
+    /**
+     * Every post sent to a client has a publish time: the client approves
+     * it for that time, and one without could never be approved.
+     *
+     * @param  iterable<SocialPost>  $posts
+     *
+     * @throws NeedsPublishTime
+     */
+    private static function requireTimes(iterable $posts, string $field): void
+    {
+        $timeless = collect($posts)->filter(fn (SocialPost $p) => $p->scheduled_at === null)->pluck('ulid')->values()->all();
+        if ($timeless !== []) {
+            throw new NeedsPublishTime($timeless, $field);
+        }
     }
 
     /**
@@ -350,6 +368,7 @@ class SocialApprovalController extends Controller
             $adding = SocialPost::query()->whereIn('id', $add)->get();
             self::requireWindow($request->user(), $adding, 'add_post_ids');
             self::requireHorizon($adding, 'add_post_ids');
+            self::requireTimes($adding, 'add_post_ids');
         }
         $remove = isset($validated['remove_post_ids'])
             ? $link->posts()->whereIn('ulid', array_unique($validated['remove_post_ids']))->pluck('social_posts.id')

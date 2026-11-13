@@ -117,6 +117,7 @@ it('creates an approval link only with approve', function () {
     $user = User::factory()->create();
     Subscription::factory()->for($user)->create();
     $post = m2Draft($user);
+    $post->update(['scheduled_at' => now()->addDay()]);
 
     bearer($this, m2Key($this, $user, ['read', 'draft']))
         ->postJson('/api/v1/social-approval-links', ['approver_email' => 'client@example.test', 'post_ids' => [$post->ulid]])
