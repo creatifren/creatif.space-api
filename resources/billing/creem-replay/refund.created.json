@@ -1,0 +1,18 @@
+{
+    "id": "{{event_id}}",
+    "eventType": "refund.created",
+    "object": {
+        "id": "{{refund_id}}",
+        "object": "refund",
+        "status": "succeeded",
+        "refund_amount": "{{amount}}",
+        "refund_currency": "USD",
+        "transaction": {
+            "id": "{{transaction_id}}",
+            "amount": "{{amount}}",
+            "amount_paid": "{{amount}}",
+            "refunded_amount": "{{amount}}",
+            "currency": "USD"
+        }
+    }
+}

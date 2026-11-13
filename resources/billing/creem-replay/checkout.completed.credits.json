@@ -1,0 +1,16 @@
+{
+    "id": "{{event_id}}",
+    "eventType": "checkout.completed",
+    "object": {
+        "id": "{{checkout_id}}",
+        "object": "checkout",
+        "request_id": "{{request_id}}",
+        "product": "{{product}}",
+        "order": {
+            "id": "{{order_id}}",
+            "status": "paid",
+            "amount": "{{amount}}",
+            "currency": "USD"
+        }
+    }
+}

@@ -1,0 +1,21 @@
+{
+    "id": "{{event_id}}",
+    "eventType": "subscription.paid",
+    "object": {
+        "id": "{{subscription_id}}",
+        "object": "subscription",
+        "product": "{{product}}",
+        "customer": "{{customer_id}}",
+        "status": "{{status}}",
+        "last_transaction_id": "{{transaction_id}}",
+        "last_transaction": {
+            "id": "{{transaction_id}}",
+            "status": "paid",
+            "amount": "{{amount}}",
+            "currency": "USD"
+        },
+        "current_period_start_date": "{{period_start}}",
+        "current_period_end_date": "{{period_end}}",
+        "metadata": { "subscription": "{{subscription_ulid}}" }
+    }
+}
