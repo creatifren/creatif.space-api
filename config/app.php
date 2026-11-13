@@ -93,6 +93,10 @@ return [
     // header is only read from those ranges.
     'cloudflare_proxy' => (bool) env('CLOUDFLARE_PROXY', true),
 
+    // Staging and other non-public copies: every response says
+    // X-Robots-Tag: noindex, nofollow (SecurityHeaders). Off in production.
+    'noindex' => (bool) env('APP_NOINDEX', false),
+
     // Rizal's slogan, verbatim: never paraphrase, never env-overridable.
     'slogan' => 'Get content approved & published faster.',
 
