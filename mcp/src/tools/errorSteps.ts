@@ -32,7 +32,6 @@ export const NOT_FOUND_FOR: Record<string, NotFound> = {
   create_insight_share_link: filters('A channel in channel_ids', 'list_channels'),
   get_connect_link: { what: 'That network', next: 'Call get_connect_link again with one of the networks its input lists.' },
   send_feedback: { what: 'The feedback inbox', next: 'Tell the user the message was not sent; they can send it from creatif.space → Help.' },
-  suggest_caption: { what: 'AI captions', next: 'Write the caption yourself; AI captions are not available right now.' },
 };
 
 /** For a 409: the one tool that shows the item's current state. */
@@ -48,7 +47,6 @@ export const STATE_TOOL: Record<string, string> = {
   publish_post: 'get_post',
   retry_post: 'get_post',
   list_failed_posts: 'list_failed_posts',
-  suggest_caption: 'suggest_caption',
   // Approvals
   create_approval_link: 'list_posts',
   check_approval_status: 'check_approval_status',

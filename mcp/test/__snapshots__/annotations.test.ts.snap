@@ -272,12 +272,6 @@ exports[`tool annotations > match the snapshot 1`] = `
     "openWorld": false,
     "readOnly": false,
   },
-  "suggest_caption": {
-    "destructive": false,
-    "idempotent": false,
-    "openWorld": false,
-    "readOnly": true,
-  },
   "unkeep_file": {
     "destructive": true,
     "idempotent": true,

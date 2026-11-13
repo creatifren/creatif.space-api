@@ -9,9 +9,13 @@ use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Validation\ValidationException;
 
 /**
- * The composer's "Rewrite with AI" and "Generate hashtags". Any
+ * The composer's "Improve with AI" (rewrite) and "Add hashtags" — the only
+ * AI path (Rizal, 13 Nov: no caption written from scratch). It works on
+ * text the user already wrote: at least ai_assist.min_chars non-whitespace
+ * characters (AI_ASSIST_MIN_CHARS, default 20), else 422. Any
  * OpenAI-compatible chat endpoint (AI_BASE_URL + AI_API_KEY + AI_MODEL).
  * The answer comes back as a suggestion — the caption is never written here.
  *
@@ -33,6 +37,13 @@ class CaptionAssistController extends Controller
             'mode' => ['required', 'in:rewrite,hashtags'],
             'caption' => ['required', 'string', 'max:5000'],
         ]);
+
+        $min = max(1, (int) config('ai_assist.min_chars', 20));
+        if (mb_strlen((string) preg_replace('/\s+/u', '', $validated['caption'])) < $min) {
+            throw ValidationException::withMessages([
+                'caption' => "Write at least {$min} characters of your caption first — AI improves and adds hashtags to what you wrote.",
+            ]);
+        }
 
         $config = config('services.ai');
         abort_unless($config['key'] && $config['base_url'] && $config['model'], 503, 'AI is not set up.');

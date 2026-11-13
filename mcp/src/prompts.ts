@@ -11,7 +11,7 @@ import { z } from 'zod';
  */
 
 export const PROMPT_TOOLS: Record<string, string[]> = {
-  plan_week: ['list_channels', 'list_posts', 'suggest_caption', 'draft_post'],
+  plan_week: ['list_channels', 'list_posts', 'draft_post'],
   send_for_approval: ['list_posts', 'get_post', 'create_approval_link', 'check_approval_status'],
   weekly_results: ['get_insight_summary', 'create_insight_share_link'],
   monthly_report: ['get_insight_summary', 'create_insight_share_link'],
@@ -52,7 +52,7 @@ export function registerPrompts(server: McpServer): void {
             `${theme ? `, about ${quoted(theme)}` : ''}: ${posts ?? '5'} posts.`,
           '1. Call list_channels and check the channel is there and connected; if it needs reconnecting, stop and tell me.',
           '2. Call list_posts for that channel and week so you do not double up on days that already have posts.',
-          '3. For each post, write the caption (suggest_caption can help if it is switched on; otherwise write it yourself) and pick a day and time.',
+          '3. For each post, write the caption yourself and pick a day and time.',
           '4. Save each one with draft_post (channel_ids = that channel, scheduled_at = the chosen time). Drafts only.',
           '5. Show me the plan as a short table: day, time, first line of the caption, post id.',
           RULES,

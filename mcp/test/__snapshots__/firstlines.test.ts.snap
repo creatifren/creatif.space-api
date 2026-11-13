@@ -47,7 +47,6 @@ exports[`tool first lines > match the snapshot 1`] = `
   "schedule_posts": "Schedules up to 10 drafts at once, all or none, after the user agrees to one preview of all of them.",
   "send_approval_reminder": "Reminds the user's client by email to answer an approval link, a send_for_approval follow-up.",
   "send_feedback": "Sends the user's bug report or idea to the creatif.space team.",
-  "suggest_caption": "Writes a caption and hashtags in the user's own style from a short brief, used by the plan_week prompt.",
   "unkeep_file": "Lets a library file be deleted automatically again, freeing the user's Keep space.",
   "update_notification_settings": "Turns a creatif.space email on or off for the user, such as failed posts, approvals or the weekly digest.",
   "update_post": "Changes a draft or a post waiting for approval: its caption, time, labels or media.",

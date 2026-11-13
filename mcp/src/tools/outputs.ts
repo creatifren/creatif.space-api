@@ -107,7 +107,6 @@ export const OUTPUT_SCHEMAS: Record<string, z.ZodRawShape> = {
  */
 export const UNSTRUCTURED = new Set([
   'list_conversations',
-  'suggest_caption',
   'list_approval_links',
   'list_shared_with_me',
   'list_top_posts',

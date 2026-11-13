@@ -87,7 +87,6 @@
         "schedule_posts",
         "send_approval_reminder",
         "send_feedback",
-        "suggest_caption",
         "unkeep_file",
         "update_notification_settings",
         "update_post"

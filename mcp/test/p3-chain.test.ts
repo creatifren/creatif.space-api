@@ -5,7 +5,7 @@ import { ALL_TOOLS } from '../src/server.js';
 import { post } from './fixtures.js';
 import { payload, startApp, TOKEN_FULL } from './helpers.js';
 
-/* Blackbox 13 Nov, P3 chain: B9, B10, B11, B14, B15. */
+/* Blackbox 13 Nov, P3 chain: B9, B10 (since replaced: AI captions dropped), B11, B14, B15. */
 
 let app: Awaited<ReturnType<typeof startApp>> | undefined;
 afterEach(async () => {
@@ -48,20 +48,12 @@ describe('B9: every error code a tool throws itself is listed in its description
   });
 });
 
-describe('B10: get_credits features.ai_caption is what suggest_caption will do', () => {
-  const credits = (ready: boolean | undefined) => () => ({
-    body: { data: { plan: 'pro', limits: { plan: { key: 'pro' }, features: { ai_caption: true, insight: true }, ...(ready === undefined ? {} : { ai_caption_ready: ready }) } } },
-  });
-
-  it('false while the AI route is switched off, even though the plan includes it', async () => {
-    const out = await call('get_credits', {}, { 'GET /credits': credits(false) });
-    expect(out.features).toMatchObject({ ai_caption: false, insight: true });
-  });
-
-  it('true when it answers; unchanged when the API does not say (older API)', async () => {
-    expect((await call('get_credits', {}, { 'GET /credits': credits(true) })).features.ai_caption).toBe(true);
-    await app?.close();
-    expect((await call('get_credits', {}, { 'GET /credits': credits(undefined) })).features.ai_caption).toBe(true);
+describe('AI captions dropped (13 Nov): no suggest_caption; get_credits features as the plan says', () => {
+  it('lists no suggest_caption tool, and passes features.ai_caption through unchanged', async () => {
+    expect(ALL_TOOLS.some((t) => t.name === 'suggest_caption')).toBe(false);
+    const credits = () => ({ body: { data: { plan: 'pro', limits: { plan: { key: 'pro' }, features: { ai_caption: true, insight: true } } } } });
+    const out = await call('get_credits', {}, { 'GET /credits': credits });
+    expect(out.features).toEqual({ ai_caption: true, insight: true });
   });
 });
 

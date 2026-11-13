@@ -2,7 +2,7 @@
 
 <!-- Generated from the served tool list by `npm run docs:tools` (in mcp/). Do not edit by hand: test/tools-doc.test.ts fails in CI when this file is out of date. -->
 
-49 tools on `https://mcp.creatif.space/mcp`, in the order `tools/list` gives them. Scope is the OAuth permission a tool needs; the hints are its MCP annotations.
+48 tools on `https://mcp.creatif.space/mcp`, in the order `tools/list` gives them. Scope is the OAuth permission a tool needs; the hints are its MCP annotations.
 
 | Tool | Title | Scope | Read-only | Destructive |
 |---|---|---|---|---|
@@ -22,7 +22,6 @@
 | [`confirm_media_upload`](#confirm_media_upload) | Confirm a media upload | `draft` | no | no |
 | [`list_conversations`](#list_conversations) | List Engage conversations | `read` | yes | no |
 | [`reply_to_conversation`](#reply_to_conversation) | Reply to a comment or DM | `publish` | no | yes |
-| [`suggest_caption`](#suggest_caption) | Suggest a caption | `draft` | yes | no |
 | [`get_storage_usage`](#get_storage_usage) | Get media storage usage | `read` | yes | no |
 | [`keep_file`](#keep_file) | Keep a file | `draft` | no | no |
 | [`unkeep_file`](#unkeep_file) | Un-keep a file | `draft` | no | yes |
@@ -172,7 +171,7 @@ Shows the user's plan, limits and Credits, and what each send costs.
 
 Gets the workspace’s creatif.space plan, its limits and its Credits — everything that decides what can be sent.
 
-When to use: before schedule_post or publish_post when the user asks what they can afford or why something was refused. It returns, as set on the plan: plan name; this month’s posts vs the plan’s monthly figure; connected channels used vs allowed; scheduling (days ahead allowed, queued posts — scheduled or waiting for approval — used vs allowed); approval clients used vs allowed; features (approval links, analytics, AI captions, Spaces…); Credits (Monthly, when they reset, Top-up balance, total, committed to scheduled posts); the Credits each send uses, by platform; how many sends connected apps have left today (cap 20/day); this month’s Credit spend by action (publish, reply, ai — AI captions are free today, so ai is 0); and the days until the Monthly Credits renew.
+When to use: before schedule_post or publish_post when the user asks what they can afford or why something was refused. It returns, as set on the plan: plan name; this month’s posts vs the plan’s monthly figure; connected channels used vs allowed; scheduling (days ahead allowed, queued posts — scheduled or waiting for approval — used vs allowed); approval clients used vs allowed; features (approval links, analytics, the app’s Improve with AI / Add hashtags, Spaces…); Credits (Monthly, when they reset, Top-up balance, total, committed to scheduled posts); the Credits each send uses, by platform; how many sends connected apps have left today (cap 20/day); this month’s Credit spend by action (publish, reply, ai — the app’s AI help is free today, so ai is 0); and the days until the Monthly Credits renew.
 
 Example: get_credits {} → { plan: { key: "free" }, credits: { monthly, topup, resets_at, committed }, price_per_send, scheduling, approval_clients, mcp_daily_sends, spend: { since, by_action: { publish, reply, ai }, total }, renewal: { resets_at, days_until } }
 
@@ -404,27 +403,6 @@ Errors → next step: not_found → the id is not in this workspace; list_conver
 | `conversation_id` | string | yes | Conversation id from list_conversations, e.g. "dm_01JABCDEF…" or "comment_01JABCDEF…" |
 | `text` | string | yes | The reply, exactly as it will be sent (DMs up to 1000 characters, comment replies up to 2200) |
 | `confirm` | boolean | no | Leave false first: you get a preview and nothing is sent. Set true only after the user explicitly agreed to that preview. |
-
-## suggest_caption
-
-**Suggest a caption** · scope `draft` · read-only yes · destructive no · idempotent no · open world no
-
-Writes a caption and hashtags in the user's own style from a short brief, used by the plan_week prompt.
-
-Writes a caption and hashtags from a short brief, in the user’s own creatif.space style (tone, emoji, hashtag count, language). Saves nothing.
-
-When to use: when the user wants creatif.space’s AI to write or rework a caption. Show the result to the user; to save it, pass the caption (with the hashtags if wanted) to draft_post or update_post. If you are writing the caption yourself, you do not need this tool.
-
-Example: suggest_caption { "brief": "Morning coffee promo, 20% off until Friday", "platform": "instagram" } → { caption, hashtags: ["#coffee", …], next_step }
-
-Not included on every plan, and may not be switched on for every account yet: get_credits features.ai_caption is true only when this tool will answer.
-
-Errors → next step: not_enabled → AI captions are not switched on yet: write the caption yourself; do not retry; plan_required → tell the user it is not available on their plan, then offer to write the caption yourself; do not retry; upstream_unavailable → call once more; if it fails again, write the caption yourself; invalid_input → shorten the brief (2000 characters max) or fix the platform; forbidden → the user’s role (viewer) cannot write captions; tell them; scope_missing → reconnect with "draft" allowed; not_found (404) → the id is not in this workspace: take a fresh id from the matching list tool and call again.
-
-| Input | Type | Required | Description |
-|---|---|---|---|
-| `brief` | string | yes | What the post is about, in a few sentences (product, offer, mood, call to action). Up to 2000 characters. |
-| `platform` | "instagram" \| "facebook" \| "x" \| "tiktok" \| "linkedin" \| "threads" \| "youtube" \| "pinterest" \| "bluesky" | no | The channel it is for, so length and hashtags fit (optional) |
 
 ## get_storage_usage
 

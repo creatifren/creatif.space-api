@@ -108,7 +108,6 @@ redirect_uris, token_endpoint_auth_method: "none"}`. The API fetches it
 | `get_storage_usage` — used vs quota (Free: 1 GB total; paid: Keep quota) and kept vs auto-delete (soonest dates), from the newest 300 files | read | `GET /files/usage` + `GET /files?per_page=60&page=1..5` |
 | `keep_file` (file_id) — Pro/Max; Free → `plan_required`, quota full → `storage_full`, not ready (409) → `file_not_ready` | draft | `POST /files/{id}/keep` |
 | `unkeep_file` (file_id) — back under the retention rules; returns `auto_delete_at` | draft | `DELETE /files/{id}/keep` |
-| `suggest_caption` (brief, platform) — a caption and hashtags in the user's style; saves nothing. Pro/Max; 404 while `AI_CAPTION_ENABLED` is off → `not_enabled` ("write the caption yourself"), Free → `plan_required` | draft | `POST /ai/caption` |
 | `discard_draft` (post_id, confirm) — deletes a draft only; preview first, `confirm: true` deletes; scheduled / published / failed → `not_draft` with the next step | draft | `GET /social-posts/{id}`, then `DELETE /social-posts/{id}/draft` |
 | `list_approval_links` (status active\|expired\|revoked\|all, limit) — status, approver email, post count, approved/waiting/revision | read | `GET /social-approval-links` |
 | `revoke_approval_link` (link_id, confirm) — preview, then revokes the link for good; unanswered posts come back to the user | approve | `GET` then `DELETE /social-approval-links/{id}` |
@@ -399,7 +398,7 @@ are quoted and marked as data. Defined in `src/prompts.ts`.
 
 | Prompt | Arguments | Tools it uses |
 | --- | --- | --- |
-| `plan_week` (“Plan next week”) — draft a week of posts for a channel (drafts only) | channel_id*, week_start, theme, posts (1–7) | `list_channels`, `list_posts`, `suggest_caption`, `draft_post` |
+| `plan_week` (“Plan next week”) — draft a week of posts for a channel (drafts only) | channel_id*, week_start, theme, posts (1–7) | `list_channels`, `list_posts`, `draft_post` |
 | `send_for_approval` (“Send to client for approval”) — bundle drafts into one approval link | approver_email*, post_ids (comma-separated), client_name | `list_posts`, `get_post`, `create_approval_link`, `check_approval_status` |
 | `weekly_results` (“Weekly results”) — the last 7 days (or a month) summed up + share link | month (YYYY-MM, instead of the last 7 days), share (yes\|no) | `get_insight_summary`, `create_insight_share_link` |
 | `monthly_report` (“Monthly report”) — a month summed up + share link | month (YYYY-MM, default last month), share (yes\|no) | `get_insight_summary`, `create_insight_share_link` |

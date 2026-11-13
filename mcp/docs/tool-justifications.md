@@ -19,7 +19,6 @@ is destructive previews first and acts only on `confirm: true`.
 | `list_posts` | List posts | yes | no | no | Reads the workspace's posts. |
 | `list_failed_posts` | List failed posts | yes | no | no | Reads the user's own posts that failed to publish in the last 30 days, with each failure's reason. |
 | `get_post` | Get a post | yes | no | no | Reads one post and its review thread. |
-| `suggest_caption` | Suggest a caption | yes | no | no | Generates caption text; saves and sends nothing. |
 | `draft_post` | Draft a post | no | no | no | Saves a private draft in creatif.space; never sends or spends Credits. |
 | `update_post` | Update a post | no | no | no | Edits a draft or a post awaiting approval; nothing is sent. |
 | `discard_draft` | Discard a draft | no | yes | no | Deletes a draft for good (preview, then confirm). |
