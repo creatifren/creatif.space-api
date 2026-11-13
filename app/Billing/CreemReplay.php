@@ -44,8 +44,7 @@ final class CreemReplay
         'refund' => 'A full refund marks the invoice refunded, once',
         'credits_topup' => 'A paid Credits top-up adds the Credits and one ledger row, however often it is replayed',
         'change_plan_active' => 'Pro → Max on an active plan: accepted, then the Max payment makes the account Max',
-        'checkout_trial' => 'Checkout with the trial product: trialing, nothing charged',
-        'checkout_notrial' => 'Checkout with the NOTRIAL product: active and paid at once, never trialing',
+        'checkout_paid' => 'Checkout for Pro: active and paid at once, never trialing (no plan has a trial)',
     ];
 
     private const FIXTURES = 'resources/billing/creem-replay';
@@ -93,8 +92,7 @@ final class CreemReplay
                 'refund' => $this->refund(...),
                 'credits_topup' => $this->creditsTopup(...),
                 'change_plan_active' => $this->changePlanActive(...),
-                'checkout_trial' => $this->checkoutTrial(...),
-                'checkout_notrial' => $this->checkoutNotrial(...),
+                'checkout_paid' => $this->checkoutPaid(...),
             ];
             $steps[$scenario]();
         } catch (Throwable $e) {
@@ -222,36 +220,10 @@ final class CreemReplay
         $this->check('Max payment on an invoice', Invoice::query()->where('creem_transaction_id', $transaction)->where('status', InvoiceStatus::Paid)->exists());
     }
 
-    private function checkoutTrial(): void
+    private function checkoutPaid(): void
     {
         [$sub, $invoice] = $this->pendingCheckout($this->user());
-        $vars = [
-            ...$this->subscriptionVars($sub),
-            'checkout_id' => (string) $invoice->creem_checkout_id,
-            'request_id' => $invoice->number,
-            'product' => (string) config('services.creem.products.pro_monthly'),
-            'status' => 'trialing',
-            'period_start' => now()->toIso8601String(),
-            'period_end' => now()->addDays(7)->toIso8601String(),
-        ];
-
-        $this->check('checkout accepted', ($s = $this->send($this->event('checkout.completed.subscription', $vars))) === 200, "HTTP {$s}");
-        $sub->refresh();
-        $this->check('trialing', $sub->status === SubscriptionStatus::Trialing, $sub->status->value);
-        $this->check('linked to the Creem subscription', $sub->creem_subscription_id === $vars['subscription_id']);
-        $this->check('account Pro during the trial', $this->planOf($sub->user_id) === 'pro', $this->planOf($sub->user_id));
-
-        // Creem's $0 card check at the trial's start.
-        $zero = $this->event('subscription.paid', [...$vars, 'transaction_id' => $this->id('tran'), 'amount' => 0]);
-        $this->check('$0 card check accepted', ($s = $this->send($zero)) === 200, "HTTP {$s}");
-        $this->check('still trialing', $sub->fresh()?->status === SubscriptionStatus::Trialing);
-        $this->check('nothing charged', ! $sub->invoices()->where('status', InvoiceStatus::Paid)->exists());
-    }
-
-    private function checkoutNotrial(): void
-    {
-        [$sub, $invoice] = $this->pendingCheckout($this->user());
-        $product = (string) config('services.creem.products.pro_monthly_notrial');
+        $product = (string) config('services.creem.products.pro_monthly');
         $vars = [
             ...$this->subscriptionVars($sub),
             'checkout_id' => (string) $invoice->creem_checkout_id,
@@ -514,7 +486,6 @@ final class CreemReplay
         $needs = match ($scenario) {
             'credits_topup' => ['credits'],
             'change_plan_active' => ['pro_monthly', 'max_monthly'],
-            'checkout_notrial' => ['pro_monthly', 'pro_monthly_notrial'],
             default => ['pro_monthly'],
         };
         foreach ($needs as $key) {

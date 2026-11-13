@@ -182,8 +182,7 @@ The command refuses to run when `APP_ENV` is production.
 | `refund` | A full refund marks the invoice refunded, once |
 | `credits_topup` | A paid top-up adds 10,000 Credits and one ledger row; the same event, or the same checkout under a new event id, adds nothing |
 | `change_plan_active` | Pro → Max on an active plan is accepted (202); the Max payment makes the account Max |
-| `checkout_trial` | Checkout with the trial product: trialing, the $0 card check charges nothing |
-| `checkout_notrial` | Checkout with the NOTRIAL product: active and paid at once, never trialing (skipped when `CREEM_PRODUCT_PRO_MONTHLY_NOTRIAL` is empty) |
+| `checkout_paid` | Checkout for Pro: active and paid at once, never trialing (no plan has a trial since 13 Nov 2026) |
 
 **On staging** (in `/www/wwwroot/staging-api`, after the deploy script, before deploying billing changes to production):
 

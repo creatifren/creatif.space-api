@@ -117,7 +117,7 @@ final class ProductEvents
      * A user row was created.
      *
      * @param  array<string, string|null>  $attribution  ref, utm_*, entry, referrer_host, landing_path — ref, utm_* and entry
-     *                                                    are sent; all but ref are kept on the user (SignupAttribution)
+     *                                                   are sent; all but ref are kept on the user (SignupAttribution)
      * @param  array<string, string>  $context  sent as is, e.g. ['platform' => 'android_app'] for the app shell
      */
     public static function signedUp(User $user, string $method, array $attribution = [], array $context = []): void
@@ -477,18 +477,17 @@ final class ProductEvents
     /**
      * @param  'subscription'|'credits'  $kind
      */
-    public static function checkoutStarted(User $user, string $kind, PlanKey|string|null $plan, ?string $period, int $amountCents, bool $trial = false): void
+    public static function checkoutStarted(User $user, string $kind, PlanKey|string|null $plan, ?string $period, int $amountCents): void
     {
         self::capture($user, 'checkout_started', [
             'kind' => $kind,
             'plan' => self::key($plan),
             'period' => $period,
             'amount_usd' => round($amountCents / 100, 2),
-            'trial' => $trial,
         ]);
     }
 
-    /** Once per subscription: Creem says its trial began. */
+    /** Once per subscription: Creem says its trial began (trials started before 13 Nov 2026). */
     public static function trialStarted(User $user, PlanKey|string $plan, string $period, int $days): void
     {
         self::capture($user, 'trial_started', [

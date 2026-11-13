@@ -125,7 +125,7 @@ describe('Free plan through a real API key', function () {
             ->assertJsonPath('feature', 'approval_clients')
             ->assertJsonPath('required_plan', 'pro')
             ->assertJsonPath('limit', 1)
-            ->assertJsonPath('message', 'On Free, approval links are for one client at a time. Approval for more clients is on Pro and Max. Start the 7-day Pro trial: https://creatif.space/settings?section=subscription')
+            ->assertJsonPath('message', 'On Free, approval links are for one client at a time. Approval for more clients is on Pro and Max. Upgrade: https://creatif.space/settings?section=subscription')
             ->assertJsonPath('billing_url', 'https://creatif.space/settings?section=subscription');
 
         expect($second->fresh()->status->value)->toBe('draft');

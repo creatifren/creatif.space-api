@@ -340,9 +340,12 @@ describe('connect_guide', () => {
   });
 
   it('the Instagram scopes it cites are the instagram_business_* defaults in config', () => {
+    // Found by content, not line number: the config file moves under it.
     const cfg = readFileSync(new URL('../../config/services.php', import.meta.url), 'utf8').split('\n');
-    expect(cfg[116]).toMatch(/'instagram_business_basic,instagram_business_content_publish/);
-    expect(cfg[112]).toContain('Instagram sign-in');
+    const comment = cfg.findIndex((l) => l.includes('Instagram sign-in'));
+    expect(comment).toBeGreaterThan(-1);
+    const scopes = cfg.slice(comment, comment + 8).find((l) => l.includes("'instagram_business_basic,"));
+    expect(scopes).toMatch(/'instagram_business_basic,instagram_business_content_publish/);
   });
 
   it('every evidence reference points at a real file and line in this repo', () => {

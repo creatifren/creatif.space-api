@@ -39,7 +39,7 @@ const space = (extra: Record<string, unknown> = {}) => ({
 const PLAN_402 = {
   status: 402,
   body: {
-    message: 'Creating and editing Spaces and your link in bio is on Pro and Max. Start the 14-day Pro trial: https://creatif.space/settings?section=subscription',
+    message: 'Creating and editing Spaces and your link in bio is on Pro and Max. Upgrade: https://creatif.space/settings?section=subscription',
     reason: 'plan_required',
     code: 'plan_required',
     feature: 'spaces',

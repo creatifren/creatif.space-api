@@ -32,7 +32,7 @@ class CreemService
      * A hosted checkout for a plan's first payment. `request_id` is our
      * invoice number, so the webhook can find the bill it settles.
      *
-     * `$productId` is the plan's product, or its trial twin. A discount code
+     * `$productId` is the plan's product (charged at once, no trial). A discount code
      * (Founding 100) is a bonus, never a condition: if Creem refuses it
      * (used up, expired, not for this product) the checkout is opened again
      * without it rather than failing the purchase.
