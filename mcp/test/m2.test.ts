@@ -348,7 +348,7 @@ describe('publish_post', () => {
 
 describe('plan and Credit limits are passed on verbatim', () => {
   const BILLING = 'https://creatif.space/settings?section=subscription';
-  const TRIAL = `On Free, approval links are for one client at a time. Approval for more clients is on Pro and Max. Start the 7-day Pro trial: ${BILLING}`;
+  const APPROVAL_CLIENTS_402 = `On Free, approval links are for one client at a time. Approval for more clients is on Pro and Max. Upgrade: ${BILLING}`;
   const plan402 = (feature: string, message: string, limit?: number) => ({
     status: 402,
     body: {
@@ -365,11 +365,11 @@ describe('plan and Credit limits are passed on verbatim', () => {
 
   it('402 plan_required → plan_required with the API sentence as the message', async () => {
     const res = await call('create_approval_link', { post_ids: [POST], approver_email: 'second@client.test', client_name: 'Second client' }, {
-      'POST /social-approval-links': () => plan402('approval_clients', TRIAL, 1),
+      'POST /social-approval-links': () => plan402('approval_clients', APPROVAL_CLIENTS_402, 1),
     });
     expect(payload(res).error).toMatchObject({
       code: 'plan_required',
-      message: TRIAL,
+      message: APPROVAL_CLIENTS_402,
       next_step: expect.stringMatching(/as it is/),
       details: { reason: 'plan_required', feature: 'approval_clients', required_plan: 'pro', limit: 1, billing_url: BILLING },
     });

@@ -3,8 +3,6 @@
 namespace App\Exceptions;
 
 use App\Models\User;
-use App\Support\Trial;
-use App\Support\Workspace;
 use Illuminate\Http\JsonResponse;
 use RuntimeException;
 
@@ -17,7 +15,7 @@ use RuntimeException;
  * plus `code` (= reason, what older clients read), `billing_url` and the
  * field error under `errors`, so a form can still show it next to a field.
  * The message is written to be passed on as it stands: it names the limit
- * and carries the trial or upgrade link.
+ * and carries the upgrade link.
  *
  * Features: schedule_window, queue_limit, approval_clients, and every
  * feature gate in PlanQuota::FEATURES.
@@ -79,11 +77,8 @@ class PlanFeatureRequired extends RuntimeException
     private static function make(User $user, string $feature, string $field, string $sentence, ?int $limit = null): self
     {
         $url = self::billingUrl();
-        $next = Trial::eligible(Workspace::owner($user))
-            ? 'Start the '.Trial::days().'-day Pro trial: '.$url
-            : 'Upgrade: '.$url;
 
-        return new self($feature, $field, $sentence.' '.$next, $url, 'pro', $limit);
+        return new self($feature, $field, $sentence.' Upgrade: '.$url, $url, 'pro', $limit);
     }
 
     public static function billingUrl(): string

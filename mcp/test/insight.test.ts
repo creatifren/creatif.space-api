@@ -130,7 +130,7 @@ describe('get_insight_summary', () => {
   });
 
   it('turns the 402 on Free into a structured plan_required error to pass on', async () => {
-    const message = 'Insights and analytics is on Pro and Max. Start the 7-day Pro trial: https://creatif.space/settings?section=subscription';
+    const message = 'Insights and analytics is on Pro and Max. Upgrade: https://creatif.space/settings?section=subscription';
     const res = await call({ period: { month: '2026-10' } }, {
       'GET /insight/summary': () => ({
         status: 402,

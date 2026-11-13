@@ -14,7 +14,6 @@ use App\Services\CreemService;
 use App\Support\CommissionEngine;
 use App\Support\Credits;
 use App\Support\CreemTrial;
-use App\Support\Trial;
 use Illuminate\Http\Client\Factory as HttpFactory;
 use Illuminate\Http\Client\Request as HttpRequest;
 use Illuminate\Support\Facades\DB;
@@ -23,20 +22,18 @@ use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Notification;
 
 /*
- * The 7-day Pro trial lives on Creem's Pro products (7 days, card taken);
- * owners who already had a trial or a paid plan go to no-trial twins.
- * Founding 100 is a discount code on yearly checkouts. Creem's shapes are
- * from its official SDK (creem@1.13.0): event `subscription.trialing`,
- * status `trialing`, `current_period_end_date`, checkout `discount_code`;
- * a trial opens with a $0 `subscription.paid`, as seen in the live account.
+ * No plan has a trial (Rizal, 13 Nov 2026): every checkout uses the plan's
+ * own product and is charged at once; the no-trial twins and trial
+ * eligibility are gone. Trials started before then still run their course
+ * (Creem's events below) and convert or end. Founding 100 is a discount
+ * code on yearly checkouts. Creem's shapes are from its official SDK
+ * (creem@1.13.0): event `subscription.trialing`, status `trialing`,
+ * `current_period_end_date`, checkout `discount_code`; a trial opens with a
+ * $0 `subscription.paid`, as seen in the live account.
  */
 
 beforeEach(function () {
-    config([
-        'services.creem.products.pro_monthly_notrial' => 'prod_pro_monthly_notrial',
-        'services.creem.products.pro_yearly_notrial' => 'prod_pro_yearly_notrial',
-        'services.creem.founding_code' => 'FOUNDING100',
-    ]);
+    config(['services.creem.founding_code' => 'FOUNDING100']);
     Notification::fake();
     Http::preventStrayRequests();
     $this->analytics = Analytics::fake();
@@ -76,7 +73,7 @@ function trialHook(array $event)
     ], $body);
 }
 
-/** An eligible owner who has just opened the Pro trial checkout. */
+/** An owner who opened a Pro checkout on a Creem product that still had a trial (before 13 Nov 2026). */
 function trialCheckout(string $period = 'monthly'): Subscription
 {
     fakeCreemCheckouts();
@@ -165,86 +162,40 @@ describe('what main did with a trial (the bug this fixes first)', function () {
     });
 });
 
-describe('checkout', function () {
-    it('sends an eligible owner to Pro, which carries the trial, and says so', function () {
-        $sub = trialCheckout();
-
-        $requests = creemCheckoutRequests();
-        expect($requests)->toHaveCount(1)
-            ->and($requests[0]['product_id'])->toBe('prod_pro_monthly')
-            ->and($sub->status)->toBe(SubscriptionStatus::Expired)
-            ->and($sub->user->plan()->key->value)->toBe('free');
-        $this->analytics->assertCapturedOnce('checkout_started', fn ($p) => $p['trial'] === true && $p['plan'] === 'pro');
-    });
-
-    it('answers with the trial length', function () {
+describe('checkout: every plan is charged at once, no trial', function () {
+    it('sends every plan and period to its own product, says nothing of a trial', function (string $plan, string $period, string $product, int $amount) {
         fakeCreemCheckouts();
-        $this->actingAs(User::factory()->create())
-            ->postJson('/api/v1/me/subscription/checkout', ['plan' => 'pro', 'period' => 'monthly'])
+        $user = User::factory()->create();
+
+        $res = $this->actingAs($user)->postJson('/api/v1/me/subscription/checkout', ['plan' => $plan, 'period' => $period])
             ->assertCreated()
-            ->assertJsonPath('data.trial_days', 7)
-            ->assertJsonPath('data.amount', 999);
-    });
+            ->assertJsonPath('data.amount', $amount);
 
-    it('sends an owner who had a paid plan to the no-trial Pro', function () {
-        fakeCreemCheckouts();
-        $user = User::factory()->create();
-        $old = Subscription::factory()->for($user)->create(['status' => SubscriptionStatus::Expired, 'creem_subscription_id' => null]);
-        $old->invoices()->create(['number' => Invoice::nextNumber(), 'amount' => 999, 'currency' => 'USD', 'status' => InvoiceStatus::Paid]);
+        expect($res->json('data'))->not->toHaveKey('trial_days')
+            ->and(creemCheckoutRequests()[0]['product_id'])->toBe($product)
+            ->and(json_encode(creemCheckoutRequests()[0]->data()))->not->toContain('trial');
+        $this->analytics->assertCapturedOnce('checkout_started', fn ($p) => ! array_key_exists('trial', $p) && $p['plan'] === $plan);
+    })->with([
+        'pro monthly' => ['pro', 'monthly', 'prod_pro_monthly', 999],
+        'pro yearly' => ['pro', 'yearly', 'prod_pro_yearly', 9990],
+        'max monthly' => ['max', 'monthly', 'prod_max_monthly', 1499],
+        'max yearly' => ['max', 'yearly', 'prod_max_yearly', 14990],
+    ]);
 
-        $this->actingAs($user)->postJson('/api/v1/me/subscription/checkout', ['plan' => 'pro', 'period' => 'monthly'])
-            ->assertCreated()->assertJsonPath('data.trial_days', null);
-
-        expect(creemCheckoutRequests()[0]['product_id'])->toBe('prod_pro_monthly_notrial');
-        $this->analytics->assertCapturedOnce('checkout_started', fn ($p) => $p['trial'] === false);
-    });
-
-    it('sends an owner who already had a trial to the no-trial Pro', function () {
+    it('uses the same product whatever the owner had before (no repeat-trial routing)', function () {
         fakeCreemCheckouts();
         $user = User::factory()->create();
         Subscription::factory()->for($user)->create(['status' => SubscriptionStatus::Expired, 'creem_subscription_id' => 'sub_old_trial']);
+        config(['services.creem.legacy_notrial.pro_monthly' => 'prod_pro_monthly_notrial']);
 
-        expect(Trial::eligible($user))->toBeFalse();
-        $this->actingAs($user)->postJson('/api/v1/me/subscription/checkout', ['plan' => 'pro', 'period' => 'yearly'])->assertCreated();
-        expect(creemCheckoutRequests()[0]['product_id'])->toBe('prod_pro_yearly_notrial');
-    });
-
-    it('falls back to Pro and logs a possible repeat trial when no no-trial product is set', function () {
-        Log::spy();
-        config(['services.creem.products.pro_monthly_notrial' => '']);
-        fakeCreemCheckouts();
-        $user = User::factory()->create();
-        Subscription::factory()->for($user)->create(['status' => SubscriptionStatus::Expired, 'creem_subscription_id' => 'sub_old_trial']);
-
-        $this->actingAs($user)->postJson('/api/v1/me/subscription/checkout', ['plan' => 'pro', 'period' => 'monthly'])
-            ->assertCreated()->assertJsonPath('data.trial_days', 7);
+        $this->actingAs($user)->postJson('/api/v1/me/subscription/checkout', ['plan' => 'pro', 'period' => 'monthly'])->assertCreated();
 
         expect(creemCheckoutRequests()[0]['product_id'])->toBe('prod_pro_monthly');
-        Log::shouldHaveReceived('warning')->withArgs(fn ($m, $c) => $m === 'billing.repeat_trial_possible'
-            && $c['missing'] === 'CREEM_PRODUCT_PRO_MONTHLY_NOTRIAL')->once();
     });
 
-    it('keeps an owner eligible after an abandoned checkout', function () {
-        fakeCreemCheckouts();
-        $user = User::factory()->create();
-        $this->actingAs($user)->postJson('/api/v1/me/subscription/checkout', ['plan' => 'max', 'period' => 'monthly'])->assertCreated();
-
-        expect(Trial::eligible($user))->toBeTrue();
-        $this->postJson('/api/v1/me/subscription/checkout', ['plan' => 'pro', 'period' => 'monthly'])->assertCreated();
-        expect(creemCheckoutRequests()[1]['product_id'])->toBe('prod_pro_monthly');
-    });
-
-    it('never trials Max', function () {
-        fakeCreemCheckouts();
-        $this->actingAs(User::factory()->create())
-            ->postJson('/api/v1/me/subscription/checkout', ['plan' => 'max', 'period' => 'monthly'])
-            ->assertCreated()->assertJsonPath('data.trial_days', null);
-
-        expect(creemCheckoutRequests()[0]['product_id'])->toBe('prod_max_monthly');
-    });
-
-    it('moves a paying owner to Pro without a trial', function () {
+    it('moves a paying owner to the plan\'s own product', function () {
         Http::fake(['test-api.creem.io/*' => Http::response(['id' => 'sub_paid'])]);
+        config(['services.creem.legacy_notrial.pro_yearly' => 'prod_pro_yearly_notrial']);
         $sub = Subscription::factory()->create([
             'plan_id' => Plan::query()->where('key', 'max')->value('id'),
             'status' => SubscriptionStatus::Active, 'creem_subscription_id' => 'sub_paid',
@@ -253,7 +204,41 @@ describe('checkout', function () {
         $this->actingAs($sub->user)->postJson('/api/v1/me/subscription/checkout', ['plan' => 'pro', 'period' => 'yearly'])->assertStatus(202);
 
         Http::assertSent(fn (HttpRequest $r) => str_ends_with($r->url(), '/subscriptions/sub_paid/upgrade')
-            && $r['product_id'] === 'prod_pro_yearly_notrial');
+            && $r['product_id'] === 'prod_pro_yearly');
+    });
+});
+
+describe('earlier product ids still renew (legacy, webhooks only)', function () {
+    it('recognises an old no-trial product and CREEM_LEGACY_PRODUCTS ids on a renewal', function (array $config, string $product, string $plan) {
+        config($config);
+        $sub = Subscription::factory()->create(['creem_subscription_id' => 'sub_legacy', 'status' => SubscriptionStatus::Active]);
+        $sub->invoices()->create(['number' => Invoice::nextNumber(), 'amount' => 999, 'currency' => 'USD', 'status' => InvoiceStatus::Paid, 'creem_transaction_id' => 'tran_first', 'paid_at' => now()]);
+
+        trialHook(['id' => 'evt_renew_'.$product, 'eventType' => 'subscription.paid', 'object' => [
+            'id' => 'sub_legacy', 'status' => 'active', 'product' => $product, 'customer' => 'cust_l',
+            'last_transaction_id' => 'tran_renew',
+            'last_transaction' => ['id' => 'tran_renew', 'status' => 'paid', 'amount' => 999, 'currency' => 'USD'],
+            'current_period_start_date' => now()->toIso8601String(),
+            'current_period_end_date' => now()->addMonth()->toIso8601String(),
+        ]])->assertOk();
+
+        expect($sub->fresh()->plan->key->value)->toBe($plan)
+            ->and(Invoice::query()->where('creem_transaction_id', 'tran_renew')->value('status'))->toBe(InvoiceStatus::Paid);
+    })->with([
+        'old no-trial twin (deprecated env)' => [['services.creem.legacy_notrial.pro_monthly' => 'prod_pro_monthly_notrial'], 'prod_pro_monthly_notrial', 'pro'],
+        'CREEM_LEGACY_PRODUCTS' => [['services.creem.legacy_products' => 'prod_old_pro=pro_monthly, prod_old_max=max_monthly'], 'prod_old_max', 'max'],
+    ]);
+
+    it('still refuses a product nobody knows', function () {
+        $sub = Subscription::factory()->create(['creem_subscription_id' => 'sub_legacy']);
+        trialHook(['id' => 'evt_unknown', 'eventType' => 'subscription.paid', 'object' => [
+            'id' => 'sub_legacy', 'status' => 'active', 'product' => 'prod_nobody', 'customer' => 'cust_l',
+            'last_transaction_id' => 'tran_x',
+            'last_transaction' => ['id' => 'tran_x', 'status' => 'paid', 'amount' => 999, 'currency' => 'USD'],
+            'current_period_start_date' => now()->toIso8601String(),
+            'current_period_end_date' => now()->addMonth()->toIso8601String(),
+        ]])->assertUnprocessable();
+        expect($sub->fresh()->plan->key->value)->toBe('pro');
     });
 });
 
@@ -261,21 +246,12 @@ describe('founding 100', function () {
     it('sends the code on every yearly checkout', function (string $plan, string $product) {
         fakeCreemCheckouts();
         $user = User::factory()->create();
-        // Already had a trial, so Pro yearly is the no-trial twin here.
-        Subscription::factory()->for($user)->create(['status' => SubscriptionStatus::Expired, 'creem_subscription_id' => 'sub_x']);
 
         $this->actingAs($user)->postJson('/api/v1/me/subscription/checkout', ['plan' => $plan, 'period' => 'yearly'])->assertCreated();
 
         $sent = creemCheckoutRequests()[0];
         expect($sent['product_id'])->toBe($product)->and($sent['discount_code'])->toBe('FOUNDING100');
-    })->with([['pro', 'prod_pro_yearly_notrial'], ['max', 'prod_max_yearly']]);
-
-    it('sends the code with the yearly trial too', function () {
-        trialCheckout('yearly');
-
-        $sent = creemCheckoutRequests()[0];
-        expect($sent['product_id'])->toBe('prod_pro_yearly')->and($sent['discount_code'])->toBe('FOUNDING100');
-    });
+    })->with([['pro', 'prod_pro_yearly'], ['max', 'prod_max_yearly']]);
 
     it('never sends the code on a monthly checkout', function (string $plan) {
         fakeCreemCheckouts();
@@ -323,22 +299,22 @@ describe('founding 100', function () {
 });
 
 describe('the subscription screen', function () {
-    it('tells the app about the trial and Founding 100', function () {
-        $this->actingAs(User::factory()->create())->getJson('/api/v1/me/subscription')
+    it('tells the app about Founding 100, and nothing about a trial', function () {
+        $res = $this->actingAs(User::factory()->create())->getJson('/api/v1/me/subscription')
             ->assertOk()
-            ->assertJsonPath('data.trial', ['eligible' => true, 'days' => 7])
             ->assertJsonPath('data.founding', ['active' => true, 'percent' => 30, 'applies_to' => 'yearly']);
+
+        expect($res->json('data'))->not->toHaveKey('trial');
     });
 
-    it('shows a trialing subscription with its end', function () {
+    it('still shows a trial started before 13 Nov with its end', function () {
         $sub = trialCheckout();
         trialHook(trialingEvent($sub))->assertOk();
 
         $this->actingAs($sub->user)->getJson('/api/v1/me/subscription')
             ->assertJsonPath('data.plan.key', 'pro')
             ->assertJsonPath('data.subscription.status', 'trialing')
-            ->assertJsonPath('data.subscription.trial_ends_at', $sub->fresh()->current_period_end->toJSON())
-            ->assertJsonPath('data.trial.eligible', false);
+            ->assertJsonPath('data.subscription.trial_ends_at', $sub->fresh()->current_period_end->toJSON());
     });
 });
 
@@ -409,8 +385,7 @@ describe('webhooks', function () {
 
         // A late trialing replay does not bring it back.
         trialHook(trialingEvent($sub, 'evt_late'))->assertOk();
-        expect($sub->fresh()->status)->toBe(SubscriptionStatus::Expired)
-            ->and(Trial::eligible($user))->toBeFalse();
+        expect($sub->fresh()->status)->toBe(SubscriptionStatus::Expired);
     });
 
     it('ends a cancelled trial on Creem\'s canceled event too', function () {
@@ -525,12 +500,10 @@ describe('billing:reconcile-trials', function () {
             ->and($fresh->current_period_start->equalTo($sub->current_period_start))->toBeTrue()
             ->and($fresh->current_period_end->equalTo($sub->current_period_end))->toBeTrue()
             ->and(Credits::monthlyBalance($user))->toBe($monthly)
-            ->and(DB::table('wallet_transactions')->count())->toBe($ledger)
-            ->and(Trial::eligible($user))->toBeFalse();
+            ->and(DB::table('wallet_transactions')->count())->toBe($ledger);
         $this->actingAs($user)->getJson('/api/v1/me/subscription')
             ->assertJsonPath('data.subscription.status', 'trialing')
             ->assertJsonPath('data.subscription.trial_ends_at', $sub->current_period_end->toJSON())
-            ->assertJsonPath('data.trial.eligible', false)
             ->assertJsonPath('data.plan.key', 'pro');
 
         // Idempotent: no longer a candidate, and trial_started stays at one.
@@ -598,8 +571,7 @@ describe('billing:reconcile-trials', function () {
             ->and($affiliate->fresh()->paid_referrals_count)->toBe(0)
             ->and($sub->fresh()->status)->toBe(SubscriptionStatus::Trialing)
             ->and(Credits::monthlyBalance($user))->toBe($monthly)
-            ->and(DB::table('wallet_transactions')->count())->toBe($ledger)
-            ->and(Trial::eligible($user))->toBeFalse();
+            ->and(DB::table('wallet_transactions')->count())->toBe($ledger);
         $this->actingAs($user)->getJson('/api/v1/me/subscription')
             ->assertJsonPath('data.subscription.status', 'trialing')
             ->assertJsonPath('data.subscription.trial_ends_at', $sub->current_period_end->toJSON());

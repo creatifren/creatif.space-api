@@ -17,7 +17,6 @@ beforeEach(function () {
     Notification::fake();
     // Nothing leaves the test: the replay stubs Creem itself.
     Http::preventStrayRequests();
-    config(['services.creem.products.pro_monthly_notrial' => 'prod_pro_monthly_notrial']);
 });
 
 function replayResult(string $scenario, ?Closure $deliver = null): array
@@ -45,8 +44,7 @@ it('covers the scenarios QA asked for', function () {
         'refund',
         'credits_topup',
         'change_plan_active',
-        'checkout_trial',
-        'checkout_notrial',
+        'checkout_paid',
     ]);
 });
 
@@ -72,11 +70,11 @@ it('signs with the webhook secret from config, so a wrong secret is refused (403
 });
 
 it('skips a scenario whose product is not configured, instead of failing it', function () {
-    config(['services.creem.products.pro_monthly_notrial' => null]);
+    config(['services.creem.products.credits' => null]);
 
-    expect(replayResult('checkout_notrial'))->toMatchArray([
+    expect(replayResult('credits_topup'))->toMatchArray([
         'result' => 'skipped',
-        'note' => 'CREEM_PRODUCT_PRO_MONTHLY_NOTRIAL is not set',
+        'note' => 'CREEM_PRODUCT_CREDITS is not set',
     ]);
 });
 

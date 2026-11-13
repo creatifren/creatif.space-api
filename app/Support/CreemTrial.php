@@ -18,6 +18,9 @@ use Illuminate\Validation\ValidationException;
  * subscription.paid Creem sends at the trial's start, checkout.completed
  * carrying a trialing subscription, and `billing:reconcile-trials`.
  * Idempotent: trial_started fires once. The caller holds the row locks.
+ *
+ * Trials were removed on 13 Nov 2026: no checkout starts one. This keeps
+ * the trials started before then working until they convert or end.
  */
 class CreemTrial
 {
@@ -71,7 +74,7 @@ class CreemTrial
             'grace_ends_at' => null,
         ]);
         if (! $already) {
-            ProductEvents::trialStarted($subscription->user, $plan->key, $period, Trial::days());
+            ProductEvents::trialStarted($subscription->user, $plan->key, $period, max(1, (int) round($start->diffInDays($end, true))));
         }
         ProductEvents::planChanged($subscription->user, $planBefore);
 

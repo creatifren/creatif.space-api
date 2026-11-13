@@ -129,6 +129,13 @@ class CreemWebhookController extends Controller
         // too, so a lost subscription.trialing still grants the trial.
         $remote = $object['subscription'] ?? null;
         if (is_array($remote) && ($remote['status'] ?? null) === 'trialing') {
+            // No plan has a trial any more: a new checkout coming back
+            // trialing means the Creem product still has one. Honoured (the
+            // customer was promised it), and flagged so the product is fixed.
+            Log::warning('billing.trial_on_checkout', [
+                'subscription' => $subscription->ulid,
+                'product' => $this->id($object['product'] ?? null),
+            ]);
             $this->trialing($remote + ['product' => $object['product'] ?? null, 'customer' => $object['customer'] ?? null]);
         }
     }

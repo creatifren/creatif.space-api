@@ -20,7 +20,6 @@ use App\Support\Credits;
 use App\Support\Founding;
 use App\Support\PlanQuota;
 use App\Support\ProductEvents;
-use App\Support\Trial;
 use App\Support\Workspace;
 use Illuminate\Http\Client\RequestException;
 use Illuminate\Http\JsonResponse;
@@ -80,12 +79,6 @@ class SubscriptionController extends Controller
                 'total' => Credits::total($user),
                 'seats' => Workspace::seats($user),
                 'seats_used' => Workspace::seatsUsed($user),
-                // What the plan picker may offer. Eligible = never had a
-                // trial or a paid plan; the trial itself is on Creem's Pro.
-                'trial' => [
-                    'eligible' => Trial::eligible($user),
-                    'days' => Trial::days(),
-                ],
                 'founding' => [
                     'active' => Founding::active(),
                     'percent' => Founding::percent(),
@@ -125,8 +118,9 @@ class SubscriptionController extends Controller
         $current = $user->activeSubscription();
 
         if ($current !== null) {
-            // Creem would charge a proration now and end the trial early;
-            // the trial runs out (or is cancelled) first.
+            // A trial started before trials were removed (13 Nov 2026): Creem
+            // would charge a proration now and end it early, so it runs out
+            // (or is cancelled) first.
             if ($current->isTrialing()) {
                 throw ValidationException::withMessages([
                     'plan' => 'You’re on a '.$current->plan->name.' trial — the plan can be changed once it ends.',
@@ -145,8 +139,8 @@ class SubscriptionController extends Controller
                 ]);
             }
 
-            self::changePlan($creem, $current, (string) Trial::changeProduct($plan, $validated['period']));
-            ProductEvents::checkoutStarted($user, 'subscription', $plan->key, $validated['period'], (int) $plan->priceFor($validated['period']), false);
+            self::changePlan($creem, $current, (string) $plan->creemProduct($validated['period']));
+            ProductEvents::checkoutStarted($user, 'subscription', $plan->key, $validated['period'], (int) $plan->priceFor($validated['period']));
 
             return response()->json(['data' => [
                 'checkout_url' => null,
@@ -197,10 +191,10 @@ class SubscriptionController extends Controller
             ]);
         });
 
-        // Pro carries Creem's trial; an owner who had one (or a paid plan)
-        // gets the no-trial twin. The Founding code goes on any yearly plan
-        // (dropped if Creem refuses it).
-        ['product' => $product, 'trial' => $trial] = Trial::checkoutProduct($plan, $validated['period'], $user);
+        // Every plan is charged at checkout: the plan's own product, never a
+        // trial. The Founding code goes on any yearly plan (dropped if Creem
+        // refuses it).
+        $product = $plan->creemProduct($validated['period']);
 
         // Reused bill: the same hosted page, never a second checkout for it.
         if ($invoice->creem_checkout_url === null) {
@@ -216,14 +210,12 @@ class SubscriptionController extends Controller
             ])->save();
         }
 
-        ProductEvents::checkoutStarted($user, 'subscription', $plan->key, $validated['period'], (int) $invoice->amount, $trial);
+        ProductEvents::checkoutStarted($user, 'subscription', $plan->key, $validated['period'], (int) $invoice->amount);
 
         return response()->json([
             'data' => [
                 'checkout_url' => $invoice->creem_checkout_url,
                 'amount' => $invoice->amount,
-                // Days free before `amount` is first charged; null = no trial.
-                'trial_days' => $trial ? Trial::days() : null,
                 'invoice' => (new InvoiceResource($invoice))->toArray($request),
             ],
         ], 201);

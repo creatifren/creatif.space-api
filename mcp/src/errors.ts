@@ -197,7 +197,7 @@ function classify(e: unknown, notFound: NotFound, stateTool?: string): ToolError
     return new ToolError(
       'plan_required',
       message,
-      `Tell the user this message as it is (it names the limit and has the trial/upgrade link). ${PLAN_NEXT[typeof body.feature === 'string' ? body.feature : ''] ?? PLAN_NEXT.default} Do not retry the same call.`,
+      `Tell the user this message as it is (it names the limit and has the upgrade link). ${PLAN_NEXT[typeof body.feature === 'string' ? body.feature : ''] ?? PLAN_NEXT.default} Do not retry the same call.`,
       { reason: 'plan_limit', ...pick(body, ['reason', 'feature', 'required_plan', 'limit', 'billing_url']) },
     );
   }
