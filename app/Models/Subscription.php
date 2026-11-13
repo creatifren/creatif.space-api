@@ -20,6 +20,7 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
  * @property int $user_id
  * @property int $plan_id
  * @property string|null $creem_subscription_id
+ * @property string|null $plan_source
  * @property string|null $creem_customer_id
  * @property string $provider creem | google
  * @property string|null $google_purchase_token
@@ -52,6 +53,9 @@ class Subscription extends Model
 
     public const PROVIDER_GOOGLE = 'google';
 
+    /** plan_source of a plan given by staff (reviewer:setup): never billed, no provider subscription. */
+    public const SOURCE_STAFF_COMP = 'staff_comp';
+
     /**
      * The purchase token is a bearer credential for the Play purchase: it
      * never leaves the server.
@@ -65,6 +69,7 @@ class Subscription extends Model
         'creem_subscription_id',
         'creem_customer_id',
         'provider',
+        'plan_source',
         'google_purchase_token',
         'google_purchase_token_hash',
         'google_product_id',

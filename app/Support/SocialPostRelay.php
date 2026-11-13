@@ -17,6 +17,7 @@ use App\Models\SocialAccount;
 use App\Models\SocialPost;
 use App\Models\SocialPostTarget;
 use App\Models\User;
+use App\Services\DemoSocialProvider;
 use Carbon\CarbonImmutable;
 use Carbon\CarbonInterface;
 use Illuminate\Database\Eloquent\Collection as EloquentCollection;
@@ -119,6 +120,10 @@ class SocialPostRelay
      */
     public function send(SocialPost $post): void
     {
+        // The reviewer's seeded demo channel goes through the demo relay,
+        // which never reaches a network.
+        self::routeDemo($post);
+
         // A destination left under another relay cannot be sent through
         // this one: named, before anything is charged.
         self::ensureUsable($post);
@@ -156,6 +161,51 @@ class SocialPostRelay
                 ? SocialPostStatus::Published
                 : SocialPostStatus::Scheduled,
         ]);
+
+        // A demo post that is due says so at once: nothing is posted, the
+        // Credits come back. A later one is settled by reconcile when due.
+        if ($post->provider === DemoSocialProvider::NAME && ($post->scheduled_at === null || ! $post->scheduled_at->isFuture())) {
+            self::settleDemo($post->refresh());
+        }
+    }
+
+    /**
+     * A post whose destinations are all the demo channel is the demo
+     * relay's; one mixing it with real channels is refused before anything
+     * is charged.
+     *
+     * @throws ValidationException
+     */
+    private static function routeDemo(SocialPost $post): void
+    {
+        $accounts = $post->targets()->with('account')->get()->pluck('account')->filter();
+        $demo = $accounts->filter(fn ($a) => $a instanceof SocialAccount && $a->is_demo)->count();
+
+        if ($demo === 0) {
+            return;
+        }
+        if ($demo < $accounts->count()) {
+            throw ValidationException::withMessages([
+                'account_ids' => 'The demo channel can’t be sent together with real channels. Send it on its own.',
+            ]);
+        }
+        if ($post->provider !== DemoSocialProvider::NAME) {
+            $post->forceFill(['provider' => DemoSocialProvider::NAME])->save();
+        }
+    }
+
+    /** Every pending destination of a due demo post: "demo channel, nothing is posted". */
+    public static function settleDemo(SocialPost $post): void
+    {
+        foreach ($post->targets()->with('account')->get() as $target) {
+            if ($target->account !== null && $target->status === SocialPostTargetStatus::Pending) {
+                self::applyResult($post, $target->account, [
+                    'success' => false,
+                    'post_id' => (string) $post->provider_post_id,
+                    'error' => DemoSocialProvider::DEMO_MARKER,
+                ], 'job');
+            }
+        }
     }
 
     /**
@@ -700,7 +750,8 @@ class SocialPostRelay
             ->where('status', SocialPostStatus::Scheduled)
             ->whereNotNull('provider_post_id')
             ->where(fn ($q) => $q->whereNull('scheduled_at')->orWhere('scheduled_at', '<=', UtcDateTime::bind(now())))
-            ->with('targets.account')
+            // user: a failed result gives its Credits back (Credits::returnSend reads the owner).
+            ->with(['targets.account', 'user'])
             ->limit(50)
             ->get();
 

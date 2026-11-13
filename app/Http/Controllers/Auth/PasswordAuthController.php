@@ -6,6 +6,7 @@ use App\Enums\UserStatus;
 use App\Http\Controllers\Controller;
 use App\Models\User;
 use App\Support\AutoHandle;
+use App\Support\DirectoryReviewer;
 use App\Support\Onboarding;
 use App\Support\ProductEvents;
 use App\Support\ReferralAttribution;
@@ -215,6 +216,14 @@ class PasswordAuthController extends Controller
             'email' => ['required', 'string', 'email'],
             'password' => ['required', 'string', PasswordRule::min(8)->max(72)],
         ]);
+
+        // A directory reviewer's password follows the reviewer rule (12–72),
+        // whichever way it is set. Says nothing an ordinary reset would not:
+        // only a length rule, and only for that account.
+        $reviewer = User::query()->where('email', Str::lower((string) $request->input('email')))->where('is_directory_reviewer', true)->exists();
+        if ($reviewer && mb_strlen((string) $request->input('password')) < DirectoryReviewer::MIN_PASSWORD) {
+            throw ValidationException::withMessages(['password' => 'Use at least '.DirectoryReviewer::MIN_PASSWORD.' characters.']);
+        }
 
         $status = Password::reset(
             $request->only('email', 'password', 'token'),

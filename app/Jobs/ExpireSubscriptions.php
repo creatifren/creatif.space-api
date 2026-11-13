@@ -43,6 +43,16 @@ class ExpireSubscriptions implements ShouldQueue
         $endedTrials->update(['status' => SubscriptionStatus::Expired]);
         $trialUsers->each(fn (User $u) => ProductEvents::planChanged($u));
 
+        // A staff comp (reviewer:setup) ends with its period: nobody bills it.
+        $compEnded = Subscription::query()
+            ->where('plan_source', Subscription::SOURCE_STAFF_COMP)
+            ->whereIn('status', SubscriptionStatus::entitled())
+            ->whereNotNull('current_period_end')
+            ->where('current_period_end', '<=', now());
+        $compUsers = User::query()->whereIn('id', (clone $compEnded)->select('user_id'))->get();
+        $compEnded->update(['status' => SubscriptionStatus::Expired]);
+        $compUsers->each(fn (User $u) => ProductEvents::planChanged($u));
+
         // Google Play: notifications move these rows, so this is the net for
         // one that never arrived. A cancelled Play plan ends with its period;
         // any other ends once the period plus the grace window is over (a

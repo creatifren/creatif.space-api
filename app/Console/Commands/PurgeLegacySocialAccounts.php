@@ -72,7 +72,9 @@ class PurgeLegacySocialAccounts extends Command
      */
     private function plan(string $current): array
     {
-        $accountQuery = DB::table('social_accounts')->where('provider', '!=', $current);
+        $accountQuery = DB::table('social_accounts')->where('provider', '!=', $current)
+            // The reviewer's seeded demo channel is not a legacy account.
+            ->where('is_demo', false);
         $accounts = (DB::transactionLevel() > 0 ? $accountQuery->lockForUpdate() : $accountQuery)
             ->orderBy('id')->get(['id', 'user_id', 'provider']);
         $legacy = $accounts->pluck('id')->all();

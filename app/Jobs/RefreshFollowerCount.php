@@ -7,6 +7,7 @@ use App\Enums\SocialPlatform;
 use App\Models\FollowerSnapshot;
 use App\Models\SocialAccount;
 use App\Models\User;
+use App\Support\SocialProviders;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Queue\Queueable;
 use Illuminate\Support\Facades\Cache;
@@ -73,7 +74,8 @@ class RefreshFollowerCount implements ShouldQueue
             $fields['followers_count'] = null;
         } else {
             try {
-                $fields['followers_count'] = $provider->followersCount($account->provider_account_id);
+                $relay = $account->is_demo ? app(SocialProviders::class)->for($account) : $provider;
+                $fields['followers_count'] = $relay->followersCount($account->provider_account_id);
             } catch (Throwable $e) {
                 Log::warning('social.followers_failed', ['account' => $account->ulid, 'error' => $e->getMessage()]);
             }
