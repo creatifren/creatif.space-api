@@ -8,6 +8,7 @@ use App\Http\Controllers\Api\V1\AnalyticsController;
 use App\Http\Controllers\Api\V1\ApiKeyController;
 use App\Http\Controllers\Api\V1\ApprovalAuditController;
 use App\Http\Controllers\Api\V1\CaptionAssistController;
+use App\Http\Controllers\Api\V1\ChannelVerifyController;
 use App\Http\Controllers\Api\V1\ConnectedAppController;
 use App\Http\Controllers\Api\V1\CreditsController;
 use App\Http\Controllers\Api\V1\CreemWebhookController;
@@ -392,7 +393,12 @@ Route::middleware(['auth:sanctum,mcp', EnforceTokenScope::class, EnsureNotPendin
     Route::get('/social-accounts/{socialAccount}/pinterest-boards', PinterestBoardController::class)
         ->middleware('throttle:30,1')
         ->name('api.v1.social-accounts.pinterest-boards');
-    Route::delete('/social-accounts/{socialAccount}', [SocialAccountController::class, 'destroy'])->name('api.v1.social-accounts.destroy');
+    Route::post('/social-accounts/{socialAccount}/verify', ChannelVerifyController::class)
+        ->middleware('throttle:20,1')
+        ->name('api.v1.social-accounts.verify');
+    Route::delete('/social-accounts/{socialAccount}', [SocialAccountController::class, 'destroy'])
+        ->middleware('throttle:30,1')
+        ->name('api.v1.social-accounts.destroy');
 
     // Social — posts relayed to the platforms
     Route::get('/social-posts', [SocialPostController::class, 'index'])->name('api.v1.social-posts.index');

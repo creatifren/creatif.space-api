@@ -36,6 +36,20 @@ describe('list_channels', () => {
     expect(app!.v1.calls[0]!.auth).toBe(`Bearer ${TOKEN_ALL}`);
   });
 
+  it('passes each channel\'s last live check through, and adds nothing when the API sends none', async () => {
+    const res = await call('list_channels', {}, {
+      'GET /social-accounts': () => ({ body: { data: [
+        account(IG, 'instagram', { health_status: 'ok', health_reason: null, last_verified_at: '2026-11-13T08:00:00Z', needs_attention: false }),
+        account(X, 'bluesky', { health_status: 'failed', health_reason: 'The sign-in expired or was revoked. Reconnect it to keep posting.', last_verified_at: '2026-11-13T08:01:00Z', needs_attention: true }),
+      ] } }),
+    });
+    const out = payload(res);
+    expect(out.channels[0]).toMatchObject({ health_status: 'ok', health_reason: null, last_verified_at: '2026-11-13T08:00:00Z' });
+    expect(out.channels[1]).toMatchObject({ health_status: 'failed', health_reason: expect.stringContaining('Reconnect') });
+    expect(JSON.stringify(out)).not.toMatch(/outstand|post\s*for\s*me/i);
+    expect(res.structuredContent).toEqual(out);
+  });
+
   it('emits mcp_tool_called with no content', async () => {
     await call('list_channels', {}, { 'GET /social-accounts': () => ({ body: { data: [account(IG)] } }) });
     await new Promise((r) => setTimeout(r, 10));

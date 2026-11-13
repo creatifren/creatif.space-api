@@ -75,7 +75,8 @@ class SocialAccountController extends Controller
      */
     private static function listed(User $user): Collection
     {
-        $rows = $user->socialAccounts()->orderBy('platform')->orderBy('username')->get();
+        // A disconnected channel the owner removed stays only for history.
+        $rows = $user->socialAccounts()->whereNull('removed_at')->orderBy('platform')->orderBy('username')->get();
 
         $live = $rows
             ->filter(fn (SocialAccount $a) => $a->network_unique_id !== null && $a->status === SocialAccountStatus::Connected)
@@ -275,6 +276,8 @@ class SocialAccountController extends Controller
                 'network_webhook_reference_id' => $fields['network_webhook_reference_id'],
                 'status' => $status,
                 'connected_at' => self::connectedAt($account, $existing, $status),
+                // Connected again: a channel the owner removed comes back.
+                ...($status === SocialAccountStatus::Connected ? ['removed_at' => null] : []),
             ]);
 
             $this->recordMessagesScope($row, $account, $askedForMessages);
@@ -315,6 +318,12 @@ class SocialAccountController extends Controller
      * posts and their numbers reference it. A post still to go loses this
      * destination (its 3 Credits come back); one aimed only here goes back
      * to being a draft, pulled from the provider and off any approval link.
+     *
+     * An account that is already disconnected (or connected only under
+     * the relay before the move) is removed instead: the same
+     * for its posts still to go, then hidden from Channels (removed_at).
+     * The row stays for the same history; connecting it again brings it
+     * back. Removing it twice is a no-op.
      */
     public function destroy(
         Request $request,
@@ -324,7 +333,14 @@ class SocialAccountController extends Controller
     ): JsonResponse {
         Gate::allowIf(fn ($user) => $socialAccount->user_id === $user->id);
 
-        $why = 'Its account was disconnected';
+        if ($socialAccount->removed_at !== null) {
+            return response()->json(null, 204);
+        }
+        // Disconnected, or connected only under the relay before the move
+        // (listed as disconnected): either way the owner is removing it.
+        $removing = ! $socialAccount->isUsable();
+
+        $why = $removing ? 'Its channel was removed' : 'Its account was disconnected';
         $posts = SocialPost::query()
             ->where('user_id', $socialAccount->user_id)
             ->whereIn('status', [SocialPostStatus::Scheduled, SocialPostStatus::Draft])
@@ -377,6 +393,22 @@ class SocialAccountController extends Controller
                 }
                 $target->delete();
             });
+        }
+
+        if ($removing) {
+            // The grant is already gone; tidying the relay's copy (the old
+            // relay's, for a pre-move account) is best effort and never keeps
+            // the owner from removing it.
+            try {
+                $provider = $providers->for($socialAccount);
+                $provider->disconnect($socialAccount->provider_account_id);
+                $provider->deleteAccount($socialAccount->provider_account_id);
+            } catch (Throwable $e) {
+                Log::warning('social.remove_relay_cleanup_failed', ['account' => $socialAccount->ulid, 'provider' => $socialAccount->provider, 'error' => $e->getMessage()]);
+            }
+            $socialAccount->forceFill(['status' => SocialAccountStatus::Disconnected, 'removed_at' => now()])->save();
+
+            return response()->json(null, 204);
         }
 
         $provider = $providers->for($socialAccount);
