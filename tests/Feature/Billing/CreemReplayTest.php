@@ -105,7 +105,7 @@ describe('the runner refuses anything but staging in Creem test mode', function 
 
         foreach (['https://api.creatif.space', 'https://app.creatif.space', 'https://notstaging-api.creatif.space', 'https://api.staging.creatif.space'] as $url) {
             config(['app.url' => $url]);
-            expect(BillingReplayWebhooks::refusal('staging'))->toContain('is not a staging host', $url);
+            expect(BillingReplayWebhooks::refusal('staging'))->toContain('is not a staging host');
         }
         foreach (['https://staging.creatif.space', 'https://staging-api.creatif.space'] as $url) {
             config(['app.url' => $url]);
