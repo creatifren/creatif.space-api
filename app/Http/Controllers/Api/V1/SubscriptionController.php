@@ -140,7 +140,7 @@ class SubscriptionController extends Controller
             }
 
             self::changePlan($creem, $current, (string) $plan->creemProduct($validated['period']));
-            ProductEvents::checkoutStarted($user, 'subscription', $plan->key, $validated['period'], (int) $plan->priceFor($validated['period']), false);
+            ProductEvents::checkoutStarted($user, 'subscription', $plan->key, $validated['period'], (int) $plan->priceFor($validated['period']));
 
             return response()->json(['data' => [
                 'checkout_url' => null,
