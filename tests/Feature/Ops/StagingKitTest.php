@@ -88,8 +88,9 @@ it('holds no secret, IP address or server path beyond /www/wwwroot/staging-*', f
             ->not->toMatch('/\b(?:sk|pk|rk)_(?:live|test)_[A-Za-z0-9]{8,}/', $name)
             ->not->toMatch('/-----BEGIN [A-Z ]*PRIVATE KEY-----/', $name);
 
-        preg_match_all('#/(?:www|home|root|etc|var|opt|srv)/[^\s"\'`)]*#', $text, $paths);
+        preg_match_all('#/(?:www|home|root|etc|var|opt|srv)/[^\s"\'`)}]*#', $text, $paths);
         foreach ($paths[0] as $path) {
+            $path = rtrim($path, '.,;:'); // a path ending a sentence
             expect($path)->toMatch('#^/www/wwwroot/staging-[a-z]+(?:/|$)#', "{$name}: {$path}");
         }
     }
