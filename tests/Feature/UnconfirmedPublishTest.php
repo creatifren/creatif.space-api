@@ -120,10 +120,8 @@ it('waits 5 minutes, and takes a late result instead of failing it', function ()
     expect($early->targets()->sole()->status->value)->toBe('pending');
     Http::assertNothingSent();
 
+    $early->delete(); // provider_post_id is unique
     $late = ucSentPost($user, [ucAccount($user, 'bluesky', 'Late1')], 6);
-    $late->update(['provider_post_id' => 'VCioF']);
-    SocialPost::query()->whereKey($late->id)->update(['updated_at' => now()->subMinutes(6)]);
-    $early->delete();
     ucFakeOutstand(['Late1' => 'published']);
     ucRun();
 
