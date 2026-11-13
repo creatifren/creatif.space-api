@@ -48,7 +48,7 @@ class PlanFactory extends Factory
             'price_monthly' => 0,
             'price_yearly' => 0,
             'quotas' => [
-                'storage_bytes' => 2 * 1024 * 1024 * 1024,
+                'storage_bytes' => 1 * 1024 * 1024 * 1024,
                 'spaces_total' => 15,
                 'spaces_active' => null,
                 'seats' => 1,
