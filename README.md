@@ -1,4 +1,4 @@
-[![CI](https://github.com/creatifren/creatif.space-api/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/creatifren/creatif.space-api/actions/workflows/ci.yml)
+[![CI](https://github.com/creatifren/creatif.space-api/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/creatifren/creatif.space-api/actions/workflows/ci.yml) [![Creatif Space MCP server](https://mcprush.com/badge/creatif-space-mcp/card.svg)](https://mcprush.com/creatifren/creatif-space-mcp)
 
 <p align="center"><a href="https://laravel.com" target="_blank"><img src="https://raw.githubusercontent.com/laravel/art/master/logo-lockup/5%20SVG/2%20CMYK/1%20Full%20Color/laravel-logolockup-cmyk-red.svg" width="400" alt="Laravel Logo"></a></p>
 
