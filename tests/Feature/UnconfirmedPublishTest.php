@@ -115,14 +115,14 @@ it('fails a "now" post the relay never confirmed after 5 minutes: cancelled at t
 it('waits 5 minutes, and takes a late result instead of failing it', function () {
     $user = ucUser();
     $early = ucSentPost($user, [ucAccount($user)], 3);
-    ucFakeOutstand(['IcKjX' => 'pending']);
+    // One fake for the whole test: a second Http::fake would not replace the first.
+    ucFakeOutstand(['IcKjX' => 'pending', 'Late1' => 'published']);
     ucRun();
     expect($early->targets()->sole()->status->value)->toBe('pending');
     Http::assertNothingSent();
 
     $early->delete(); // provider_post_id is unique
     $late = ucSentPost($user, [ucAccount($user, 'bluesky', 'Late1')], 6);
-    ucFakeOutstand(['Late1' => 'published']);
     ucRun();
 
     expect($late->targets()->sole()->status->value)->toBe('published')
