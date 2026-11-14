@@ -29,7 +29,10 @@ class SocialAccountResource extends JsonResource
             // composer, Channels and Engage stop offering it with no app
             // change; reconnect_required says why.
             'status' => $this->isLegacy() ? SocialAccountStatus::Disconnected : $this->status,
-            'reconnect_required' => $this->isLegacy(),
+            // Also true when the last check or a publish found its sign-in no
+            // longer accepted (ChannelHealth::RECONNECT_REASONS): status stays
+            // connected, but posting to it fails until it is reconnected.
+            'reconnect_required' => ChannelHealth::reconnectRequired($this->resource),
             'connected_at' => $this->connected_at,
             'messaging_enabled' => $this->messagingEnabled(),
             'needs_reconnect_for_messages' => $this->needsReconnectForMessages(),

@@ -76,6 +76,17 @@ describe('list_failed_posts', () => {
     expect(calls.every((c) => c.headers.get('x-mcp-tool') === 'list_failed_posts')).toBe(true);
   });
 
+  it('lists a partly failed post once, though the API returns it under failed and published', async () => {
+    const partial = post(P2, {
+      status: 'published',
+      scheduled_at: '2026-11-11T02:00:00Z',
+      targets: [target(IG, 'instagram', 'published'), target(X, 'x', 'failed', ['media_spec', 'X refused the media file.'])],
+    });
+    const out = payload(await run({ failed: [partial], published: [partial] }));
+    expect(out).toMatchObject({ count: 1, total: 1 });
+    expect(out.posts[0]).toMatchObject({ post_id: P2, failed_channels: [{ channel_id: X, failure_code: 'media_spec' }] });
+  });
+
   it('nothing failed: an empty list that says so', async () => {
     const out = payload(await run({ published: [post(P3, { status: 'published', targets: [target(IG, 'instagram', 'published')] })] }));
     expect(out).toMatchObject({ count: 0, total: 0, posts: [], next_cursor: null, next_step: 'Nothing failed in the last 30 days.' });

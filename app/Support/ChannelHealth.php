@@ -31,7 +31,61 @@ class ChannelHealth
         'signin_expired' => 'The sign-in expired or was revoked. Reconnect it to keep posting.',
         'disconnected' => 'The channel is disconnected. Reconnect it to post to it.',
         'reconnect_required' => 'It was connected through an older connection that no longer works. Reconnect it to post to it.',
+        // A publish to it was refused for its sign-in (PublishFailure::RECONNECT), whatever the relay's record says.
+        'publish_unauthorized' => 'The network refused a post from this account because its sign-in no longer works. Reconnect it to keep posting.',
     ];
+
+    /** Failure reasons only a reconnect fixes: the channel reads reconnect_required. */
+    public const RECONNECT_REASONS = ['not_found', 'signin_expired', 'publish_unauthorized'];
+
+    /**
+     * A publish result is the strongest health check there is: a refusal
+     * for the account's sign-in fails the channel (until a passing check or
+     * a publish that goes out), a destination that went out makes it ok.
+     * Only results the network reported for this account count — never our
+     * own call failing — and never the demo channel.
+     */
+    public static function fromPublish(SocialAccount $account, bool $success, ?string $reasonCode = null): void
+    {
+        if ($account->is_demo) {
+            return;
+        }
+
+        if ($success) {
+            if ($account->health_status !== self::OK || $account->health_reason !== null) {
+                $account->forceFill([
+                    'health_status' => self::OK,
+                    'health_reason' => null,
+                    'last_verified_at' => now(),
+                    'health_notified_at' => null,
+                ])->save();
+            }
+
+            return;
+        }
+
+        if (! in_array($reasonCode, PublishFailure::RECONNECT, true)) {
+            return;
+        }
+
+        $account->forceFill([
+            'health_status' => self::FAILED,
+            'health_reason' => 'publish_unauthorized',
+            'last_verified_at' => now(),
+        ])->save();
+    }
+
+    /** The channel can be posted to only after the owner reconnects it. */
+    public static function reconnectRequired(SocialAccount $account): bool
+    {
+        if ($account->isLegacy()) {
+            return true;
+        }
+        $shown = self::present($account);
+
+        return $account->isUsable() && $shown['health_status'] === self::FAILED
+            && in_array((string) $account->health_reason, self::RECONNECT_REASONS, true);
+    }
 
     public function __construct(private SocialProviders $providers) {}
 

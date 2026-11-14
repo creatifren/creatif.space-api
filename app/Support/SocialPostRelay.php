@@ -490,6 +490,14 @@ class SocialPostRelay
 
             $post->recomputeFromTargets();
 
+            // The channel's health follows what the network said about this
+            // account: our own call failing (source "job") says nothing about it.
+            if ($success) {
+                ChannelHealth::fromPublish($account, true);
+            } elseif ($source !== 'job') {
+                ChannelHealth::fromPublish($account, false, $target->fail_code);
+            }
+
             if (self::countsAsNews($post, $target, $data)) {
                 ProductEvents::publishResult($post, $target, $before, $raw, $source);
             }
