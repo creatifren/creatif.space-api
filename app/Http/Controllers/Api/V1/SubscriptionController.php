@@ -317,7 +317,10 @@ class SubscriptionController extends Controller
         if ($subscription->cancelled_at === null) {
             ProductEvents::subscriptionCanceled($request->user(), $subscription->plan->key);
         }
+        $planBefore = ProductEvents::planOf($request->user());
         $subscription->forceFill(['cancelled_at' => $subscription->cancelled_at ?? now()])->save();
+        // A period already over ends the plan at once once cancelled.
+        ProductEvents::planChanged($request->user()->fresh(), $planBefore);
 
         return response()->json([
             'data' => (new SubscriptionResource($subscription->load('plan')))->toArray($request),

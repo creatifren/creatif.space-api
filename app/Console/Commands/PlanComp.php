@@ -85,10 +85,19 @@ class PlanComp extends Command
             ->where(fn ($q) => $q->whereNull('plan_source')->orWhere('plan_source', '!=', Subscription::SOURCE_STAFF_COMP))
             ->entitled()
             ->get();
+        $alreadyEnded = [];
         foreach ($running as $subscription) {
             try {
                 $creem->cancelNow($subscription);
             } catch (Throwable $e) {
+                // Already ended at Creem (cancelled earlier, or expired): nothing
+                // left to charge, so that counts as done (P0 14 Nov: the owner's
+                // trial was already cancelled and Creem answered 400).
+                if (self::alreadyEnded($creem, (string) $subscription->creem_subscription_id)) {
+                    $alreadyEnded[] = $subscription->creem_subscription_id;
+
+                    continue;
+                }
                 $status = $e->getCode() !== 0 ? ' (HTTP '.$e->getCode().')' : '';
                 $this->error("Creem refused to cancel {$subscription->creem_subscription_id}{$status}; nothing was changed in our database. Try again, or cancel it in the Creem dashboard first.");
 
@@ -135,12 +144,29 @@ class PlanComp extends Command
 
         ProductEvents::planChanged($user->fresh());
 
+        $cancelled = $running->pluck('creem_subscription_id')->diff($alreadyEnded)->values();
         $creemLine = $running->isEmpty()
             ? 'Creem: nothing to cancel'
-            : 'Creem: cancelled now, no charge ('.$running->pluck('creem_subscription_id')->implode(', ').')';
+            : 'Creem: '.implode('; ', array_filter([
+                $cancelled->isNotEmpty() ? 'cancelled now, no charge ('.$cancelled->implode(', ').')' : null,
+                $alreadyEnded !== [] ? 'already ended at Creem ('.implode(', ', $alreadyEnded).')' : null,
+            ]));
         $this->line("{$email}: {$plan->name} (staff comp) until {$until->toDateString()} · {$creemLine} · invoices voided: ".($voided === [] ? 'none' : implode(', ', $voided)));
 
         return self::SUCCESS;
+    }
+
+    /** Creem's own word that the subscription is over (cancelled or expired); false when it cannot say. */
+    private static function alreadyEnded(CreemService $creem, string $id): bool
+    {
+        try {
+            $remote = $creem->subscription($id);
+        } catch (Throwable) {
+            return false;
+        }
+
+        return ($remote['id'] ?? null) === $id
+            && in_array(strtolower((string) ($remote['status'] ?? '')), ['canceled', 'cancelled', 'expired', 'scheduled_cancel'], true);
     }
 
     /** The end of --until in the app timezone, when it is after today. */

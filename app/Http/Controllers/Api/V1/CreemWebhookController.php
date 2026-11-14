@@ -185,16 +185,28 @@ class CreemWebhookController extends Controller
         $start = CarbonImmutable::parse($object['current_period_start_date'] ?? throw ValidationException::withMessages(['object' => 'Missing billing period.']));
         $end = CarbonImmutable::parse($object['current_period_end_date'] ?? throw ValidationException::withMessages(['object' => 'Missing billing period.']));
         $this->require($end->gt($start));
-        // Two checkouts both paid: record the money, but never run two plans.
-        // The second is left for an operator to refund in Creem.
-        $other = Subscription::query()->where('user_id', $subscription->user_id)
+        // A payment always buys access: the paid row is activated whatever
+        // else the account holds (P0 14 Nov: a stale cancelled trial blocked
+        // a paid checkout and left the owner charged on Free). Rows it
+        // replaces close; a second LIVE paid plan stays for an operator to
+        // refund by hand (no auto-refund), logged.
+        $others = Subscription::query()->where('user_id', $subscription->user_id)
             ->whereKeyNot($subscription->id)
-            ->entitled()
-            ->exists();
-        if ($other) {
-            Log::warning('billing.duplicate_subscription_paid', [
-                'subscription' => $subscription->ulid, 'creem_subscription' => $object['id'],
-            ]);
+            // Entitled or merely still reading so (a cancelled trial past its period).
+            ->whereIn('status', SubscriptionStatus::entitled())
+            ->lockForUpdate()
+            ->get();
+        foreach ($others as $old) {
+            if (self::liveDuplicate($old)) {
+                Log::warning('billing.duplicate_subscription_paid', [
+                    'subscription' => $subscription->ulid, 'creem_subscription' => $object['id'],
+                    'other_subscription' => $old->ulid, 'other_creem_subscription' => $old->creem_subscription_id,
+                    'action' => 'refund the other one by hand in Creem',
+                ]);
+
+                continue;
+            }
+            $old->update(['status' => SubscriptionStatus::Expired, 'cancelled_at' => $old->cancelled_at ?? now()]);
         }
 
         // A $0 "paid" invoice (a trial's card check) is not a first payment.
@@ -212,7 +224,7 @@ class CreemWebhookController extends Controller
         // Record a late, older payment, but do not roll a newer period back.
         // Ordered by period start, not end: switching yearly → monthly makes
         // the new period end earlier while still being the newer one.
-        if (! $other && ($subscription->current_period_start === null || $start->gte($subscription->current_period_start))) {
+        if (($subscription->current_period_start === null || $start->gte($subscription->current_period_start))) {
             $subscription->update([
                 'plan_id' => $plan->id, 'billing_period' => $period,
                 'status' => SubscriptionStatus::Active,
@@ -221,9 +233,6 @@ class CreemWebhookController extends Controller
                 'current_period_start' => $start, 'current_period_end' => $end,
                 'grace_ends_at' => null,
             ]);
-        }
-        if ($other) {
-            return;
         }
         CommissionEngine::forInvoice($invoice);
         // Once per subscription: a replayed or later paid event finds a paid invoice.
@@ -234,6 +243,16 @@ class CreemWebhookController extends Controller
         if ($first) {
             DB::afterCommit(fn () => $subscription->user->notify(new SubscriptionStarted($subscription->fresh()->load('plan'), $invoice)));
         }
+    }
+
+    /** Another paid plan still running at Creem (not a trial, not set to end, not a staff comp). */
+    public static function liveDuplicate(Subscription $old): bool
+    {
+        return $old->creem_subscription_id !== null
+            && $old->plan_source === null
+            && $old->cancelled_at === null
+            && in_array($old->status, [SubscriptionStatus::Active, SubscriptionStatus::PastDue], true)
+            && $old->invoices()->where('status', InvoiceStatus::Paid)->exists();
     }
 
     private function lifecycle(string $type, array $object): void
