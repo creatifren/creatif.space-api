@@ -9,6 +9,7 @@ use App\Models\SocialAccount;
 use App\Support\Media\FileSignature;
 use App\Support\Media\MediaLinks;
 use Carbon\CarbonImmutable;
+use GuzzleHttp\Psr7\Utils;
 use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Http\Client\PendingRequest;
 use Illuminate\Http\Client\RequestException;
@@ -16,6 +17,7 @@ use Illuminate\Http\Client\Response;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 use RuntimeException;
 use Throwable;
@@ -791,12 +793,21 @@ class OutstandService implements SocialProvider
             ->mapWithKeys(fn (SocialAccount $a) => [$a->provider_account_id => $a->platform->value])
             ->all();
 
+        // Library files go out from Outstand's own media host, not as our
+        // signed R2 links: TikTok pulls media by URL and only from a domain
+        // verified for the (Outstand-managed) TikTok app — an R2 link fails
+        // url_ownership_unverified — and our links expire after
+        // File::URL_TTL_HOURS while a scheduled post waits up to
+        // max_schedule_days. Any other URL is passed through as it is.
         $media = [];
         $cover = null;
         foreach ((array) ($payload['media'] ?? []) as $i => $m) {
             $url = (string) ($m['url'] ?? '');
-            $media[] = ['url' => $url, 'filename' => self::filename($url, (int) $i)];
-            $cover ??= $m['thumbnail_url'] ?? null;
+            $filename = self::filename($url, (int) $i);
+            $media[] = ['url' => $this->hosted($url, $filename), 'filename' => $filename];
+            if ($cover === null && is_string($m['thumbnail_url'] ?? null) && $m['thumbnail_url'] !== '') {
+                $cover = $this->hosted($m['thumbnail_url'], self::filename($m['thumbnail_url'], (int) $i));
+            }
         }
 
         $networks = [];
@@ -1016,6 +1027,56 @@ class OutstandService implements SocialProvider
      * MIME — calling every such file "media-N.jpg" made Outstand treat
      * videos as images (the Media v2 video bug).
      */
+    /** How long an Outstand-hosted copy is reused for the same library file (a retry, a cover used twice). */
+    public const HOSTED_CACHE_HOURS = 12;
+
+    /**
+     * A library file's public URL on Outstand's media host (media upload:
+     * POST /media/upload → PUT the bytes → POST /media/{id}/confirm, kept
+     * 60 days by Outstand), or the URL unchanged when it is not one of our
+     * library files. Streamed from storage, never read into memory.
+     *
+     * @throws RuntimeException|RequestException|ConnectionException when the copy cannot be made:
+     *                                                               the send fails and its Credits come back
+     */
+    private function hosted(string $url, string $filename): string
+    {
+        $file = MediaLinks::fileFor($url);
+
+        if ($file === null) {
+            return $url;
+        }
+
+        $key = 'outstand:hosted:'.$file->ulid.':'.($file->checksum ?? (string) $file->size_bytes);
+        $cached = Cache::get($key);
+        if (is_string($cached) && $cached !== '') {
+            return $cached;
+        }
+
+        $upload = $this->client()->post('/media/upload', ['filename' => $filename, 'content_type' => $file->mime_type])->throw();
+        $id = (string) $upload->json('data.id');
+        $putUrl = (string) $upload->json('data.upload_url');
+        if ($id === '' || $putUrl === '') {
+            throw new RuntimeException('Outstand returned no media upload URL.');
+        }
+
+        $stream = Storage::disk($file->disk)->readStream($file->path);
+        if (! is_resource($stream)) {
+            throw new RuntimeException('The media file could not be read from storage.');
+        }
+        Http::withBody(Utils::streamFor($stream), $file->mime_type)->timeout(600)->put($putUrl)->throw();
+
+        $confirm = $this->client()->post('/media/'.rawurlencode($id).'/confirm', $file->size_bytes ? ['size' => (int) $file->size_bytes] : [])->throw();
+        $hosted = (string) $confirm->json('data.url');
+        if (! str_starts_with($hosted, 'https://')) {
+            throw new RuntimeException('Outstand returned no public media URL.');
+        }
+
+        Cache::put($key, $hosted, now()->addHours(self::HOSTED_CACHE_HOURS));
+
+        return $hosted;
+    }
+
     private static function filename(string $url, int $i): string
     {
         $name = basename((string) parse_url($url, PHP_URL_PATH));

@@ -4,6 +4,7 @@ namespace App\Http\Resources;
 
 use App\Models\SocialPost;
 use App\Models\SocialPostTarget;
+use App\Support\PublishFailure;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
 
@@ -58,6 +59,10 @@ class SocialPostResource extends JsonResource
                     'fail_code' => $target->fail_code,
                     // Waiting out a platform limit: still pending, retried then.
                     'retry_at' => $target->retry_at?->toIso8601String(),
+                    // What a waiting destination is doing, in words (null unless it waits for a retry).
+                    'retry_reason' => $target->retry_at !== null && $target->fail_code !== null
+                        ? PublishFailure::waitingReason($target->fail_code, $target->account->platform->value, $target->retry_at)
+                        : null,
                     'platform_url' => $target->platform_url,
                 ],
             )->all()),
