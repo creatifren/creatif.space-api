@@ -10,10 +10,10 @@ use Throwable;
 
 /**
  * How far ahead a relay takes a scheduled post. Outstand refuses a slot past
- * its horizon with a 400; its documentation could not be read when this was
- * written, so the number is config (services.<relay>.max_schedule_days,
- * OUTSTAND_MAX_SCHEDULE_DAYS) and the refusal is also recognised by its
- * wording, in case the configured number is ever too generous.
+ * its horizon with a 400; its create-post docs say scheduledAt must be within
+ * 30 days, the default since 14 Nov 2026 (services.<relay>.max_schedule_days,
+ * OUTSTAND_MAX_SCHEDULE_DAYS). The refusal is also recognised by its wording,
+ * in case the configured number is ever too generous.
  * Null days = no known limit.
  */
 final class ScheduleHorizon

@@ -122,10 +122,12 @@ return [
         // Private reply body: nested (instagram.comment_id + author_id),
         // top_level (comment_id), or auto (nested, then top level).
         'private_reply_shape' => env('OUTSTAND_PRIVATE_REPLY_SHAPE', 'auto'),
-        // How far ahead Outstand takes a scheduled post (it answers 400 past
-        // it). Not confirmed from Outstand's docs: QA saw a slot ~65 days out
-        // refused, so 60 is the safe side. Set to Outstand's real figure.
-        'max_schedule_days' => (int) env('OUTSTAND_MAX_SCHEDULE_DAYS', 60),
+        // How far ahead Outstand takes a scheduled post. Outstand's create-post
+        // docs: scheduledAt "Must be within 30 days - a later value is rejected
+        // and no post is created". 30 also keeps a scheduled post well inside
+        // the 60 days Outstand keeps the media we copy to it at send time
+        // (OutstandService::hosted). Rizal, 14 Nov 2026: 60 → 30.
+        'max_schedule_days' => (int) env('OUTSTAND_MAX_SCHEDULE_DAYS', 30),
     ],
 
     'inbox' => [
