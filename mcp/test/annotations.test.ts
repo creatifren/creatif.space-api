@@ -8,17 +8,34 @@ import { startApp, TOKEN_FULL } from './helpers.js';
  * change is deliberate (vitest -u).
  *
  * Rules (directory readiness, G1): list_* / get_* / check_* are read-only.
- * openWorldHint is true only for tools that post publicly (a social network
- * or the public web); everything else is false. destructiveHint is true for
- * tools that post publicly, delete, revoke or record a decision that cannot
- * be taken back. A read-only tool is never destructive. schedule_posts is
- * held to the same rule as schedule_post once it is registered.
+ * openWorldHint is true for tools that reach outside this workspace: post
+ * publicly (a social network or the public web), email or notify another
+ * person, or make a link anyone can open; everything else is false.
+ * destructiveHint is true for tools that post publicly, delete, replace,
+ * revoke or record a decision that cannot be taken back. A read-only tool is
+ * never destructive. schedule_posts is held to the same rule as schedule_post.
+ *
+ * OpenAI's ChatGPT Apps scan (14 Nov 2026, HQ q202611141748) flagged
+ * update_post (file_ids replaces media) and confirm_media_upload (deletes a
+ * file that fails its check) as destructive, and send_approval_reminder,
+ * decide_approval, create_insight_share_link and create_content_plan as
+ * open-world: those hints are required from now on (SCAN_REQUIRED below).
  */
 
 const READ_PREFIXES = /^(list|get|check)_/;
-const DESTRUCTIVE = ['publish_post', 'schedule_post', 'schedule_posts', 'reply_to_conversation', 'discard_draft', 'unkeep_file', 'decide_approval', 'revoke_approval_link', 'revoke_insight_share_link', 'publish_space', 'retry_post'];
-const OPEN_WORLD = ['publish_post', 'schedule_post', 'schedule_posts', 'reply_to_conversation', 'publish_space', 'retry_post'];
 const HINTS = ['readOnlyHint', 'destructiveHint', 'idempotentHint', 'openWorldHint'] as const;
+const DESTRUCTIVE = ['publish_post', 'schedule_post', 'schedule_posts', 'reply_to_conversation', 'discard_draft', 'unkeep_file', 'decide_approval', 'revoke_approval_link', 'revoke_insight_share_link', 'publish_space', 'retry_post', 'update_post', 'confirm_media_upload'];
+const OPEN_WORLD = ['publish_post', 'schedule_post', 'schedule_posts', 'reply_to_conversation', 'publish_space', 'retry_post', 'send_approval_reminder', 'decide_approval', 'create_insight_share_link', 'create_content_plan'];
+/** What the ChatGPT Apps scan asked for, by name: these must never fall back. */
+const SCAN_REQUIRED: Record<string, Partial<Record<(typeof HINTS)[number], boolean>>> = {
+  update_post: { destructiveHint: true },
+  confirm_media_upload: { destructiveHint: true },
+  send_approval_reminder: { openWorldHint: true },
+  decide_approval: { openWorldHint: true, destructiveHint: true },
+  create_insight_share_link: { openWorldHint: true },
+  create_content_plan: { openWorldHint: true },
+  schedule_posts: { destructiveHint: true, openWorldHint: true, readOnlyHint: false, idempotentHint: false },
+};
 
 /** The table in docs/tool-justifications.md: name → [title, ro, destructive, open]. */
 function justifications() {
@@ -66,7 +83,26 @@ describe('tool annotations', () => {
     expect(list.filter((t) => t.annotations!.destructiveHint).map((t) => t.name).sort()).toEqual(DESTRUCTIVE.filter((n) => names.has(n)).sort());
   });
 
-  it('only tools that post publicly are open-world', async () => {
+  it('keeps every hint the ChatGPT Apps scan asked for, and schedule_posts matches schedule_post', async () => {
+    const list = await tools();
+    const byName = new Map(list.map((t) => [t.name, t]));
+    for (const [name, hints] of Object.entries(SCAN_REQUIRED)) {
+      const t = byName.get(name);
+      expect(t, `${name} is registered`).toBeDefined();
+      for (const [h, v] of Object.entries(hints)) expect(t!.annotations?.[h as (typeof HINTS)[number]], `${name}.${h}`).toBe(v);
+    }
+    const one = byName.get('schedule_post')!;
+    const many = byName.get('schedule_posts')!;
+    for (const h of HINTS) expect(many.annotations?.[h], `schedule_posts.${h} = schedule_post.${h}`).toBe(one.annotations?.[h]);
+    // The same confirm wording as schedule_post: a preview first, confirm: true only after the user agrees.
+    for (const t of [one, many]) {
+      expect(t.description, t.name).toContain('only after they explicitly agree call again with');
+      expect(t.description, t.name).toContain('confirm: true');
+      expect(t.description, t.name).toMatch(/Credits are charged when/);
+    }
+  });
+
+  it('only tools that reach outside the workspace are open-world', async () => {
     const list = await tools();
     const names = new Set(list.map((t) => t.name));
     expect(list.filter((t) => t.annotations!.openWorldHint).map((t) => t.name).sort()).toEqual(OPEN_WORLD.filter((n) => names.has(n)).sort());

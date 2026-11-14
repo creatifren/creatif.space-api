@@ -15,11 +15,11 @@
 | [`create_approval_link`](#create_approval_link) | Create a client approval link | `approve` | no | no |
 | [`check_approval_status`](#check_approval_status) | Check approval status | `read` | yes | no |
 | [`send_approval_reminder`](#send_approval_reminder) | Send an approval reminder | `approve` | no | no |
-| [`update_post`](#update_post) | Update a post | `draft` | no | no |
+| [`update_post`](#update_post) | Update a post | `draft` | no | yes |
 | [`schedule_post`](#schedule_post) | Schedule a draft | `publish` | no | yes |
 | [`publish_post`](#publish_post) | Publish a draft now | `publish` | no | yes |
 | [`request_media_upload`](#request_media_upload) | Request a media upload URL | `draft` | no | no |
-| [`confirm_media_upload`](#confirm_media_upload) | Confirm a media upload | `draft` | no | no |
+| [`confirm_media_upload`](#confirm_media_upload) | Confirm a media upload | `draft` | no | yes |
 | [`list_conversations`](#list_conversations) | List Engage conversations | `read` | yes | no |
 | [`reply_to_conversation`](#reply_to_conversation) | Reply to a comment or DM | `publish` | no | yes |
 | [`get_storage_usage`](#get_storage_usage) | Get media storage usage | `read` | yes | no |
@@ -230,7 +230,7 @@ Errors → next step: invalid_input → pass exactly one of post_id or link_id; 
 
 ## send_approval_reminder
 
-**Send an approval reminder** · scope `approve` · read-only no · destructive no · idempotent no · open world no
+**Send an approval reminder** · scope `approve` · read-only no · destructive no · idempotent no · open world yes
 
 Reminds the user's client by email to answer an approval link, a send_for_approval follow-up.
 
@@ -250,11 +250,11 @@ Errors → next step: rate_limited → details.reason reminder_too_soon: a remin
 
 ## update_post
 
-**Update a post** · scope `draft` · read-only no · destructive no · idempotent yes · open world no
+**Update a post** · scope `draft` · read-only no · destructive yes · idempotent yes · open world no
 
 Changes a draft or a post waiting for approval: its caption, time, labels or media.
 
-Changes a draft or a post still waiting for approval: its caption, scheduled time, labels or media.
+Changes a draft or a post still waiting for approval: its caption, scheduled time, labels or media. file_ids REPLACES the post’s media — the media not listed is removed from the post.
 
 When to use: to edit an existing draft instead of drafting a new one. Posts already queued to publish, published or otherwise done cannot be changed from here — the user edits those in creatif.space.
 
@@ -341,11 +341,11 @@ Errors → next step: storage_full → tell the user to free up space (link give
 
 ## confirm_media_upload
 
-**Confirm a media upload** · scope `draft` · read-only no · destructive no · idempotent yes · open world no
+**Confirm a media upload** · scope `draft` · read-only no · destructive yes · idempotent yes · open world no
 
 Finishes adding an uploaded image or video so the user can attach it to a post (step 2 of 2).
 
-Step 2 of 2: after you PUT the bytes to the upload_url from request_media_upload, checks the stored file and returns it ready to attach.
+Step 2 of 2: after you PUT the bytes to the upload_url from request_media_upload, checks the stored file and returns it ready to attach. A file that fails the check is deleted.
 
 When to use: right after the PUT has answered 200, with the file_id from request_media_upload. creatif.space checks the file’s real size against the plan’s limits and its first bytes against the format (a renamed file is refused). Pass the returned id in draft_post or update_post file_ids. Safe to call again: an already confirmed file is returned as it is.
 
@@ -547,7 +547,7 @@ Errors → next step: scope_missing → reconnect and allow "approvals:decide"; 
 
 ## decide_approval
 
-**Approve or request changes on a post sent to you** · scope `approvals:decide` · read-only no · destructive yes · idempotent yes · open world no
+**Approve or request changes on a post sent to you** · scope `approvals:decide` · read-only no · destructive yes · idempotent yes · open world yes
 
 Approves a post sent to the user, or sends it back with a reason, after showing them the post.
 
@@ -841,7 +841,7 @@ Errors → next step: rate_limited → the user sent 10 in the last hour: wait d
 
 ## create_insight_share_link
 
-**Share an Insight report** · scope `approve` · read-only no · destructive no · idempotent no · open world no
+**Share an Insight report** · scope `approve` · read-only no · destructive no · idempotent no · open world yes
 
 Shares a report with the user's client as a link that needs no account, as weekly_results and monthly_report end with.
 
@@ -902,7 +902,7 @@ Errors → next step: not_a_plan → this link is a fixed list of posts, not a C
 
 ## create_content_plan
 
-**Create a Content Plan and email the approver** · scope `approve` · read-only no · destructive no · idempotent no · open world no
+**Create a Content Plan and email the approver** · scope `approve` · read-only no · destructive no · idempotent no · open world yes
 
 Emails a period's plan to the user's client for approval, in the send_for_approval workflow.
 
@@ -1015,13 +1015,13 @@ Errors → next step: invalid_input → pass at least one of post_missed_or_fail
 
 Schedules up to 10 drafts at once, all or none, after the user agrees to one preview of all of them.
 
-Schedules up to 10 drafts at once, each at its own time, all or none: if one is refused, none stays scheduled and no Credits are kept.
+Schedules up to 10 DRAFTS to publish publicly on their channels, each at its own time, after the user agrees to one preview of every post, its channels and the total Credit cost. All or none: if one is refused, none stays scheduled and no Credits are kept.
 
-When to use: when the user wants a set of drafts (a planned week) scheduled together. First call without confirm for one preview of every post and the total Credits; call again with the same posts and confirm: true only after the user agrees. For one draft, schedule_post is simpler.
+When to use: when the user wants a set of drafts (a planned week) to go out later; for one draft use schedule_post, to send now publish_post. Two steps: call with confirm false (default) to get the preview; show it to the user, and only after they explicitly agree call again with the same posts and confirm: true.
 
 Example: schedule_posts { "posts": [{ "post_id": "01JD…", "scheduled_at": "2026-11-20T09:00:00+07:00" }, { "post_id": "01JE…", "scheduled_at": "2026-11-21T09:00:00+07:00" }] } → { confirmation_required: true, posts, total_credit_cost }; then with "confirm": true → { scheduled: [...] }
 
-Every post counts against the 20 sends a day connected apps may make. confirm: true without a current preview of the same posts and times (shown in the last 10 minutes) returns a preview again and schedules nothing. Drafts waiting for approval cannot be scheduled here.
+The confirm schedules exactly what that preview showed. Credits are charged when they are scheduled (Monthly Credits first, then the Top-up balance; on every plan). Every post counts against the 20 sends a day connected apps may make. confirm: true without a current preview of the same posts and times (shown in the last 10 minutes) returns a preview again and schedules nothing. Drafts waiting for approval cannot be scheduled here.
 
 Errors → next step: preview_stale → nothing was scheduled: channels or Credits changed since the preview; show the user the new preview in details.preview and confirm again only if they agree; batch_failed → nothing was scheduled: details.failed_post_id was refused (details.reason) and the others were taken back; fix that post or leave it out, preview again; not_schedulable → nothing was scheduled: details.refused names each post that is not a draft or waits for approval; leave them out and preview again; insufficient_credits → nothing was scheduled: the user tops up, or schedules fewer posts; daily_cap_reached → nothing was scheduled: fewer posts, or tomorrow (UTC); plan_required → pass the message to the user as it is (window or queue limit), do not retry; invalid_input → a post is listed twice (details.post_ids): list each draft once and call again; not_found → take draft ids from list_posts status "draft"; scope_missing → reconnect and allow "publish"; forbidden (403) → this seat or connection may not do this (e.g. a viewer, or a permission the connection was not given): the workspace owner or an editor can, or the user does it in creatif.space; do not retry.
 

@@ -201,7 +201,7 @@ export const createContentPlan = defineTool({
   }),
   scope: 'approve',
   input,
-  annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false },
+  annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: true },
   notFound: { what: 'A channel', next: 'Take channel ids from list_channels, or leave channel_ids out, then call again.' },
   run: async (args, ctx) => {
     const key = requestKey(ctx.auth.extra.userUlid, args);

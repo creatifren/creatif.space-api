@@ -376,7 +376,7 @@ export const sendApprovalReminder = defineTool({
   input: {
     link_id: ulid('Approval link'),
   },
-  annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false },
+  annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: true },
   notFound: { what: 'That approval link', next: 'Check the link id: it comes from create_approval_link (or check_approval_status). Call again with a valid id.' },
   run: async (args, { v1 }) => {
     try {
@@ -418,7 +418,7 @@ export const updatePost = defineTool({
   name: 'update_post',
   title: 'Update a post',
   description: describeTool({
-    does: "Changes a draft or a post still waiting for approval: its caption, scheduled time, labels or media.",
+    does: "Changes a draft or a post still waiting for approval: its caption, scheduled time, labels or media. file_ids REPLACES the post’s media — the media not listed is removed from the post.",
     when: "to edit an existing draft instead of drafting a new one. Posts already queued to publish, published or otherwise done cannot be changed from here — the user edits those in creatif.space.",
     example: "update_post { \"post_id\": \"01JD…\", \"caption\": \"New caption\", \"add_file_ids\": [\"01JE…\"] }",
     rules: "Media: file_ids REPLACES the post’s media with these library files ([] removes all); add_file_ids keeps the current media and adds these after it (10 items at most). Ids come from list_files, or from confirm_media_upload for a new upload.",
@@ -439,7 +439,7 @@ export const updatePost = defineTool({
     file_ids: z.array(ulid('File')).max(10).optional().describe('Replaces the post’s media with these library files ([] removes all media)'),
     add_file_ids: z.array(ulid('File')).min(1).max(10).optional().describe('Adds these library files after the post’s current media'),
   },
-  annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false },
+  annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: true, openWorldHint: false },
   notFound: { what: 'That post', next: 'Check the post id: find it with list_posts (status draft for drafts) and call again.' },
   run: async (args, { v1 }) => {
     if (args.file_ids !== undefined && args.add_file_ids !== undefined) {
