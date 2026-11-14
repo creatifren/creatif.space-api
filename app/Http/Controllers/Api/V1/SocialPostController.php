@@ -21,6 +21,7 @@ use App\Models\User;
 use App\Support\Credits;
 use App\Support\PlanQuota;
 use App\Support\ProductEvents;
+use App\Support\PostDelivery;
 use App\Support\PublishPreflight;
 use App\Support\ScheduleHorizon;
 use App\Support\SendConfirmation;
@@ -47,7 +48,9 @@ class SocialPostController extends Controller
     public function index(Request $request, SocialPostRelay $relay): AnonymousResourceCollection
     {
         $validated = $request->validate([
-            'status' => ['sometimes', Rule::enum(SocialPostStatus::class)],
+            // A post status, or "partial" (went out on some channels, failed
+            // on others). "failed" includes partial posts (PostDelivery).
+            'status' => ['sometimes', 'string', Rule::in(PostDelivery::FILTERS)],
             // Narrowing for API clients (the MCP server): a window on the
             // post's slot — or, with no slot, when it was made — one
             // channel, and a cap. All optional; the app sends none of them.
@@ -67,21 +70,25 @@ class SocialPostController extends Controller
         $from = isset($validated['from']) ? self::instant($validated['from']) : null;
         $to = isset($validated['to']) ? self::instant($validated['to']) : null;
 
+        $base = $request->user()->socialPosts()->getQuery()
+            // scheduled_at holds UTC, created_at app-timezone wall time:
+            // each is compared in its own zone.
+            ->when($from, fn ($q, $from) => $q->where(fn ($w) => $w
+                ->where('scheduled_at', '>=', UtcDateTime::bind($from))
+                ->orWhere(fn ($u) => $u->whereNull('scheduled_at')->where('created_at', '>=', $from))))
+            ->when($to, fn ($q, $to) => $q->where(fn ($w) => $w
+                ->where('scheduled_at', '<=', UtcDateTime::bind($to))
+                ->orWhere(fn ($u) => $u->whereNull('scheduled_at')->where('created_at', '<=', $to))))
+            ->when($validated['account_id'] ?? null, fn ($q, $account) => $q->whereHas(
+                'targets.account',
+                fn ($a) => $a->where('ulid', $account),
+            ));
+
         return SocialPostResource::collection(
-            $request->user()->socialPosts()
-                ->when($validated['status'] ?? null, fn ($q, $status) => $q->where('status', $status))
-                // scheduled_at holds UTC, created_at app-timezone wall time:
-                // each is compared in its own zone.
-                ->when($from, fn ($q, $from) => $q->where(fn ($w) => $w
-                    ->where('scheduled_at', '>=', UtcDateTime::bind($from))
-                    ->orWhere(fn ($u) => $u->whereNull('scheduled_at')->where('created_at', '>=', $from))))
-                ->when($to, fn ($q, $to) => $q->where(fn ($w) => $w
-                    ->where('scheduled_at', '<=', UtcDateTime::bind($to))
-                    ->orWhere(fn ($u) => $u->whereNull('scheduled_at')->where('created_at', '<=', $to))))
-                ->when($validated['account_id'] ?? null, fn ($q, $account) => $q->whereHas(
-                    'targets.account',
-                    fn ($a) => $a->where('ulid', $account),
-                ))
+            (clone $base)
+                // One definition with the badge and meta.counts (PostDelivery):
+                // "failed" also holds partly failed posts.
+                ->when($validated['status'] ?? null, fn ($q, $status) => PostDelivery::filter($q, $status))
                 ->when($validated['limit'] ?? null, fn ($q, $limit) => $q->limit((int) $limit))
                 // OFFSET is only valid SQL after a LIMIT.
                 ->when(isset($validated['limit']) ? ($validated['offset'] ?? null) : null, fn ($q, $offset) => $q->offset((int) $offset))
@@ -93,6 +100,10 @@ class SocialPostController extends Controller
                 ->orderByDesc('id')
                 ->get(),
         )->additional(['meta' => [
+            // How many posts each status filter returns under the same
+            // from / to / account_id (not limit): Today and the Posts tabs
+            // read these. published and failed both count partial posts.
+            'counts' => PostDelivery::counts($base),
             // The composer's "uses N of your Credits" line: Monthly Credits
             // go first, then Top-up (`credits`). posts_* are the legacy
             // allowance, kept for older screens.

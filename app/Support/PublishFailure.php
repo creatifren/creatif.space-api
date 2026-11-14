@@ -101,6 +101,30 @@ final class PublishFailure
         ];
     }
 
+    /**
+     * Every reason_code (a target's `fail_code`), the stable list an app
+     * maps to its own copy.
+     *
+     * @return list<string>
+     */
+    public static function codes(): array
+    {
+        return array_keys(self::COARSE);
+    }
+
+    /** The coarse error_code for a reason_code (unknown for one this class never gave). */
+    public static function coarse(?string $reasonCode): ?string
+    {
+        return $reasonCode === null ? null : (self::COARSE[$reasonCode] ?? 'unknown');
+    }
+
+    /**
+     * Reason codes that mean the network no longer accepts the account's
+     * sign-in: the channel needs a reconnect (ChannelHealth). Not
+     * video_upload_refused: that account still posts images.
+     */
+    public const RECONNECT = ['auth'];
+
     /** Codes whose own wording from the platform is the most useful part. */
     private const WITH_DETAIL = ['other', 'media_spec', 'content_rejected', 'content_too_long'];
 
@@ -113,6 +137,17 @@ final class PublishFailure
         $text = trim((string) preg_replace(['/\[[^\]]*\]/', '/\s+/'], ['', ' '], (string) $raw));
 
         return $text === '' || $text === 'the platform refused it' ? null : Str::limit($text, 200);
+    }
+
+    /**
+     * The platform's words a person may see apart from the reason: only for
+     * the codes whose reason already quotes them (WITH_DETAIL). For every
+     * other code the raw text stays server-side — it can name the account
+     * or quote a token error.
+     */
+    public static function shownDetail(?string $reasonCode, ?string $raw): ?string
+    {
+        return in_array($reasonCode, self::WITH_DETAIL, true) ? self::detail($raw) : null;
     }
 
     /** Whether waiting and trying again can fix it. */

@@ -41,7 +41,10 @@ export const listFailedPosts = defineTool({
     ]);
 
     const when = (p: V1Post) => p.scheduled_at ?? p.created_at;
+    // status=failed also returns partly failed posts, which status=published returns too: once each.
+    const seen = new Set<string>();
     const rows = [...failed.data, ...published.data]
+      .filter((p) => (seen.has(p.id) ? false : (seen.add(p.id), true)))
       .map((p) => ({ post: p, bad: (p.targets ?? []).filter((t) => t.status === 'failed') }))
       .filter(({ post, bad }) => post.status === 'failed' || bad.length > 0)
       .sort((a, b) => when(b.post).localeCompare(when(a.post)) || b.post.id.localeCompare(a.post.id))

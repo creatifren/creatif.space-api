@@ -4,6 +4,7 @@ namespace App\Http\Resources;
 
 use App\Models\SocialPost;
 use App\Models\SocialPostTarget;
+use App\Support\PostDelivery;
 use App\Support\PublishFailure;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
@@ -29,6 +30,10 @@ class SocialPostResource extends JsonResource
             'scheduled_at' => $this->scheduled_at,
             'status' => $this->status,
             'fail_reason' => $this->fail_reason,
+            // Where delivery stands, one definition with ?status= and meta.counts
+            // (PostDelivery): state published | partial | failed | pending and the
+            // destination counts. Null for a draft or a cancelled post.
+            'delivery' => $this->whenLoaded('targets', fn () => PostDelivery::summary($this->resource)),
             'approval' => $this->approval,
             'approval_by' => $this->approval_by,
             'approval_at' => $this->approval_at,
@@ -55,8 +60,21 @@ class SocialPostResource extends JsonResource
                         : null,
                     'status' => $target->status,
                     'fail_reason' => $target->fail_reason,
-                    // PublishFailure reason code (needs_video, missing_board, …).
+                    // PublishFailure reason code (needs_video, missing_board, …):
+                    // one of PublishFailure::codes(); null when nothing went wrong.
                     'fail_code' => $target->fail_code,
+                    // Its coarse group (auth, rate_limited, media, missing_field,
+                    // content, duplicate, platform_unavailable, demo, unknown, other).
+                    'error_code' => PublishFailure::coarse($target->fail_code),
+                    // The network's own words, tidied (machine tags out, capped at
+                    // 200), only for other / media_spec / content_rejected /
+                    // content_too_long (already quoted in fail_reason); null for
+                    // every other code: the raw text stays server-side.
+                    'provider_message' => PublishFailure::shownDetail($target->fail_code, $target->provider_error),
+                    // Waiting and sending again can fix it (or is already doing so).
+                    'retryable' => $target->fail_code !== null && PublishFailure::retryable($target->fail_code),
+                    // The account's sign-in is no longer accepted: reconnect it.
+                    'reconnect_required' => in_array($target->fail_code, PublishFailure::RECONNECT, true),
                     // Waiting out a platform limit: still pending, retried then.
                     'retry_at' => $target->retry_at?->toIso8601String(),
                     // What a waiting destination is doing, in words (null unless it waits for a retry).
