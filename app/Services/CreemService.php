@@ -144,6 +144,19 @@ class CreemService
     }
 
     /**
+     * End a subscription or trial NOW, with no further charge (plan:comp).
+     * Unlike cancel(), nothing runs to the end of the period.
+     *
+     * @throws ConnectionException|RequestException
+     */
+    public function cancelNow(Subscription $subscription): void
+    {
+        $this->api()->post("/subscriptions/{$subscription->creem_subscription_id}/cancel", [
+            'mode' => 'immediate',
+        ]);
+    }
+
+    /**
      * Creem's customer portal: change the card, read receipts, cancel.
      *
      * @throws ConnectionException|RequestException
