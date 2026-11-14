@@ -705,6 +705,10 @@ Route::middleware(['auth:sanctum,mcp', EnforceTokenScope::class, EnsureNotPendin
 
     // Subscription — Settings → Subscription
     Route::get('/me/subscription', [SubscriptionController::class, 'show'])->name('api.v1.me.subscription');
+    // What a change of plan would charge — read before the confirm sheet (b202611140813).
+    Route::get('/me/subscription/change-preview', [SubscriptionController::class, 'changePreview'])
+        ->middleware('throttle:30,1')
+        ->name('api.v1.me.subscription.change-preview');
     Route::post('/me/subscription/checkout', [SubscriptionController::class, 'checkout'])
         ->middleware('throttle:10,1')
         ->name('api.v1.me.subscription.checkout');

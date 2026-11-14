@@ -2,6 +2,7 @@
 
 namespace App\Support;
 
+use App\Enums\BillingPeriod;
 use App\Enums\SocialPlatform;
 use App\Enums\SocialPostStatus;
 use App\Enums\SocialPostTargetStatus;
@@ -434,6 +435,20 @@ final class Credits
     /** When this cycle ends and the next one's Monthly Credits arrive. */
     public static function cycleEnds(User $owner): CarbonImmutable
     {
+        // A monthly plan's cycle IS its billing period: report the date the
+        // plan renews, so "Resets" on Credits and "Renews" on the plan are
+        // one date from one field (CEO q202611140950 #3). Only the reported
+        // date: when the cycle starts (cycleSince, the grants) is unchanged.
+        $subscription = $owner->activeSubscription();
+        $end = $subscription?->current_period_end;
+        if ($subscription !== null
+            && $subscription->billing_period === BillingPeriod::Monthly
+            && $end !== null
+            && $end->isFuture()
+            && $end->lessThanOrEqualTo(now()->addDays(32))) {
+            return CarbonImmutable::make($end);
+        }
+
         $anchor = $owner->activeSubscription()?->current_period_start ?? $owner->created_at;
         $day = $anchor === null ? 1 : $anchor->day;
         $next = self::cycleSince($owner)->startOfMonth()->addMonthNoOverflow();
