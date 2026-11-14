@@ -160,8 +160,8 @@ describe('P2 — scheduling horizon: the owner hears it when scheduling', functi
         expect(ScheduleHorizon::days('postforme'))->toBeNull();
     });
 
-    it('defaults Outstand to a configured horizon', function () {
-        expect(ScheduleHorizon::days('outstand'))->toBe(60);
+    it('defaults Outstand to a configured horizon: 30 days (Outstand docs; Rizal, 14 Nov 2026)', function () {
+        expect(ScheduleHorizon::days('outstand'))->toBe(30);
         config(['services.outstand.max_schedule_days' => 90]);
         expect(ScheduleHorizon::days('outstand'))->toBe(90);
     });
