@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Api\V1;
 
+use App\Billing\PlanChangePreview;
 use App\Enums\InvoiceStatus;
 use App\Enums\PlanKey;
 use App\Enums\SubscriptionStatus;
@@ -118,26 +119,7 @@ class SubscriptionController extends Controller
         $current = $user->activeSubscription();
 
         if ($current !== null) {
-            // A trial started before trials were removed (13 Nov 2026): Creem
-            // would charge a proration now and end it early, so it runs out
-            // (or is cancelled) first.
-            if ($current->isTrialing()) {
-                throw ValidationException::withMessages([
-                    'plan' => 'You’re on a '.$current->plan->name.' trial — the plan can be changed once it ends.',
-                ]);
-            }
-
-            if ($current->plan->key === $plan->key && $current->billing_period->value === $validated['period']) {
-                throw ValidationException::withMessages([
-                    'plan' => 'You’re already on '.$plan->name.'.',
-                ]);
-            }
-
-            if ($current->creem_subscription_id === null) {
-                throw ValidationException::withMessages([
-                    'plan' => 'This plan can’t be changed online yet — it ends on its own; choose again after.',
-                ]);
-            }
+            self::refuseUnchangeable($current, $plan, $validated['period']);
 
             self::changePlan($creem, $current, (string) $plan->creemProduct($validated['period']));
             ProductEvents::checkoutStarted($user, 'subscription', $plan->key, $validated['period'], (int) $plan->priceFor($validated['period']));
@@ -219,6 +201,71 @@ class SubscriptionController extends Controller
                 'invoice' => (new InvoiceResource($invoice))->toArray($request),
             ],
         ], 201);
+    }
+
+    /**
+     * What a change of plan or period would charge, BEFORE anything is
+     * charged (bug b202611140813: Switch to Max charged the card on the
+     * click). Read-only: nothing is sent to Creem. The screen shows this in
+     * a confirm sheet and calls checkout only on Confirm.
+     *
+     * The amount is worked out here from the subscription's own period and
+     * prices — time-based proration of what is left of the period, the way
+     * Creem's proration-charge-immediately prorates — so the screen never
+     * guesses it. Creem charges its own figure; `estimated` says so.
+     */
+    public function changePreview(Request $request): JsonResponse
+    {
+        Workspace::ownerOnly($request->user());
+        $validated = $request->validate([
+            'plan' => ['required', 'string', Rule::in(PlanKey::sold())],
+            'period' => ['required', 'string', 'in:monthly,yearly'],
+        ]);
+
+        $user = $request->user();
+        $plan = Plan::query()
+            ->where('key', $validated['plan'])
+            ->where('is_active', true)
+            ->firstOrFail();
+
+        if ($user->subscriptions()->where('provider', Subscription::PROVIDER_GOOGLE)->entitled()->exists()) {
+            throw GooglePlayRefused::activePlaySubscription();
+        }
+
+        $current = $user->activeSubscription();
+        if ($current === null || $current->status === SubscriptionStatus::Expired) {
+            throw ValidationException::withMessages([
+                'plan' => 'There’s no paid plan to change — checkout shows the price before you pay.',
+            ]);
+        }
+        self::refuseUnchangeable($current, $plan, $validated['period']);
+
+        return response()->json(['data' => PlanChangePreview::for($current->load(['plan', 'invoices']), $plan, $validated['period'], now()->toImmutable())]);
+    }
+
+    /** The cases where a running plan cannot be changed online (checkout and its preview alike). */
+    private static function refuseUnchangeable(Subscription $current, Plan $plan, string $period): void
+    {
+        // A trial started before trials were removed (13 Nov 2026): Creem
+        // would charge a proration now and end it early, so it runs out
+        // (or is cancelled) first.
+        if ($current->isTrialing()) {
+            throw ValidationException::withMessages([
+                'plan' => 'You’re on a '.$current->plan->name.' trial — the plan can be changed once it ends.',
+            ]);
+        }
+
+        if ($current->plan->key === $plan->key && $current->billing_period->value === $period) {
+            throw ValidationException::withMessages([
+                'plan' => 'You’re already on '.$plan->name.'.',
+            ]);
+        }
+
+        if ($current->creem_subscription_id === null) {
+            throw ValidationException::withMessages([
+                'plan' => 'This plan can’t be changed online yet — it ends on its own; choose again after.',
+            ]);
+        }
     }
 
     /**

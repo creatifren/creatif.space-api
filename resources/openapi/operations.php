@@ -185,6 +185,7 @@ return [
     'api.v1.me.affiliate' => 'Affiliate status and earnings',
     'api.v1.affiliates.apply' => 'Apply to the affiliate program',
     'api.v1.me.subscription' => 'Your subscription',
+    'api.v1.me.subscription.change-preview' => 'Preview what a change of plan would charge (read-only)',
     'api.v1.me.subscription.checkout' => 'Start a subscription checkout',
     'api.v1.me.subscription.seats' => 'Change the number of seats',
     'api.v1.me.subscription.cancel' => 'Cancel the subscription',
