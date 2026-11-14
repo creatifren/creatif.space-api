@@ -504,7 +504,12 @@ class SocialPostRelay
         'rate_limited' => [2, 10, 30],
         'platform_unavailable' => [2, 10, 30],
         'quota_exceeded' => [60, 180, 360],
+        // Only when Outstand names no retryAt; with one, that time is used as given.
+        'capacity_pending' => [15, 30, 60],
     ];
+
+    /** Reasons whose retryAt from Outstand is the time to retry, not only a lower bound. */
+    private const NAMED_RETRY = ['capacity_pending'];
 
     /**
      * Retries are for the current relay only: a result of a legacy relay
@@ -531,7 +536,10 @@ class SocialPostRelay
             try {
                 // In the app's zone: a datetime column stores wall-clock time.
                 $named = CarbonImmutable::parse($m[1])->setTimezone((string) config('app.timezone'));
-                if ($named->greaterThan($at) && $named->lessThan(CarbonImmutable::now()->addDays(2))) {
+                $usable = $named->isFuture() && $named->lessThan(CarbonImmutable::now()->addDays(2));
+                // YouTube's shared pool opens at retryAt (Outstand: "use the supplied timestamp"):
+                // retry then, even before the generic backoff would.
+                if ($usable && (in_array($reasonCode, self::NAMED_RETRY, true) || $named->greaterThan($at))) {
                     $at = $named;
                 }
             } catch (Throwable) {

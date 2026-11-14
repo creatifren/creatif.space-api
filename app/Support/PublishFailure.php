@@ -3,6 +3,7 @@
 namespace App\Support;
 
 use App\Jobs\FailUnconfirmedPublishes as FailUnconfirmed;
+use Carbon\CarbonInterface;
 use Illuminate\Support\Str;
 
 /**
@@ -26,9 +27,13 @@ final class PublishFailure
     private const COARSE = [
         'rate_limited' => 'rate_limited',
         'quota_exceeded' => 'rate_limited',
+        // YouTube on Outstand's managed keys: the shared upload pool opens again at retryAt.
+        'capacity_pending' => 'rate_limited',
         'auth' => 'auth',
         'duplicate' => 'duplicate',
         'needs_video' => 'media',
+        // The network took images from this account but refused its video upload (Bluesky 401).
+        'video_upload_refused' => 'media',
         'needs_media' => 'media',
         'media_spec' => 'media',
         'media_unreachable' => 'media',
@@ -52,7 +57,11 @@ final class PublishFailure
         // Our own marker, never a platform's words: checked first.
         'not_confirmed' => '/\[creatif:not_confirmed\]/',
         'demo_channel' => '/\[creatif:demo_channel\]/',
-        'quota_exceeded' => '/\b(quota|daily (upload )?limit|upload limit|uploadLimitExceeded)\b/i',
+        // Outstand's stable YouTube codes ("[youtube_upload_error:release_pending; retryAt=…]",
+        // docs: Publishing Rate Limits › Managed Keys: shared upload capacity), before the word matches.
+        'capacity_pending' => '/\[youtube_upload_error:(release_pending|org_limit_reached)\b/',
+        'video_upload_refused' => '/\bvideo upload failed\b.*\b40[13]\b|\bfailed to upload video:?\s*40[13]\b/i',
+        'quota_exceeded' => '/\[youtube_upload_error:(daily_limit_reached|provider_quota_exhausted)\b|\b(quota|daily (upload )?limit|upload limit|uploadLimitExceeded)\b/i',
         'rate_limited' => '/\b(rate[ _-]?limit(ed)?|too many requests|429|throttl(ed|ing)|try again later|limit reached)\b/i',
         'missing_board' => '/\bboard(_?ids?)?\b.*\b(required|missing|not found|invalid|must)\b|\b(required|missing|no)\b.*\bboard/i',
         'missing_title' => '/\btitle\b.*\b(required|missing|empty|must)\b|\b(required|missing)\b.*\btitle\b/i',
@@ -109,7 +118,7 @@ final class PublishFailure
     /** Whether waiting and trying again can fix it. */
     public static function retryable(string $reasonCode): bool
     {
-        return in_array($reasonCode, ['rate_limited', 'quota_exceeded', 'platform_unavailable'], true);
+        return in_array($reasonCode, ['rate_limited', 'quota_exceeded', 'capacity_pending', 'platform_unavailable'], true);
     }
 
     public static function reason(string $code, ?string $network, ?string $raw = null): string
@@ -127,6 +136,10 @@ final class PublishFailure
         return match ($code) {
             'rate_limited' => "{$n} is limiting how often this account can post right now. Try again in a little while.",
             'quota_exceeded' => "{$n} has hit its daily upload limit for this account. Try again tomorrow.",
+            'capacity_pending' => "{$n}'s shared upload capacity was full several times in a row, so it was not sent and not charged. Send it again in a little while.",
+            'video_upload_refused' => $network === 'bluesky'
+                ? 'Bluesky refused the video upload (images from this account work). Bluesky only takes video from accounts with a verified email address: verify it in Bluesky › Settings › Account, then send it again.'
+                : "{$n} refused the video upload. Check the account on {$n}, then send it again.",
             'auth' => "{$n} needs you to reconnect this account in Creatif Space → Channels.",
             'duplicate' => "{$n} refused it as a duplicate of a recent post. Change the caption or media and send again.",
             'needs_video' => "{$n} only takes video. Attach one video file.",
@@ -142,6 +155,23 @@ final class PublishFailure
             'demo_channel' => 'Demo channel: nothing is posted. This channel is sample data for the review; no network was contacted and no Credits were spent.',
             'not_confirmed' => "{$n} did not confirm the post within ".FailUnconfirmed::AFTER_MINUTES.' minutes, so it was stopped and not charged. Check the account on '.$n.' (on Bluesky: that its app password is still valid), then send it again.',
             default => "{$n} refused it. Try again, or contact support with the post link.",
+        };
+    }
+
+    /**
+     * What a destination that is waiting to be sent again (Pending with a
+     * retry_at) is doing, for a person: shown instead of a silent wait.
+     */
+    public static function waitingReason(string $reasonCode, ?string $network, ?CarbonInterface $retryAt): string
+    {
+        $n = self::networkName($network);
+        $when = $retryAt === null ? 'shortly' : 'at '.$retryAt->copy()->utc()->format('H:i').' UTC';
+
+        return match ($reasonCode) {
+            'capacity_pending' => "{$n}'s shared upload capacity is full right now. It is sent again automatically {$when}.",
+            'quota_exceeded' => "{$n}'s upload limit is reached for now. It is sent again automatically {$when}.",
+            'platform_unavailable' => "{$n} was unavailable. It is sent again automatically {$when}.",
+            default => "{$n} is limiting posts right now. It is sent again automatically {$when}.",
         };
     }
 
