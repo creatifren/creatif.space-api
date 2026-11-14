@@ -5,6 +5,15 @@ Versions of the remote MCP server at `https://mcp.creatif.space/mcp`
 `package.json`). The `/free` server and the registry entry
 (`server.json`) are versioned on their own.
 
+## Unreleased
+
+Annotations, from OpenAI's ChatGPT Apps scan (14 Nov 2026):
+
+- `destructiveHint: true` on `update_post` (`file_ids` replaces the post's media) and `confirm_media_upload` (a file that fails its check is deleted).
+- `openWorldHint: true` on `send_approval_reminder`, `decide_approval`, `create_insight_share_link` and `create_content_plan`: each reaches another person or makes a link anyone can open.
+- `schedule_posts` reads like `schedule_post`: publishes publicly, Credits charged when scheduled, the same two-step confirm wording.
+- `test/annotations.test.ts` requires these hints by name.
+
 ## 0.3.0 — 2026-11-12
 
 48 tools (was 11). Every description follows the agent shape (what / when to

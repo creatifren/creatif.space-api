@@ -97,7 +97,8 @@ describe('directory review simulation (docs/directory-test-pack.md)', () => {
     expect(ann('list_posts').readOnlyHint).toBe(true);
     expect(writes(listed.calls)).toEqual([]);
     const { calls } = await run('update_post', { post_id: DRAFT_A, caption: '20% off lattes this weekend ☕' });
-    expect(ann('update_post')).toMatchObject({ destructiveHint: false, openWorldHint: false });
+    // Destructive since the ChatGPT Apps scan (file_ids replaces media); never open-world: nothing is sent.
+    expect(ann('update_post')).toMatchObject({ destructiveHint: true, openWorldHint: false });
     expect(writes(calls)).toEqual([`PATCH /social-posts/${DRAFT_A}`]);
   });
 
@@ -142,11 +143,18 @@ describe('directory review simulation (docs/directory-test-pack.md)', () => {
     expect(tools.map((t) => t.name).filter((n) => /upgrade|plan_change|billing|payment|charge|subscri|delete_account|close_account/.test(n))).toEqual([]);
   });
 
-  it('every open-world (public-posting) tool takes a confirm step', async () => {
+  it('every public-posting tool (open-world and destructive) takes a confirm step', async () => {
     const { tools } = await reviewer();
     const noConfirm = tools
-      .filter((t) => t.annotations?.openWorldHint && !(t.inputSchema as { properties?: Record<string, unknown> }).properties?.confirm)
+      .filter((t) => t.annotations?.openWorldHint && t.annotations?.destructiveHint && !(t.inputSchema as { properties?: Record<string, unknown> }).properties?.confirm)
       .map((t) => t.name);
     expect(noConfirm).toEqual([]);
+  });
+
+  it('open-world tools that do not post publicly only email or link one person: a reminder and a read-only report link', async () => {
+    const { tools } = await reviewer();
+    // Open-world since the ChatGPT Apps scan (they reach another person); neither publishes or deletes anything.
+    const quiet = tools.filter((t) => t.annotations?.openWorldHint && !t.annotations?.destructiveHint).map((t) => t.name).sort();
+    expect(quiet).toEqual(['create_content_plan', 'create_insight_share_link', 'send_approval_reminder']);
   });
 });

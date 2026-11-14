@@ -36,7 +36,7 @@ export const createInsightShareLink = defineTool({
     channel_ids: z.array(z.string().trim().min(10).max(26)).min(1).max(50).optional().describe('Only these channels (ids from list_channels); default all connected channels'),
     recipient_email: z.string().trim().email().max(254).optional().describe('Optional: who it is for. They get one email with the link and see it under "Reports shared with you".'),
   },
-  annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false },
+  annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: true },
   run: async ({ from, to, channel_ids, recipient_email }, { v1 }) => {
     const { data } = await v1.post<{ data: V1ShareLink }>('/insight/share', {
       from,

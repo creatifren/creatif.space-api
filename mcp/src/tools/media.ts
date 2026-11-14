@@ -94,7 +94,7 @@ export const confirmMediaUpload = defineTool({
   name: 'confirm_media_upload',
   title: 'Confirm a media upload',
   description: describeTool({
-    does: "Step 2 of 2: after you PUT the bytes to the upload_url from request_media_upload, checks the stored file and returns it ready to attach.",
+    does: "Step 2 of 2: after you PUT the bytes to the upload_url from request_media_upload, checks the stored file and returns it ready to attach. A file that fails the check is deleted.",
     when: "right after the PUT has answered 200, with the file_id from request_media_upload. creatif.space checks the file’s real size against the plan’s limits and its first bytes against the format (a renamed file is refused). Pass the returned id in draft_post or update_post file_ids. Safe to call again: an already confirmed file is returned as it is.",
     example: "confirm_media_upload { \"file_id\": \"01JD…\" } → { file: { id, name, mime_type, size_bytes, status: \"ready\", url } }",
     errors: [
@@ -107,7 +107,7 @@ export const confirmMediaUpload = defineTool({
   }),
   scope: 'draft',
   input: { file_id: fileId },
-  annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false },
+  annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: true, openWorldHint: false },
   notFound: { what: 'That upload', next: 'Start over: call request_media_upload for a new file_id and upload URL.' },
   run: async ({ file_id }, { v1 }) => {
     const path = `/files/${encodeURIComponent(file_id)}`;
