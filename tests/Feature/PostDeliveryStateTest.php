@@ -208,23 +208,30 @@ describe('failure detail per destination (b202611141401)', function () {
         $user = pdsUser();
         $bsky = pdsAccount($user, 'bluesky');
         $ig = pdsAccount($user, 'instagram');
-        $post = pdsSent($user, [$bsky, $ig], 'op_codes');
+        $pin = pdsAccount($user, 'pinterest');
+        $post = pdsSent($user, [$bsky, $ig, $pin], 'op_codes');
 
-        pdsHook($this, pdsError($post, $bsky, 'Failed to upload video: 401 [creatif:extra]'))->assertOk();
+        pdsHook($this, pdsError($post, $bsky, 'Failed to upload video: 401 for @bsky_private'))->assertOk();
+        pdsHook($this, pdsError($post, $pin, 'Unsupported codec h265 [code:42]'))->assertOk();
         pdsHook($this, pdsPublished($post, $ig))->assertOk();
 
-        $res = $this->actingAs($user)->getJson('/api/v1/social-posts/'.$post->ulid)->assertOk();
+        $res = $this->actingAs($user)->getJson('/api/v1/social-posts/'.$post->ulid)->assertOk()->assertDontSee('bsky_private');
         $targets = collect($res->json('data.targets'))->keyBy('account.platform');
 
         expect($targets['bluesky'])
             ->fail_code->toBe('video_upload_refused')
             ->error_code->toBe('media')
             ->fail_reason->toBe(PublishFailure::reason('video_upload_refused', 'bluesky'))
-            ->provider_message->toBe('Failed to upload video: 401')
+            // Not a detail code: the raw words stay server-side.
+            ->provider_message->toBeNull()
             ->retryable->toBeFalse()
             ->reconnect_required->toBeFalse()
             ->retry_at->toBeNull()
             ->retry_reason->toBeNull()
+            ->and($targets['pinterest'])
+            ->fail_code->toBe('media_spec')
+            ->error_code->toBe('media')
+            ->provider_message->toBe('Unsupported codec h265')
             ->and($targets['instagram'])
             ->fail_code->toBeNull()
             ->error_code->toBeNull()

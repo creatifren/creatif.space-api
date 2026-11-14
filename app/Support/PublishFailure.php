@@ -139,6 +139,17 @@ final class PublishFailure
         return $text === '' || $text === 'the platform refused it' ? null : Str::limit($text, 200);
     }
 
+    /**
+     * The platform's words a person may see apart from the reason: only for
+     * the codes whose reason already quotes them (WITH_DETAIL). For every
+     * other code the raw text stays server-side — it can name the account
+     * or quote a token error.
+     */
+    public static function shownDetail(?string $reasonCode, ?string $raw): ?string
+    {
+        return in_array($reasonCode, self::WITH_DETAIL, true) ? self::detail($raw) : null;
+    }
+
     /** Whether waiting and trying again can fix it. */
     public static function retryable(string $reasonCode): bool
     {

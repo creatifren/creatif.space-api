@@ -67,8 +67,10 @@ class SocialPostResource extends JsonResource
                     // content, duplicate, platform_unavailable, demo, unknown, other).
                     'error_code' => PublishFailure::coarse($target->fail_code),
                     // The network's own words, tidied (machine tags out, capped at
-                    // 200): a detail line under fail_reason, never the headline.
-                    'provider_message' => $target->fail_code !== null ? PublishFailure::detail($target->provider_error) : null,
+                    // 200), only for other / media_spec / content_rejected /
+                    // content_too_long (already quoted in fail_reason); null for
+                    // every other code: the raw text stays server-side.
+                    'provider_message' => PublishFailure::shownDetail($target->fail_code, $target->provider_error),
                     // Waiting and sending again can fix it (or is already doing so).
                     'retryable' => $target->fail_code !== null && PublishFailure::retryable($target->fail_code),
                     // The account's sign-in is no longer accepted: reconnect it.
