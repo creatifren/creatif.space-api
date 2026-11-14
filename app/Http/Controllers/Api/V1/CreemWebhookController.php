@@ -197,6 +197,19 @@ class CreemWebhookController extends Controller
             ->lockForUpdate()
             ->get();
         foreach ($others as $old) {
+            // A running staff comp wins until it ends (b202611141738): it is
+            // never closed by a payment. The paid row is activated behind it
+            // (activeSubscription() prefers the comp) and takes over when the
+            // comp ends.
+            if ($old->plan_source === Subscription::SOURCE_STAFF_COMP && $old->isEntitled()) {
+                Log::warning('billing.paid_during_staff_comp', [
+                    'subscription' => $subscription->ulid, 'creem_subscription' => $object['id'],
+                    'staff_comp' => $old->ulid, 'comp_until' => $old->current_period_end?->toIso8601String(),
+                    'action' => 'the comp stays until it ends; the paid plan starts after it — refund or revoke by hand if that is not wanted',
+                ]);
+
+                continue;
+            }
             if (self::liveDuplicate($old)) {
                 Log::warning('billing.duplicate_subscription_paid', [
                     'subscription' => $subscription->ulid, 'creem_subscription' => $object['id'],

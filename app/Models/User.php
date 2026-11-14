@@ -250,6 +250,8 @@ class User extends Authenticatable implements FilamentUser
                 ->orWhereNull('cancelled_at')
                 ->orWhere('current_period_end', '>', now()))
             ->with('plan')
+            // A running staff comp wins over a paid plan bought during it.
+            ->orderByRaw('CASE WHEN plan_source = ? THEN 0 ELSE 1 END', [Subscription::SOURCE_STAFF_COMP])
             ->latest('id')
             ->first();
     }
