@@ -4,7 +4,7 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <meta name="robots" content="noindex">
-    <title>Connection request expired · Creatif Space</title>
+    <title>Sign-in link expired · Creatif Space</title>
     <style>
         :root { --bg: #FAFAF8; --surface: #FFFFFF; --ink: #0F172A; --muted: #5A6478; --line: #ECE9E2; }
         @media (prefers-color-scheme: dark) { :root { --bg: #0B1120; --surface: #111827; --ink: #F1F5F9; --muted: #A3ADBF; --line: #263043; } }
@@ -18,8 +18,8 @@
 </head>
 <body>
 <main>
-    <h1>This connection request has expired</h1>
-    <p>It was already used or is too old. Go back to the app you were connecting and start again.</p>
+    <h1>This sign-in link expired</h1>
+    <p>It was already used or is too old. Go back to ChatGPT, Claude or the app you were connecting, and press Connect again.</p>
 </main>
 </body>
 </html>

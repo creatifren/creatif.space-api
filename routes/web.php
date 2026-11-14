@@ -12,7 +12,9 @@ use App\Http\Middleware\PendingAuthorizations;
 use App\Http\Middleware\RememberPendingAuthorization;
 use App\Http\Middleware\RequirePkce;
 use App\Http\Middleware\ResolveClientMetadataDocument;
+use App\OAuth\AuthorizeResume;
 use App\OAuth\OAuthRateLimits;
+use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Route;
 use Laravel\Passport\Http\Controllers\ApproveAuthorizationController;
@@ -88,14 +90,22 @@ Route::post('/oauth/switch-account', SwitchAccountController::class)
     ->name('oauth.switch-account');
 
 // Back from the frontend's login to the authorize request that sent the
-// person there. Only ever an /oauth/authorize URL on this host.
-Route::get('/oauth/resume', function () {
+// person there. Only ever an /oauth/authorize URL on this host: the signed
+// ?r= (AuthorizeResume) that survives a sign-out or account switch on the
+// way, else the one remembered in the session. A guest goes on to the login
+// again; an ?r= that is too old says so instead of a dead end.
+Route::get('/oauth/resume', function (Request $request) {
     $intended = (string) session()->pull('oauth.intended', '');
-    $prefix = url('/oauth/authorize').'?';
+    $url = AuthorizeResume::url($request->query('r'))
+        ?? (str_starts_with($intended, url('/oauth/authorize').'?') ? $intended : null);
 
-    return Auth::guard('web')->check() && str_starts_with($intended, $prefix)
-        ? redirect()->to($intended)
-        : redirect(config('app.frontend_url'));
+    if ($url === null) {
+        return $request->has('r')
+            ? response()->view('oauth.expired', [], 400)
+            : redirect(config('app.frontend_url'));
+    }
+
+    return redirect()->to($url);
 })->middleware('throttle:30,1')->name('oauth.resume');
 
 // RFC 9116: how to report a security problem. Plain text, public, cached a day.

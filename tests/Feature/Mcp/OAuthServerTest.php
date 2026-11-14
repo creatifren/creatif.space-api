@@ -119,8 +119,8 @@ describe('authorization code + PKCE', function () {
             'code_challenge_method' => 'S256',
         ]);
 
-        $this->get('/oauth/authorize?'.$query)
-            ->assertRedirect('https://app.creatif.space/login?next='.urlencode('/oauth/resume'));
+        $login = (string) $this->get('/oauth/authorize?'.$query)->assertRedirect()->headers->get('Location');
+        expect($login)->toStartWith('https://app.creatif.space/login?next='.urlencode('/oauth/resume?r='));
 
         $intended = session('oauth.intended');
         expect($intended)->toContain('/oauth/authorize?');

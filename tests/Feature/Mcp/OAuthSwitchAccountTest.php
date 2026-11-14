@@ -122,7 +122,8 @@ it('switches account and completes the original request for the new account only
         ->and(session('auth.select_account'))->toBeTrue();
 
     // As a guest, the same URL goes to the login and is remembered.
-    $this->get($back)->assertRedirect('https://app.creatif.space/login?next='.urlencode('/oauth/resume'));
+    $login = (string) $this->get($back)->assertRedirect()->headers->get('Location');
+    expect($login)->toStartWith('https://app.creatif.space/login?next='.urlencode('/oauth/resume?r='));
     $intended = (string) session('oauth.intended');
     expect(switchQueryOf($intended))->toEqual($query);
 

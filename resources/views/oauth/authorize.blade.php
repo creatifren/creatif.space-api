@@ -57,6 +57,8 @@
 </head>
 <body>
 <main>
+    {{-- The same request, signed: survives a sign-out / account switch (AuthorizeResume). --}}
+    @php($resumeToken = \App\OAuth\AuthorizeResume::token($request->fullUrl()))
     <div class="brand">Creatif Space</div>
     <h1>{{ $client->name }} wants to connect to your account</h1>
     @php($documentHost = \App\OAuth\ClientMetadataDocuments::hostFor($client))
@@ -74,6 +76,7 @@
         <div class="switch">Not you?
             <form method="post" action="{{ route('oauth.switch-account') }}">
                 @csrf
+                <input type="hidden" name="resume" value="{{ $resumeToken }}">
                 <button type="submit" class="link">Use another account</button>
             </form>
         </div>
@@ -96,6 +99,7 @@
             <input type="hidden" name="state" value="{{ $request->state }}">
             <input type="hidden" name="client_id" value="{{ $client->getKey() }}">
             <input type="hidden" name="auth_token" value="{{ $authToken }}">
+            <input type="hidden" name="resume" value="{{ $resumeToken }}">
             <button type="submit" class="deny">Cancel</button>
         </form>
         <form method="post" action="{{ route('passport.authorizations.approve') }}">
@@ -103,6 +107,7 @@
             <input type="hidden" name="state" value="{{ $request->state }}">
             <input type="hidden" name="client_id" value="{{ $client->getKey() }}">
             <input type="hidden" name="auth_token" value="{{ $authToken }}">
+            <input type="hidden" name="resume" value="{{ $resumeToken }}">
             <button type="submit" class="approve">Allow</button>
         </form>
     </div>

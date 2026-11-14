@@ -2,6 +2,7 @@
 
 namespace App\Http\Middleware;
 
+use App\OAuth\AuthorizeResume;
 use Closure;
 use Illuminate\Http\Request;
 use Symfony\Component\HttpFoundation\Response;
@@ -57,8 +58,14 @@ class PendingAuthorizations
             return $next($request);
         }
 
-        // Used, unknown or expired: never a bare 403.
+        // Used, unknown or expired: never a bare 403. Show the request this
+        // form was for again (its signed copy survives a session that was
+        // reset by signing out or switching account), else the latest one.
         $request->session()->forget(['authToken', 'authRequest']);
+        $resume = AuthorizeResume::url($request->input('resume'));
+        if ($resume !== null) {
+            return redirect()->to($resume);
+        }
         $latest = $entries === [] ? null : $entries[array_key_last($entries)];
         if ($latest !== null) {
             return redirect()->to($latest['url']);

@@ -83,7 +83,7 @@ it('refuses a replayed token: no second code, no bare 403', function () {
     $replay = $this->post('/oauth/authorize', ['state' => 'once', 'client_id' => $client->getKey(), 'auth_token' => $token]);
     expect($replay->getStatusCode())->not->toBe(403)
         ->and((string) $replay->headers->get('Location'))->not->toContain('code=');
-    $replay->assertStatus(400)->assertSee('This connection request has expired');
+    $replay->assertStatus(400)->assertSee('This sign-in link expired');
 });
 
 it('sends a used token back to the consent screen still open in another tab', function () {
@@ -107,7 +107,7 @@ it('answers an unknown token with the expired page, not a bare 403', function ()
 
     $this->actingAs(User::factory()->create(), 'web')
         ->post('/oauth/authorize', ['state' => 'x', 'client_id' => $client->getKey(), 'auth_token' => 'not-a-token'])
-        ->assertStatus(400)->assertSee('This connection request has expired');
+        ->assertStatus(400)->assertSee('This sign-in link expired');
 });
 
 it('lets Deny work on the earlier of two screens', function () {
