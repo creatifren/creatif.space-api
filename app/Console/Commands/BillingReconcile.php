@@ -246,7 +246,11 @@ class BillingReconcile extends Command
         return null;
     }
 
-    /** Does $value hold one of $ids as a string anywhere (an id or a nested id)? */
+    /**
+     * Does $value hold one of $ids as a string anywhere (an id or a nested id)?
+     *
+     * @param  list<string>  $ids
+     */
     private static function names(mixed $value, array $ids): bool
     {
         if (is_string($value)) {
