@@ -113,11 +113,11 @@ function resumeRedeem(mixed $test, Client $client, array $query, string $verifie
 
 it('reproduces the bug: consent for A, sign out (session reset), sign in as B â€” lands on the consent for the same request, Allow gives B the code', function () {
     $client = mcpClient('https://chatgpt.com/connector/oauth/qPty7QlyU5Qp');
-    $a = User::factory()->create(['email' => 'aa@example.test']);
-    $b = User::factory()->create(['email' => 'bb@example.test']);
+    $a = User::factory()->create(['email' => 'alice@example.test']);
+    $b = User::factory()->create(['email' => 'bobby@example.test']);
     [$url, $query, $verifier] = resumeAuthorizeUrl($client);
 
-    $consent = $this->actingAs($a, 'web')->get($url)->assertOk()->assertSee('aa***@example.test');
+    $consent = $this->actingAs($a, 'web')->get($url)->assertOk()->assertSee('al***@example.test');
     $oldToken = session('authToken');
     $resume = resumeFieldOf($consent->getContent());
 
@@ -136,7 +136,7 @@ it('reproduces the bug: consent for A, sign out (session reset), sign in as B â€
     $this->flushSession();
     $back = resumeAssertBackTo($this->actingAs($b, 'web')->get($next), $query);
 
-    $this->get($back)->assertOk()->assertSee('bb***@example.test')->assertDontSee('aa***@example.test');
+    $this->get($back)->assertOk()->assertSee('bo***@example.test')->assertDontSee('al***@example.test');
     resumeRedeem($this, $client, $query, $verifier, resumeAllow($this, $client, $query));
 
     expect(Token::query()->where('user_id', $b->id)->count())->toBe(1)
@@ -220,7 +220,7 @@ it('brings a fresh login (not signed in at the start) back to the consent screen
 
 it('brings a Google sign-in back to the consent screen for the same request', function () {
     $client = mcpClient();
-    $b = User::factory()->create(['google_id' => 'g-resume-b', 'email' => 'gb@example.test']);
+    $b = User::factory()->create(['google_id' => 'g-resume-b', 'email' => 'gbobby@example.test']);
     [$url, $query, $verifier] = resumeAuthorizeUrl($client);
 
     $next = resumeNextOf((string) $this->get($url)->assertRedirect()->headers->get('Location'));
@@ -228,7 +228,7 @@ it('brings a Google sign-in back to the consent screen for the same request', fu
     // The frontend's "Continue with Google" carries the same ?next=.
     $this->get('/auth/google/redirect?'.http_build_query(['next' => $next]))->assertRedirect();
 
-    $google = (new GoogleUser)->map(['id' => 'g-resume-b', 'name' => 'B', 'email' => 'gb@example.test', 'avatar' => null]);
+    $google = (new GoogleUser)->map(['id' => 'g-resume-b', 'name' => 'B', 'email' => 'gbobby@example.test', 'avatar' => null]);
     $driver = Mockery::mock(GoogleProvider::class);
     $driver->shouldReceive('user')->andReturn($google);
     Socialite::shouldReceive('driver')->with('google')->andReturn($driver);
