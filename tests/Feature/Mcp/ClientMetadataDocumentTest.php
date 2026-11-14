@@ -117,6 +117,88 @@ it('accepts a document that also lists grants we do not support, like Claude\'s 
     expect(Client::query()->sole()->grant_types)->toContain('authorization_code')->not->toContain('urn:ietf:params:oauth:grant-type:jwt-bearer');
 });
 
+/** ChatGPT's real document shape: prefers private_key_jwt, also supports none. */
+function chatgptDocument(array $overrides = []): array
+{
+    return cimdDocument(array_merge([
+        'client_name' => 'ChatGPT',
+        'token_endpoint_auth_method' => 'private_key_jwt',
+        'token_endpoint_auth_methods_supported' => ['none', 'private_key_jwt'],
+        'token_endpoint_auth_signing_alg' => 'RS256',
+        'jwks_uri' => 'https://chatgpt.com/oauth/jwks.json',
+    ], $overrides));
+}
+
+function fakeAssertion(array $claims): string
+{
+    $b64 = fn (array $part) => rtrim(strtr(base64_encode((string) json_encode($part)), '+/', '-_'), '=');
+
+    return $b64(['alg' => 'RS256', 'typ' => 'JWT']).'.'.$b64($claims).'.c2lnbmF0dXJl';
+}
+
+it('accepts ChatGPT\'s document (private_key_jwt preferred, none supported) as a public PKCE client', function (bool $sendsClientId) {
+    fakeCimd(chatgptDocument());
+    $user = User::factory()->create();
+
+    ['response' => $consent, 'verifier' => $verifier] = cimdAuthorize($this, $user);
+    $consent->assertOk()->assertSee('ChatGPT');
+
+    $client = Client::query()->sole();
+    expect($client->confidential())->toBeFalse();
+
+    $approve = $this->post('/oauth/authorize', ['state' => 'st', 'client_id' => $client->getKey(), 'auth_token' => session('authToken')]);
+    expect((string) $approve->headers->get('Location'))->toStartWith(CIMD_REDIRECT.'?');
+    parse_str((string) parse_url((string) $approve->headers->get('Location'), PHP_URL_QUERY), $query);
+
+    // A client_assertion is ignored (not verified): PKCE is what proves the client.
+    $tokens = $this->post('/oauth/token', array_filter([
+        'grant_type' => 'authorization_code',
+        'client_id' => $sendsClientId ? CIMD_URL : null,
+        'redirect_uri' => CIMD_REDIRECT,
+        'code_verifier' => $verifier,
+        'code' => $query['code'],
+        'client_assertion_type' => 'urn:ietf:params:oauth:client-assertion-type:jwt-bearer',
+        'client_assertion' => fakeAssertion(['iss' => CIMD_URL, 'sub' => CIMD_URL, 'aud' => 'https://api.creatif.space/oauth/token', 'exp' => time() + 60]),
+    ]))->assertOk()->json();
+    expect($tokens['access_token'])->toBeString()->and($tokens['refresh_token'])->toBeString();
+
+    $this->post('/oauth/token', ['grant_type' => 'refresh_token', 'client_id' => CIMD_URL, 'refresh_token' => $tokens['refresh_token']])
+        ->assertOk();
+})->with(['with client_id' => [true], 'client_id only in the assertion' => [false]]);
+
+it('still requires PKCE from a ChatGPT-shaped client: no code_verifier, no token', function () {
+    fakeCimd(chatgptDocument());
+    $user = User::factory()->create();
+
+    cimdAuthorize($this, $user)['response']->assertOk();
+    $client = Client::query()->sole();
+    $approve = $this->post('/oauth/authorize', ['state' => 'st', 'client_id' => $client->getKey(), 'auth_token' => session('authToken')]);
+    parse_str((string) parse_url((string) $approve->headers->get('Location'), PHP_URL_QUERY), $query);
+
+    $this->post('/oauth/token', [
+        'grant_type' => 'authorization_code',
+        'client_id' => CIMD_URL,
+        'redirect_uri' => CIMD_REDIRECT,
+        'code' => $query['code'],
+        'client_assertion_type' => 'urn:ietf:params:oauth:client-assertion-type:jwt-bearer',
+        'client_assertion' => fakeAssertion(['sub' => CIMD_URL]),
+    ])->assertStatus(400);
+});
+
+it('refuses a document that supports only private_key_jwt with a clear invalid_client', function (array $overrides) {
+    fakeCimd(chatgptDocument($overrides));
+
+    cimdAuthorize($this, User::factory()->create())['response']
+        ->assertStatus(400)
+        ->assertJsonPath('error', 'invalid_client')
+        ->assertJson(fn ($json) => $json->where('error_description', fn ($d) => str_contains($d, 'token_endpoint_auth_method') && str_contains($d, '"none"'))->etc());
+    expect(Client::query()->count())->toBe(0);
+})->with([
+    'supported list without none' => [['token_endpoint_auth_methods_supported' => ['private_key_jwt']]],
+    'no supported list' => [['token_endpoint_auth_methods_supported' => null]],
+    'supported list not an array' => [['token_endpoint_auth_methods_supported' => 'none']],
+]);
+
 it('refuses a redirect_uri the document does not list', function () {
     fakeCimd(cimdDocument());
 

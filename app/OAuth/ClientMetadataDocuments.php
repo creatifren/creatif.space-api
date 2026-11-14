@@ -201,9 +201,8 @@ class ClientMetadataDocuments
             throw new ClientMetadataException('A client metadata document must not carry a client_secret.');
         }
 
-        $method = $document['token_endpoint_auth_method'] ?? 'none';
-        if ($method !== 'none') {
-            throw new ClientMetadataException('Only token_endpoint_auth_method "none" (a public client with PKCE) is supported.');
+        if (! self::supportsPublicClient($document)) {
+            throw new ClientMetadataException('Only token_endpoint_auth_method "none" (a public client with PKCE) is supported; the document allows neither it nor "none" in token_endpoint_auth_methods_supported.');
         }
 
         // Extra grants/response types a client advertises (e.g. Claude's jwt-bearer) are ignored:
@@ -233,6 +232,26 @@ class ClientMetadataDocuments
         $name = $name === '' ? (string) parse_url($url, PHP_URL_HOST) : mb_substr($name, 0, 120);
 
         return [$name, array_values(array_unique($redirects))];
+    }
+
+    /**
+     * Can this client authenticate at the token endpoint as a public client
+     * (method "none", PKCE S256)? Yes when its preferred method is "none", or
+     * when it prefers another one but also lists "none" as supported — as
+     * ChatGPT does: token_endpoint_auth_method "private_key_jwt" with
+     * token_endpoint_auth_methods_supported ["none", "private_key_jwt"].
+     * We only advertise "none" for such clients, so it falls back to it.
+     *
+     * @param  array<string, mixed>  $document
+     */
+    private static function supportsPublicClient(array $document): bool
+    {
+        if (($document['token_endpoint_auth_method'] ?? 'none') === 'none') {
+            return true;
+        }
+        $supported = $document['token_endpoint_auth_methods_supported'] ?? null;
+
+        return is_array($supported) && in_array('none', $supported, true);
     }
 
     /** No loopback, private, link-local or reserved addresses: the fetch must not reach our own network. */

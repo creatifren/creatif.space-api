@@ -21,6 +21,10 @@ class ResolveClientMetadataDocument
     public function handle(Request $request, Closure $next): Response
     {
         $clientId = $request->input('client_id');
+        if ($clientId === null && $request->isMethod('POST') && ($assertedId = self::clientIdFromAssertion($request)) !== null) {
+            $request->request->set('client_id', $assertedId);
+            $clientId = $assertedId;
+        }
         if (! ClientMetadataDocuments::isUrl($clientId)) {
             return $next($request);
         }
@@ -46,5 +50,30 @@ class ResolveClientMetadataDocument
         }
 
         return $next($request);
+    }
+
+    /**
+     * A client that prefers private_key_jwt (ChatGPT) may still send a
+     * client_assertion, and RFC 7523 lets it leave client_id out then. We
+     * treat metadata-document clients as public clients: the assertion is
+     * NOT verified and grants nothing (PKCE's code_verifier is the proof),
+     * so it is otherwise ignored. Only to find out who the client is when
+     * client_id is missing, its "sub" (= the document URL) is read.
+     */
+    private static function clientIdFromAssertion(Request $request): ?string
+    {
+        $type = $request->input('client_assertion_type');
+        $assertion = $request->input('client_assertion');
+        if ($type !== 'urn:ietf:params:oauth:client-assertion-type:jwt-bearer' || ! is_string($assertion) || strlen($assertion) > 8192) {
+            return null;
+        }
+        $parts = explode('.', $assertion);
+        if (count($parts) !== 3) {
+            return null;
+        }
+        $payload = json_decode((string) base64_decode(str_pad(strtr($parts[1], '-_', '+/'), (int) ceil(strlen($parts[1]) / 4) * 4, '='), true), true);
+        $sub = is_array($payload) ? ($payload['sub'] ?? null) : null;
+
+        return ClientMetadataDocuments::isUrl($sub) ? $sub : null;
     }
 }
