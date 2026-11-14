@@ -6,6 +6,7 @@ use App\Http\Middleware\ScopeToWorkspace;
 use App\Http\Middleware\SecurityHeaders;
 use App\Http\Middleware\ThrottlePerRoute;
 use App\Http\Middleware\TrustAppServer;
+use App\OAuth\AuthorizeResume;
 use App\Services\ErrorTracking;
 use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
@@ -14,6 +15,7 @@ use Illuminate\Http\Exceptions\ThrottleRequestsException;
 use Illuminate\Http\Middleware\TrustProxies;
 use Illuminate\Http\Request;
 use Illuminate\Routing\Middleware\SubstituteBindings;
+use Illuminate\Session\TokenMismatchException;
 use Illuminate\Support\Facades\Route;
 use Symfony\Component\HttpKernel\Exception\HttpException;
 use Symfony\Component\HttpKernel\Exception\HttpExceptionInterface;
@@ -86,11 +88,18 @@ return Application::configure(basePath: dirname(__DIR__))
         // An OAuth authorize request is remembered so the login can hand the
         // person back to the consent screen (the frontend sends them to
         // /oauth/resume afterwards).
+        // The request also travels signed in ?next= (AuthorizeResume), so a
+        // sign-out or account switch that empties the session on the way
+        // still lands on the same consent screen. Allow / Deny pressed after
+        // signing out (an old tab) come back the same way.
         $middleware->redirectGuestsTo(function (Request $request) {
-            if ($request->is('oauth/authorize') && $request->isMethod('GET') && $request->hasSession()) {
-                $request->session()->put('oauth.intended', $request->fullUrl());
+            if ($request->is('oauth/authorize') && $request->hasSession()) {
+                $url = $request->isMethod('GET') ? $request->fullUrl() : AuthorizeResume::url($request->input('resume'));
+                if ($url !== null) {
+                    $request->session()->put('oauth.intended', $url);
 
-                return config('app.frontend_url').'/login?next='.urlencode('/oauth/resume');
+                    return config('app.frontend_url').'/login?next='.urlencode(AuthorizeResume::resumePath($url));
+                }
             }
 
             return config('app.frontend_url').'/login';
@@ -108,6 +117,15 @@ return Application::configure(basePath: dirname(__DIR__))
         $exceptions->render(function (Throwable $e, Request $request) {
             if (! ($request->is('oauth/*') || $request->is('.well-known/oauth-*'))) {
                 return null;
+            }
+            // A consent / "Not you?" form from before the session changed
+            // (signed out, switched account, another tab): its CSRF token is
+            // stale. Show the same request again, fresh, instead of a dead
+            // "Page Expired" — nothing is approved or signed out on the way.
+            if ($e instanceof TokenMismatchException || $e->getPrevious() instanceof TokenMismatchException) {
+                $url = AuthorizeResume::url($request->input('resume'));
+
+                return $url !== null ? redirect()->to($url) : response()->view('oauth.expired', [], 419);
             }
             if ($e instanceof ThrottleRequestsException) {
                 $seconds = max(1, (int) ($e->getHeaders()['Retry-After'] ?? 60));
