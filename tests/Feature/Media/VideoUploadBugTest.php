@@ -64,7 +64,13 @@ dataset('videos', [
 ]);
 
 it('uploads a real video and publishes it as a video', function (string $name, string $mime, string $fixture, string $ext) {
-    Http::fake(['api.outstand.test/*' => Http::response(['success' => true, 'post' => ['id' => 'v1', 'publishedAt' => null]])]);
+    // Library media goes out from Outstand's media host (upload → PUT → confirm) before the post is created.
+    Http::fake([
+        'api.outstand.test/v1/media/upload' => Http::response(['success' => true, 'data' => ['id' => 'm1', 'upload_url' => 'https://outstand-media.test/put/m1', 'expires_in' => 3600]]),
+        'outstand-media.test/*' => Http::response('', 200),
+        'api.outstand.test/v1/media/m1/confirm' => Http::response(['success' => true, 'data' => ['id' => 'm1', 'url' => 'https://media.outstand.so/org/m1/clip', 'status' => 'active']]),
+        'api.outstand.test/*' => Http::response(['success' => true, 'post' => ['id' => 'v1', 'publishedAt' => null]]),
+    ]);
 
     $user = User::factory()->create();
     Subscription::factory()->for($user)->create();
@@ -76,6 +82,11 @@ it('uploads a real video and publishes it as a video', function (string $name, s
     expect($file->path)->toEndWith(".{$ext}")
         ->and($file->mime_type)->toBe($mime);
 
+    // The bytes are read from storage for the copy; the post still carries a signed R2 link until then.
+    Storage::fake('s3');
+    Storage::disk('s3')->put($file->path, mediaFixture($fixture));
+    Storage::disk('s3')->buildTemporaryUrlsUsing(fn (string $path) => 'https://bucket.example.r2.cloudflarestorage.com/'.$path.'?X-Amz-Signature=abc');
+
     $this->actingAs($user)->postJson('/api/v1/social-posts', [
         'caption' => 'Behind the scenes',
         'account_ids' => [$yt->ulid],
@@ -86,7 +97,8 @@ it('uploads a real video and publishes it as a video', function (string $name, s
     Http::assertSent(function (HttpRequest $r) use ($ext) {
         $media = $r['containers'][0]['media'][0] ?? [];
 
-        return str_ends_with($r->url(), '/posts') && str_ends_with((string) ($media['filename'] ?? ''), ".{$ext}");
+        return str_ends_with($r->url(), '/posts') && str_ends_with((string) ($media['filename'] ?? ''), ".{$ext}")
+            && ($media['url'] ?? null) === 'https://media.outstand.so/org/m1/clip';
     });
 })->with('videos');
 
