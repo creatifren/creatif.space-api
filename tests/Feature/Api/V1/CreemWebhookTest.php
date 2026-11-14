@@ -141,12 +141,16 @@ it('opens a grace window on past_due', function () {
         ->and($sub->fresh()->grace_ends_at)->not->toBeNull();
 });
 
-it('never runs two paid plans for one user', function () {
+it('a second paid plan is activated (never charged without access); the live first one is left for a manual refund', function () {
+    // P0 14 Nov: a payment always buys access. The earlier live paid plan is
+    // logged (billing.duplicate_subscription_paid) for a refund by hand.
     $live = Subscription::factory()->create(['creem_subscription_id' => 'sub_live']);
-    $second = Subscription::factory()->for($live->user)->create(['status' => 'expired', 'current_period_end' => null]);
+    $live->invoices()->create(['number' => Invoice::nextNumber(), 'amount' => 999, 'currency' => 'USD', 'status' => 'paid', 'creem_transaction_id' => 'tran_live', 'paid_at' => now()->subDay()]);
+    $second = Subscription::factory()->for($live->user)->create(['status' => 'expired', 'current_period_start' => null, 'current_period_end' => null]);
     Invoice::factory()->for($second)->create();
     sendCreem(creemPaid($second, 'tran_dup'))->assertOk();
-    expect($second->fresh()->status)->toBe(SubscriptionStatus::Expired)
+    expect($second->fresh()->status)->toBe(SubscriptionStatus::Active)
+        ->and($live->user->fresh()->activeSubscription()->id)->toBe($second->id)
         ->and($live->fresh()->status)->toBe(SubscriptionStatus::Active);
 });
 

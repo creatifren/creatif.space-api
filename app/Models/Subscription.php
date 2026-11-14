@@ -151,7 +151,7 @@ class Subscription extends Model
      */
     public function isEntitled(): bool
     {
-        return self::grants($this->status, $this->current_period_end);
+        return self::grants($this->status, $this->current_period_end, $this->cancelled_at);
     }
 
     /**
@@ -160,8 +160,14 @@ class Subscription extends Model
      * cancelled subscription that still runs that way (Creem keeps such a
      * row Active with cancelled_at set, which the first rule covers).
      */
-    public static function grants(SubscriptionStatus $status, ?\DateTimeInterface $periodEnd): bool
+    public static function grants(SubscriptionStatus $status, ?\DateTimeInterface $periodEnd, ?\DateTimeInterface $cancelledAt = null): bool
     {
+        // Cancelled and past its period: over, whatever the status still says
+        // (a cancelled trial left 'trialing' blocked a paid checkout, P0 14 Nov).
+        if ($cancelledAt !== null && $periodEnd !== null && $periodEnd <= now()) {
+            return false;
+        }
+
         return in_array($status, SubscriptionStatus::entitled(), true)
             || ($status === SubscriptionStatus::Cancelled && $periodEnd !== null && $periodEnd > now());
     }
@@ -175,7 +181,11 @@ class Subscription extends Model
     {
         $query->where(fn (Builder $q) => $q->whereIn('status', SubscriptionStatus::entitled())
             ->orWhere(fn (Builder $q) => $q->where('status', SubscriptionStatus::Cancelled)
-                ->where('current_period_end', '>', now())));
+                ->where('current_period_end', '>', now())))
+            // Cancelled and past its period is over, whatever the status says.
+            ->whereNot(fn (Builder $q) => $q->whereNotNull('cancelled_at')
+                ->whereNotNull('current_period_end')
+                ->where('current_period_end', '<=', now()));
     }
 
     public function isGoogle(): bool
