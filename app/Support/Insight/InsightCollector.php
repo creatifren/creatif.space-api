@@ -110,7 +110,12 @@ final class InsightCollector
                 // Out of time: the rest are not read this time (their numbers
                 // stay unknown); the analytics already read are cached, so the
                 // next request gets further.
-                $feed = microtime(true) < $this->deadline ? $this->feed($account, $previous->from) : null;
+                $feed = null;
+                if (microtime(true) < $this->deadline) {
+                    $feed = $this->feed($account, $previous->from);
+                } else {
+                    $this->skipped[$account->id] = true;
+                }
                 $feeds[$account->id] = $feed;
                 [$channel, $notes] = $this->channel($owner, $account, $feed, $period, $previous);
                 $channels[] = $channel;
