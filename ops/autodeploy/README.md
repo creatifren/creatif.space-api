@@ -8,8 +8,8 @@ inbound, no aaPanel tab.
 | Site | Repo | Deploy command (unchanged scripts) | Smoke |
 |---|---|---|---|
 | `api` | creatif.space-api (public) | `/root/deploy-api.sh` + `/root/deploy-csmcp.sh` | api `/up`, `/api/v1/plans` 200, `/api/v1/inbox/summary` 401, mcp `/health` 200 |
-| `app` | creatif.space (`git@gh-app:`) | `/root/d-app.sh` | app `/login`, `/post` 200 |
-| `mkt` | creatifspace (`git@gh-mkt:`) | `/root/d-mkt.sh` | `/`, `/pricing` 200 |
+| `app` | creatif.space (`git@gh-app:`) | `/root/d-site.sh app` (foreground; d-app.sh only backgrounds it) | app `/login`, `/post` 200 |
+| `mkt` | creatifspace (`git@gh-mkt:`) | `/root/d-site.sh mkt` | `/`, `/pricing` 200 |
 
 ## Install (Rizal, once, aaPanel terminal, ~5 min)
 
