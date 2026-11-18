@@ -82,8 +82,10 @@ function cpToken(array $plan): string
 function cpIds($test, string $token, string $query = ''): array
 {
     app('auth')->forgetGuards();
+    // What the client sees: the plan's approver, signed in (an anonymous look is refused).
+    $email = SocialApprovalLink::query()->where('token_hash', SocialApprovalLink::hashToken($token))->value('approver_email') ?? 'rani@client.test';
 
-    return collect($test->getJson("/api/v1/a/{$token}{$query}")->assertOk()->json('data.posts'))->pluck('id')->all();
+    return collect(asApprover($test, $email)->getJson("/api/v1/a/{$token}{$query}")->assertOk()->json('data.posts'))->pluck('id')->all();
 }
 
 describe('scope', function () {
@@ -149,7 +151,7 @@ describe('scope', function () {
         expect(collect($channels)->pluck('id')->all())->toEqualCanonicalizing([$ig->ulid, $tt->ulid]);
     });
 
-    it('shows scheduled / held / approved / changes-requested / published posts, drafts only when marked for review', function () {
+    it('shows scheduled / held / approved / changes-requested / published posts, and drafts that have a time (b202611140923)', function () {
         $owner = cpOwner();
         $ig = cpAccount($owner);
         $waiting = cpPost($owner, $ig, '2026-12-02 03:00:00', ['approval' => 'client']);
@@ -172,6 +174,7 @@ describe('scope', function () {
             $changes->ulid => 'changes_requested',
             $approved->ulid => 'approved',
             $scheduled->ulid => 'scheduled',
+            $draft->ulid => 'draft',
             $published->ulid => 'published',
         ]);
         // What went out is shown, never decidable.
@@ -180,21 +183,21 @@ describe('scope', function () {
         asApprover($this, 'rani@client.test')->postJson("/api/v1/a/{$token}/posts/{$published->ulid}/decision", ['decision' => 'revise', 'reason' => 'Too late'])
             ->assertUnprocessable();
 
-        // The owner marks the draft for review: it shows (view only).
-        $this->actingAs($owner)->postJson("/api/v1/social-posts/{$draft->ulid}/review", ['for_review' => true])
-            ->assertOk()->assertJsonPath('data.for_review', true);
+        // A draft with a time shows without being marked: view only, never decidable.
         $post = collect($this->getJson("/api/v1/a/{$token}")->json('data.posts'))->firstWhere('id', $draft->ulid);
         expect($post['state'])->toBe('draft')->and($post['decidable'])->toBeFalse();
-
+        asApprover($this, 'rani@client.test')->postJson("/api/v1/a/{$token}/posts/{$draft->ulid}/decision", ['decision' => 'approve'])
+            ->assertUnprocessable();
+        // Marking it for review changes nothing about that; a draft with no time never shows (next test).
         $this->actingAs($owner)->postJson("/api/v1/social-posts/{$draft->ulid}/review", ['for_review' => false])->assertOk();
-        expect(cpIds($this, $token))->not->toContain($draft->ulid);
+        expect(cpIds($this, $token))->toContain($draft->ulid);
 
         // Only drafts are marked.
         $this->actingAs($owner)->postJson("/api/v1/social-posts/{$waiting->ulid}/review", ['for_review' => true])->assertUnprocessable();
 
         // Counts per state on the owner's list.
         $listed = collect($this->actingAs($owner)->getJson('/api/v1/social-approval-links')->json('data'))->firstWhere('id', $plan['id']);
-        expect($listed['by_state'])->toMatchArray(['total' => 6, 'waiting' => 2, 'changes_requested' => 1, 'approved' => 1, 'scheduled' => 1, 'draft' => 0, 'published' => 1]);
+        expect($listed['by_state'])->toMatchArray(['total' => 7, 'waiting' => 2, 'changes_requested' => 1, 'approved' => 1, 'scheduled' => 1, 'draft' => 1, 'published' => 1]);
     });
 
     it('shows a post published "now" (no slot) on the day it went out, in the owner timezone', function () {
@@ -323,8 +326,14 @@ describe('Free on a Content Plan', function () {
         asApprover($this, 'rani@client.test')->postJson("/api/v1/a/{$token}/posts/{$inside->ulid}/decision", ['decision' => 'revise', 'reason' => 'Brighter'])
             ->assertOk();
 
-        // Approve-all approves what is inside the window, nothing past it.
-        $this->postJson("/api/v1/a/{$token}/approve-all", ['post_ids' => [$outside->ulid]])->assertUnprocessable();
+        // Approve-all approves what is inside the window, nothing past it — and says so (HQ q202611141525).
+        $this->postJson("/api/v1/a/{$token}/approve-all", ['post_ids' => [$outside->ulid]])
+            ->assertOk()
+            ->assertJsonPath('data.results.0', [
+                'id' => $outside->ulid, 'approved' => false, 'reason' => 'outside_window',
+                'decidable_from' => '2026-11-22T03:00:00Z',
+                'message' => 'This post can be approved from 22 Nov — on this plan a post is decided at most 7 days ahead.',
+            ]);
         expect($outside->fresh()->approval->value)->toBe('client');
 
         // Two days later it is inside.

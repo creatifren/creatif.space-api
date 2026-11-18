@@ -26,6 +26,7 @@ use App\Support\PublishFailure;
 use App\Support\ScheduleHorizon;
 use App\Support\SocialPostRelay;
 use App\Support\Workspace;
+use Carbon\CarbonImmutable;
 use Illuminate\Http\Client\RequestException;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -33,11 +34,13 @@ use Illuminate\Validation\ValidationException;
 use Throwable;
 
 /**
- * creatif.space/a/{token} — the client's side. Looking needs only the token.
- * Deciding (approve, ask for changes, take back) needs the invited approver
- * signed in — ApproverGate: 401 sign_in_required, 403 approver_mismatch —
- * and every decision is written to social_approval_decisions. The typed
- * name is kept for display only. Comments stay open to the token holder.
+ * creatif.space/a/{token} — the client's side. On a link with an approver
+ * email, looking, deciding (approve, ask for changes, take back) and
+ * commenting all need that approver signed in — ApproverGate: 401
+ * sign_in_required, 403 approver_mismatch — and everything is recorded
+ * under the account's name. A link without one: the token shows it and
+ * takes comments; deciding binds it to the first signed-in person. Every
+ * decision is written to social_approval_decisions.
  * Every action is scoped to the posts ON this link; a post id from anywhere
  * else 404s.
  *
@@ -59,6 +62,11 @@ class PublicApprovalController extends Controller
         $link = $this->resolve($token);
         if ($link instanceof JsonResponse) {
             return $link;
+        }
+
+        // The invited approver only, before a single post is shown.
+        if (($refused = ApproverGate::viewRefusal($request, $link)) !== null) {
+            return $refused;
         }
 
         // Filters inside the link (Content Plan views): a channel, and a date
@@ -272,25 +280,53 @@ class PublicApprovalController extends Controller
 
         $validated = $request->validate([
             'name' => ['sometimes', 'nullable', 'string', 'max:120'],
-            'post_ids' => ['required', 'array', 'min:1', 'max:50'],
+            // all: true — every post on the link that asks for an answer,
+            // chosen here (HQ q202611141525: the page sent only the posts it
+            // had loaded, so a plan's later weeks stayed waiting).
+            'all' => ['sometimes', 'boolean'],
+            'post_ids' => ['required_without:all', 'array', 'min:1', 'max:500'],
             'post_ids.*' => ['string'],
         ]);
         $name = self::displayName($validated['name'] ?? null, $approver);
+        $every = (bool) ($validated['all'] ?? false);
 
-        $eligible = PlanScope::posts($link)
-            ->whereIn('ulid', array_unique($validated['post_ids']))
+        // Everything named (or, with all, everything on the link) that asks
+        // for an answer: each one is approved, or its result says why not.
+        $asking = PlanScope::posts($link)
+            ->when(! $every, fn ($q) => $q->whereIn('ulid', array_unique($validated['post_ids'])))
             ->where('status', SocialPostStatus::Scheduled)
             ->whereIn('approval', array_map(fn (SocialPostApproval $a) => $a->value, PlanScope::decidableFrom($link)))
             ->orderBy('scheduled_at')
-            ->get()
-            // Free: only what is inside the scheduling window yet.
-            ->filter(fn (SocialPost $p) => PlanScope::decidability($link, $p)['decidable'])
-            ->values();
+            ->get();
+
+        $skipped = [];
+        foreach ($asking as $post) {
+            $window = PlanScope::decidability($link, $post);
+            if (! $window['decidable']) {
+                // Free: only what is inside the scheduling window yet.
+                $skipped[] = ['id' => $post->ulid, 'approved' => false, 'reason' => 'outside_window', 'decidable_from' => $window['decidable_from'],
+                    'message' => self::opensMessage($link, $window['decidable_from'])];
+            } elseif ($post->scheduled_at === null) {
+                $skipped[] = ['id' => $post->ulid, 'approved' => false, 'reason' => 'needs_time', 'decidable_from' => null, 'message' => self::NEEDS_TIME];
+            }
+        }
+        $skippedIds = array_column($skipped, 'id');
+        $eligible = $asking->reject(fn (SocialPost $p) => in_array($p->ulid, $skippedIds, true))->values();
+
+        if ($eligible->isEmpty() && $skipped !== []) {
+            // Nothing can go yet: say why for each, change nothing.
+            $posts = PlanScope::posts($link)->with(['targets.account', 'comments.replies'])->orderBy('scheduled_at')->get();
+
+            return response()->json(['data' => [
+                'posts' => $posts->map(fn (SocialPost $p) => $this->postArray($p))->all(),
+                'results' => $skipped,
+            ]]);
+        }
 
         if ($eligible->isEmpty()) {
             // Approve-all again, once everything it named is approved: the
             // same answer as the first time, nothing sent twice.
-            $named = PlanScope::posts($link)->whereIn('ulid', array_unique($validated['post_ids']))->get();
+            $named = $every ? collect() : PlanScope::posts($link)->whereIn('ulid', array_unique($validated['post_ids']))->get();
             if ($named->isNotEmpty() && $named->every(fn (SocialPost $p) => $p->approval === SocialPostApproval::Approved)) {
                 $posts = PlanScope::posts($link)->with(['targets.account', 'comments.replies'])->orderBy('scheduled_at')->get();
 
@@ -316,13 +352,15 @@ class PublicApprovalController extends Controller
 
         ApproverGate::bindIfUnbound($request, $link, $approver, SocialApprovalDecision::APPROVED);
 
-        $results = [];
+        $results = $skipped;
         $approved = 0;
         foreach ($eligible as $post) {
             $outcome = $this->approveFor($link, $post, $name, $relay);
             $results[] = [
                 'id' => $post->ulid,
                 'approved' => $outcome === true,
+                'reason' => $outcome === true ? null : (is_string($outcome) ? 'not_sent' : 'already_decided'),
+                'decidable_from' => null,
                 'message' => is_string($outcome) ? $outcome : null,
             ];
             $approved += $outcome === true ? 1 : 0;
@@ -413,6 +451,19 @@ class PublicApprovalController extends Controller
         return "{$network} did not accept it: {$reason}.";
     }
 
+    /** "This post can be approved from 25 Nov." — in the link's timezone. */
+    private static function opensMessage(SocialApprovalLink $link, ?string $from): string
+    {
+        if ($from === null) {
+            return 'This post can be approved closer to its date.';
+        }
+
+        $days = PlanQuota::scheduleWindowDays($link->user);
+
+        return 'This post can be approved from '.CarbonImmutable::parse($from)->setTimezone(PlanScope::timezone($link))->format('j M')
+            .($days !== null ? " — on this plan a post is decided at most {$days} days ahead." : '.');
+    }
+
     private function blockedMessage(SocialApprovalLink $link): string
     {
         return "This can’t go out right now — {$link->user->name} has been told.";
@@ -471,8 +522,11 @@ class PublicApprovalController extends Controller
             return $link;
         }
 
+        // A link for one person: only they comment, under their account's name.
+        $approver = $link->approver_email === null ? null : ApproverGate::authorize($request, $link);
+
         $validated = $request->validate([
-            'name' => ['required', 'string', 'max:120'],
+            'name' => [$approver === null ? 'required' : 'sometimes', 'nullable', 'string', 'max:120'],
             'body' => ['required', 'string', 'max:5000'],
             'parent_id' => ['sometimes', 'nullable', 'string'],
             'suggestion' => ['sometimes', 'nullable', 'string', 'max:63206'],
@@ -486,7 +540,7 @@ class PublicApprovalController extends Controller
         $comment = SocialPostComment::create([
             'social_post_id' => $socialPost->id,
             'parent_id' => $parent?->id,
-            'author_name' => $validated['name'],
+            'author_name' => $approver === null ? $validated['name'] : ApproverGate::nameOf($approver),
             'role' => 'COMMENTER',
             'body' => $validated['body'],
             'suggestion' => $parent ? null : ($validated['suggestion'] ?? null),
@@ -519,12 +573,14 @@ class PublicApprovalController extends Controller
         ], 202);
     }
 
-    /** What the approver typed, else their account name. */
+    /**
+     * The name a decision is recorded and shown under: the signed-in
+     * account's (b202611140955 — a typed "QA Tester" was recorded instead).
+     * A typed name is ignored.
+     */
     private static function displayName(?string $typed, User $approver): string
     {
-        $typed = trim((string) $typed);
-
-        return $typed !== '' ? $typed : ($approver->name ?: $approver->email);
+        return ApproverGate::nameOf($approver);
     }
 
     private function resolve(string $token): SocialApprovalLink|JsonResponse

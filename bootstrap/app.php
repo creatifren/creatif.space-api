@@ -60,6 +60,7 @@ return Application::configure(basePath: dirname(__DIR__))
             'api/v1/a/*/posts/*/decision',
             'api/v1/a/*/posts/*/retract',
             'api/v1/a/*/approve-all',
+            'api/v1/a/*/posts/*/comments',
             'api/v1/enterprise/contact',
             'api/v1/waitlist',
             'api/v1/referrals/*/click',
