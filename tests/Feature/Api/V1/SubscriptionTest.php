@@ -70,6 +70,42 @@ it('reuses one checkout for a repeated click and replaces it for another choice'
         ->and(Invoice::query()->where('status', InvoiceStatus::Expired)->count())->toBe(1);
 });
 
+it('never opens a second subscription for a choice whose checkout is still being made (checkout dobel)', function () {
+    $user = User::factory()->create();
+    // What a racing first request leaves before its Creem call returns:
+    // an open unpaid choice with no hosted page yet.
+    $subscription = $user->subscriptions()->create([
+        'plan_id' => \App\Models\Plan::query()->where('key', 'pro')->sole()->id,
+        'billing_period' => 'monthly', 'seats' => 1, 'status' => SubscriptionStatus::Expired,
+    ]);
+    $invoice = $subscription->invoices()->create([
+        'number' => Invoice::nextNumber(), 'amount' => 999, 'currency' => 'USD',
+        'status' => InvoiceStatus::Pending, 'due_at' => now()->addHours(Invoice::DUE_HOURS),
+    ]);
+
+    $this->actingAs($user)->postJson('/api/v1/me/subscription/checkout', ['plan' => 'pro', 'period' => 'monthly'])
+        ->assertCreated()->assertJsonPath('data.checkout_url', 'https://checkout.creem.io/test');
+
+    expect($user->subscriptions()->count())->toBe(1)
+        ->and(Invoice::query()->count())->toBe(1)
+        ->and($invoice->fresh()->creem_checkout_id)->toBe('ch_test');
+    Http::assertSentCount(1);
+});
+
+it('leaves nothing behind when Creem refuses the checkout', function () {
+    // A fresh fake: the beforeEach stub would otherwise answer first.
+    Http::swap(new \Illuminate\Http\Client\Factory);
+    Http::preventStrayRequests();
+    Http::fake(['test-api.creem.io/*' => Http::response(['message' => 'down'], 503)]);
+    $user = User::factory()->create();
+
+    $this->actingAs($user)->postJson('/api/v1/me/subscription/checkout', ['plan' => 'pro', 'period' => 'monthly'])
+        ->assertServerError();
+
+    expect($user->subscriptions()->count())->toBe(0)
+        ->and(Invoice::query()->count())->toBe(0);
+});
+
 it('charges the selected plan and period', function (string $plan, string $period, int $amount) {
     $this->actingAs(User::factory()->create())->postJson('/api/v1/me/subscription/checkout', compact('plan', 'period'))
         ->assertCreated()->assertJsonPath('data.amount', $amount);

@@ -130,16 +130,24 @@ class SubscriptionController extends Controller
             ]], 202);
         }
 
-        $invoice = DB::transaction(function () use ($user, $plan, $validated) {
-            // A double click or a second tab must not open a second paid
-            // subscription: the same unpaid choice reuses its checkout.
+        // Every plan is charged at checkout: the plan's own product, never a
+        // trial. The Founding code goes on any yearly plan (dropped if Creem
+        // refuses it).
+        $product = $plan->creemProduct($validated['period']);
+
+        $invoice = DB::transaction(function () use ($user, $plan, $validated, $creem, $product) {
+            // A double click, a second tab or the pricing-page pick racing the
+            // button must not open a second paid subscription (P1 18 Nov,
+            // checkout dobel). The account lock is held until the hosted
+            // checkout exists, so a second request waits and then finds it.
             User::query()->whereKey($user->id)->lockForUpdate()->firstOrFail();
 
+            // Any unpaid choice still open — with or without its hosted page
+            // (a page whose Creem call failed earlier is finished here).
             $open = Invoice::query()
                 ->whereIn('subscription_id', $user->subscriptions()->where('status', SubscriptionStatus::Expired)->select('id'))
                 ->where('status', InvoiceStatus::Pending)
                 ->where('due_at', '>', now())
-                ->whereNotNull('creem_checkout_url')
                 ->latest('id')
                 ->with('subscription.plan')
                 ->first();
@@ -147,50 +155,48 @@ class SubscriptionController extends Controller
             if ($open !== null
                 && $open->subscription->plan_id === $plan->id
                 && $open->subscription->billing_period->value === $validated['period']) {
-                return $open;
+                $invoice = $open;
+            } else {
+                // Another choice replaces the earlier unpaid one rather than
+                // standing beside it, so only one checkout can ever activate.
+                if ($open !== null) {
+                    $open->forceFill(['status' => InvoiceStatus::Expired])->save();
+                }
+
+                $subscription = $user->subscriptions()->create([
+                    'plan_id' => $plan->id,
+                    'billing_period' => $validated['period'],
+                    'seats' => 1,
+                    // Not entitled until the webhook says the money arrived.
+                    'status' => SubscriptionStatus::Expired,
+                ]);
+
+                $invoice = $subscription->invoices()->create([
+                    'number' => Invoice::nextNumber(),
+                    'amount' => $plan->priceFor($validated['period']),
+                    'currency' => 'USD',
+                    'status' => InvoiceStatus::Pending,
+                    'due_at' => now()->addHours(Invoice::DUE_HOURS),
+                ]);
             }
 
-            // Another choice replaces the earlier unpaid one rather than
-            // standing beside it, so only one checkout can ever activate.
-            if ($open !== null) {
-                $open->forceFill(['status' => InvoiceStatus::Expired])->save();
+            // Reused bill: the same hosted page, never a second checkout for it.
+            // Created under the lock: a Creem failure rolls the new rows back.
+            if ($invoice->creem_checkout_url === null) {
+                $checkout = $creem->subscriptionCheckout(
+                    $invoice->load('subscription.plan'),
+                    $user,
+                    $product,
+                    Founding::codeFor($validated['period']),
+                );
+                $invoice->forceFill([
+                    'creem_checkout_id' => $checkout['id'],
+                    'creem_checkout_url' => $checkout['checkout_url'],
+                ])->save();
             }
 
-            $subscription = $user->subscriptions()->create([
-                'plan_id' => $plan->id,
-                'billing_period' => $validated['period'],
-                'seats' => 1,
-                // Not entitled until the webhook says the money arrived.
-                'status' => SubscriptionStatus::Expired,
-            ]);
-
-            return $subscription->invoices()->create([
-                'number' => Invoice::nextNumber(),
-                'amount' => $plan->priceFor($validated['period']),
-                'currency' => 'USD',
-                'status' => InvoiceStatus::Pending,
-                'due_at' => now()->addHours(Invoice::DUE_HOURS),
-            ]);
+            return $invoice;
         });
-
-        // Every plan is charged at checkout: the plan's own product, never a
-        // trial. The Founding code goes on any yearly plan (dropped if Creem
-        // refuses it).
-        $product = $plan->creemProduct($validated['period']);
-
-        // Reused bill: the same hosted page, never a second checkout for it.
-        if ($invoice->creem_checkout_url === null) {
-            $checkout = $creem->subscriptionCheckout(
-                $invoice->load('subscription.plan'),
-                $user,
-                $product,
-                Founding::codeFor($validated['period']),
-            );
-            $invoice->forceFill([
-                'creem_checkout_id' => $checkout['id'],
-                'creem_checkout_url' => $checkout['checkout_url'],
-            ])->save();
-        }
 
         ProductEvents::checkoutStarted($user, 'subscription', $plan->key, $validated['period'], (int) $invoice->amount);
 
