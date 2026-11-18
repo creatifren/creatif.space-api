@@ -10,6 +10,7 @@ use App\Models\FollowerSnapshot;
 use App\Models\SocialAccount;
 use App\Models\SocialPost;
 use App\Models\User;
+use App\Services\OutstandService;
 use App\Support\SocialProviders;
 use App\Support\Workspace;
 use Carbon\CarbonImmutable;
@@ -50,6 +51,11 @@ final class InsightCollector
 
     public const PAGE_SIZE = 25;
 
+    /** Seconds one report may spend on network calls (gateway timeout is 30 s). */
+    public static float $budgetSeconds = 18.0;
+
+    private float $deadline = INF;
+
     /** "On time" = published within this many seconds of the slot. */
     public const ON_TIME_SECONDS = 600;
 
@@ -84,12 +90,21 @@ final class InsightCollector
         $footnotes = [];
         $feeds = [];
 
-        foreach ($accounts as $account) {
-            $feed = $this->feed($account, $previous->from);
-            $feeds[$account->id] = $feed;
-            [$channel, $notes] = $this->channel($owner, $account, $feed, $period, $previous);
-            $channels[] = $channel;
-            array_push($footnotes, ...$notes);
+        // One budget for every network call of this report: the gateway cuts
+        // a request at 30 s (QA P1 18 Nov, Insight answered 503). Past it,
+        // feeds stop paging and per-post numbers come back unknown.
+        $this->deadline = microtime(true) + self::$budgetSeconds;
+        OutstandService::$metricsDeadline = $this->deadline;
+        try {
+            foreach ($accounts as $account) {
+                $feed = $this->feed($account, $previous->from);
+                $feeds[$account->id] = $feed;
+                [$channel, $notes] = $this->channel($owner, $account, $feed, $period, $previous);
+                $channels[] = $channel;
+                array_push($footnotes, ...$notes);
+            }
+        } finally {
+            OutstandService::$metricsDeadline = null;
         }
 
         $current = $this->totals(array_column($channels, 'current'));
@@ -150,6 +165,13 @@ final class InsightCollector
             $provider = $this->providers->for($account);
 
             for ($page = 0; $page < self::MAX_PAGES; $page++) {
+                if ($page > 0 && microtime(true) >= $this->deadline) {
+                    // Out of time with more to read: say how far back we got.
+                    if ($items !== []) {
+                        $this->cutShort[$account->id] = min(array_column($items, 'posted_at'));
+                    }
+                    break;
+                }
                 $result = $provider->feed($account->provider_account_id, $cursor, self::PAGE_SIZE);
                 $oldest = null;
 
