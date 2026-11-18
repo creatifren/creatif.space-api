@@ -161,7 +161,7 @@ describe('P2 — scheduling horizon: past it the post is held, not refused (Pro/
 
         $post = SocialPost::query()->where('ulid', $id)->first();
         expect($post->provider_post_id)->toBeNull()
-            ->and($post->scheduled_at->toIso8601String())->toBe(now()->addDays(70)->toIso8601String())
+            ->and($post->scheduled_at->getTimestamp())->toBe(now()->addDays(70)->getTimestamp())
             ->and(SocialPostRelay::heldForLater($post))->toBeTrue()
             ->and(Credits::balance($owner))->toBe(30_000)
             ->and(count(Http::recorded(fn (HttpRequest $r) => $r->method() === 'DELETE' && str_ends_with($r->url(), '/social-posts/post_x'))))->toBe(1);
