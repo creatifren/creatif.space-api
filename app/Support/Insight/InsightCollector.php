@@ -56,7 +56,11 @@ final class InsightCollector
 
     private float $deadline = INF;
 
-    /** Accounts not read because the time budget ran out (keyed by id). @var array<int, true> */
+    /**
+     * Accounts not read because the time budget ran out (keyed by id).
+     *
+     * @var array<int, true>
+     */
     private array $skipped = [];
 
     /** "On time" = published within this many seconds of the slot. */
