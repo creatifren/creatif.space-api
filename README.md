@@ -49,6 +49,7 @@ in [mcp/README.md](mcp/README.md).
 | Media | `unkeep_file` | Let a kept file go back under the rules | All |
 | Channels | `list_channels` | Connected channels; marks ones to reconnect | All |
 | Channels | `get_connect_link` | App link to connect or reconnect a network (no token) | All |
+| Channels | `list_pinterest_boards` | A Pinterest channel's boards and its last-used board, for `pinterest.board_id` on a post | All |
 | Insight | `get_insight_summary` | Insight numbers for a month or up to 92 days | Pro / Max |
 | Insight | `list_top_posts` | The five most engaging posts of a period, with links | Pro / Max |
 | Insight | `get_best_times` | Best weekday + hour to post per channel, from the user’s own posts | Pro / Max |

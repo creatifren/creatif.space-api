@@ -24,6 +24,7 @@ destructive; `send_approval_reminder`, `decide_approval`,
 | `get_onboarding` | Get the setup checklist | yes | no | no | Reads which getting-started steps the workspace has done; changes nothing. |
 | `list_channels` | List connected channels | yes | no | no | Reads the user's connected social channels (ids needed by every post tool). |
 | `get_connect_link` | Get a link to connect a channel | yes | no | no | Returns a creatif.space link; the user connects the network themselves. |
+| `list_pinterest_boards` | List Pinterest boards | yes | no | no | Reads the boards of one of the user's connected Pinterest channels (and its last-used board), so a Pin can be sent to a board; changes nothing. |
 | `get_credits` | Get plan, limits and Credits | yes | no | no | Reads plan limits and Credit balance. |
 | `list_posts` | List posts | yes | no | no | Reads the workspace's posts. |
 | `list_failed_posts` | List failed posts | yes | no | no | Reads the user's own posts that failed to publish in the last 30 days, with each failure's reason. |

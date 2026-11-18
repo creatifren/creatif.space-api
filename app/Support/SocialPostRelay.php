@@ -240,9 +240,10 @@ class SocialPostRelay
     }
 
     /**
-     * A Pinterest account with no board chosen gets its only board, when it
-     * has exactly one. With several, the person picks (preflight says so);
-     * a relay that cannot list boards leaves it to preflight too.
+     * A Pinterest account with no board chosen gets its remembered board,
+     * else its only board (PinterestBoards::fill). With several and none
+     * remembered, the person picks (preflight says so); a relay that cannot
+     * list boards leaves it to preflight too.
      *
      * @param  iterable<SocialAccount>  $accounts
      * @param  array<string, array<string, mixed>>  $options  by account ulid
@@ -250,23 +251,7 @@ class SocialPostRelay
      */
     public function withPinterestBoards(iterable $accounts, array $options): array
     {
-        foreach ($accounts as $account) {
-            if ($account->platform !== SocialPlatform::Pinterest || ! empty($options[$account->ulid]['board_id'])) {
-                continue;
-            }
-
-            try {
-                $boards = $this->providers->named((string) $account->provider)->pinterestBoards($account->provider_account_id);
-            } catch (Throwable) {
-                continue;
-            }
-
-            if (count($boards) === 1) {
-                $options[$account->ulid] = [...($options[$account->ulid] ?? []), 'board_id' => $boards[0]['id']];
-            }
-        }
-
-        return $options;
+        return (new PinterestBoards($this->providers))->fill($accounts, $options);
     }
 
     /**

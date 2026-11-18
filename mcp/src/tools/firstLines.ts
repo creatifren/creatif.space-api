@@ -14,6 +14,7 @@ export const FIRST_LINES: Record<string, string> = {
   get_account_summary: 'Shows the user\'s plan, limits left, Credits, channels and storage in one call, so you know what they can do.',
   list_channels: 'Lists the user\'s connected social channels and their ids, the first step of the plan_week prompt.',
   get_connect_link: 'Gives the user the creatif.space link to connect or reconnect a social network.',
+  list_pinterest_boards: 'Lists the boards of a connected Pinterest channel, so a Pin can be sent to the right one.',
   get_credits: 'Shows the user\'s plan, limits and Credits, and what each send costs.',
 
   // Posts

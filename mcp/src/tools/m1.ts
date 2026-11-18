@@ -3,6 +3,7 @@ import { ToolError } from '../errors.js';
 import { defineTool, describeTool } from './define.js';
 import { shapePost, type V1Post } from './shape.js';
 import { decodeCursor, encodeCursor, pageInput, pageOf } from './paging.js';
+import { pinterestInput, pinterestOptions } from './pinterest.js';
 
 const READ_ONLY = { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false } as const;
 
@@ -279,10 +280,10 @@ export const draftPost = defineTool({
     does: "Saves a DRAFT post in creatif.space for the given channels — nothing is published or scheduled and no Credits are spent (on every plan).",
     when: "to create any new post; it is always the safe first step. The user reviews and sends it from creatif.space, or you send it later with schedule_post / publish_post (with the user’s explicit agreement) or share it with create_approval_link. To change an existing draft, use update_post instead of drafting again.",
     example: "draft_post { \"caption\": \"Winter set is live\", \"channel_ids\": [\"01JD…\"], \"file_ids\": [\"01JE…\"], \"captions_by_channel\": { \"01JF…\": \"Shorter for X\" } }",
-    rules: "Media: library file ids (from list_files, or from confirm_media_upload for a file you just uploaded) and/or public https media URLs, 10 items in all. captions_by_channel overrides the caption for channels that are also in channel_ids. type picks the placement on Facebook, Instagram and Threads.",
+    rules: "Media: library file ids (from list_files, or from confirm_media_upload for a file you just uploaded) and/or public https media URLs, 10 items in all. captions_by_channel overrides the caption for channels that are also in channel_ids. type picks the placement on Facebook, Instagram and Threads. Pinterest: a Pin needs a board — pinterest.board_id (from list_pinterest_boards) picks it; without it the channel’s last-used board (or its only board) is used.",
     errors: [
       ["file_not_ready", "call confirm_media_upload for that file, or take ids from list_files"],
-      ["invalid_input", "fix what details names (e.g. a captions_by_channel id not in channel_ids, more than 10 media)"],
+      ["invalid_input", "fix what details names (e.g. a captions_by_channel id not in channel_ids, more than 10 media, a board not on that Pinterest account: list_pinterest_boards)"],
       ["not_found", "take channel ids from list_channels and file ids from list_files"],
       ["reconnect_required", "the user reconnects the channel in creatif.space → Channels"],
       ["scope_missing", "reconnect and allow \"draft\""],
@@ -300,10 +301,12 @@ export const draftPost = defineTool({
       .optional()
       .describe('Per-channel caption overrides: { "<channel id>": "caption" }'),
     type: z.enum(['post', 'reels', 'story']).default('post').describe('Placement on Facebook, Instagram and Threads; others post normally'),
+    pinterest: pinterestInput,
   },
   annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false },
   notFound: { what: 'A channel or file', next: 'Take channel ids from list_channels and file ids from list_files (or confirm_media_upload), then call again.' },
-  run: async (args, { v1 }) => {
+  run: async (args, ctx) => {
+    const { v1 } = ctx;
     const unknownChannels = Object.keys(args.captions_by_channel ?? {}).filter((id) => !args.channel_ids.includes(id));
     if (unknownChannels.length > 0) {
       throw new ToolError(
@@ -321,7 +324,9 @@ export const draftPost = defineTool({
       });
     }
 
+    const options = args.pinterest ? await pinterestOptions(ctx, args.channel_ids, args.pinterest.board_id) : undefined;
     const res = await v1.post<{ data: V1Post }>('/social-posts', {
+      ...(options ? { options } : {}),
       caption: args.caption,
       account_ids: args.channel_ids,
       ...(args.captions_by_channel ? { captions: args.captions_by_channel } : {}),

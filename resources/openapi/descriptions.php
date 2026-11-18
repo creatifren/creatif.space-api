@@ -19,6 +19,11 @@ return [
         .'owner\'s words), last_verified_at: ISO 8601 | null, needs_attention: boolean. Connected channels are checked right '
         .'after they connect and once a day; a failed daily check emails the owner once (publish_failed switch). '
         .'Removed channels are not listed.',
+    'api.v1.social-accounts.pinterest-boards' => 'A Pinterest channel\'s boards: data: [{id, name}], meta: {default_board_id: string | null} '
+        .'(the board the channel used last; a Pin that names none goes there, else the account\'s only board). '
+        .'Pick a board per post with options.{account id}.board_id on POST /social-posts, PATCH /social-posts/{post} (draft or '
+        .'post waiting for approval) or POST /social-posts/{post}/send; a board that is not one of the account\'s boards is 422 on '
+        .'that field, and the board given becomes the channel\'s default. 422 for a channel that is not Pinterest; 502 when Pinterest does not answer.',
     'api.v1.social-accounts.verify' => 'Check now: one live, read-only check of a connected channel through the publishing '
         .'relay. Nothing is posted. Answers {data: account}, the channel as GET /social-accounts lists it (health_status, health_reason, '
         .'last_verified_at). 429 {reason: "too_soon", retry_after} more than once a minute per channel; 409 {reason: '

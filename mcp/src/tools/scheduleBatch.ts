@@ -4,6 +4,7 @@ import { ToolError, type ErrorCode } from '../errors.js';
 import { idempotencyKey, V1Error } from '../v1.js';
 import { defineTool, describeTool, type ToolContext } from './define.js';
 import { preview, type SendPreview } from './m2.js';
+import { pinterestInput, setPinterestBoard } from './pinterest.js';
 import { shapePost, type V1Post } from './shape.js';
 
 /*
@@ -23,6 +24,7 @@ const TTL_MS = 10 * 60_000;
 const item = z.object({
   post_id: z.string().trim().min(10).max(26).describe('A draft’s id (list_posts status "draft", or draft_post)'),
   scheduled_at: z.iso.datetime({ offset: true }).describe('When it goes out, ISO 8601 in the future (e.g. 2026-11-20T09:00:00+07:00)'),
+  pinterest: pinterestInput,
 });
 
 type Item = z.infer<typeof item>;
@@ -107,7 +109,7 @@ export const schedulePosts = defineTool({
     does: 'Schedules up to 10 DRAFTS to publish publicly on their channels, each at its own time, after the user agrees to one preview of every post, its channels and the total Credit cost. All or none: if one is refused, none stays scheduled and no Credits are kept.',
     when: 'when the user wants a set of drafts (a planned week) to go out later; for one draft use schedule_post, to send now publish_post. Two steps: call with confirm false (default) to get the preview; show it to the user, and only after they explicitly agree call again with the same posts and confirm: true.',
     example: 'schedule_posts { "posts": [{ "post_id": "01JD…", "scheduled_at": "2026-11-20T09:00:00+07:00" }, { "post_id": "01JE…", "scheduled_at": "2026-11-21T09:00:00+07:00" }] } → { confirmation_required: true, posts, total_credit_cost }; then with "confirm": true → { scheduled: [...] }',
-    rules: 'The confirm schedules exactly what that preview showed. Credits are charged when they are scheduled (Monthly Credits first, then the Top-up balance; on every plan). Every post counts against the 20 sends a day connected apps may make. confirm: true without a current preview of the same posts and times (shown in the last 10 minutes) returns a preview again and schedules nothing. Drafts waiting for approval cannot be scheduled here.',
+    rules: 'The confirm schedules exactly what that preview showed. Credits are charged when they are scheduled (Monthly Credits first, then the Top-up balance; on every plan). Every post counts against the 20 sends a day connected apps may make. confirm: true without a current preview of the same posts and times (shown in the last 10 minutes) returns a preview again and schedules nothing. Drafts waiting for approval cannot be scheduled here. A Pin needs a Pinterest board: each post’s pinterest.board_id (from list_pinterest_boards) sets it; without it the channel’s last-used board, or its only board, is used.',
     errors: [
       ['preview_stale', 'nothing was scheduled: channels or Credits changed since the preview; show the user the new preview in details.preview and confirm again only if they agree'],
       ['batch_failed', 'nothing was scheduled: details.failed_post_id was refused (details.reason) and the others were taken back; fix that post or leave it out, preview again'],
@@ -132,6 +134,11 @@ export const schedulePosts = defineTool({
     const dupes = ids.filter((id, i) => ids.indexOf(id) !== i);
     if (dupes.length) {
       throw new ToolError('invalid_input', 'A post is listed more than once.', 'List each draft once, with one time, then call again.', { post_ids: [...new Set(dupes)] });
+    }
+    // A board named for a post's Pinterest channel is set on the draft first
+    // (it is not part of the preview's signed price, so the confirm still matches).
+    for (const p of posts) {
+      if (p.pinterest) await setPinterestBoard(ctx, p.post_id, p.pinterest.board_id);
     }
     const key = keyOf(ctx.auth.extra.userUlid, posts);
 

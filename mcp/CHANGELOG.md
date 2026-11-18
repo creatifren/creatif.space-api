@@ -7,6 +7,12 @@ Versions of the remote MCP server at `https://mcp.creatif.space/mcp`
 
 ## Unreleased
 
+Pinterest boards (bug b202611140812: a Pin sent from a connected app failed with `missing_board` and no tool could name a board):
+
+- `list_pinterest_boards` (new, read-only): a Pinterest channel's boards and the board it used last (`default_board_id`).
+- `pinterest.board_id` (optional) on `draft_post`, `update_post`, `schedule_post`, `schedule_posts` and `publish_post`; checked against that channel's boards. The board is remembered per channel, so later Pins need none (an account with one board never does).
+- A `missing_board` refusal's `next_step` names `list_pinterest_boards` and `pinterest.board_id`; send previews list it in `blocked` before anything is confirmed.
+
 Annotations, from OpenAI's ChatGPT Apps scan (14 Nov 2026):
 
 - `destructiveHint: true` on `update_post` (`file_ids` replaces the post's media) and `confirm_media_upload` (a file that fails its check is deleted).
@@ -16,7 +22,7 @@ Annotations, from OpenAI's ChatGPT Apps scan (14 Nov 2026):
 
 ## 0.3.0 — 2026-11-12
 
-48 tools (was 11). Every description follows the agent shape (what / when to
+49 tools (was 11). Every description follows the agent shape (what / when to
 use / example / errors → next step, #78), and every error is
 `{code, message, next_step, details}` (#76).
 

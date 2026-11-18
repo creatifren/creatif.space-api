@@ -84,6 +84,12 @@ export const OUTPUT_SCHEMAS: Record<string, z.ZodRawShape> = {
     count: z.number(),
     spaces: z.array(loose({ id: str, title: opt(str), status: opt(str), url: opt(str) })),
   },
+  list_pinterest_boards: {
+    next_cursor: z.string().nullable(),
+    boards: z.array(loose({ id: str, name: str, default: z.boolean() })),
+    default_board_id: str.nullable(),
+    next_step: str,
+  },
   get_onboarding: {
     steps: z.array(loose({ key: str, label: str, done: z.boolean(), at: str.nullable() })),
     done_count: z.number(),

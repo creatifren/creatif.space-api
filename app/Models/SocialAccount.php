@@ -41,6 +41,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
  * @property CarbonImmutable|null $last_verified_at
  * @property CarbonImmutable|null $health_notified_at
  * @property CarbonImmutable|null $removed_at a disconnected channel the owner removed: hidden, kept for history
+ * @property string|null $pinterest_default_board_id Pinterest: the board used last; a Pin naming none goes there (PinterestBoards)
  */
 class SocialAccount extends Model implements WorkspaceOwned
 {
@@ -64,6 +65,7 @@ class SocialAccount extends Model implements WorkspaceOwned
         'network_unique_id',
         'network_webhook_reference_id',
         'removed_at',
+        'pinterest_default_board_id',
     ];
 
     /**

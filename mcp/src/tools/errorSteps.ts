@@ -70,6 +70,7 @@ export const STATE_TOOL: Record<string, string> = {
   // Channels
   list_channels: 'list_channels',
   get_connect_link: 'list_channels',
+  list_pinterest_boards: 'list_channels',
   // Insight
   get_insight_summary: 'get_insight_summary',
   list_top_posts: 'list_top_posts',
