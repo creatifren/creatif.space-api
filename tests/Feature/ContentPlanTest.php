@@ -122,6 +122,14 @@ describe('scope', function () {
         expect($plan['scope']['timezone'])->toBe(config('app.timezone'));
     });
 
+    it('defaults to the account\'s own timezone when one is set (QA-SOC-008)', function () {
+        $owner = cpOwner();
+        $owner->forceFill(['timezone' => 'Indian/Maldives'])->save();
+        $plan = cpPlan($this, $owner, ['timezone' => null]);
+
+        expect($plan['scope']['timezone'])->toBe('Indian/Maldives');
+    });
+
     it('narrows to the scoped channels, and filters by channel and dates inside the scope only', function () {
         $owner = cpOwner();
         $ig = cpAccount($owner, 'instagram');

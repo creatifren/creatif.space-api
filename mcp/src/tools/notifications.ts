@@ -68,7 +68,7 @@ export const updateNotificationSettings = defineTool({
     does: 'Turns the user’s post_missed_or_failed (“Post missed / failed”), approval_decided or weekly_digest email on or off, or sets the weekly digest’s timezone, and returns all settings.',
     when: 'when the user asks to stop or start one of these emails (e.g. "stop the weekly summary", "tell me when a post misses its time"). To only see them, use get_notification_settings.',
     example: 'update_notification_settings { "post_missed_or_failed": true } → { settings: { post_missed_or_failed: true, publish_failed: true, approval_decided: true, weekly_digest: false } }',
-    rules: 'Give at least one switch as true or false, or timezone (IANA, e.g. "Asia/Jakarta"; null resets it); the rest stay as they are. post_missed_or_failed and publish_failed are one switch here: give one of them. Only change what the user asked for. Email only: the in-app bell stays. Account and storage emails cannot be turned off.',
+    rules: 'Give at least one switch as true or false, x post_missed_or_failed and publish_failed are one switch here: give one of them. Only change what the user asked for. Email only: the in-app bell stays. Account and storage emails cannot be turned off.',
     errors: [
       ['invalid_input', 'pass at least one of post_missed_or_failed, approval_decided, weekly_digest as true/false, or a valid IANA timezone'],
       ['scope_missing', 'reconnect and allow "draft"'],
@@ -82,7 +82,7 @@ export const updateNotificationSettings = defineTool({
     publish_failed: z.boolean().optional().describe('The same switch as post_missed_or_failed (older name)'),
     approval_decided: z.boolean().optional().describe('Email when a client approves or asks for changes'),
     weekly_digest: z.boolean().optional().describe('The Monday 08:00 weekly summary email'),
-    timezone: z.string().trim().min(1).max(64).nullable().optional().describe('IANA timezone for the weekly digest, e.g. "Asia/Jakarta"; null resets it'),
+    timezone: z.string().trim().min(1).max(64).nullable().optional().describe('IANA timezone for the weekly digest, e.g. "Europe/London"; null resets it. Omit it unless the user asked to change the timezone'),
   },
   annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false },
   run: async (args, { v1 }) => {

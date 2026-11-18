@@ -235,9 +235,13 @@ class SocialApprovalController extends Controller
     {
         $from = $validated['date_from'] ?? $link?->scope_from?->format('Y-m-d');
         $to = $validated['date_to'] ?? $link?->scope_to?->format('Y-m-d');
+        // No zone given: the account's own (Settings), then the app's — not
+        // Asia/Jakarta for a user who set Maldives (QA-SOC-008).
+        $ownTz = Workspace::owner($user)->getAttributes()['timezone'] ?? null;
+        $default = is_string($ownTz) && $ownTz !== '' ? $ownTz : (string) config('app.timezone');
         $tz = array_key_exists('timezone', $validated)
-            ? ($validated['timezone'] ?: (string) config('app.timezone'))
-            : (($link === null ? null : $link->scope_timezone) ?? (string) config('app.timezone'));
+            ? ($validated['timezone'] ?: $default)
+            : (($link === null ? null : $link->scope_timezone) ?? $default);
 
         if ($from === null || $to === null || $to < $from) {
             throw ValidationException::withMessages(['date_to' => 'The plan ends before it starts.']);

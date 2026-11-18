@@ -196,6 +196,26 @@ describe('delete', function () {
         expect(File::query()->count())->toBe(1);
     });
 
+    it('moves a file to the Trash once its Space was deleted (QA-SPC-008)', function () {
+        Storage::fake('s3');
+        $user = User::factory()->create();
+        $file = File::factory()->for($user)->create();
+        $space = Space::factory()->for($user)->create();
+        SpaceItem::factory()->for($space)->create(['file_id' => $file->id]);
+        $space->delete();
+
+        $this->actingAs($user)->deleteJson("/api/v1/files/{$file->ulid}")->assertNoContent();
+
+        expect(File::onlyTrashed()->count())->toBe(1);
+    });
+
+    it('says a 0-byte file is empty, not the validator line (QA-FILE-007)', function () {
+        $this->actingAs(User::factory()->create())
+            ->postJson('/api/v1/files/presign', ['name' => 'empty.jpg', 'mime_type' => 'image/jpeg', 'size_bytes' => 0])
+            ->assertUnprocessable()
+            ->assertJsonPath('errors.size_bytes.0', 'This file is empty (0 bytes). Pick another file.');
+    });
+
     it('moves the file to the Trash once nothing references it', function () {
         Storage::fake('s3');
         $user = User::factory()->create();

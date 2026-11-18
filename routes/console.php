@@ -87,7 +87,8 @@ Schedule::job(new PruneStaleUploads)->hourly();
  * prune, so a file that was both pending and trashed is already gone by
  * the time this looks.
  */
-Schedule::job(new PurgeTrashedFiles)->dailyAt('01:45');
+// Hourly: a file at "0 days left" goes within the hour, not up to a day later (QA-FILE-014).
+Schedule::job(new PurgeTrashedFiles)->hourlyAt(45)->withoutOverlapping();
 
 /*
  * Media v2 retention: post media past its rule (MediaRetention). After the

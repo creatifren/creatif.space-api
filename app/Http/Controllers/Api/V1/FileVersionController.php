@@ -63,6 +63,8 @@ class FileVersionController extends Controller
         $validated = $request->validate([
             'size_bytes' => ['required', 'integer', 'min:1'],
             'note' => ['sometimes', 'nullable', 'string', 'max:500'],
+        ], [
+            'size_bytes.min' => 'This file is empty (0 bytes). Pick another file.',
         ]);
 
         /* The old bytes stay, so a replacement costs the new size on top of
