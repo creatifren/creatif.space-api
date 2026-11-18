@@ -163,23 +163,32 @@ class CreemWebhookController extends Controller
         }
 
         $transaction = $object['last_transaction'] ?? $creem->transaction($transactionId);
+        // A 100%-off code (Sales' NAME1M): Creem charges $0 but the
+        // subscription is live and paid for by the discount. It buys the plan
+        // like any payment (P1 18 Nov: code users stayed Free).
+        $fullyDiscounted = self::fullyDiscounted($object, $transaction);
         // Creem's trial opens with a $0 "paid" transaction (the card check).
         // It is not the first payment: it starts the trial, or — not
-        // trialing — is recorded nowhere. Never a 422, or Creem retries it
-        // forever and the trial never shows.
-        if (($transaction['amount'] ?? null) === 0) {
-            if (($object['status'] ?? null) === 'trialing') {
-                CreemTrial::start($subscription, $object);
-            } else {
-                Log::info('billing.zero_paid_ignored', ['subscription' => $subscription->ulid, 'transaction' => $transactionId]);
-            }
+        // trialing and not a full discount — is recorded nowhere. Never a
+        // 422, or Creem retries it forever and the trial never shows.
+        if (($object['status'] ?? null) === 'trialing' && ($transaction['amount'] ?? null) === 0) {
+            CreemTrial::start($subscription, $object);
+
+            return;
+        }
+        if (($transaction['amount'] ?? null) === 0 && ! $fullyDiscounted) {
+            Log::info('billing.zero_paid_ignored', ['subscription' => $subscription->ulid, 'transaction' => $transactionId]);
 
             return;
         }
         $this->require(($transaction['id'] ?? '') === $transactionId
             && ($transaction['currency'] ?? '') === 'USD'
             && in_array($transaction['status'] ?? '', ['paid', 'completed'], true)
-            && is_int($transaction['amount'] ?? null) && $transaction['amount'] > 0);
+            && is_int($transaction['amount'] ?? null)
+            && ($transaction['amount'] > 0 || $fullyDiscounted));
+        // What was actually charged: a full discount is a $0 invoice, so no
+        // revenue and no affiliate commission is counted on it.
+        $charged = $fullyDiscounted ? 0 : $transaction['amount'];
 
         [$plan, $period] = $this->plan($this->id($object['product'] ?? null));
         $start = CarbonImmutable::parse($object['current_period_start_date'] ?? throw ValidationException::withMessages(['object' => 'Missing billing period.']));
@@ -227,10 +236,10 @@ class CreemWebhookController extends Controller
         $planBefore = ProductEvents::planOf($subscription->user);
         $invoice = $subscription->invoices()->where('status', InvoiceStatus::Pending)->oldest('id')->lockForUpdate()->first();
         if ($invoice === null) {
-            $invoice = $subscription->invoices()->create(['number' => Invoice::nextNumber(), 'amount' => $transaction['amount'], 'currency' => 'USD']);
+            $invoice = $subscription->invoices()->create(['number' => Invoice::nextNumber(), 'amount' => $charged, 'currency' => 'USD']);
         }
         $invoice->update([
-            'status' => InvoiceStatus::Paid, 'amount' => $transaction['amount'], 'currency' => 'USD',
+            'status' => InvoiceStatus::Paid, 'amount' => $charged, 'currency' => 'USD',
             'creem_transaction_id' => $transactionId, 'paid_at' => now(), 'raw_notification' => $object,
         ]);
 
@@ -250,12 +259,35 @@ class CreemWebhookController extends Controller
         CommissionEngine::forInvoice($invoice);
         // Once per subscription: a replayed or later paid event finds a paid invoice.
         if ($first) {
-            ProductEvents::subscriptionStarted($subscription->user, $plan->key, $period, (int) $transaction['amount']);
+            ProductEvents::subscriptionStarted($subscription->user, $plan->key, $period, (int) $charged);
         }
         ProductEvents::planChanged($subscription->user, $planBefore);
         if ($first) {
             DB::afterCommit(fn () => $subscription->user->notify(new SubscriptionStarted($subscription->fresh()->load('plan'), $invoice)));
         }
+    }
+
+    /**
+     * A payment of $0 that a 100%-off discount paid for: Creem says the
+     * subscription is active and either names the redeemed discount or shows
+     * the price before the discount with nothing charged.
+     *
+     * @param  array<string, mixed>  $object
+     * @param  array<string, mixed>  $transaction
+     */
+    public static function fullyDiscounted(array $object, array $transaction): bool
+    {
+        if (($object['status'] ?? null) !== 'active') {
+            return false;
+        }
+        $amount = $transaction['amount'] ?? null;
+        $paid = $transaction['amount_paid'] ?? null;
+        if ($paid === 0 && is_int($amount) && $amount > 0) {
+            return true;
+        }
+        $discounted = ! empty($object['discount']) || (int) ($transaction['discount_amount'] ?? 0) > 0;
+
+        return $discounted && $amount === 0 && ($paid === null || $paid === 0);
     }
 
     /** Another paid plan still running at Creem (not a trial, not set to end, not a staff comp). */
