@@ -9,27 +9,24 @@ use App\Models\SocialPost;
 use App\Models\User;
 use App\Notifications\ApprovalLinkBound;
 use Illuminate\Http\Exceptions\HttpResponseException;
-use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 
 /**
  * Who may decide on an approval link (Meeting #02, 11 Nov 2026).
  *
- * A link with an approver_email is for that person only (HQ
- * q202611141515, b202611140955): LOOKING needs them signed in too, as do
- * deciding (approve, ask for changes, take back) and commenting — a
- * signed-in web session (the app's Sanctum cookie) whose VERIFIED email is
- * the link's approver_email, compared case-insensitively. What they do is
- * recorded under that account's name, never a typed one:
+ * Looking stays open: the token shows the plan to anyone holding it.
+ * Deciding (approve, ask for changes, take back) needs a signed-in web
+ * session (the app's Sanctum cookie) whose VERIFIED email is the link's
+ * approver_email, compared case-insensitively:
  *
  *   401 {reason: "sign_in_required", methods: ["google", "email"]}
  *
  *   403 {reason: "approver_mismatch", expected_hint: "r***@d***.com"}
  *
- * A link made before approver_email existed keeps the old rules: anyone
- * holding the token may look and comment, and the first signed-in person
- * (verified email) to decide becomes its approver; the owner is told.
+ * A link made before approver_email existed is bound on first use: the
+ * first signed-in person (verified email) to decide becomes its approver,
+ * and the owner is told by email.
  */
 final class ApproverGate
 {
@@ -62,76 +59,7 @@ final class ApproverGate
             ], 403));
         }
 
-        self::markBound($link);
-
         return $user;
-    }
-
-    /**
-     * Who may LOOK at this link: null when the page may be shown, else the
-     * 401 / 403 answer — the editor's name and who the link is for (a hint),
-     * never a post. A link without an approver_email stays open.
-     */
-    public static function viewRefusal(Request $request, SocialApprovalLink $link): ?JsonResponse
-    {
-        if ($link->approver_email === null) {
-            return null;
-        }
-
-        $user = self::sessionUser($request);
-        if ($user !== null && self::matches($user, $link)) {
-            self::markBound($link);
-
-            return null;
-        }
-        // The link's own workspace may look ("Open as client", read-only):
-        // deciding still needs the approver (authorize).
-        if ($user !== null && Workspace::contains($user, $link->user_id)) {
-            return null;
-        }
-
-        $base = [
-            'editor' => $link->user->name,
-            'expires_at' => $link->expires_at?->toIso8601String(),
-            'approver' => self::viewer($request, $link),
-        ];
-
-        return $user === null
-            ? response()->json([
-                'message' => 'Sign in to see the posts on this link.',
-                'reason' => 'sign_in_required',
-                'methods' => self::METHODS,
-                ...$base,
-            ], 401)
-            : response()->json([
-                'message' => 'This link was sent to a different email address. Sign in with that address to see it.',
-                'reason' => 'approver_mismatch',
-                'expected_hint' => self::hint($link->approver_email),
-                ...$base,
-            ], 403);
-    }
-
-    /**
-     * The first time the invited approver is seen signed in, the link is
-     * bound to their account (approver_bound_at; b202611141406: links sent
-     * to an address never recorded when that person arrived).
-     */
-    public static function markBound(SocialApprovalLink $link): void
-    {
-        if ($link->approver_email === null || $link->approver_bound_at !== null) {
-            return;
-        }
-
-        SocialApprovalLink::query()->whereKey($link->id)->whereNull('approver_bound_at')->update(['approver_bound_at' => now()]);
-        $link->approver_bound_at = now()->toImmutable();
-    }
-
-    /** The name a decision or comment is recorded under: the account's own, never a typed one. */
-    public static function nameOf(User $user): string
-    {
-        $name = trim((string) $user->name);
-
-        return $name !== '' ? $name : $user->email;
     }
 
     /** The web-session user (never a bearer token: an approver is a person). */
@@ -222,10 +150,6 @@ final class ApproverGate
 
         return [
             'approver_required' => true,
-            // Looking needs the invited approver too (a link with an approver_email).
-            'view_requires_sign_in' => $link->approver_email !== null,
-            // "Signed in as X — this link is for Y": the account's name, as decisions are recorded.
-            'signed_in_name' => $user === null ? null : self::nameOf($user),
             'approver_hint' => $link->approver_email === null ? null : self::hint($link->approver_email),
             // An old link nobody has decided on yet: the first signed-in person binds it.
             'bind_on_first_decision' => $link->approver_email === null,

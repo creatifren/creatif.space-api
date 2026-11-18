@@ -159,28 +159,28 @@ describe('the client decision survives a closing tab', function () {
         ['api.v1.approval-links.decide', '/api/v1/a/tok/posts/p/decision'],
         ['api.v1.approval-links.retract', '/api/v1/a/tok/posts/p/retract'],
         ['api.v1.approval-links.approve-all', '/api/v1/a/tok/approve-all'],
-        // Comments too (b202611140955): on a link for one person, only that signed-in approver comments.
-        ['api.v1.approval-links.comment', '/api/v1/a/tok/posts/p/comments'],
     ]);
 
-    it('keeps the email sign-in request token-only (no session, no CSRF layer)', function (string $name) {
+    it('keeps comments and the email sign-in request token-only (no session, no CSRF layer)', function (string $name) {
         $middleware = app('router')->gatherRouteMiddleware(Route::getRoutes()->getByName($name));
 
         expect($middleware)->not->toContain(EnsureFrontendRequestsAreStateful::class)
             ->and(collect($middleware)->contains(fn ($m) => str_contains((string) $m, 'Throttle')))->toBeTrue();
-    })->with(['api.v1.approval-links.email-link']);
+    })->with(['api.v1.approval-links.comment', 'api.v1.approval-links.email-link']);
 
-    it('an old link (no approver email) still takes a comment from the token holder, tied to no account', function () {
+    it('starts no session and honours no login from the app\'s origin', function () {
         $owner = rtOwner();
         [$post, $link] = rtHeld($owner);
 
-        $this->withHeaders(['Origin' => 'https://app.test', 'Referer' => 'https://app.test/a/x'])
+        // A stateful-looking request (the app's origin and cookies): before,
+        // Sanctum started a session here and set its cookies.
+        $response = $this->withHeaders(['Origin' => 'https://app.test', 'Referer' => 'https://app.test/a/x'])
             ->withCookies(['laravel_session' => 'someone-elses'])
             ->postJson("/api/v1/a/{$link->token}/posts/{$post->ulid}/comments", ['name' => 'Andi', 'body' => 'Nice'])
-            ->assertCreated()
-            ->assertJsonPath('data.author', 'Andi');
+            ->assertCreated();
 
-        expect(SocialPostComment::query()->latest('id')->first()->user_id)->toBeNull();
+        expect($response->headers->getCookies())->toBe([])
+            ->and(SocialPostComment::query()->latest('id')->first()->user_id)->toBeNull();
 
         // The token is still the only key.
         $this->withHeaders(['Origin' => 'https://app.test'])

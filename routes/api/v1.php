@@ -215,9 +215,8 @@ Route::post('/profiles/{handle}/spaces/{slug}/unlock', [PublicSpaceController::c
     ->middleware('throttle:10,1')
     ->name('api.v1.profiles.spaces.unlock');
 
-// Approval link — a link with an approver email shows its posts only to that
-// approver signed in (401 / 403 otherwise, ApproverGate::viewRefusal); an old
-// link without one stays open to the token holder.
+// Approval link — anyone holding the token may look (no sign-in); deciding
+// needs the invited approver signed in (below).
 Route::get('/a/{token}', [PublicApprovalController::class, 'show'])
     ->middleware('throttle:60,1')
     ->name('api.v1.approval-links.show');
@@ -241,18 +240,16 @@ Route::middleware(AcceptBeaconJson::class)->group(function () {
     Route::post('/a/{token}/approve-all', [PublicApprovalController::class, 'approveAll'])
         ->middleware('throttle:10,1')
         ->name('api.v1.approval-links.approve-all');
-    // Comments too: on a link for one person, only that signed-in approver
-    // comments (the session cookie must arrive), under their account's name.
-    Route::post('/a/{token}/posts/{post}/comments', [PublicApprovalController::class, 'comment'])
-        ->middleware('throttle:30,1')
-        ->name('api.v1.approval-links.comment');
 });
 
-// The email sign-in request stays token-only: no session, no cookie login,
-// no CSRF — nothing a cross-site request could ride on.
+// Comments and the email sign-in request stay token-only: no session, no
+// cookie login, no CSRF — nothing a cross-site request could ride on.
 Route::withoutMiddleware([EnsureFrontendRequestsAreStateful::class])
     ->middleware(AcceptBeaconJson::class)
     ->group(function () {
+        Route::post('/a/{token}/posts/{post}/comments', [PublicApprovalController::class, 'comment'])
+            ->middleware('throttle:30,1')
+            ->name('api.v1.approval-links.comment');
         // A one-time sign-in link by email; always 202 (never says whether
         // the address matched). Also throttled per link + address.
         Route::post('/a/{token}/email-link', [PublicApprovalController::class, 'emailLink'])
