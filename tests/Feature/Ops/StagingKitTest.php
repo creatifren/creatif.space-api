@@ -62,7 +62,7 @@ it('keeps Creem in test mode and every outside service off', function () {
         ->and($env['FRONTEND_URL'])->toStartWith('https://staging-');
 
     $empty = ['APP_KEY', 'DB_PASSWORD', 'CREEM_API_KEY', 'CREEM_WEBHOOK_SECRET', 'CREEM_FOUNDING_CODE',
-        'OUTSTAND_API_KEY', 'OUTSTAND_WEBHOOK_SECRET', 'POSTFORME_API_KEY', 'AI_API_KEY', 'AI_BASE_URL',
+        'OUTSTAND_API_KEY', 'OUTSTAND_WEBHOOK_SECRET', 'POSTFORME_API_KEY', 'ANTHROPIC_API_KEY',
         'POSTHOG_API_KEY', 'POSTHOG_PERSONAL_API_KEY', 'RESEND_API_KEY', 'AWS_ACCESS_KEY_ID',
         'AWS_SECRET_ACCESS_KEY', 'GOOGLE_CLIENT_SECRET', 'PASSPORT_PRIVATE_KEY', 'MCP_INTROSPECT_SECRET', 'HEALTH_TOKEN'];
     foreach ($empty as $key) {

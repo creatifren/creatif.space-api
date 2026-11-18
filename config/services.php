@@ -160,11 +160,13 @@ return [
         'contact_email' => env('ENTERPRISE_CONTACT_EMAIL', 'halo@creatif.space'),
     ],
 
-    // Any OpenAI-compatible chat endpoint, for the composer's caption help.
+    // Claude (Anthropic Messages API) for the composer's caption help (Rizal, 19 Nov: Opus now,
+    // Sonnet after ~1,000 users, Haiku when volume is large).
+    // The model is a setting (ANTHROPIC_MODEL): switching needs no code.
     'ai' => [
-        'key' => env('AI_API_KEY'),
-        'base_url' => env('AI_BASE_URL'),
-        'model' => env('AI_MODEL'),
+        'key' => env('ANTHROPIC_API_KEY'),
+        'base_url' => env('ANTHROPIC_BASE_URL', 'https://api.anthropic.com/v1'),
+        'model' => env('ANTHROPIC_MODEL', 'claude-opus-5-5'),
     ],
 
     /*

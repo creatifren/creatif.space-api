@@ -7,7 +7,7 @@
 |
 | The only AI path: POST /social-captions/assist ("Improve with AI" and
 | "Add hashtags") on a caption the user already wrote. The endpoint itself
-| is services.ai (AI_API_KEY, AI_BASE_URL, AI_MODEL). Nothing writes a
+| is services.ai (ANTHROPIC_API_KEY, ANTHROPIC_BASE_URL, ANTHROPIC_MODEL). Nothing writes a
 | caption from scratch any more.
 |
 */

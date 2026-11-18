@@ -16,13 +16,17 @@ use Illuminate\Validation\ValidationException;
  * AI path (Rizal, 13 Nov: no caption written from scratch). It works on
  * text the user already wrote: at least ai_assist.min_chars non-whitespace
  * characters (AI_ASSIST_MIN_CHARS, default 20), else 422. Any
- * OpenAI-compatible chat endpoint (AI_BASE_URL + AI_API_KEY + AI_MODEL).
+ * Claude through the Anthropic Messages API (ANTHROPIC_API_KEY, model from
+ * ANTHROPIC_MODEL, default claude-opus-5-5 — Rizal, 19 Nov). No fallback to
+ * another provider: a failure is a plain 502.
  * The answer comes back as a suggestion — the caption is never written here.
  *
  * Pro and Max (plans v2: feature `ai_caption`, hashtags included).
  */
 class CaptionAssistController extends Controller
 {
+    private const ANTHROPIC_VERSION = '2023-06-01';
+
     private const PROMPTS = [
         'rewrite' => 'Rewrite this social media caption so it reads better. Keep its language, meaning, links and hashtags. Reply with the caption only.',
         'hashtags' => 'Suggest 5 to 10 relevant hashtags for this social media caption, in its language. Reply with the hashtags only, space-separated.',
@@ -49,14 +53,16 @@ class CaptionAssistController extends Controller
         abort_unless($config['key'] && $config['base_url'] && $config['model'], 503, 'AI is not set up.');
 
         try {
-            $response = Http::withToken($config['key'])
+            $response = Http::withHeaders([
+                'x-api-key' => $config['key'],
+                'anthropic-version' => self::ANTHROPIC_VERSION,
+            ])
                 ->timeout(30)
-                ->post(rtrim($config['base_url'], '/').'/chat/completions', [
+                ->post(rtrim($config['base_url'], '/').'/messages', [
                     'model' => $config['model'],
-                    // Not kept by OpenAI for later (evals, distillation) — CTO q1550.
-                    'store' => false,
+                    'max_tokens' => 1024,
+                    'system' => self::PROMPTS[$validated['mode']],
                     'messages' => [
-                        ['role' => 'system', 'content' => self::PROMPTS[$validated['mode']]],
                         ['role' => 'user', 'content' => $validated['caption']],
                     ],
                 ]);
@@ -64,7 +70,10 @@ class CaptionAssistController extends Controller
             abort(502, 'The AI did not answer — try again.');
         }
 
-        $text = trim((string) $response->json('choices.0.message.content'));
+        $text = trim(collect((array) $response->json('content'))
+            ->where('type', 'text')
+            ->pluck('text')
+            ->implode(''));
         abort_if($response->failed() || $text === '', 502, 'The AI did not answer — try again.');
 
         return response()->json(['data' => ['text' => $text]]);
