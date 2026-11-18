@@ -309,12 +309,8 @@ final class PlanScope
             ->whereIn('social_posts.user_id', Workspace::memberIds(Workspace::owner($link->user)))
             ->where(fn ($q) => $q
                 ->whereIn('social_posts.status', [SocialPostStatus::Scheduled->value, SocialPostStatus::Published->value])
-                // A draft shows (view only, never decidable) once it has a
-                // time in the window — b202611140923: a plan of the coming
-                // weeks showed none of the drafts already given a slot. One
-                // marked for review shows too; without a slot it has no day.
                 ->orWhere(fn ($d) => $d->where('social_posts.status', SocialPostStatus::Draft->value)
-                    ->where(fn ($r) => $r->whereNotNull('social_posts.scheduled_at')->orWhereNotNull('social_posts.review_requested_at'))));
+                    ->whereNotNull('social_posts.review_requested_at')));
     }
 
     /**
