@@ -36,6 +36,7 @@ use Illuminate\Support\Facades\Storage;
  * @property int|null $width
  * @property int|null $height
  * @property array<string, mixed>|null $exif
+ * @property array<string, mixed>|null $variants
  * @property string $source
  * @property array<string, mixed>|null $source_meta
  * @property CarbonImmutable|null $deleted_at
@@ -119,6 +120,7 @@ class File extends Model implements WorkspaceOwned
     {
         return [
             'exif' => 'array',
+            'variants' => 'array',
             'source_meta' => 'array',
             'purge_at' => 'datetime',
             'kept_at' => 'datetime',
