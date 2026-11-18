@@ -52,7 +52,7 @@ final class InsightCollector
     public const PAGE_SIZE = 25;
 
     /** Seconds one report may spend on network calls (gateway timeout is 30 s). */
-    public static float $budgetSeconds = 18.0;
+    public static float $budgetSeconds = 14.0;
 
     private float $deadline = INF;
 
@@ -97,7 +97,10 @@ final class InsightCollector
         OutstandService::$metricsDeadline = $this->deadline;
         try {
             foreach ($accounts as $account) {
-                $feed = $this->feed($account, $previous->from);
+                // Out of time: the rest are not read this time (their numbers
+                // stay unknown); the analytics already read are cached, so the
+                // next request gets further.
+                $feed = microtime(true) < $this->deadline ? $this->feed($account, $previous->from) : null;
                 $feeds[$account->id] = $feed;
                 [$channel, $notes] = $this->channel($owner, $account, $feed, $period, $previous);
                 $channels[] = $channel;
