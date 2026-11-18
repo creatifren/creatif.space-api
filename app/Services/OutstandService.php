@@ -11,6 +11,7 @@ use App\Support\Media\MediaLinks;
 use Carbon\CarbonImmutable;
 use GuzzleHttp\Psr7\Utils;
 use Illuminate\Http\Client\ConnectionException;
+use Illuminate\Http\Client\Pool;
 use Illuminate\Http\Client\PendingRequest;
 use Illuminate\Http\Client\RequestException;
 use Illuminate\Http\Client\Response;
@@ -416,8 +417,15 @@ class OutstandService implements SocialProvider
                     (array) ($container['media'] ?? []),
                 ))),
                 'provider_post_id' => (string) ($post['id'] ?? ''),
-                'metrics' => $this->metricsFor((string) ($post['id'] ?? ''), $accountId),
+                'metrics' => [],
             ];
+        }
+
+        // One analytics call per post, all of the page at once (QA P1 18 Nov:
+        // one after another, ~3.5 s each, an Instagram page took 33 s).
+        $metrics = $this->metricsForMany(array_column($items, 'provider_post_id'), $accountId);
+        foreach ($items as $i => $item) {
+            $items[$i]['metrics'] = $metrics[$item['provider_post_id']] ?? [];
         }
 
         return [
@@ -944,39 +952,58 @@ class OutstandService implements SocialProvider
      *
      * @return array<string, mixed>
      */
-    private function metricsFor(string $postId, string $accountId): array
+    /**
+     * The analytics of these posts for one account, keyed by post id; a post
+     * whose numbers could not be read maps to [] (unknown, never zero).
+     * Fresh readings are kept 30 minutes; the rest are read in parallel, one
+     * try each, 6 s at most. Past $metricsDeadline nothing more is read.
+     *
+     * @param  list<string>  $postIds
+     * @return array<string, array<string, int|float>>
+     */
+    private function metricsForMany(array $postIds, string $accountId): array
     {
-        // Insight reads one analytics call per post (QA P1 18 Nov: with a few
-        // hundred posts and Outstand's 429 retries, summary/top-posts/best-times
-        // outran the 30 s gateway and answered 503). Past the caller's deadline
-        // the rest come back unknown (null, never zero); a fresh reading is
-        // kept 30 minutes; one call never waits more than 5 s or retries.
-        if (self::$metricsDeadline !== null && microtime(true) >= self::$metricsDeadline) {
-            return [];
+        $out = [];
+        $todo = [];
+        foreach (array_unique(array_filter($postIds)) as $id) {
+            $cached = Cache::get(self::metricsKey($id, $accountId));
+            if (is_array($cached)) {
+                $out[$id] = $cached;
+            } else {
+                $todo[] = $id;
+            }
         }
-        $key = 'outstand:metrics:'.sha1($postId.'|'.$accountId);
-        $cached = Cache::get($key);
-        if (is_array($cached)) {
-            return $cached;
-        }
-
-        try {
-            $response = $this->client(retry: false)->timeout(5)->get('/posts/'.rawurlencode($postId).'/analytics');
-        } catch (ConnectionException) {
-            return [];
+        if ($todo === [] || (self::$metricsDeadline !== null && microtime(true) >= self::$metricsDeadline)) {
+            return $out;
         }
 
-        if (! $response->successful()) {
-            return [];
+        $key = (string) config('services.outstand.key');
+        $base = rtrim((string) config('services.outstand.base_url'), '/');
+        $responses = Http::pool(fn (Pool $pool) => array_map(
+            fn (string $id) => $pool->as($id)->withToken($key)->acceptJson()->timeout(6)
+                ->get($base.'/posts/'.rawurlencode($id).'/analytics'),
+            $todo,
+        ));
+
+        foreach ($todo as $id) {
+            $response = $responses[$id] ?? null;
+            if (! $response instanceof Response || ! $response->successful()) {
+                $out[$id] = [];
+
+                continue;
+            }
+            $row = collect((array) $response->json('metrics_by_account', []))
+                ->first(fn ($r) => (string) ($r['social_account']['id'] ?? '') === $accountId);
+            $out[$id] = array_filter((array) ($row['metrics'] ?? []), fn ($v) => $v !== null);
+            Cache::put(self::metricsKey($id, $accountId), $out[$id], now()->addMinutes(30));
         }
 
-        $row = collect((array) $response->json('metrics_by_account', []))
-            ->first(fn ($r) => (string) ($r['social_account']['id'] ?? '') === $accountId);
+        return $out;
+    }
 
-        $metrics = array_filter((array) ($row['metrics'] ?? []), fn ($v) => $v !== null);
-        Cache::put($key, $metrics, now()->addMinutes(30));
-
-        return $metrics;
+    private static function metricsKey(string $postId, string $accountId): string
+    {
+        return 'outstand:metrics:'.sha1($postId.'|'.$accountId);
     }
 
     /** microtime() after which feed() stops reading per-post analytics (set by InsightCollector). */
