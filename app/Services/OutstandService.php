@@ -946,8 +946,22 @@ class OutstandService implements SocialProvider
      */
     private function metricsFor(string $postId, string $accountId): array
     {
+        // Insight reads one analytics call per post (QA P1 18 Nov: with a few
+        // hundred posts and Outstand's 429 retries, summary/top-posts/best-times
+        // outran the 30 s gateway and answered 503). Past the caller's deadline
+        // the rest come back unknown (null, never zero); a fresh reading is
+        // kept 30 minutes; one call never waits more than 5 s or retries.
+        if (self::$metricsDeadline !== null && microtime(true) >= self::$metricsDeadline) {
+            return [];
+        }
+        $key = 'outstand:metrics:'.sha1($postId.'|'.$accountId);
+        $cached = Cache::get($key);
+        if (is_array($cached)) {
+            return $cached;
+        }
+
         try {
-            $response = $this->client()->get('/posts/'.rawurlencode($postId).'/analytics');
+            $response = $this->client(retry: false)->timeout(5)->get('/posts/'.rawurlencode($postId).'/analytics');
         } catch (ConnectionException) {
             return [];
         }
@@ -959,8 +973,14 @@ class OutstandService implements SocialProvider
         $row = collect((array) $response->json('metrics_by_account', []))
             ->first(fn ($r) => (string) ($r['social_account']['id'] ?? '') === $accountId);
 
-        return array_filter((array) ($row['metrics'] ?? []), fn ($v) => $v !== null);
+        $metrics = array_filter((array) ($row['metrics'] ?? []), fn ($v) => $v !== null);
+        Cache::put($key, $metrics, now()->addMinutes(30));
+
+        return $metrics;
     }
+
+    /** microtime() after which feed() stops reading per-post analytics (set by InsightCollector). */
+    public static ?float $metricsDeadline = null;
 
     /**
      * GET /social-accounts/{id}/metrics → followers_count. Every network is

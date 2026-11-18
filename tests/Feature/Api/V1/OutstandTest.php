@@ -645,3 +645,32 @@ it('reads an Outstand account feed from its posts and their analytics', function
         ->assertJsonPath('data.0.metrics.shares', null)
         ->assertJsonPath('meta.next_cursor', null);
 });
+
+it('stops reading per-post analytics past the Insight deadline, and keeps a fresh reading (QA P1 18 Nov)', function () {
+    $user = User::factory()->create();
+    $ig = outstandAccount($user);
+    Http::fake([
+        'api.outstand.test/v1/posts/f1/analytics' => Http::response(['success' => true, 'metrics_by_account' => [[
+            'social_account' => ['id' => $ig->provider_account_id], 'metrics' => ['likes' => 9],
+        ]]]),
+        'api.outstand.test/v1/posts?*' => Http::response(['success' => true, 'data' => [
+            ['id' => 'f1', 'publishedAt' => '2026-11-01T10:00:00Z', 'containers' => [['content' => 'Ours']],
+                'socialAccounts' => [['id' => $ig->provider_account_id, 'status' => 'published', 'platformPostId' => 'ig1']]],
+        ]]),
+    ]);
+    $service = app(\App\Services\OutstandService::class);
+
+    try {
+        \App\Services\OutstandService::$metricsDeadline = microtime(true) - 1;
+        expect($service->feed($ig->provider_account_id)['data'][0]['metrics'])->toBe([]);
+        Http::assertNotSent(fn ($r) => str_contains($r->url(), '/analytics'));
+
+        \App\Services\OutstandService::$metricsDeadline = null;
+        expect($service->feed($ig->provider_account_id)['data'][0]['metrics'])->toBe(['likes' => 9])
+            ->and($service->feed($ig->provider_account_id)['data'][0]['metrics'])->toBe(['likes' => 9]);
+        // The second read came from the 30-minute cache.
+        expect(collect(Http::recorded())->filter(fn ($p) => str_contains($p[0]->url(), '/analytics'))->count())->toBe(1);
+    } finally {
+        \App\Services\OutstandService::$metricsDeadline = null;
+    }
+});
