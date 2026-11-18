@@ -12,7 +12,9 @@ Change the server copy and this copy together (aaPanel terminal, Rizal's OK).
 The `.user.ini` fix = `--exclude=.user.ini` on rsync + `! -name .user.ini` on chown (aaPanel's
 immutable `.user.ini` made both fail).
 
-## Pending (needs Rizal's OK to change the server copy)
-IndexNow per marketing deploy: after the blue/green switch, ping new/changed `content/blog/*.md`
-as `/blog/<slug>` with `node scripts/indexnow-submit.mjs <paths>` (env from `.env.local`),
-tracking hashes in `/root/indexnow-mkt.last`; never fail the deploy.
+## IndexNow (live 19 Nov 2026, Rizal yes)
+After a live marketing deploy, `d-site.sh mkt` pings new/changed `content/blog/*.md` as
+`/blog/<slug>` (`node scripts/indexnow-submit.mjs <paths>`, env from `.env.local`). Hashes of the
+last pinged set live in `/root/indexnow-mkt.last` (seeded 19 Nov with 10 posts after a one-off
+`--all` of 81 URLs). Errors print "indexnow: skipped" and never fail the deploy.
+Previous server copy: `/root/d-site.sh.bak-20261119`.

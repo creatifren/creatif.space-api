@@ -9,3 +9,11 @@ bash /root/build-site.sh $S $A $R $SITE
 rsync -a --delete --exclude=.git/ --exclude=.user.ini /root/build-$S/ $D/
 find "$D" ! -name .user.ini -exec chown -h www:www {} +
 /opt/creatif-ops/bluegreen.sh $S --to $T --no-build
+# IndexNow (19 Nov 2026): after a live mkt deploy, ping new/changed blog posts (Bing/Yandex/Naver). Never fails the deploy.
+if [ "$S" = mkt ]; then
+  ( cd /root/build-mkt && export PATH=/www/server/nodejs/v24.18.0/bin:$PATH
+    NOW=$(cd content/blog && md5sum *.md | sort)
+    P=$(comm -13 <(sort /root/indexnow-mkt.last 2>/dev/null) <(echo "$NOW") | awk '{sub(/\.md$/,"",$2); print "/blog/"$2}')
+    if [ -n "$P" ]; then set -a; . ./.env.local; set +a; node scripts/indexnow-submit.mjs $P && echo "$NOW" > /root/indexnow-mkt.last; else echo "indexnow: no blog changes"; fi
+  ) || echo "indexnow: skipped (error)"
+fi
