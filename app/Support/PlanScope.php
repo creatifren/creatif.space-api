@@ -280,6 +280,8 @@ final class PlanScope
                 $thumb = $coverSet['thumb'] ?? $own['thumb'] ?? null;
                 $feed = $type === 'video' ? null : ($own['feed'] ?? null);
                 $poster = $type === 'video' ? ($coverSet['feed'] ?? $own['poster'] ?? null) : null;
+                // A video with no small copy yet still has its cover as a still.
+                $posterUrl = $type !== 'video' ? null : ($poster === null ? $cover : ($poster['webp'] ?? $poster['jpeg']));
 
                 return [
                     'url' => $url,
@@ -290,7 +292,7 @@ final class PlanScope
                     'height' => $h,
                     'thumb_url' => $thumb === null ? null : ($thumb['webp'] ?? $thumb['jpeg']),
                     'feed_url' => $feed === null ? null : ($feed['webp'] ?? $feed['jpeg']),
-                    'poster_url' => $poster === null ? ($type === 'video' ? $cover : null) : ($poster['webp'] ?? $poster['jpeg']),
+                    'poster_url' => $posterUrl,
                     // Each with its JPEG fallback and its own size.
                     'variants' => ['thumb' => $thumb, 'feed' => $feed, 'poster' => $poster],
                 ];
