@@ -496,6 +496,32 @@ it('does not send a post twice when Approve all is pressed twice', function () {
     Http::assertSentCount(1);
 });
 
+it('approves every post of a long plan: past the time budget the rest are sent by the queue', function () {
+    Notification::fake();
+    providerOk();
+    \App\Http\Controllers\Api\V1\PublicApprovalController::$syncBudget = 0.0;
+    try {
+        $a = heldPost('client');
+        $b = heldPost('client', $a->user);
+        $c = heldPost('client', $a->user);
+        $link = linkFor($a, $b, $c);
+
+        $results = asApprover($this)->postJson("/api/v1/a/{$link->token}/approve-all", ['name' => 'Andi', 'post_ids' => [$a->ulid, $b->ulid, $c->ulid]])
+            ->assertOk()
+            ->json('data.results');
+
+        expect(collect($results)->pluck('approved')->all())->toBe([true, true, true]);
+        foreach ([$a, $b, $c] as $p) {
+            // Approved at once; the queued SendApprovedHeldPosts (sync here) sent it.
+            expect($p->fresh()->approval->value)->toBe('approved')
+                ->and($p->fresh()->provider_post_id)->not->toBeNull();
+        }
+        Http::assertSentCount(3);
+    } finally {
+        \App\Http\Controllers\Api\V1\PublicApprovalController::$syncBudget = 20.0;
+    }
+});
+
 it('tells the owner when a client asks for changes, and respects the switch', function () {
     Notification::fake();
     $post = heldPost('client');
