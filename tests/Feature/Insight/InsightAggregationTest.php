@@ -148,3 +148,22 @@ it('records one follower snapshot a day, overwriting a second reading', function
     expect(FollowerSnapshot::query()->where('social_account_id', $account->id)->whereDate('on', '2026-11-05')->pluck('followers')->all())
         ->toBe([13210]);
 });
+
+it('says "not read in time" for channels past the time budget, and does not cache that report (QA P1 18 Nov)', function () {
+    InsightCollector::$budgetSeconds = -1.0;
+    try {
+        $accounts = collect(array_values($this->accounts));
+        $period = InsightPeriod::month(InsightFixture::MONTH);
+        $data = app(InsightCollector::class)->collectCached($this->owner, $accounts, $period);
+
+        expect(collect($data['footnotes'])->pluck('key')->unique()->values()->all())->toContain('not_read_in_time')
+            ->and(collect($data['footnotes'])->pluck('key'))->not->toContain('not_available');
+
+        // Not kept: with time again, the next read is complete.
+        InsightCollector::$budgetSeconds = 14.0;
+        $again = app(InsightCollector::class)->collectCached($this->owner, $accounts, $period);
+        expect(collect($again['footnotes'])->pluck('key'))->not->toContain('not_read_in_time');
+    } finally {
+        InsightCollector::$budgetSeconds = 14.0;
+    }
+});

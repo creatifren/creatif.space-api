@@ -39,9 +39,10 @@ final class InsightCache
     /**
      * @param  Collection<int, SocialAccount>  $accounts
      * @param  Closure(): array<string, mixed>  $compute
+     * @param  (Closure(array<string, mixed>): bool)|null  $keep  false = do not cache this result
      * @return array<string, mixed>
      */
-    public static function remember(User $owner, Collection $accounts, InsightPeriod $period, Closure $compute): array
+    public static function remember(User $owner, Collection $accounts, InsightPeriod $period, Closure $compute, ?Closure $keep = null): array
     {
         $key = implode(':', [
             'insight',
@@ -54,7 +55,16 @@ final class InsightCache
             sha1($accounts->pluck('ulid')->sort()->implode(',')),
         ]);
 
-        return Cache::remember($key, now()->addMinutes(self::TTL_MINUTES), $compute);
+        $hit = Cache::get($key);
+        if (is_array($hit)) {
+            return $hit;
+        }
+        $value = $compute();
+        if ($keep === null || $keep($value)) {
+            Cache::put($key, $value, now()->addMinutes(self::TTL_MINUTES));
+        }
+
+        return $value;
     }
 
     public static function version(int $ownerId): int

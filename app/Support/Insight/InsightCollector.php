@@ -56,6 +56,13 @@ final class InsightCollector
 
     private float $deadline = INF;
 
+    /**
+     * Accounts not read because the time budget ran out (keyed by id).
+     *
+     * @var array<int, true>
+     */
+    private array $skipped = [];
+
     /** "On time" = published within this many seconds of the slot. */
     public const ON_TIME_SECONDS = 600;
 
@@ -75,7 +82,9 @@ final class InsightCollector
      */
     public function collectCached(User $owner, Collection $accounts, InsightPeriod $period): array
     {
-        return InsightCache::remember($owner, $accounts, $period, fn () => $this->collect($owner, $accounts, $period));
+        // A report cut short by the time budget is not kept: the next request
+        // reads further (the analytics already read are cached by the provider).
+        return InsightCache::remember($owner, $accounts, $period, fn () => $this->collect($owner, $accounts, $period), fn () => $this->skipped === []);
     }
 
     /**
@@ -85,6 +94,7 @@ final class InsightCollector
     public function collect(User $owner, Collection $accounts, InsightPeriod $period): array
     {
         $this->cutShort = [];
+        $this->skipped = [];
         $previous = $period->previous();
         $channels = [];
         $footnotes = [];
@@ -100,7 +110,12 @@ final class InsightCollector
                 // Out of time: the rest are not read this time (their numbers
                 // stay unknown); the analytics already read are cached, so the
                 // next request gets further.
-                $feed = microtime(true) < $this->deadline ? $this->feed($account, $previous->from) : null;
+                $feed = null;
+                if (microtime(true) < $this->deadline) {
+                    $feed = $this->feed($account, $previous->from);
+                } else {
+                    $this->skipped[$account->id] = true;
+                }
                 $feeds[$account->id] = $feed;
                 [$channel, $notes] = $this->channel($owner, $account, $feed, $period, $previous);
                 $channels[] = $channel;
@@ -245,7 +260,7 @@ final class InsightCollector
         $before = $this->metrics($inPrevious);
 
         if ($feed === null) {
-            $notes[] = ['key' => 'not_available', 'params' => ['network' => $network]];
+            $notes[] = ['key' => isset($this->skipped[$account->id]) ? 'not_read_in_time' : 'not_available', 'params' => ['network' => $network]];
         } elseif ($current['posts'] > 0) {
             foreach (['reach', 'views', 'likes', 'comments', 'shares', 'saves'] as $metric) {
                 if ($current[$metric] === null) {
