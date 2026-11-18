@@ -45,6 +45,8 @@ function rl429($response): void
 
 it('stops the public approval page after 60 a minute', function () {
     [, $link] = rlLink();
+    // The invited approver, signed in (an anonymous look is refused before any post is read).
+    asApprover($this, 'rani@client.test');
     foreach (range(1, 60) as $i) {
         $this->getJson("/api/v1/a/{$link->token}")->assertOk();
     }

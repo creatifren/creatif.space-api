@@ -5,6 +5,7 @@ use App\Models\SocialAccount;
 use App\Models\SocialApprovalDecision;
 use App\Models\SocialApprovalLink;
 use App\Models\SocialPost;
+use App\Models\SocialPostComment;
 use App\Models\Subscription;
 use App\Models\User;
 use App\Notifications\ApprovalLinkBound;
@@ -73,21 +74,85 @@ function saDecide($test, SocialApprovalLink $link, SocialPost $post, string $dec
 }
 
 describe('deciding needs the invited approver signed in', function () {
-    it('lets anyone look without signing in, and says who may decide', function () {
+    it('shows no post until the invited approver is signed in: 401, then 403 for another address', function () {
         [, $post, $link] = saLink();
+        $approver = [
+            'approver_required' => true,
+            'view_requires_sign_in' => true,
+            'signed_in_name' => null,
+            'approver_hint' => 'r***@c***.test',
+            'bind_on_first_decision' => false,
+            'signed_in' => false,
+            'signed_in_email' => null,
+            'can_decide' => false,
+            'sign_in_methods' => ['google', 'email'],
+        ];
 
         $this->getJson("/api/v1/a/{$link->token}")
+            ->assertStatus(401)
+            ->assertJson(['reason' => 'sign_in_required', 'methods' => ['google', 'email'], 'editor' => $link->user->name])
+            ->assertJsonPath('approver', $approver)
+            ->assertJsonMissingPath('data')
+            ->assertDontSee($post->ulid)
+            ->assertDontSee($post->caption);
+
+        asApprover($this, 'someone@else.test', 'Someone Else')->getJson("/api/v1/a/{$link->token}")
+            ->assertStatus(403)
+            ->assertJson(['reason' => 'approver_mismatch', 'expected_hint' => 'r***@c***.test'])
+            ->assertJsonPath('approver.signed_in_email', 'someone@else.test')
+            ->assertJsonPath('approver.signed_in_name', 'Someone Else')
+            ->assertJsonMissingPath('data')
+            ->assertDontSee($post->caption);
+
+        expect($link->fresh()->approver_bound_at)->toBeNull();
+    });
+
+    it('lets the link\'s own workspace look (Open as client) but not decide', function () {
+        [$owner, $post, $link] = saLink();
+
+        $this->actingAs(User::findOrFail($owner->id), 'web')->getJson("/api/v1/a/{$link->token}")
+            ->assertOk()->assertJsonPath('data.posts.0.id', $post->ulid);
+        saDecide($this, $link, $post)->assertStatus(403)->assertJsonPath('reason', 'approver_mismatch');
+
+        expect($link->fresh()->approver_bound_at)->toBeNull()
+            ->and($post->fresh()->approval->value)->toBe('client');
+    });
+
+    it('binds the link to the approver the first time they open it, and shows them the posts', function () {
+        [, $post, $link] = saLink();
+
+        asApprover($this, 'rani@client.test', 'Rani Prameswari')->getJson("/api/v1/a/{$link->token}")
             ->assertOk()
             ->assertJsonPath('data.posts.0.id', $post->ulid)
-            ->assertJsonPath('data.approver', [
-                'approver_required' => true,
-                'approver_hint' => 'r***@c***.test',
-                'bind_on_first_decision' => false,
-                'signed_in' => false,
-                'signed_in_email' => null,
-                'can_decide' => false,
-                'sign_in_methods' => ['google', 'email'],
-            ]);
+            ->assertJsonPath('data.approver.signed_in_name', 'Rani Prameswari');
+
+        expect($link->fresh()->approver_bound_at)->not->toBeNull();
+    });
+
+    it('records decisions and comments under the account name, never a typed one (b202611140955)', function () {
+        [, $post, $link] = saLink();
+
+        saDecide(asApprover($this, 'rani@client.test', 'Rani Prameswari'), $link, $post, 'revise', ['name' => 'QA Tester', 'reason' => 'Shorter please'])
+            ->assertOk()
+            ->assertJsonPath('data.approval_by', 'Rani Prameswari');
+        $this->postJson("/api/v1/a/{$link->token}/posts/{$post->ulid}/comments", ['name' => 'QA Tester', 'body' => 'And a warmer photo'])
+            ->assertCreated()
+            ->assertJsonPath('data.author', 'Rani Prameswari');
+
+        expect(SocialApprovalDecision::query()->sole()->client_name)->toBe('Rani Prameswari')
+            ->and($link->fresh()->approver_bound_at)->not->toBeNull()
+            ->and(SocialPostComment::query()->pluck('author_name')->unique()->values()->all())->toBe(['Rani Prameswari']);
+    });
+
+    it('refuses a comment on a link for one person unless it is that person (401, then 403)', function () {
+        [, $post, $link] = saLink();
+
+        $this->postJson("/api/v1/a/{$link->token}/posts/{$post->ulid}/comments", ['name' => 'Anyone', 'body' => 'Hi'])
+            ->assertStatus(401)->assertJsonPath('reason', 'sign_in_required');
+        asApprover($this, 'someone@else.test')->postJson("/api/v1/a/{$link->token}/posts/{$post->ulid}/comments", ['name' => 'Anyone', 'body' => 'Hi'])
+            ->assertStatus(403)->assertJsonPath('reason', 'approver_mismatch');
+
+        expect(SocialPostComment::query()->count())->toBe(0);
     });
 
     it('answers 401 sign_in_required to an anonymous decision, approve-all and take-back', function () {
@@ -128,7 +193,8 @@ describe('deciding needs the invited approver signed in', function () {
         saDecide($this->actingAs(User::findOrFail($approver->id), 'web'), $link, $post, 'approve', ['name' => 'Rani from Acme'])
             ->assertOk()
             ->assertJsonPath('data.approval', 'approved')
-            ->assertJsonPath('data.approval_by', 'Rani from Acme');
+            // The account's name, not the one typed (b202611140955).
+            ->assertJsonPath('data.approval_by', $approver->name);
 
         $row = SocialApprovalDecision::query()->sole();
         expect($row->decision)->toBe('approved')
@@ -136,7 +202,7 @@ describe('deciding needs the invited approver signed in', function () {
             ->and($row->social_post_id)->toBe($post->id)
             ->and($row->approver_user_id)->toBe($approver->id)
             ->and($row->approver_email)->toBe('rani@client.test')
-            ->and($row->client_name)->toBe('Rani from Acme')
+            ->and($row->client_name)->toBe($approver->name)
             ->and($row->ip)->toBe('127.0.0.1')
             ->and($row->user_agent)->toBe('SignedInApproverTest/1.0');
     });

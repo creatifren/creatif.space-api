@@ -104,7 +104,9 @@ it('lets a client approve on the link, and only posts on that link', function ()
 
     expect($post->fresh()->approval->value)->toBe('client');
 
-    $this->getJson("/api/v1/a/{$token}")->assertOk()->assertJsonCount(1, 'data.posts')
+    // A link for one person: the owner may look (Open as client), the approver sees it signed in.
+    $this->getJson("/api/v1/a/{$token}")->assertOk();
+    asApprover($this)->getJson("/api/v1/a/{$token}")->assertOk()->assertJsonCount(1, 'data.posts')
         ->assertJsonMissingPath('data.client_name');
 
     asApprover($this)->postJson("/api/v1/a/{$token}/posts/{$other->ulid}/decision", ['name' => 'Andi', 'decision' => 'approve'])
