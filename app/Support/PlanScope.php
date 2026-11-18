@@ -11,6 +11,7 @@ use App\Models\SocialApprovalLink;
 use App\Models\SocialPost;
 use App\Models\SocialPostTarget;
 use App\Support\Media\MediaLinks;
+use App\Support\Media\MediaVariants;
 use Carbon\CarbonImmutable;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
@@ -241,32 +242,57 @@ final class PlanScope
      * (width / height) when the file is in the library.
      *
      * @param  Collection<int, SocialPost>  $posts
-     * @return array<int, list<array{url: string, thumbnail_url: ?string, type: string, aspect: ?float, width: ?int, height: ?int}>>
+     * @return array<int, list<array{url: string, thumbnail_url: ?string, type: string, aspect: ?float, width: ?int, height: ?int, thumb_url: ?string, feed_url: ?string, poster_url: ?string, variants: array{thumb: ?array{webp: ?string, jpeg: string, width: int, height: int}, feed: ?array{webp: ?string, jpeg: string, width: int, height: int}, poster: ?array{webp: ?string, jpeg: string, width: int, height: int}}}>>
      */
     public static function media(Collection $posts): array
     {
         $ulids = $posts->flatMap(fn (SocialPost $p) => MediaLinks::ulidsIn($p->media))->unique()->values()->all();
         $files = $ulids === [] ? collect()
-            : File::query()->whereIn('ulid', $ulids)->get(['ulid', 'width', 'height', 'mime_type'])->keyBy('ulid');
+            : File::query()->whereIn('ulid', $ulids)->get(['ulid', 'disk', 'path', 'width', 'height', 'mime_type', 'variants'])->keyBy('ulid');
+        $variants = [];
+        $variantsOf = function (?string $url) use ($files, &$variants): ?array {
+            $ulid = is_string($url) ? MediaLinks::fileUlid($url) : null;
+            $file = $ulid !== null ? $files->get($ulid) : null;
+            if ($file === null) {
+                return null;
+            }
+
+            return $variants[$ulid] ??= MediaVariants::urls($file) ?? [];
+        };
 
         $out = [];
         foreach ($posts as $post) {
             /** @var list<array<string, mixed>> $items */
             $items = array_values(array_filter((array) ($post->getAttribute('media') ?? []), 'is_array'));
-            $out[$post->id] = array_map(function (array $m) use ($files) {
+            $out[$post->id] = array_map(function (array $m) use ($files, $variantsOf) {
                 $url = is_string($m['url'] ?? null) ? $m['url'] : '';
                 $file = ($ulid = MediaLinks::fileUlid($url)) !== null ? $files->get($ulid) : null;
                 $w = $file?->width;
                 $h = $file?->height;
                 $kind = PublishPreflight::kind($url);
+                $type = $kind !== 'unknown' ? $kind : (str_starts_with((string) $file?->mime_type, 'video/') ? 'video' : 'image');
+                $cover = isset($m['thumbnail_url']) && is_string($m['thumbnail_url']) ? $m['thumbnail_url'] : null;
+
+                // Small copies for the page (originals only for the viewer /
+                // zoom). A video's chosen cover wins over its first frame.
+                $own = $variantsOf($url) ?? [];
+                $coverSet = $type === 'video' ? ($variantsOf($cover) ?? []) : [];
+                $thumb = $coverSet['thumb'] ?? $own['thumb'] ?? null;
+                $feed = $type === 'video' ? null : ($own['feed'] ?? null);
+                $poster = $type === 'video' ? ($coverSet['feed'] ?? $own['poster'] ?? null) : null;
 
                 return [
                     'url' => $url,
-                    'thumbnail_url' => isset($m['thumbnail_url']) && is_string($m['thumbnail_url']) ? $m['thumbnail_url'] : null,
-                    'type' => $kind !== 'unknown' ? $kind : (str_starts_with((string) $file?->mime_type, 'video/') ? 'video' : 'image'),
+                    'thumbnail_url' => $cover,
+                    'type' => $type,
                     'aspect' => $w && $h ? round($w / $h, 4) : null,
                     'width' => $w,
                     'height' => $h,
+                    'thumb_url' => $thumb === null ? null : ($thumb['webp'] ?? $thumb['jpeg']),
+                    'feed_url' => $feed === null ? null : ($feed['webp'] ?? $feed['jpeg']),
+                    'poster_url' => $poster === null ? ($type === 'video' ? $cover : null) : ($poster['webp'] ?? $poster['jpeg']),
+                    // Each with its JPEG fallback and its own size.
+                    'variants' => ['thumb' => $thumb, 'feed' => $feed, 'poster' => $poster],
                 ];
             }, $items);
         }

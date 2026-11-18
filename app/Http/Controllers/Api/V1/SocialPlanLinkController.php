@@ -8,6 +8,7 @@ use App\Enums\UserStatus;
 use App\Http\Controllers\Controller;
 use App\Models\SocialPlanLink;
 use App\Models\SocialPost;
+use App\Support\PlanScope;
 use App\Support\Workspace;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -107,6 +108,8 @@ class SocialPlanLinkController extends Controller
             ->sortBy(fn (SocialPost $p) => ($p->scheduled_at ?? $p->created_at)->getTimestamp())
             ->values();
 
+        $mediaItems = PlanScope::media($posts);
+
         $accounts = $link->user->socialAccounts()
             ->when($ids !== null, fn ($q) => $q->whereIn('id', $ids))
             ->get(['platform', 'username']);
@@ -126,6 +129,9 @@ class SocialPlanLinkController extends Controller
                 'caption' => $p->caption,
                 'type' => $p->type,
                 'media' => $p->media ?? [],
+                // Each media entry with kind, size and small copies (thumb /
+                // feed / poster), as the approval page gets them.
+                'media_items' => $mediaItems[$p->id] ?? [],
                 'at' => ($p->scheduled_at ?? $p->created_at)->toIso8601String(),
                 'status' => $p->status->value,
                 // Only the accounts on this plan, never the provider fields.

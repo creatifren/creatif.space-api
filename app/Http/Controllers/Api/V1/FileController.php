@@ -7,6 +7,7 @@ use App\Exceptions\MediaRefused;
 use App\Http\Controllers\Controller;
 use App\Http\Resources\FileResource;
 use App\Http\Resources\FolderResource;
+use App\Jobs\GenerateMediaVariants;
 use App\Models\Activity;
 use App\Models\File;
 use App\Models\Folder;
@@ -19,6 +20,7 @@ use App\Support\Media\MediaLimits;
 use App\Support\Media\MediaQuota;
 use App\Support\Media\MediaRetention;
 use App\Support\Media\MediaUploadGuard;
+use App\Support\Media\MediaVariants;
 use App\Support\Media\PresignedUpload;
 use App\Support\PlanQuota;
 use App\Support\Workspace;
@@ -335,6 +337,10 @@ class FileController extends Controller
         );
 
         StorageAlmostFull::checkAndSend($user);
+        // Thumbnails for the approval page and plan links (MediaVariants).
+        if (MediaVariants::isCandidate($file)) {
+            GenerateMediaVariants::dispatch($file->id);
+        }
 
         return new FileResource($file->refresh());
     }
@@ -577,6 +583,7 @@ class FileController extends Controller
         }
 
         Storage::disk($file->disk)->delete($file->path);
+        MediaVariants::delete($file);
         $file->forceDelete();
     }
 }

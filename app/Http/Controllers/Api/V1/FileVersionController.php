@@ -12,6 +12,7 @@ use App\Models\FileVersion;
 use App\Support\Media\FileSignature;
 use App\Support\Media\MediaQuota;
 use App\Support\Media\MediaUploadGuard;
+use App\Support\Media\MediaVariants;
 use App\Support\Media\PresignedUpload;
 use App\Support\Workspace;
 use Illuminate\Http\JsonResponse;
@@ -166,6 +167,8 @@ class FileVersionController extends Controller
                 'checksum' => null,
             ]);
         });
+        // New bytes at the same key: new thumbnails (MediaVariants).
+        MediaVariants::invalidate($file->refresh());
 
         Activity::log(
             $file->user,
@@ -230,6 +233,7 @@ class FileVersionController extends Controller
                 'checksum' => $version->checksum,
             ]);
         });
+        MediaVariants::invalidate($file->refresh());
 
         return response()->json([
             'data' => [
