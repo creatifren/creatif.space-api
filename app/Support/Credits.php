@@ -344,19 +344,15 @@ final class Credits
     }
 
     /**
-     * Legacy: publishes taken from the count-based allowance this cycle.
-     * Nothing is charged to it any more, so this reads 0 once a cycle has
-     * passed; kept for responses that still show it.
+     * "Publishes this month" for responses that still show the allowance
+     * (Settings, Credits, the posts quota): one source with `limits.
+     * monthly_posts.used`, i.e. every send paid this cycle by any wallet.
+     * It read paid_with=allowance only, which nothing is charged to any more,
+     * so it showed 0 while get_credits said 106 (QA-BIL-005).
      */
     public static function allowanceUsed(User $user): int
     {
-        $owner = self::owner($user);
-
-        return SocialPostTarget::query()
-            ->where('paid_with', SocialPostTarget::ALLOWANCE)
-            ->where('charged_at', '>=', self::allowanceSince($owner))
-            ->whereHas('post', fn ($q) => $q->whereIn('user_id', Workspace::memberIds($owner)))
-            ->count();
+        return self::sendsThisCycle($user);
     }
 
     /**
