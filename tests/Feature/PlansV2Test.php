@@ -40,7 +40,7 @@ beforeEach(function () {
     ]);
     Http::fake([
         'api.postforme.test/*' => Http::response(['id' => 'post_v2', 'status' => 'scheduled']),
-        'ai.test/*' => Http::response(['choices' => [['message' => ['content' => 'Better caption']]]]),
+        'ai.test/*' => Http::response(['content' => [['type' => 'text', 'text' => 'Better caption']]]),
     ]);
 });
 
