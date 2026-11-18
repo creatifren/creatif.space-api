@@ -7,6 +7,11 @@ Versions of the remote MCP server at `https://mcp.creatif.space/mcp`
 
 ## Unreleased
 
+Scheduling window (18 Nov 2026):
+
+- Pro and Max schedule up to 90 days ahead (`get_credits` → `scheduling.window_days` 90); Free stays at 7. A post more than 30 days ahead is held by Creatif Space and sent — and charged — about 30 days before its time; `schedule_post`, `schedule_posts` and `publish_post` no longer refuse it with `schedule_horizon`.
+- `decidable_from` copy no longer says "7 days" for every plan.
+
 Annotations, from OpenAI's ChatGPT Apps scan (14 Nov 2026):
 
 - `destructiveHint: true` on `update_post` (`file_ids` replaces the post's media) and `confirm_media_upload` (a file that fails its check is deleted).

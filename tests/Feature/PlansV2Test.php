@@ -460,10 +460,10 @@ describe('rule 6 — MCP / API keys get the same answers', function () {
             ]);
     });
 
-    it('get_credits shows no limits on Pro', function () {
+    it('get_credits shows Pro\'s 90-day window and no other limits', function () {
         $limits = bearer($this, v2ApiKey($this, v2Pro(), ['read']))->getJson('/api/v1/credits')->json('data.limits');
 
-        expect($limits['scheduling'])->toBe(['window_days' => null, 'queued_posts' => ['limit' => null, 'used' => 0]])
+        expect($limits['scheduling'])->toBe(['window_days' => 90, 'queued_posts' => ['limit' => null, 'used' => 0]])
             ->and($limits['approval_clients']['limit'])->toBeNull()
             ->and($limits['features']['spaces'])->toBeTrue();
     });

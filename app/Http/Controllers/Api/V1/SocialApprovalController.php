@@ -24,7 +24,6 @@ use App\Support\PlanQuota;
 use App\Support\PlanScope;
 use App\Support\ProductEvents;
 use App\Support\RateLimitHeaders;
-use App\Support\ScheduleHorizon;
 use App\Support\SocialPostRelay;
 use App\Support\Workspace;
 use Illuminate\Database\Eloquent\Builder;
@@ -61,7 +60,8 @@ class SocialApprovalController extends Controller
             return response()->json(['message' => 'This post is not waiting for approval.'], 422);
         }
 
-        if (! $relay->approve($socialPost, $request->user()->name, self::HELD)) {
+        // A slot past the relay's horizon: approved and held, sent when close enough.
+        if (! $relay->approve($socialPost, $request->user()->name, self::HELD, holdBeyondHorizon: true)) {
             return response()->json(['message' => 'This post is not waiting for approval.'], 422);
         }
 
@@ -124,7 +124,6 @@ class SocialApprovalController extends Controller
         $user = $request->user();
         PlanQuota::requireApprovalClient($user, $validated['client_name'] ?? null, null, 'approver_email', $validated['approver_email']);
         self::requireWindow($user, $posts, 'post_ids');
-        self::requireHorizon($posts, 'post_ids');
         PlanQuota::requireQueueRoom($user, $posts->where('status', SocialPostStatus::Draft)->count(), 'post_ids');
         self::requireTimes($posts, 'post_ids');
 
@@ -367,7 +366,6 @@ class SocialApprovalController extends Controller
         if ($add->isNotEmpty()) {
             $adding = SocialPost::query()->whereIn('id', $add)->get();
             self::requireWindow($request->user(), $adding, 'add_post_ids');
-            self::requireHorizon($adding, 'add_post_ids');
             self::requireTimes($adding, 'add_post_ids');
         }
         $remove = isset($validated['remove_post_ids'])
@@ -461,7 +459,7 @@ class SocialApprovalController extends Controller
         foreach ($waiting as $post) {
             $message = null;
             try {
-                $approved = $relay->approve($post, $request->user()->name, [SocialPostApproval::Client]);
+                $approved = $relay->approve($post, $request->user()->name, [SocialPostApproval::Client], holdBeyondHorizon: true);
             } catch (ValidationException|AccountReconnectRequired|PublishPreflightFailed|NotEnoughCredits|ScheduleBeyondHorizon $e) {
                 [$approved, $message] = [false, $e->getMessage()];
             } catch (Throwable $e) {
@@ -507,20 +505,6 @@ class SocialApprovalController extends Controller
     {
         foreach ($posts as $post) {
             PlanQuota::requireScheduleWindow($user, $post->scheduled_at, $field);
-        }
-    }
-
-    /**
-     * A post put to a client must be one the relay can take on its slot:
-     * the owner hears it now (422 with the latest date), not the client
-     * after their yes.
-     *
-     * @param  Collection<int, SocialPost>  $posts
-     */
-    private static function requireHorizon(Collection $posts, string $field): void
-    {
-        foreach ($posts as $post) {
-            ScheduleHorizon::require($post->provider, $post->scheduled_at, $field);
         }
     }
 

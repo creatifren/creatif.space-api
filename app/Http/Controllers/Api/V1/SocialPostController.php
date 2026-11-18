@@ -202,7 +202,14 @@ class SocialPostController extends Controller
         // is only saved; it is checked when it is sent.
         if (! $draft) {
             self::requireQueueable($user, $scheduledAt, $approval);
-            ScheduleHorizon::require((string) config('services.social.provider'), $scheduledAt);
+        }
+        // Pro/Max schedule up to 90 days; past the relay's horizon (Outstand:
+        // 30) the post is kept here and sent when its slot is close enough
+        // (SendApprovedHeldPosts) — paid then, not now. A held-for-approval
+        // post waits anyway; its yes holds it the same way.
+        $horizonHold = $sendsNow && ScheduleHorizon::beyond((string) config('services.social.provider'), $scheduledAt);
+        if ($horizonHold) {
+            $sendsNow = false;
         }
 
         // Only usable accounts: Connected, under the current relay. One the
@@ -283,7 +290,7 @@ class SocialPostController extends Controller
         // balance — or a teammate spending the same wallet a moment earlier —
         // refuses here, before anything can go live unpaid. A held post or a
         // draft is only recorded; approving or sending it reaches the provider.
-        $post = DB::transaction(function () use ($user, $ulid, $validated, $accounts, $captions, $options, $scheduledAt, $approval, $draft, $type, $sendsNow) {
+        $post = DB::transaction(function () use ($user, $ulid, $validated, $accounts, $captions, $options, $scheduledAt, $approval, $draft, $type, $sendsNow, $horizonHold) {
             $post = $user->socialPosts()->create([
                 'ulid' => $ulid,
                 'caption' => $validated['caption'],
@@ -294,6 +301,7 @@ class SocialPostController extends Controller
                 'approval' => $approval,
                 'status' => $draft ? SocialPostStatus::Draft : SocialPostStatus::Scheduled,
                 'client_platform' => ProductEvents::platform(),
+                'raw_payload' => $horizonHold ? SocialPostRelay::HORIZON_HOLD : null,
             ]);
 
             foreach ($accounts as $account) {
@@ -427,8 +435,13 @@ class SocialPostController extends Controller
         // window. A draft's time is only a plan — sending checks it.
         if (isset($validated['scheduled_at']) && $socialPost->status !== SocialPostStatus::Draft) {
             PlanQuota::requireScheduleWindow($request->user(), $scheduledAt);
-            ScheduleHorizon::require($socialPost->provider, $scheduledAt);
         }
+        // Moved past the relay's horizon: a post already at the relay is
+        // taken back from it (its Credits returned) and held here until the
+        // slot is close enough; one not sent yet just waits.
+        $recall = $socialPost->provider_post_id !== null
+            && $socialPost->status === SocialPostStatus::Scheduled
+            && ScheduleHorizon::beyond($socialPost->provider, $scheduledAt);
 
         $media = array_key_exists('media', $validated) ? array_values($validated['media']) : $socialPost->media;
         $edited = $caption !== $socialPost->caption
@@ -439,7 +452,12 @@ class SocialPostController extends Controller
         $socialPost->media = $media;
 
         // Provider first: the row only changes once the plan really moved.
-        if ($socialPost->provider_post_id !== null) {
+        if ($recall) {
+            $relay->recall($socialPost, 'Moved more than '.ScheduleHorizon::days($socialPost->provider).' days ahead · charged when it is sent');
+            if ($socialPost->approval === null) {
+                $socialPost->update(['raw_payload' => SocialPostRelay::HORIZON_HOLD]);
+            }
+        } elseif ($socialPost->provider_post_id !== null) {
             SocialPostRelay::ensureUsable($socialPost);
             $providers->for($socialPost)->updatePost(
                 $socialPost->provider_post_id,
@@ -532,6 +550,19 @@ class SocialPostController extends Controller
         }
         [$atA, $atB] = [$a->scheduled_at, $b->scheduled_at];
 
+        // A sent post taking a slot past the relay's horizon (a held one's)
+        // is taken back from the relay first and held here; if the swap
+        // then fails, it is still held at its own slot, which is inside
+        // the horizon, so SendApprovedHeldPosts sends it again.
+        foreach ([[$a, $atB], [$b, $atA]] as [$p, $to]) {
+            if ($p->provider_post_id !== null && ScheduleHorizon::beyond($p->provider, $to)) {
+                $relay->recall($p, 'Moved more than '.ScheduleHorizon::days($p->provider).' days ahead · charged when it is sent');
+                if ($p->approval === null) {
+                    $p->update(['raw_payload' => SocialPostRelay::HORIZON_HOLD]);
+                }
+            }
+        }
+
         $replace = fn (SocialPost $p, $at) => $p->provider_post_id === null ? null
             : $providers->for($p)->updatePost($p->provider_post_id, $relay->payload($p, null, $at));
 
@@ -579,7 +610,6 @@ class SocialPostController extends Controller
                 isset($validated['scheduled_at']) ? self::instant($validated['scheduled_at']) : null,
                 isset($validated['approval']) ? SocialPostApproval::from($validated['approval']) : null,
             );
-            ScheduleHorizon::require($socialPost->provider, isset($validated['scheduled_at']) ? self::instant($validated['scheduled_at']) : null);
         }
         $socialPost->load('targets.account');
 
@@ -615,6 +645,10 @@ class SocialPostController extends Controller
             'sendable' => $socialPost->status === SocialPostStatus::Draft,
             'status' => $socialPost->status,
             'scheduled_at' => $socialPost->scheduled_at?->toIso8601String(),
+            // Past the relay's horizon the send is held here and goes out
+            // (and is charged) once the slot is close enough.
+            'held_until_closer' => isset($validated['scheduled_at'])
+                && ScheduleHorizon::beyond($socialPost->provider, self::instant($validated['scheduled_at'])),
             'targets' => $targets->map(fn ($t) => array_diff_key($t, ['destination' => true]))->values()->all(),
             // Empty when every network will take it. A Pinterest board that
             // the account's only board would fill is filled at send time.
@@ -699,7 +733,6 @@ class SocialPostController extends Controller
             isset($validated['scheduled_at']) ? self::instant($validated['scheduled_at']) : null,
             isset($validated['approval']) ? SocialPostApproval::from($validated['approval']) : null,
         );
-        ScheduleHorizon::require($socialPost->provider, isset($validated['scheduled_at']) ? self::instant($validated['scheduled_at']) : null);
         // The client approves it for a time; with none they would hit a dead end.
         if (($validated['approval'] ?? null) === SocialPostApproval::Client->value && ! isset($validated['scheduled_at'])) {
             throw new NeedsPublishTime([$socialPost->ulid], 'scheduled_at');
@@ -717,7 +750,8 @@ class SocialPostController extends Controller
         if ($socialPost->held()) {
             $socialPost->update(['status' => SocialPostStatus::Scheduled]);
         } else {
-            $relay->send($socialPost);
+            // Past the relay's horizon: held here, sent when close enough.
+            $relay->sendOrHold($socialPost);
         }
 
         return new SocialPostResource($socialPost->fresh()->load('targets.account'));

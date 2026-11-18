@@ -15,6 +15,7 @@ use App\Models\User;
 use App\Support\Media\MediaLimits;
 use Carbon\CarbonInterface;
 use Illuminate\Support\Collection;
+use Illuminate\Validation\ValidationException;
 
 /**
  * Plan limits, read from the plans table. No number lives here: a user's
@@ -67,10 +68,21 @@ class PlanQuota
         static::requireFeature($user, 'comment_to_dm', $field);
     }
 
-    /** Days ahead a post may be scheduled, or null for no limit. */
+    /**
+     * Days ahead a post may be scheduled. A plan without its own figure
+     * (the paid ones) gets config('plans.paid_schedule_window_days') — 90
+     * since 18 Nov 2026; null only if that is set to 0.
+     */
     public static function scheduleWindowDays(User $user): ?int
     {
-        return Workspace::owner($user)->plan()->quota('schedule_window_days');
+        $days = Workspace::owner($user)->plan()->quota('schedule_window_days');
+        if ($days !== null) {
+            return $days;
+        }
+
+        $paid = (int) config('plans.paid_schedule_window_days', 90);
+
+        return $paid > 0 ? $paid : null;
     }
 
     /** Queued posts (scheduled + waiting for approval) allowed, or null. */
@@ -90,7 +102,8 @@ class PlanQuota
      * now: exactly `days` ahead is still in. Null (send now / on approval)
      * always is.
      *
-     * @throws PlanFeatureRequired
+     * @throws PlanFeatureRequired on Free
+     * @throws ValidationException on a paid plan (90 days)
      */
     public static function requireScheduleWindow(User $user, ?CarbonInterface $at, string $field = 'scheduled_at'): void
     {
@@ -98,6 +111,15 @@ class PlanQuota
 
         if ($days !== null && $at !== null
             && $at->copy()->utc()->greaterThan(now()->utc()->addDays($days))) {
+            // Free: an upgrade opens more (402). A paid plan is at the top
+            // already: a plain 422 with the latest date that works.
+            if (Workspace::owner($user)->plan()->quota('schedule_window_days') === null) {
+                throw ValidationException::withMessages([
+                    $field => "Posts can be scheduled at most {$days} days ahead — the latest date that works now is "
+                        .now()->utc()->addDays($days)->format('j M Y').'. Pick an earlier date.',
+                ]);
+            }
+
             throw PlanFeatureRequired::scheduleWindow($user, $days, $field);
         }
     }

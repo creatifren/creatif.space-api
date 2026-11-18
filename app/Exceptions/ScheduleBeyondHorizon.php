@@ -8,10 +8,11 @@ use RuntimeException;
 
 /**
  * A slot further out than the publishing relay accepts (Outstand refuses a
- * schedule past its horizon). Said to the owner when a post is scheduled or
- * put on an approval link — a clear 422 with the latest date that works —
- * never to a client on an approval link: there the post is kept approved
- * and sent once it is inside the horizon (SendApprovedHeldPosts).
+ * schedule past its horizon). Since 18 Nov 2026 no owner or client path
+ * answers with it: past the horizon a post is held here and sent once it
+ * is inside (SocialPostRelay::sendOrHold, SendApprovedHeldPosts). It stays
+ * as SocialPostRelay::send's last guard — a slot past the horizon is never
+ * charged and handed to the relay.
  */
 class ScheduleBeyondHorizon extends RuntimeException
 {

@@ -122,7 +122,7 @@ function previewResult(p: DecisionPreview) {
           blocked: p.needs_time
             ? `This post has no publish time yet, so it cannot be approved (approving would publish it at once). ${p.link.editor} has to set a time first; asking for changes ("revise") still works.`
             : p.decidable_from
-            ? `This post can be decided from ${p.decidable_from} (the sender’s plan allows deciding 7 days ahead).`
+            ? `This post can be decided from ${p.decidable_from} (the sender’s plan sets how far ahead posts can be decided).`
             : `This post is not waiting for a decision (it is "${p.post.state}").`,
         }
       : {}),

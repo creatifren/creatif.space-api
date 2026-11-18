@@ -10,7 +10,6 @@ use App\Models\SocialPost;
 use App\Models\User;
 use App\Support\Credits;
 use App\Support\PlanQuota;
-use App\Support\ScheduleHorizon;
 use App\Support\SendConfirmation;
 use App\Support\SocialPostRelay;
 use Illuminate\Http\JsonResponse;
@@ -27,9 +26,10 @@ use Throwable;
  * Everything a single send checks is checked for every post first —
  * draft, not waiting for approval, each preview's confirm_token (from a
  * connected app or API key), plan window and queue room for all of them,
- * the relay's horizon, usable channels, today's connected-app sends for
- * all of them, and Credits for the whole batch. Only then are they sent,
- * one by one. If one is refused on the way, the ones already handed over
+ * usable channels, today's connected-app sends for all of them, and
+ * Credits for the whole batch. Only then are they sent, one by one — a
+ * slot past the relay's horizon is held here and sent once it is close
+ * enough (SocialPostRelay::sendOrHold). If one is refused on the way, the ones already handed over
  * are recalled (taken back from the relay, Credits returned) and put back
  * to draft as they were: nothing stays scheduled.
  */
@@ -80,7 +80,7 @@ class SocialPostBatchController extends Controller
                 continue;
             }
             PlanQuota::requireScheduleWindow($user, $at, "posts.{$i}.scheduled_at");
-            ScheduleHorizon::require($post->provider, $at);
+            // Past the relay's horizon is fine: held here, sent when close enough.
             SocialPostRelay::ensureUsable($post);
         }
         if ($refused !== []) {
@@ -125,10 +125,10 @@ class SocialPostBatchController extends Controller
             $post = $posts[$item['post_id']];
             try {
                 $post->update(['scheduled_at' => Carbon::parse($item['scheduled_at'])->setTimezone((string) config('app.timezone'))]);
-                $relay->send($post);
+                $relay->sendOrHold($post);
                 $sent[] = $post;
             } catch (Throwable $e) {
-                $post->update(['scheduled_at' => $was[$post->ulid], 'status' => SocialPostStatus::Draft]);
+                $post->update(['scheduled_at' => $was[$post->ulid], 'status' => SocialPostStatus::Draft, 'raw_payload' => null]);
                 [$back, $stuck] = $this->rollBack($relay, $sent, $was->all());
                 if ($byToken) {
                     CapTokenSends::release($user, $items->count());
@@ -162,7 +162,7 @@ class SocialPostBatchController extends Controller
         foreach (array_reverse($sent) as $post) {
             try {
                 $relay->recall($post, 'Batch schedule taken back');
-                $post->update(['status' => SocialPostStatus::Draft, 'scheduled_at' => $was[$post->ulid] ?? null]);
+                $post->update(['status' => SocialPostStatus::Draft, 'scheduled_at' => $was[$post->ulid] ?? null, 'raw_payload' => null]);
                 $back[] = $post->ulid;
             } catch (Throwable $e) {
                 Log::error('social.batch_rollback_failed', ['post' => $post->ulid, 'error' => $e->getMessage()]);
