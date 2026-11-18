@@ -2,7 +2,7 @@
 
 <!-- Generated from the served tool list by `npm run docs:tools` (in mcp/). Do not edit by hand: test/tools-doc.test.ts fails in CI when this file is out of date. -->
 
-48 tools on `https://mcp.creatif.space/mcp`, in the order `tools/list` gives them. Scope is the OAuth permission a tool needs; the hints are its MCP annotations.
+49 tools on `https://mcp.creatif.space/mcp`, in the order `tools/list` gives them. Scope is the OAuth permission a tool needs; the hints are its MCP annotations.
 
 | Tool | Title | Scope | Read-only | Destructive |
 |---|---|---|---|---|
@@ -54,6 +54,7 @@
 | [`schedule_posts`](#schedule_posts) | Schedule several drafts at once | `publish` | no | yes |
 | [`list_failed_posts`](#list_failed_posts) | List failed posts | `read` | yes | no |
 | [`get_onboarding`](#get_onboarding) | Get the setup checklist | `read` | yes | no |
+| [`list_pinterest_boards`](#list_pinterest_boards) | List Pinterest boards | `read` | yes | no |
 
 ## list_channels
 
@@ -150,9 +151,9 @@ When to use: to create any new post; it is always the safe first step. The user 
 
 Example: draft_post { "caption": "Winter set is live", "channel_ids": ["01JD…"], "file_ids": ["01JE…"], "captions_by_channel": { "01JF…": "Shorter for X" } }
 
-Media: library file ids (from list_files, or from confirm_media_upload for a file you just uploaded) and/or public https media URLs, 10 items in all. captions_by_channel overrides the caption for channels that are also in channel_ids. type picks the placement on Facebook, Instagram and Threads.
+Media: library file ids (from list_files, or from confirm_media_upload for a file you just uploaded) and/or public https media URLs, 10 items in all. captions_by_channel overrides the caption for channels that are also in channel_ids. type picks the placement on Facebook, Instagram and Threads. Pinterest: a Pin needs a board — pinterest.board_id (from list_pinterest_boards) picks it; without it the channel’s last-used board (or its only board) is used.
 
-Errors → next step: file_not_ready → call confirm_media_upload for that file, or take ids from list_files; invalid_input → fix what details names (e.g. a captions_by_channel id not in channel_ids, more than 10 media); not_found → take channel ids from list_channels and file ids from list_files; reconnect_required → the user reconnects the channel in creatif.space → Channels; scope_missing → reconnect and allow "draft"; upstream_unavailable → check list_posts before calling again — it may have been saved; plan_required (402) → a plan limit, or a feature this account's plan does not include (on some plans: posts scheduled at most 7 days ahead, at most 10 queued posts, approval links for one client); tell the user it is not available on their plan, and do not retry; forbidden (403) → this seat or connection may not do this (e.g. a viewer, or a permission the connection was not given): the workspace owner or an editor can, or the user does it in creatif.space; do not retry.
+Errors → next step: file_not_ready → call confirm_media_upload for that file, or take ids from list_files; invalid_input → fix what details names (e.g. a captions_by_channel id not in channel_ids, more than 10 media, a board not on that Pinterest account: list_pinterest_boards); not_found → take channel ids from list_channels and file ids from list_files; reconnect_required → the user reconnects the channel in creatif.space → Channels; scope_missing → reconnect and allow "draft"; upstream_unavailable → check list_posts before calling again — it may have been saved; plan_required (402) → a plan limit, or a feature this account's plan does not include (on some plans: posts scheduled at most 7 days ahead, at most 10 queued posts, approval links for one client); tell the user it is not available on their plan, and do not retry; forbidden (403) → this seat or connection may not do this (e.g. a viewer, or a permission the connection was not given): the workspace owner or an editor can, or the user does it in creatif.space; do not retry.
 
 | Input | Type | Required | Description |
 |---|---|---|---|
@@ -162,6 +163,7 @@ Errors → next step: file_not_ready → call confirm_media_upload for that file
 | `media_urls` | array of string | no | Public https image/video URLs to attach |
 | `captions_by_channel` | object | no | Per-channel caption overrides: { "<channel id>": "caption" } |
 | `type` | "post" \| "reels" \| "story" | no | Placement on Facebook, Instagram and Threads; others post normally |
+| `pinterest` | object { board_id } | no | Pinterest only: the board for the Pin. Optional — without it the channel’s last-used board is used (or its only board). |
 
 ## get_credits
 
@@ -254,13 +256,13 @@ Errors → next step: rate_limited → details.reason reminder_too_soon: a remin
 
 Changes a draft or a post waiting for approval: its caption, time, labels or media.
 
-Changes a draft or a post still waiting for approval: its caption, scheduled time, labels or media. file_ids REPLACES the post’s media — the media not listed is removed from the post.
+Changes a draft or a post still waiting for approval: its caption, scheduled time, labels, media or Pinterest board. file_ids REPLACES the post’s media — the media not listed is removed from the post.
 
 When to use: to edit an existing draft instead of drafting a new one. Posts already queued to publish, published or otherwise done cannot be changed from here — the user edits those in creatif.space.
 
 Example: update_post { "post_id": "01JD…", "caption": "New caption", "add_file_ids": ["01JE…"] }
 
-Media: file_ids REPLACES the post’s media with these library files ([] removes all); add_file_ids keeps the current media and adds these after it (10 items at most). Ids come from list_files, or from confirm_media_upload for a new upload.
+Media: file_ids REPLACES the post’s media with these library files ([] removes all); add_file_ids keeps the current media and adds these after it (10 items at most). Ids come from list_files, or from confirm_media_upload for a new upload. pinterest.board_id sets the board of the post’s Pinterest channel (ids from list_pinterest_boards).
 
 Errors → next step: not_editable → details.status says why; tell the user to change it in creatif.space, or draft_post a new version; file_not_ready → call confirm_media_upload first; invalid_input → fix what details names (both file_ids and add_file_ids, nothing to change, more than 10 media); not_found → find the id with list_posts; scope_missing → reconnect and allow "draft"; plan_required (402) → a plan limit, or a feature this account's plan does not include (on some plans: posts scheduled at most 7 days ahead, at most 10 queued posts, approval links for one client); tell the user it is not available on their plan, and do not retry; forbidden (403) → this seat or connection may not do this (e.g. a viewer, or a permission the connection was not given): the workspace owner or an editor can, or the user does it in creatif.space; do not retry.
 
@@ -272,6 +274,7 @@ Errors → next step: not_editable → details.status says why; tell the user to
 | `labels` | array of string | no | Replaces the post’s labels |
 | `file_ids` | array of string | no | Replaces the post’s media with these library files ([] removes all media) |
 | `add_file_ids` | array of string | no | Adds these library files after the post’s current media |
+| `pinterest` | object { board_id } | no | Pinterest only: the board for the Pin. Optional — without it the channel’s last-used board is used (or its only board). |
 
 ## schedule_post
 
@@ -285,14 +288,15 @@ When to use: when the user wants a draft to go out later; use publish_post to se
 
 Example: schedule_post { "post_id": "01JD…", "scheduled_at": "2026-12-01T09:00:00+07:00" } → preview; then the same call with "confirm": true → { post, note }
 
-The confirm sends exactly what that preview showed (a signed confirm_token kept by the server, valid 10 minutes). Credits are charged when it is scheduled (Monthly Credits first, then the Top-up balance; on every plan). On some plans, scheduled_at is at most 7 days ahead and at most 10 posts can be queued. Connected apps can send at most 20 posts a day.
+The confirm sends exactly what that preview showed (a signed confirm_token kept by the server, valid 10 minutes). Credits are charged when it is scheduled (Monthly Credits first, then the Top-up balance; on every plan). On some plans, scheduled_at is at most 7 days ahead and at most 10 posts can be queued. Connected apps can send at most 20 posts a day. A Pin needs a Pinterest board: pinterest.board_id (from list_pinterest_boards) sets it; without it the channel’s last-used board, or its only board, is used — the preview lists missing_board in blocked if there is none.
 
-Errors → next step: preview_stale → nothing was sent; show the user the new preview in details.preview and confirm again only if they agree; insufficient_credits or quota_exceeded → pass the message on as it is (nothing was charged); retry only once the user has more Credits; plan_required → details.feature schedule_window or queue_limit — pass the message on as it is; not_draft → list_posts status "draft", or draft_post; invalid_input → scheduled_at must be in the future; daily_cap_reached → send from creatif.space or wait for details.resets_at; reconnect_required → the user reconnects the channel; scope_missing → reconnect and allow "publish"; forbidden (403) → this seat or connection may not do this (e.g. a viewer, or a permission the connection was not given): the workspace owner or an editor can, or the user does it in creatif.space; do not retry; not_found (404) → the id is not in this workspace: take a fresh id from the matching list tool and call again.
+Errors → next step: preview_stale → nothing was sent; show the user the new preview in details.preview and confirm again only if they agree; insufficient_credits or quota_exceeded → pass the message on as it is (nothing was charged); retry only once the user has more Credits; plan_required → details.feature schedule_window or queue_limit — pass the message on as it is; not_draft → list_posts status "draft", or draft_post; invalid_input (missing_board) → call list_pinterest_boards for the Pinterest channel, ask the user which board, then call again with pinterest: { board_id }; invalid_input → scheduled_at must be in the future; daily_cap_reached → send from creatif.space or wait for details.resets_at; reconnect_required → the user reconnects the channel; scope_missing → reconnect and allow "publish"; forbidden (403) → this seat or connection may not do this (e.g. a viewer, or a permission the connection was not given): the workspace owner or an editor can, or the user does it in creatif.space; do not retry; not_found (404) → the id is not in this workspace: take a fresh id from the matching list tool and call again.
 
 | Input | Type | Required | Description |
 |---|---|---|---|
 | `post_id` | string | yes | Draft post id, as returned by the list tools |
 | `scheduled_at` | string | yes | When to publish, ISO 8601, in the future |
+| `pinterest` | object { board_id } | no | Pinterest only: the board for the Pin. Optional — without it the channel’s last-used board is used (or its only board). |
 | `confirm` | boolean | no | Leave false first: you get a preview (channels and Credit cost). Set true only after the user explicitly agreed to that preview. |
 
 ## publish_post
@@ -307,13 +311,14 @@ When to use: only when the user wants it out now; use schedule_post for later an
 
 Example: publish_post { "post_id": "01JD…" } → preview; then publish_post { "post_id": "01JD…", "confirm": true } → { post, note }; then get_post for each channel’s link
 
-The confirm sends exactly what that preview showed (a signed confirm_token kept by the server, valid 10 minutes). Credits are charged (Monthly Credits first, then the Top-up balance; on every plan). Connected apps can send at most 20 posts a day.
+The confirm sends exactly what that preview showed (a signed confirm_token kept by the server, valid 10 minutes). Credits are charged (Monthly Credits first, then the Top-up balance; on every plan). Connected apps can send at most 20 posts a day. A Pin needs a Pinterest board: pinterest.board_id (from list_pinterest_boards) sets it; without it the channel’s last-used board, or its only board, is used — the preview lists missing_board in blocked if there is none.
 
-Errors → next step: preview_stale → nothing was sent; show the user the new preview in details.preview and confirm again only if they agree; insufficient_credits or quota_exceeded → pass the message on as it is (nothing was charged); retry only once the user has more Credits; plan_required → pass the message on as it is; not_draft → list_posts status "draft", or draft_post; daily_cap_reached → send from creatif.space or wait for details.resets_at; reconnect_required → the user reconnects the channel; scope_missing → reconnect and allow "publish"; upstream_unavailable → check get_post before calling again — it may have gone out; forbidden (403) → this seat or connection may not do this (e.g. a viewer, or a permission the connection was not given): the workspace owner or an editor can, or the user does it in creatif.space; do not retry; not_found (404) → the id is not in this workspace: take a fresh id from the matching list tool and call again.
+Errors → next step: preview_stale → nothing was sent; show the user the new preview in details.preview and confirm again only if they agree; insufficient_credits or quota_exceeded → pass the message on as it is (nothing was charged); retry only once the user has more Credits; plan_required → pass the message on as it is; not_draft → list_posts status "draft", or draft_post; invalid_input (missing_board) → call list_pinterest_boards for the Pinterest channel, ask the user which board, then call again with pinterest: { board_id }; daily_cap_reached → send from creatif.space or wait for details.resets_at; reconnect_required → the user reconnects the channel; scope_missing → reconnect and allow "publish"; upstream_unavailable → check get_post before calling again — it may have gone out; forbidden (403) → this seat or connection may not do this (e.g. a viewer, or a permission the connection was not given): the workspace owner or an editor can, or the user does it in creatif.space; do not retry; not_found (404) → the id is not in this workspace: take a fresh id from the matching list tool and call again.
 
 | Input | Type | Required | Description |
 |---|---|---|---|
 | `post_id` | string | yes | Draft post id, as returned by the list tools |
+| `pinterest` | object { board_id } | no | Pinterest only: the board for the Pin. Optional — without it the channel’s last-used board is used (or its only board). |
 | `confirm` | boolean | no | Leave false first: you get a preview (channels and Credit cost). Set true only after the user explicitly agreed to that preview. |
 
 ## request_media_upload
@@ -1021,13 +1026,13 @@ When to use: when the user wants a set of drafts (a planned week) to go out late
 
 Example: schedule_posts { "posts": [{ "post_id": "01JD…", "scheduled_at": "2026-11-20T09:00:00+07:00" }, { "post_id": "01JE…", "scheduled_at": "2026-11-21T09:00:00+07:00" }] } → { confirmation_required: true, posts, total_credit_cost }; then with "confirm": true → { scheduled: [...] }
 
-The confirm schedules exactly what that preview showed. Credits are charged when they are scheduled (Monthly Credits first, then the Top-up balance; on every plan). Every post counts against the 20 sends a day connected apps may make. confirm: true without a current preview of the same posts and times (shown in the last 10 minutes) returns a preview again and schedules nothing. Drafts waiting for approval cannot be scheduled here.
+The confirm schedules exactly what that preview showed. Credits are charged when they are scheduled (Monthly Credits first, then the Top-up balance; on every plan). Every post counts against the 20 sends a day connected apps may make. confirm: true without a current preview of the same posts and times (shown in the last 10 minutes) returns a preview again and schedules nothing. Drafts waiting for approval cannot be scheduled here. A Pin needs a Pinterest board: each post’s pinterest.board_id (from list_pinterest_boards) sets it; without it the channel’s last-used board, or its only board, is used.
 
 Errors → next step: preview_stale → nothing was scheduled: channels or Credits changed since the preview; show the user the new preview in details.preview and confirm again only if they agree; batch_failed → nothing was scheduled: details.failed_post_id was refused (details.reason) and the others were taken back; fix that post or leave it out, preview again; not_schedulable → nothing was scheduled: details.refused names each post that is not a draft or waits for approval; leave them out and preview again; insufficient_credits → nothing was scheduled: the user tops up, or schedules fewer posts; daily_cap_reached → nothing was scheduled: fewer posts, or tomorrow (UTC); plan_required → pass the message to the user as it is (window or queue limit), do not retry; invalid_input → a post is listed twice (details.post_ids): list each draft once and call again; not_found → take draft ids from list_posts status "draft"; scope_missing → reconnect and allow "publish"; forbidden (403) → this seat or connection may not do this (e.g. a viewer, or a permission the connection was not given): the workspace owner or an editor can, or the user does it in creatif.space; do not retry.
 
 | Input | Type | Required | Description |
 |---|---|---|---|
-| `posts` | array of object { post_id, scheduled_at } | yes | Up to 10 drafts, each with its own time |
+| `posts` | array of object { post_id, scheduled_at, pinterest } | yes | Up to 10 drafts, each with its own time |
 | `confirm` | boolean | no | Leave false first: a preview of every post and the total Credits. Set true only after the user explicitly agreed. |
 
 ## list_failed_posts
@@ -1068,3 +1073,25 @@ Read-only. Counted across the workspace (the owner and its members), from the da
 Errors → next step: unauthorized → ask the user to reconnect the creatif.space connector; scope_missing → reconnect with "read" allowed; upstream_unavailable → wait a minute and call again; plan_required (402) → a plan limit, or a feature this account's plan does not include (on some plans: posts scheduled at most 7 days ahead, at most 10 queued posts, approval links for one client); tell the user it is not available on their plan, and do not retry; forbidden (403) → this seat or connection may not do this (e.g. a viewer, or a permission the connection was not given): the workspace owner or an editor can, or the user does it in creatif.space; do not retry; not_found (404) → the id is not in this workspace: take a fresh id from the matching list tool and call again.
 
 No input.
+
+## list_pinterest_boards
+
+**List Pinterest boards** · scope `read` · read-only yes · destructive no · idempotent yes · open world no · structured output
+
+Lists the boards of a connected Pinterest channel, so a Pin can be sent to the right one.
+
+Lists the boards of one connected Pinterest channel (id and name), and which board the channel used last (default_board_id).
+
+When to use: before sending a Pin when the user has more than one board, or when a send says missing_board: a Pin needs a board. Pass the chosen id as pinterest.board_id to draft_post, update_post, schedule_post, schedule_posts or publish_post. Without one, the channel’s last-used board is used, or its only board.
+
+Example: list_pinterest_boards { "account_id": "01JD…" } → { boards: [{ id: "8732…", name: "Recipes", default: true }], next_cursor: null, default_board_id: "8732…" }
+
+Read-only. account_id is a Pinterest channel id from list_channels. Paged: pass next_cursor back as cursor; null means no more.
+
+Errors → next step: invalid_input → the channel is not a Pinterest channel: take a Pinterest channel id from list_channels; upstream_unavailable → Pinterest did not answer: wait a minute and call again; scope_missing → reconnect and allow "read"; plan_required (402) → a plan limit, or a feature this account's plan does not include (on some plans: posts scheduled at most 7 days ahead, at most 10 queued posts, approval links for one client); tell the user it is not available on their plan, and do not retry; forbidden (403) → this seat or connection may not do this (e.g. a viewer, or a permission the connection was not given): the workspace owner or an editor can, or the user does it in creatif.space; do not retry; not_found (404) → the id is not in this workspace: take a fresh id from the matching list tool and call again.
+
+| Input | Type | Required | Description |
+|---|---|---|---|
+| `account_id` | string | yes | Pinterest channel id, as returned by list_channels |
+| `limit` | integer | no | At most this many boards per page (1–100, default 50) |
+| `cursor` | string | no | next_cursor from the previous page of this same list (same filters); omit for the first page |

@@ -32,6 +32,7 @@ import { connectTools } from './tools/connect.js';
 import { feedbackTools } from './tools/feedback.js';
 import { calendarTools } from './tools/calendar.js';
 import { onboardingTools } from './tools/onboarding.js';
+import { pinterestTools } from './tools/pinterest.js';
 import { V1Client } from './v1.js';
 import { VERSION } from './version.js';
 import { registerPrompts } from './prompts.js';
@@ -41,7 +42,7 @@ import { DEFAULT_FREE_RATE_LIMIT, DEFAULT_GLAMA_CLAIM, DEFAULT_OPENAI_APPS_CHALL
 import { mountFree } from './free/server.js';
 
 /** Every tool, in the order it is registered (and listed). */
-export const ALL_TOOLS = [...m1Tools, ...m2Tools, ...mediaTools, ...engageTools, ...storageTools, ...housekeepingTools, ...approverTools, ...insightTools, ...insightReportTools, ...spaceTools, ...auditTools, ...connectTools, ...feedbackTools, ...insightShareTools, ...calendarTools, ...contentPlanTools, ...accountSummaryTools, ...retryTools, ...notificationTools, ...scheduleBatchTools, ...failedPostsTools, ...onboardingTools];
+export const ALL_TOOLS = [...m1Tools, ...m2Tools, ...mediaTools, ...engageTools, ...storageTools, ...housekeepingTools, ...approverTools, ...insightTools, ...insightReportTools, ...spaceTools, ...auditTools, ...connectTools, ...feedbackTools, ...insightShareTools, ...calendarTools, ...contentPlanTools, ...accountSummaryTools, ...retryTools, ...notificationTools, ...scheduleBatchTools, ...failedPostsTools, ...onboardingTools, ...pinterestTools];
 
 /** The Pen Rocket, as listed in server.json for the MCP Registry (served by the web app). */
 /** Public pages: serverInfo carries websiteUrl (MCP Implementation); privacy and terms are in the RFC 9728 metadata. */

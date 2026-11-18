@@ -2,6 +2,7 @@ import { z } from 'zod';
 import { ToolError } from '../errors.js';
 import { idempotencyKey, V1Error } from '../v1.js';
 import { defineTool, describeTool, type ToolContext } from './define.js';
+import { pinterestInput, setPinterestBoard } from './pinterest.js';
 import { shapePost, type V1Post } from './shape.js';
 
 /** A repeat of the same create_approval_link within this window gets the first link back. */
@@ -23,6 +24,8 @@ export interface SendPreview {
   targets: { channel_id: string; platform: string; username: string | null; usable: boolean; credits: number }[];
   credits: { price: number; from_topup: number; monthly_balance: number; topup_balance: number; can_afford: boolean };
   daily_cap: { cap: number; used: number; remaining: number };
+  /** What a network would refuse as the post is (PublishPreflight); empty when all will take it. */
+  problems?: { account_id: string; platform: string; code: string; reason: string }[];
   /** Signed by the API: user + post + destinations + Credit price, 10 minutes. */
   confirm_token?: string;
   confirm_expires_at?: string;
@@ -140,6 +143,13 @@ function previewResult(p: SendPreview, action: 'publish' | 'schedule', scheduled
   if (p.daily_cap.remaining <= 0) blocked.push('the daily limit for sends from connected apps is reached');
   const stale = p.targets.filter((t) => !t.usable);
   if (stale.length) blocked.push(`reconnect required for: ${stale.map((t) => `${t.platform} ${t.username ?? ''}`.trim()).join(', ')}`);
+  for (const pr of p.problems ?? []) {
+    blocked.push(
+      pr.code === 'missing_board'
+        ? `${pr.platform}: ${pr.reason} — call list_pinterest_boards { "account_id": "${pr.account_id}" }, ask the user which board, then call ${action === 'publish' ? 'publish_post' : 'schedule_post'} again with pinterest: { "board_id": "<id>" }`
+        : `${pr.platform}: ${pr.reason}`,
+    );
+  }
 
   return {
     confirmation_required: true,
@@ -418,10 +428,10 @@ export const updatePost = defineTool({
   name: 'update_post',
   title: 'Update a post',
   description: describeTool({
-    does: "Changes a draft or a post still waiting for approval: its caption, scheduled time, labels or media. file_ids REPLACES the post’s media — the media not listed is removed from the post.",
+    does: "Changes a draft or a post still waiting for approval: its caption, scheduled time, labels, media or Pinterest board. file_ids REPLACES the post’s media — the media not listed is removed from the post.",
     when: "to edit an existing draft instead of drafting a new one. Posts already queued to publish, published or otherwise done cannot be changed from here — the user edits those in creatif.space.",
     example: "update_post { \"post_id\": \"01JD…\", \"caption\": \"New caption\", \"add_file_ids\": [\"01JE…\"] }",
-    rules: "Media: file_ids REPLACES the post’s media with these library files ([] removes all); add_file_ids keeps the current media and adds these after it (10 items at most). Ids come from list_files, or from confirm_media_upload for a new upload.",
+    rules: "Media: file_ids REPLACES the post’s media with these library files ([] removes all); add_file_ids keeps the current media and adds these after it (10 items at most). Ids come from list_files, or from confirm_media_upload for a new upload. pinterest.board_id sets the board of the post’s Pinterest channel (ids from list_pinterest_boards).",
     errors: [
       ["not_editable", "details.status says why; tell the user to change it in creatif.space, or draft_post a new version"],
       ["file_not_ready", "call confirm_media_upload first"],
@@ -438,6 +448,7 @@ export const updatePost = defineTool({
     labels: z.array(z.string().max(40)).max(10).optional().describe('Replaces the post’s labels'),
     file_ids: z.array(ulid('File')).max(10).optional().describe('Replaces the post’s media with these library files ([] removes all media)'),
     add_file_ids: z.array(ulid('File')).min(1).max(10).optional().describe('Adds these library files after the post’s current media'),
+    pinterest: pinterestInput,
   },
   annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: true, openWorldHint: false },
   notFound: { what: 'That post', next: 'Check the post id: find it with list_posts (status draft for drafts) and call again.' },
@@ -448,9 +459,9 @@ export const updatePost = defineTool({
       });
     }
     const changesMedia = args.file_ids !== undefined || args.add_file_ids !== undefined;
-    if (args.caption === undefined && args.scheduled_at === undefined && args.labels === undefined && !changesMedia) {
-      throw new ToolError('invalid_input', 'Nothing to change: no field to update was given.', 'Call again with at least one of caption, scheduled_at, labels, file_ids or add_file_ids.', {
-        fields: ['caption', 'scheduled_at', 'labels', 'file_ids', 'add_file_ids'],
+    if (args.caption === undefined && args.scheduled_at === undefined && args.labels === undefined && !changesMedia && args.pinterest === undefined) {
+      throw new ToolError('invalid_input', 'Nothing to change: no field to update was given.', 'Call again with at least one of caption, scheduled_at, labels, file_ids, add_file_ids or pinterest.', {
+        fields: ['caption', 'scheduled_at', 'labels', 'file_ids', 'add_file_ids', 'pinterest'],
       });
     }
     // The API decides what may change (drafts and posts waiting for approval
@@ -473,7 +484,15 @@ export const updatePost = defineTool({
         { max: 10, current: keptMedia(current).length, adding: args.add_file_ids.length },
       );
     }
+    const pin = args.pinterest ? (current.targets ?? []).find((t) => t.account.platform === 'pinterest') : undefined;
+    if (args.pinterest && !pin) {
+      throw new ToolError('invalid_input', 'pinterest.board_id was given, but this post has no Pinterest channel.', 'Leave out pinterest and call again.', {
+        field: 'pinterest.board_id',
+        post_id: args.post_id,
+      });
+    }
     const { data } = await v1.patch<{ data: V1Post }>(`/social-posts/${encodeURIComponent(args.post_id)}`, {
+      ...(pin && args.pinterest ? { options: { [pin.account.id]: { board_id: args.pinterest.board_id } } } : {}),
       ...(args.caption !== undefined ? { caption: args.caption } : {}),
       ...(args.scheduled_at !== undefined ? { scheduled_at: args.scheduled_at } : {}),
       ...(args.labels !== undefined ? { labels: args.labels } : {}),
@@ -491,12 +510,13 @@ export const schedulePost = defineTool({
     does: "Schedules a DRAFT to publish at a future time on its channels, after the user agrees to a preview of channels and Credit cost.",
     when: "when the user wants a draft to go out later; use publish_post to send now, and create_approval_link if a client must approve first. Two steps: call with confirm false (default) to get the preview; show it to the user, and only after they explicitly agree call again with confirm: true.",
     example: "schedule_post { \"post_id\": \"01JD…\", \"scheduled_at\": \"2026-12-01T09:00:00+07:00\" } → preview; then the same call with \"confirm\": true → { post, note }",
-    rules: "The confirm sends exactly what that preview showed (a signed confirm_token kept by the server, valid 10 minutes). Credits are charged when it is scheduled (Monthly Credits first, then the Top-up balance; on every plan). On some plans, scheduled_at is at most 7 days ahead and at most 10 posts can be queued. Connected apps can send at most 20 posts a day.",
+    rules: "The confirm sends exactly what that preview showed (a signed confirm_token kept by the server, valid 10 minutes). Credits are charged when it is scheduled (Monthly Credits first, then the Top-up balance; on every plan). On some plans, scheduled_at is at most 7 days ahead and at most 10 posts can be queued. Connected apps can send at most 20 posts a day. A Pin needs a Pinterest board: pinterest.board_id (from list_pinterest_boards) sets it; without it the channel’s last-used board, or its only board, is used — the preview lists missing_board in blocked if there is none.",
     errors: [
       ["preview_stale", "nothing was sent; show the user the new preview in details.preview and confirm again only if they agree"],
       ["insufficient_credits or quota_exceeded", "pass the message on as it is (nothing was charged); retry only once the user has more Credits"],
       ["plan_required", "details.feature schedule_window or queue_limit — pass the message on as it is"],
       ["not_draft", "list_posts status \"draft\", or draft_post"],
+      ["invalid_input (missing_board)", "call list_pinterest_boards for the Pinterest channel, ask the user which board, then call again with pinterest: { board_id }"],
       ["invalid_input", "scheduled_at must be in the future"],
       ["daily_cap_reached", "send from creatif.space or wait for details.resets_at"],
       ["reconnect_required", "the user reconnects the channel"],
@@ -507,6 +527,7 @@ export const schedulePost = defineTool({
   input: {
     post_id: ulid('Draft post'),
     scheduled_at: z.iso.datetime({ offset: true }).describe('When to publish, ISO 8601, in the future'),
+    pinterest: pinterestInput,
     confirm,
   },
   annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: false, openWorldHint: true },
@@ -519,6 +540,7 @@ export const schedulePost = defineTool({
         now: new Date().toISOString(),
       });
     }
+    if (args.pinterest) await setPinterestBoard(ctx, args.post_id, args.pinterest.board_id);
     if (!args.confirm) {
       return previewResult(await preview(ctx, args.post_id, args.scheduled_at), 'schedule', args.scheduled_at);
     }
@@ -535,12 +557,13 @@ export const publishPost = defineTool({
     does: "Publishes a DRAFT now on its channels — it goes public and cannot be undone — after the user agrees to a preview of channels and Credit cost.",
     when: "only when the user wants it out now; use schedule_post for later and create_approval_link if a client must approve first. Two steps: call with confirm false (default) to get the preview; show it to the user, and only after they explicitly agree call again with confirm: true.",
     example: "publish_post { \"post_id\": \"01JD…\" } → preview; then publish_post { \"post_id\": \"01JD…\", \"confirm\": true } → { post, note }; then get_post for each channel’s link",
-    rules: "The confirm sends exactly what that preview showed (a signed confirm_token kept by the server, valid 10 minutes). Credits are charged (Monthly Credits first, then the Top-up balance; on every plan). Connected apps can send at most 20 posts a day.",
+    rules: "The confirm sends exactly what that preview showed (a signed confirm_token kept by the server, valid 10 minutes). Credits are charged (Monthly Credits first, then the Top-up balance; on every plan). Connected apps can send at most 20 posts a day. A Pin needs a Pinterest board: pinterest.board_id (from list_pinterest_boards) sets it; without it the channel’s last-used board, or its only board, is used — the preview lists missing_board in blocked if there is none.",
     errors: [
       ["preview_stale", "nothing was sent; show the user the new preview in details.preview and confirm again only if they agree"],
       ["insufficient_credits or quota_exceeded", "pass the message on as it is (nothing was charged); retry only once the user has more Credits"],
       ["plan_required", "pass the message on as it is"],
       ["not_draft", "list_posts status \"draft\", or draft_post"],
+      ["invalid_input (missing_board)", "call list_pinterest_boards for the Pinterest channel, ask the user which board, then call again with pinterest: { board_id }"],
       ["daily_cap_reached", "send from creatif.space or wait for details.resets_at"],
       ["reconnect_required", "the user reconnects the channel"],
       ["scope_missing", "reconnect and allow \"publish\""],
@@ -550,11 +573,13 @@ export const publishPost = defineTool({
   scope: 'publish',
   input: {
     post_id: ulid('Draft post'),
+    pinterest: pinterestInput,
     confirm,
   },
   annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: false, openWorldHint: true },
   notFound: { what: 'That post', next: 'Check the post id: find it with list_posts (status draft for drafts) and call again.' },
   run: async (args, ctx) => {
+    if (args.pinterest) await setPinterestBoard(ctx, args.post_id, args.pinterest.board_id);
     if (!args.confirm) {
       return previewResult(await preview(ctx, args.post_id), 'publish');
     }

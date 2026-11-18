@@ -19,6 +19,7 @@ use App\Models\SocialPost;
 use App\Models\SocialPostComment;
 use App\Models\User;
 use App\Support\Credits;
+use App\Support\PinterestBoards;
 use App\Support\PlanQuota;
 use App\Support\ProductEvents;
 use App\Support\PostDelivery;
@@ -222,6 +223,10 @@ class SocialPostController extends Controller
             fn ($o) => array_intersect_key((array) $o, array_flip(['board_id', 'title', 'link'])),
             $validated['options'] ?? [],
         );
+        // A board named for a Pinterest channel is one of its boards; it is
+        // remembered as that channel's default once the post is saved.
+        app(PinterestBoards::class)->validate($accounts, $options);
+        $chosen = $options;
 
         // Monthly Credits first, then Top-up, each destination at its price
         // (X more with a link), checked before anything reaches the
@@ -334,6 +339,8 @@ class SocialPostController extends Controller
             ]);
         }
 
+        PinterestBoards::remember($accounts, $chosen);
+
         ProductEvents::postCreated($post, match (true) {
             $draft => 'draft',
             $approval !== null => 'approval',
@@ -374,6 +381,13 @@ class SocialPostController extends Controller
             // Labels are ours alone — never sent to the provider.
             'labels' => ['sometimes', 'nullable', 'array', 'max:10'],
             'labels.*' => ['string', 'max:40'],
+            // Per-channel network options, as on create: Pinterest's board
+            // (remembered as the channel's default), Pin title and link.
+            'options' => ['sometimes', 'array'],
+            'options.*' => ['array'],
+            'options.*.board_id' => ['sometimes', 'string', 'max:64'],
+            'options.*.title' => ['sometimes', 'string', 'max:100'],
+            'options.*.link' => ['sometimes', 'url:https,http', 'max:2000'],
         ]);
 
         if (array_key_exists('file_ids', $validated)) {
@@ -398,6 +412,22 @@ class SocialPostController extends Controller
                 'message' => 'Connected apps can only change drafts and posts still waiting for approval. Edit this one in creatif.space.',
                 'code' => 'not_editable',
             ], 409);
+        }
+
+        // Board, Pin title and link: only before the post reaches the provider.
+        if (array_key_exists('options', $validated)) {
+            if (! ($socialPost->status === SocialPostStatus::Draft
+                || ($socialPost->status === SocialPostStatus::Scheduled && $socialPost->held()))) {
+                return response()->json([
+                    'message' => 'The Pinterest board, Pin title and link can only change before the post is sent.',
+                    'code' => 'not_editable',
+                ], 409);
+            }
+            $this->applyOptions($socialPost, (array) $validated['options']);
+            unset($validated['options']);
+            if ($validated === []) {
+                return new SocialPostResource($socialPost->fresh()->load('targets.account'));
+            }
         }
 
         // Labels alone are our own filing: any post, any status, no provider.
@@ -649,6 +679,13 @@ class SocialPostController extends Controller
             'scheduled_at' => ['sometimes', 'nullable', 'date', 'after:now'],
             'approval' => ['sometimes', 'nullable', Rule::in(['awaiting', 'client'])],
             'confirm_token' => ['sometimes', 'nullable', 'string', 'max:1024'],
+            // Board, Pin title and link to send with (as on create); a board
+            // becomes the Pinterest channel's default.
+            'options' => ['sometimes', 'array'],
+            'options.*' => ['array'],
+            'options.*.board_id' => ['sometimes', 'string', 'max:64'],
+            'options.*.title' => ['sometimes', 'string', 'max:100'],
+            'options.*.link' => ['sometimes', 'url:https,http', 'max:2000'],
         ]);
 
         if ($socialPost->status !== SocialPostStatus::Draft) {
@@ -705,6 +742,10 @@ class SocialPostController extends Controller
             throw new NeedsPublishTime([$socialPost->ulid], 'scheduled_at');
         }
 
+        if (array_key_exists('options', $validated)) {
+            $this->applyOptions($socialPost, (array) $validated['options']);
+        }
+
         // The relay charges as it sends, and refuses before the provider if
         // the balance is short; a held draft costs nothing yet.
         $socialPost->update([
@@ -721,6 +762,43 @@ class SocialPostController extends Controller
         }
 
         return new SocialPostResource($socialPost->fresh()->load('targets.account'));
+    }
+
+    /**
+     * Per-channel network options on a post not yet at the provider: the
+     * Pinterest board (checked against the account's boards, then
+     * remembered as its default), Pin title and link, merged into each
+     * named channel's configuration.
+     *
+     * @param  array<mixed>  $raw  by channel (account ulid)
+     *
+     * @throws ValidationException
+     */
+    private function applyOptions(SocialPost $post, array $raw): void
+    {
+        $post->load('targets.account');
+        $accounts = $post->targets->pluck('account')->filter()->values();
+        $unknown = array_values(array_diff(array_map('strval', array_keys($raw)), $accounts->pluck('ulid')->all()));
+        if ($unknown !== []) {
+            throw ValidationException::withMessages([
+                'options' => 'options names a channel that is not on this post: '.implode(', ', $unknown).'.',
+            ]);
+        }
+
+        $options = array_map(
+            fn ($o) => array_intersect_key((array) $o, array_flip(['board_id', 'title', 'link'])),
+            $raw,
+        );
+        app(PinterestBoards::class)->validate($accounts, $options);
+
+        foreach ($post->targets as $target) {
+            $own = $target->account === null ? [] : ($options[$target->account->ulid] ?? []);
+            if ($own !== []) {
+                $target->update(['configuration' => [...(array) ($target->configuration ?? []), ...$own]]);
+            }
+        }
+
+        PinterestBoards::remember($accounts, $options);
     }
 
     /**

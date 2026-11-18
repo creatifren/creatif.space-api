@@ -1,5 +1,10 @@
 import { V1Error, V1Unavailable } from './v1.js';
 
+
+/** The one next step for a Pin with no board (errors, send previews, list_pinterest_boards). */
+export const MISSING_BOARD_NEXT =
+  'Nothing was sent. Call list_pinterest_boards with the Pinterest channel id (details.channel_id, or from list_channels), ask the user which board, then call again with pinterest: { "board_id": "<board id>" }. The board is remembered for that channel next time.';
+
 export type ErrorCode =
   | 'reconnect_required'
   | 'scope_missing'
@@ -183,6 +188,18 @@ function classify(e: unknown, notFound: NotFound, stateTool?: string): ToolError
   const media = mediaError(e.status, body, message);
   if (media) return media;
 
+  // A network would refuse the post (PublishPreflightFailed): each problem
+  // names its channel; a missing Pinterest board has its own next step.
+  if (code === 'publish_preflight_failed') {
+    const problems = (Array.isArray(body.problems) ? body.problems : []) as { account_id?: string; code?: string }[];
+    const board = problems.find((p) => p.code === 'missing_board');
+    return new ToolError(
+      'invalid_input',
+      message || 'One of the channels would refuse this post as it is.',
+      board ? MISSING_BOARD_NEXT : 'Nothing was sent. Tell the user each reason in details.problems; change what it names (update_post: caption, media, or pinterest.board_id) and call again.',
+      { reason: board ? 'missing_board' : 'publish_preflight_failed', problems, ...(board?.account_id ? { channel_id: board.account_id } : {}) },
+    );
+  }
   // A post with no publish time never goes to a client (API needs_publish_time).
   if (code === 'needs_publish_time') {
     const postIds = Array.isArray(body.post_ids) ? body.post_ids : [];
