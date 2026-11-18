@@ -10,6 +10,7 @@ use App\Exceptions\NotEnoughCredits;
 use App\Exceptions\PublishPreflightFailed;
 use App\Exceptions\ScheduleBeyondHorizon;
 use App\Http\Controllers\Controller;
+use App\Jobs\SendApprovedHeldPosts;
 use App\Models\SocialApprovalDecision;
 use App\Models\SocialApprovalLink;
 use App\Models\SocialPost;
@@ -46,6 +47,9 @@ use Throwable;
 class PublicApprovalController extends Controller
 {
     /** What the approver reads when a post has no time yet (needs_time). */
+    /** Seconds an Approve-all sends in place before handing the rest to the queue. */
+    public static float $syncBudget = 20.0;
+
     public const NEEDS_TIME = 'This post has no publish time yet, so it cannot be approved: approving would publish it at once. The sender has to set a time first.';
 
     /** The link this request resolved (postArray reads its rules). */
@@ -258,8 +262,10 @@ class PublicApprovalController extends Controller
      * post leaves, and a provider failure on one post is reported on that
      * post while the rest go through.
      *
-     * ponytail: synchronous — a 50-post batch waits on 50 provider calls.
-     * Queue it when links routinely carry more than ~20 posts.
+     * Sent in place while the request is young; past SYNC_BUDGET seconds the
+     * rest are approved and handed to SendApprovedHeldPosts, so a long plan
+     * is never cut off halfway by the web server's timeout (bug 14 Nov: 22
+     * posts, only the first 11 approved).
      */
     public function approveAll(Request $request, string $token, SocialPostRelay $relay): JsonResponse
     {
@@ -318,8 +324,12 @@ class PublicApprovalController extends Controller
 
         $results = [];
         $approved = 0;
+        $deferred = false;
+        $started = microtime(true);
         foreach ($eligible as $post) {
-            $outcome = $this->approveFor($link, $post, $name, $relay);
+            $defer = microtime(true) - $started >= self::$syncBudget;
+            $outcome = $this->approveFor($link, $post, $name, $relay, $defer);
+            $deferred = $deferred || ($defer && $outcome === true);
             $results[] = [
                 'id' => $post->ulid,
                 'approved' => $outcome === true,
@@ -330,6 +340,10 @@ class PublicApprovalController extends Controller
                 ApproverGate::record($request, $link, $post, SocialApprovalDecision::APPROVED, $approver, $name);
                 ProductEvents::approvalDecision($link, $post, 'approved');
             }
+        }
+
+        if ($deferred) {
+            SendApprovedHeldPosts::dispatch();
         }
 
         if ($approved > 0) {
@@ -354,7 +368,7 @@ class PublicApprovalController extends Controller
      * provider refusal) goes to the owner, never to the client: their page
      * is not where the editor's Credits are discussed.
      */
-    private function approveFor(SocialApprovalLink $link, SocialPost $post, string $name, SocialPostRelay $relay): bool|string
+    private function approveFor(SocialApprovalLink $link, SocialPost $post, string $name, SocialPostRelay $relay, bool $defer = false): bool|string
     {
         // Approve-all included: a post with no time is never sent by a yes.
         if ($post->scheduled_at === null) {
@@ -362,12 +376,14 @@ class PublicApprovalController extends Controller
         }
 
         try {
-            $approved = $relay->approve($post, $name, PlanScope::decidableFrom($link), holdBeyondHorizon: true);
+            $approved = $relay->approve($post, $name, PlanScope::decidableFrom($link), holdBeyondHorizon: true, deferSend: $defer);
 
             // A slot further out than the relay takes: the yes stands and
             // the post goes out by itself once it is close enough. The
             // owner is told; the client's tap is never a dead end.
-            if ($approved && SocialPostRelay::heldForLater($post->refresh())) {
+            // A batch's deferred send is not "held": the job sends it in minutes.
+            if ($approved && SocialPostRelay::heldForLater($post->refresh())
+                && (! $defer || ScheduleHorizon::beyond($post->provider, $post->scheduled_at))) {
                 $link->user->notify(new SocialPostDecided($link, SocialPostDecided::HELD, $name, 1, $post, self::heldReason($post)));
             }
 

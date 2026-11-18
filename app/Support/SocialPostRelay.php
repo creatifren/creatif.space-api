@@ -297,15 +297,19 @@ class SocialPostRelay
      * the post waits, approved, until SendApprovedHeldPosts can send it
      * (heldForLater). The owner's own paths get the 422 instead.
      *
+     * $deferSend (client path only, with $holdBeyondHorizon): record the yes
+     * now and leave the send to SendApprovedHeldPosts — a long Approve-all
+     * must answer before the web server's timeout cuts it off halfway.
+     *
      * @param  list<SocialPostApproval>  $from  the states this caller may approve out of
      *
      * @throws ConnectionException
      * @throws ValidationException when the Credits do not cover it
      * @throws AccountReconnectRequired when a destination is not usable
      */
-    public function approve(SocialPost $post, string $by, array $from, bool $holdBeyondHorizon = false): bool
+    public function approve(SocialPost $post, string $by, array $from, bool $holdBeyondHorizon = false, bool $deferSend = false): bool
     {
-        return Cache::lock("social-post:{$post->id}:approve", 60)->block(10, function () use ($post, $by, $from, $holdBeyondHorizon): bool {
+        return Cache::lock("social-post:{$post->id}:approve", 60)->block(10, function () use ($post, $by, $from, $holdBeyondHorizon, $deferSend): bool {
             // Fresh state, not whatever this caller loaded earlier; `send`
             // reads the owner for the Credits check.
             $post->refresh()->loadMissing('user');
@@ -315,7 +319,8 @@ class SocialPostRelay
             }
 
             // Provider first: a failed send leaves the post held, not half-approved.
-            if (! ($holdBeyondHorizon && ScheduleHorizon::beyond($post->provider, $post->scheduled_at))) {
+            $defer = $holdBeyondHorizon && ($deferSend || ScheduleHorizon::beyond($post->provider, $post->scheduled_at));
+            if (! $defer) {
                 try {
                     $this->send($post);
                 } catch (Throwable $e) {
