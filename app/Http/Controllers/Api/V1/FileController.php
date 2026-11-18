@@ -214,6 +214,8 @@ class FileController extends Controller
         ], [
             // Says what to do, not only what is wrong (connected apps pass it on).
             'mime_type.in' => self::REFUSED_FORMAT,
+            // Not the validator's "must be at least 1" (QA-FILE-007).
+            'size_bytes.min' => 'This file is empty (0 bytes). Pick another file.',
         ]);
 
         $user = Workspace::owner($request->user());
@@ -473,7 +475,9 @@ class FileController extends Controller
         abort_unless($file->user_id === $user->id, 404);
         abort_unless(Workspace::canWrite($request->user()), 403);
 
-        if ($file->spaceItems()->exists()) {
+        // Only a Space that still exists holds it: a deleted (soft-deleted)
+        // Space shows nothing, so its items no longer lock the file (QA-SPC-008).
+        if ($file->spaceItems()->whereHas('space')->exists()) {
             return response()->json([
                 'message' => 'This file is used in a Space — remove it there first.',
             ], 409);

@@ -997,7 +997,7 @@ When to use: when the user asks to stop or start one of these emails (e.g. "stop
 
 Example: update_notification_settings { "post_missed_or_failed": true } → { settings: { post_missed_or_failed: true, publish_failed: true, approval_decided: true, weekly_digest: false } }
 
-Give at least one switch as true or false, or timezone (IANA, e.g. "Asia/Jakarta"; null resets it); the rest stay as they are. post_missed_or_failed and publish_failed are one switch here: give one of them. Only change what the user asked for. Email only: the in-app bell stays. Account and storage emails cannot be turned off.
+Give at least one switch as true or false, x post_missed_or_failed and publish_failed are one switch here: give one of them. Only change what the user asked for. Email only: the in-app bell stays. Account and storage emails cannot be turned off.
 
 Errors → next step: invalid_input → pass at least one of post_missed_or_failed, approval_decided, weekly_digest as true/false, or a valid IANA timezone; scope_missing → reconnect and allow "draft"; unauthorized → reconnect creatif.space; upstream_unavailable → call again in a minute; plan_required (402) → a plan limit, or a feature this account's plan does not include (on some plans: posts scheduled at most 7 days ahead, at most 10 queued posts, approval links for one client); tell the user it is not available on their plan, and do not retry; forbidden (403) → this seat or connection may not do this (e.g. a viewer, or a permission the connection was not given): the workspace owner or an editor can, or the user does it in creatif.space; do not retry; not_found (404) → the id is not in this workspace: take a fresh id from the matching list tool and call again.
 
@@ -1007,7 +1007,7 @@ Errors → next step: invalid_input → pass at least one of post_missed_or_fail
 | `publish_failed` | boolean | no | The same switch as post_missed_or_failed (older name) |
 | `approval_decided` | boolean | no | Email when a client approves or asks for changes |
 | `weekly_digest` | boolean | no | The Monday 08:00 weekly summary email |
-| `timezone` | string or null | no | IANA timezone for the weekly digest, e.g. "Asia/Jakarta"; null resets it |
+| `timezone` | string or null | no | IANA timezone for the weekly digest, e.g. "Europe/London"; null resets it. Omit it unless the user asked to change the timezone |
 
 ## schedule_posts
 

@@ -165,7 +165,9 @@ final class MediaRetention
     {
         $protected = [];
         foreach ([
-            DB::table('space_items')->whereIn('file_id', $ids)->pluck('file_id'),
+            // A deleted Space protects nothing (QA-SPC-008).
+            DB::table('space_items')->join('spaces', 'spaces.id', '=', 'space_items.space_id')
+                ->whereNull('spaces.deleted_at')->whereIn('space_items.file_id', $ids)->pluck('space_items.file_id'),
             DB::table('transfer_files')->whereIn('file_id', $ids)->pluck('file_id'),
         ] as $used) {
             foreach ($used as $id) {
