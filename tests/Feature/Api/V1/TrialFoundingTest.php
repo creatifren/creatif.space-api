@@ -160,6 +160,39 @@ describe('what main did with a trial (the bug this fixes first)', function () {
         expect($sub->fresh()->status)->toBe(SubscriptionStatus::Expired)
             ->and($sub->invoices()->where('status', InvoiceStatus::Paid)->exists())->toBeFalse();
     });
+
+    it('activates a checkout a 100%-off code paid for, as a $0 invoice (Sales NAME1M codes)', function (array $tx, array $sub) {
+        $s = trialCheckout();
+        bindCheckout($s);
+        $event = trialPaidEvent($s, 'tran_code', 0, 'evt_code', 'active');
+        $event['object']['last_transaction'] = $tx + $event['object']['last_transaction'];
+        $event['object'] += $sub;
+
+        trialHook($event)->assertOk();
+
+        $invoice = $s->invoices()->sole();
+        expect($s->fresh()->status)->toBe(SubscriptionStatus::Active)
+            ->and($s->user->fresh()->plan()->key->value)->toBe('pro')
+            ->and($invoice->status)->toBe(InvoiceStatus::Paid)
+            ->and($invoice->amount)->toBe(0)
+            ->and($invoice->creem_transaction_id)->toBe('tran_code');
+    })->with([
+        'price before discount, nothing charged' => [['amount' => 999, 'amount_paid' => 0], []],
+        'zero amount, discount named' => [['amount' => 0], ['discount' => ['id' => 'dis_1', 'discountCode' => 'NAME1M', 'type' => 'percentage', 'duration' => 'once']]],
+        'zero amount, discount_amount on the transaction' => [['amount' => 0, 'amount_paid' => 0, 'discount_amount' => 999], []],
+    ]);
+
+    it('never treats a trialing $0 card check as a discount', function () {
+        $s = trialCheckout();
+        bindCheckout($s);
+        $event = trialPaidEvent($s, 'tran_zero', 0, 'evt_zero', 'trialing');
+        $event['object']['discount'] = ['id' => 'dis_1'];
+
+        trialHook($event)->assertOk();
+
+        expect($s->fresh()->status)->toBe(SubscriptionStatus::Trialing)
+            ->and($s->invoices()->where('status', InvoiceStatus::Paid)->exists())->toBeFalse();
+    });
 });
 
 describe('checkout: every plan is charged at once, no trial', function () {
