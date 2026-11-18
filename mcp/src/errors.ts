@@ -325,7 +325,7 @@ function classify(e: unknown, notFound: NotFound, stateTool?: string): ToolError
     return new ToolError(
       'invalid_input',
       message,
-      'Tell the user this post can be decided from decidable_from (the sender’s plan allows deciding 7 days ahead). Do not retry before then.',
+      'Tell the user this post can be decided from decidable_from (the sender’s plan sets how far ahead posts can be decided). Do not retry before then.',
       pick(body, ['decidable_from']),
     );
   }

@@ -95,7 +95,8 @@ describe('an edit after changes requested asks the client again', function () {
     })->with([
         'caption' => [['caption' => 'Second go, as asked.']],
         'media' => [['media' => [['url' => 'https://assets.creatif.space/new.jpg']]]],
-        'time' => [['scheduled_at' => '2030-01-02T10:00:00Z']],
+        // Inside Pro's 90-day window (18 Nov 2026).
+        'time' => [fn () => ['scheduled_at' => now()->addDays(30)->startOfHour()->toIso8601ZuluString()]],
     ]);
 
     it('leaves a revision post as it is when nothing the client sees changed', function () {

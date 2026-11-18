@@ -156,6 +156,8 @@ class SocialPostRelay
 
         $post->update([
             'provider_post_id' => (string) $remote['id'],
+            // At the relay now: no longer held for its horizon.
+            ...(self::horizonHeld($post) ? ['raw_payload' => null] : []),
             'scheduled_at' => $post->scheduled_at?->isFuture() ? $post->scheduled_at : null,
             'status' => ($remote['status'] ?? null) === 'processed'
                 ? SocialPostStatus::Published
@@ -292,10 +294,10 @@ class SocialPostRelay
      * overlapping a single decision) must not send — and charge — twice.
      * False means someone else decided first; that is not an error.
      *
-     * $holdBeyondHorizon is the client's path: a slot further out than the
-     * relay takes is not the client's problem, so the yes is recorded and
+     * $holdBeyondHorizon: a slot further out than the relay takes (Pro/Max
+     * schedule up to 90 days, Outstand takes 30) is recorded as a yes and
      * the post waits, approved, until SendApprovedHeldPosts can send it
-     * (heldForLater). The owner's own paths get the 422 instead.
+     * (heldForLater). Every approve path passes it since 18 Nov 2026.
      *
      * $deferSend (client path only, with $holdBeyondHorizon): record the yes
      * now and leave the send to SendApprovedHeldPosts — a long Approve-all
@@ -340,16 +342,64 @@ class SocialPostRelay
     }
 
     /**
-     * Approved, but not at the relay yet: its slot was past the horizon
-     * when the client said yes. SendApprovedHeldPosts sends it once the
-     * slot is close enough.
+     * Marks an owner's post (approval off) that is held because its slot is
+     * past the relay's horizon — kept in raw_payload, which the relay's
+     * webhook only fills once the post is at the relay. No column needed.
+     */
+    public const HORIZON_HOLD = ['hold' => 'horizon'];
+
+    /**
+     * Not at the relay yet, waiting only for its slot to come inside the
+     * relay's horizon: approved (a client's or the owner's yes on a far
+     * slot), or the owner's own post scheduled past it (HORIZON_HOLD).
+     * SendApprovedHeldPosts sends it once the slot is close enough.
      */
     public static function heldForLater(SocialPost $post): bool
     {
         return $post->status === SocialPostStatus::Scheduled
-            && $post->approval === SocialPostApproval::Approved
             && $post->provider_post_id === null
-            && $post->scheduled_at !== null;
+            && $post->scheduled_at !== null
+            && ($post->approval === SocialPostApproval::Approved
+                || ($post->approval === null && self::horizonHeld($post)));
+    }
+
+    public static function horizonHeld(SocialPost $post): bool
+    {
+        return ($post->raw_payload['hold'] ?? null) === self::HORIZON_HOLD['hold'];
+    }
+
+    /**
+     * The owner's send on a slot: to the relay now, or — slot past the
+     * relay's horizon (Pro/Max schedule up to 90 days, Outstand takes 30)
+     * — kept here, Scheduled, and sent by SendApprovedHeldPosts once the
+     * slot is close enough. A held post is checked now (usable channels,
+     * what a network would refuse) and paid for when it is sent.
+     * True when it was held.
+     *
+     * @throws ConnectionException
+     * @throws AccountReconnectRequired when a destination is not usable
+     * @throws PublishPreflightFailed when a network would refuse it
+     * @throws NotEnoughCredits when the Credits do not cover a send now
+     * @throws ValidationException when the charge itself is refused
+     */
+    public function sendOrHold(SocialPost $post): bool
+    {
+        // The demo channel's relay has no horizon: route it first.
+        self::routeDemo($post);
+        if (! ScheduleHorizon::beyond($post->provider, $post->scheduled_at)) {
+            $this->send($post);
+
+            return false;
+        }
+
+        self::ensureUsable($post);
+        $this->preflight($post);
+        $post->update([
+            'status' => SocialPostStatus::Scheduled,
+            'raw_payload' => $post->approval === null ? self::HORIZON_HOLD : $post->raw_payload,
+        ]);
+
+        return true;
     }
 
     /**

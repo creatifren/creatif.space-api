@@ -13,9 +13,11 @@ use App\Models\SocialPost;
 use App\Models\Subscription;
 use App\Models\User;
 use App\Notifications\SocialPostDecided;
+use App\Notifications\SocialPostFailed;
 use App\Services\Analytics;
 use App\Services\ErrorTracking;
 use App\Support\Credits;
+use App\Support\PlanQuota;
 use App\Support\ScheduleHorizon;
 use App\Support\SocialPostRelay;
 use App\Support\Workspace;
@@ -98,66 +100,117 @@ function lfDecide($test, SocialApprovalLink $link, SocialPost $post)
     return asApprover($test)->postJson("/api/v1/a/{$link->token}/posts/{$post->ulid}/decision", ['name' => 'Andi', 'decision' => 'approve']);
 }
 
-describe('P2 — scheduling horizon: the owner hears it when scheduling', function () {
-    it('takes exactly 60 days and refuses 60 days + 1 minute with a clear 422 and the latest date', function () {
+describe('P2 — scheduling horizon: past it the post is held, not refused (Pro/Max 90 days, 18 Nov 2026)', function () {
+    it('sends day 60 at once, holds day 61 here (no relay call, nothing charged), and refuses day 90 + 1 minute', function () {
         $owner = lfOwner();
+        $account = lfAccount($owner);
         $post = fn (CarbonInterface $at) => $this->actingAs($owner)->postJson('/api/v1/social-posts', [
-            'caption' => 'Hi', 'account_ids' => [lfAccount($owner)->ulid], 'scheduled_at' => $at->toIso8601String(),
+            'caption' => 'Hi', 'account_ids' => [$account->ulid], 'scheduled_at' => $at->toIso8601String(),
         ]);
 
         $post(now()->addDays(60))->assertCreated();
-        $post(now()->addDays(60)->addMinute())
-            ->assertUnprocessable()
-            ->assertJsonPath('code', 'schedule_horizon')
-            ->assertJsonPath('max_days', 60)
-            ->assertJsonPath('max_date', '2027-01-10T00:00:00+00:00')
-            ->assertJsonValidationErrors('scheduled_at');
+        expect(lfCreates())->toBe(1);
+        $balance = Credits::balance($owner);
 
+        $id = $post(now()->addDays(61))->assertCreated()->json('data.id');
+        $held = SocialPost::query()->where('ulid', $id)->first();
+        expect($held->status->value)->toBe('scheduled')
+            ->and($held->provider_post_id)->toBeNull()
+            ->and($held->approval)->toBeNull()
+            ->and(SocialPostRelay::horizonHeld($held))->toBeTrue()
+            ->and(SocialPostRelay::heldForLater($held))->toBeTrue()
+            ->and(lfCreates())->toBe(1)
+            ->and(Credits::balance($owner))->toBe($balance);
+
+        $post(now()->addDays(90)->addMinute())
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors('scheduled_at')
+            ->assertJsonPath('errors.scheduled_at.0', fn (string $m) => str_contains($m, 'at most 90 days ahead') && str_contains($m, '9 Feb 2027'));
+        $post(now()->addDays(90))->assertCreated();
         expect(lfCreates())->toBe(1);
     });
 
-    it('refuses sending a draft for, or moving a queued post to, a slot past the horizon', function () {
+    it('holds a draft sent for a slot past the horizon, and a draft held for the client keeps the client', function () {
         $owner = lfOwner();
         $far = now()->addDays(65)->toIso8601String();
         $draft = SocialPost::factory()->for($owner)->create(['status' => 'draft', 'provider_post_id' => null, 'scheduled_at' => null]);
         $draft->targets()->create(['social_account_id' => lfAccount($owner)->id, 'status' => 'pending']);
+        $forClient = SocialPost::factory()->for($owner)->create(['status' => 'draft', 'provider_post_id' => null, 'scheduled_at' => null]);
+        $forClient->targets()->create(['social_account_id' => lfAccount($owner)->id, 'status' => 'pending']);
 
-        $this->actingAs($owner)->postJson("/api/v1/social-posts/{$draft->ulid}/send", ['scheduled_at' => $far])
-            ->assertUnprocessable()->assertJsonPath('code', 'schedule_horizon');
-        $this->actingAs($owner)->postJson("/api/v1/social-posts/{$draft->ulid}/send", ['scheduled_at' => $far, 'approval' => 'client'])
-            ->assertUnprocessable()->assertJsonPath('code', 'schedule_horizon');
+        $this->actingAs($owner)->postJson("/api/v1/social-posts/{$draft->ulid}/send", ['scheduled_at' => $far])->assertOk();
+        $this->actingAs($owner)->postJson("/api/v1/social-posts/{$forClient->ulid}/send", ['scheduled_at' => $far, 'approval' => 'client'])->assertOk();
 
-        [$held] = lfHeld($owner, now()->addDays(10));
-        $this->actingAs($owner)->patchJson("/api/v1/social-posts/{$held->ulid}", ['scheduled_at' => $far])
-            ->assertUnprocessable()->assertJsonPath('code', 'schedule_horizon');
-
-        expect($draft->fresh()->status->value)->toBe('draft')
-            ->and(lfCreates())->toBe(0);
+        expect($draft->fresh()->status->value)->toBe('scheduled')
+            ->and($draft->fresh()->provider_post_id)->toBeNull()
+            ->and(SocialPostRelay::horizonHeld($draft->fresh()))->toBeTrue()
+            ->and($forClient->fresh()->approval->value)->toBe('client')
+            ->and(lfCreates())->toBe(0)
+            ->and(Credits::balance($owner))->toBe(30_000);
     });
 
-    it('refuses putting a post past the horizon on an approval link', function () {
+    it('takes a sent post moved past the horizon back from the relay, returns its Credits, and holds it', function () {
+        $owner = lfOwner();
+        $account = lfAccount($owner);
+        $id = $this->actingAs($owner)->postJson('/api/v1/social-posts', [
+            'caption' => 'Hi', 'account_ids' => [$account->ulid], 'scheduled_at' => now()->addDays(10)->toIso8601String(),
+        ])->assertCreated()->json('data.id');
+        expect(Credits::balance($owner))->toBeLessThan(30_000);
+
+        $this->actingAs($owner)->patchJson("/api/v1/social-posts/{$id}", ['scheduled_at' => now()->addDays(70)->toIso8601String()])->assertOk();
+
+        $post = SocialPost::query()->where('ulid', $id)->first();
+        expect($post->provider_post_id)->toBeNull()
+            ->and($post->scheduled_at->getTimestamp())->toBe(now()->addDays(70)->getTimestamp())
+            ->and(SocialPostRelay::heldForLater($post))->toBeTrue()
+            ->and(Credits::balance($owner))->toBe(30_000)
+            ->and(count(Http::recorded(fn (HttpRequest $r) => $r->method() === 'DELETE' && str_ends_with($r->url(), '/social-posts/post_x'))))->toBe(1);
+    });
+
+    it('schedules a batch with one post past the horizon: that one held, the other sent', function () {
+        $owner = lfOwner();
+        $drafts = collect([1, 2])->map(function () use ($owner) {
+            $d = SocialPost::factory()->for($owner)->create(['status' => 'draft', 'provider_post_id' => null, 'scheduled_at' => null]);
+            $d->targets()->create(['social_account_id' => lfAccount($owner)->id, 'status' => 'pending']);
+
+            return $d;
+        });
+
+        $this->actingAs($owner)->postJson('/api/v1/social-posts/send-batch', ['posts' => [
+            ['post_id' => $drafts[0]->ulid, 'scheduled_at' => now()->addDays(20)->toIso8601String()],
+            ['post_id' => $drafts[1]->ulid, 'scheduled_at' => now()->addDays(65)->toIso8601String()],
+        ]])->assertOk();
+
+        expect($drafts[0]->fresh()->provider_post_id)->toBe('post_x')
+            ->and($drafts[1]->fresh()->provider_post_id)->toBeNull()
+            ->and(SocialPostRelay::heldForLater($drafts[1]->fresh()))->toBeTrue()
+            ->and(lfCreates())->toBe(1);
+    });
+
+    it('puts a post past the horizon on an approval link', function () {
         $owner = lfOwner();
         $far = SocialPost::factory()->for($owner)->create(['status' => 'scheduled', 'approval' => 'awaiting', 'provider_post_id' => null, 'scheduled_at' => now()->addDays(75)]);
-        $near = SocialPost::factory()->for($owner)->create(['status' => 'scheduled', 'approval' => 'awaiting', 'provider_post_id' => null, 'scheduled_at' => now()->addDays(5)]);
 
         $this->actingAs($owner)->postJson('/api/v1/social-approval-links', ['approver_email' => 'client@example.test', 'post_ids' => [$far->ulid]])
-            ->assertUnprocessable()
-            ->assertJsonPath('code', 'schedule_horizon')
-            ->assertJsonValidationErrors('post_ids');
-
-        $link = $this->actingAs($owner)->postJson('/api/v1/social-approval-links', ['approver_email' => 'client@example.test', 'post_ids' => [$near->ulid]])->assertCreated()->json('data.id');
-        $this->actingAs($owner)->patchJson("/api/v1/social-approval-links/{$link}", ['add_post_ids' => [$far->ulid]])
-            ->assertUnprocessable()->assertJsonPath('code', 'schedule_horizon');
+            ->assertCreated();
     });
 
-    it('has no limit for a relay without one', function () {
+    it('sends at once on a relay without a horizon', function () {
         config(['services.postforme.max_schedule_days' => null]);
         $owner = lfOwner();
 
         $this->actingAs($owner)->postJson('/api/v1/social-posts', [
-            'caption' => 'Hi', 'account_ids' => [lfAccount($owner)->ulid], 'scheduled_at' => now()->addYear()->toIso8601String(),
+            'caption' => 'Hi', 'account_ids' => [lfAccount($owner)->ulid], 'scheduled_at' => now()->addDays(85)->toIso8601String(),
         ])->assertCreated();
-        expect(ScheduleHorizon::days('postforme'))->toBeNull();
+        expect(ScheduleHorizon::days('postforme'))->toBeNull()->and(lfCreates())->toBe(1);
+    });
+
+    it('gives paid plans a 90-day window from config; Free keeps 7', function () {
+        $pro = lfOwner();
+        expect(PlanQuota::scheduleWindowDays($pro))->toBe(90)
+            ->and(PlanQuota::scheduleWindowDays(User::factory()->create()))->toBe(7);
+        config(['plans.paid_schedule_window_days' => 120]);
+        expect(PlanQuota::scheduleWindowDays($pro))->toBe(120);
     });
 
     it('defaults Outstand to a configured horizon: 30 days (Outstand docs; Rizal, 14 Nov 2026)', function () {
@@ -221,13 +274,14 @@ describe('P2 — the client\'s yes is never a dead end', function () {
         Notification::assertSentTo($owner, SocialPostDecided::class, fn ($n) => $n->decision === SocialPostDecided::APPROVED);
     });
 
-    it('keeps the owner\'s own Approve on the 422, not a silent hold', function () {
+    it('approves and holds on the owner\'s own Approve past the horizon, sending nothing yet', function () {
         $owner = lfOwner();
         [$post] = lfHeld($owner, now()->addDays(70));
 
-        $this->actingAs($owner)->postJson("/api/v1/social-posts/{$post->ulid}/approve")
-            ->assertUnprocessable()->assertJsonPath('code', 'schedule_horizon');
-        expect($post->fresh()->approval->value)->toBe('client');
+        $this->actingAs($owner)->postJson("/api/v1/social-posts/{$post->ulid}/approve")->assertOk();
+        expect($post->fresh()->approval->value)->toBe('approved')
+            ->and(SocialPostRelay::heldForLater($post->fresh()))->toBeTrue()
+            ->and(lfCreates())->toBe(0);
     });
 });
 
@@ -272,6 +326,83 @@ describe('P2 — SendApprovedHeldPosts sends a held post once it is inside the h
         Notification::assertSentToTimes($owner, SocialPostDecided::class, 2); // HELD + one BLOCKED
         Notification::assertSentTo($owner, SocialPostDecided::class, fn ($n) => $n->decision === SocialPostDecided::BLOCKED
             && $n->reason === 'LinkedIn did not accept it: Media URL could not be fetched. It stays approved; we try again automatically.');
+    });
+});
+
+/** The owner's own post, held here because its slot is past the horizon. */
+function lfOwnHeld(User $owner, CarbonInterface $at): SocialPost
+{
+    $post = SocialPost::factory()->for($owner)->create([
+        'provider_post_id' => null, 'status' => 'scheduled', 'approval' => null,
+        'caption' => 'February sale', 'scheduled_at' => $at, 'media' => null,
+        'raw_payload' => SocialPostRelay::HORIZON_HOLD,
+    ]);
+    $post->targets()->create(['social_account_id' => lfAccount($owner)->id, 'status' => 'pending']);
+
+    return $post;
+}
+
+describe('SendApprovedHeldPosts — the owner\'s own held posts', function () {
+    it('waits while the slot is past the horizon, then sends and charges it once', function () {
+        $owner = lfOwner();
+        $post = lfOwnHeld($owner, Carbon::parse('2027-01-20 09:00:00', 'UTC')); // 70 days out
+
+        (new SendApprovedHeldPosts)->handle(app(SocialPostRelay::class));
+        expect($post->fresh()->provider_post_id)->toBeNull()->and(lfCreates())->toBe(0);
+
+        Carbon::setTestNow(Carbon::parse('2026-11-22 09:00:00', 'UTC')); // 59 days before
+        (new SendApprovedHeldPosts)->handle(app(SocialPostRelay::class));
+        (new SendApprovedHeldPosts)->handle(app(SocialPostRelay::class));
+
+        $fresh = $post->fresh();
+        expect($fresh->provider_post_id)->toBe('post_x')
+            ->and($fresh->raw_payload)->toBeNull()
+            ->and($fresh->scheduled_at->toIso8601String())->toBe('2027-01-20T09:00:00+00:00')
+            ->and(lfCreates())->toBe(1)
+            ->and(Credits::balance($owner))->toBeLessThan(30_000);
+    });
+
+    it('leaves a scheduled post that is not held alone', function () {
+        $owner = lfOwner();
+        $post = lfOwnHeld($owner, now()->addDays(5));
+        $post->update(['raw_payload' => null]);
+
+        (new SendApprovedHeldPosts)->handle(app(SocialPostRelay::class));
+        expect(lfCreates())->toBe(0);
+    });
+
+    it('marks one that cannot go Failed and tells the owner once, nothing charged', function () {
+        Notification::fake();
+        $owner = lfOwner();
+        $post = lfOwnHeld($owner, now()->addDays(20));
+        lfRelay(['message' => 'Media URL could not be fetched'], 422);
+
+        (new SendApprovedHeldPosts)->handle(app(SocialPostRelay::class));
+        (new SendApprovedHeldPosts)->handle(app(SocialPostRelay::class));
+
+        $fresh = $post->fresh();
+        expect($fresh->status->value)->toBe('failed')
+            ->and($fresh->fail_reason)->toContain('Media URL could not be fetched')
+            ->and($fresh->raw_payload)->toBeNull()
+            ->and($fresh->targets()->first()->status->value)->toBe('failed')
+            ->and(Credits::balance($owner))->toBe(30_000)
+            ->and(lfCreates())->toBe(1);
+        Notification::assertSentToTimes($owner, SocialPostFailed::class, 1);
+    });
+
+    it('fails an owner-approved held post off any link too, so it shows', function () {
+        Notification::fake();
+        $owner = User::factory()->create();
+        Subscription::factory()->for($owner)->create(); // Pro, and no Credits
+        $post = lfOwnHeld($owner, now()->addDays(20));
+        $post->update(['raw_payload' => null, 'approval' => 'approved', 'approval_by' => 'Owner']);
+
+        (new SendApprovedHeldPosts)->handle(app(SocialPostRelay::class));
+
+        expect($post->fresh()->status->value)->toBe('failed')
+            ->and($post->fresh()->approval)->toBeNull()
+            ->and($post->fresh()->approval_by)->toBe('Owner');
+        Notification::assertSentTo($owner, SocialPostFailed::class);
     });
 });
 
