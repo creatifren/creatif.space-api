@@ -2,6 +2,7 @@
 
 use App\Http\Controllers\Api\V1\ProfileFontController;
 use App\Http\Controllers\Auth\ApproverLinkController;
+use App\Http\Controllers\Auth\EmailCodeAuthController;
 use App\Http\Controllers\Auth\GoogleAuthController;
 use App\Http\Controllers\Auth\PasswordAuthController;
 use App\Http\Controllers\Auth\ReviewerLoginController;
@@ -40,6 +41,14 @@ Route::post('/auth/google/native', [GoogleAuthController::class, 'native'])
 Route::get('/auth/approver-link/{token}', ApproverLinkController::class)
     ->middleware('throttle:20,1')
     ->name('auth.approver-link');
+
+// v7 sign-in: email + a 6-digit code (new address = new account).
+Route::post('/auth/email-code', [EmailCodeAuthController::class, 'send'])
+    ->middleware('throttle:5,1')
+    ->name('auth.email-code');
+Route::post('/auth/email-code/verify', [EmailCodeAuthController::class, 'verify'])
+    ->middleware('throttle:10,1')
+    ->name('auth.email-code.verify');
 
 // Email + password. JSON for the SPA except the verify link, which is opened
 // from an inbox and redirects back to the frontend.
