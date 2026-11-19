@@ -321,4 +321,17 @@ describe('public payloads', function () {
         $one = $this->actingAs($owner)->getJson("/api/v1/social-posts/{$post->ulid}")->assertOk()->json('data');
         expect($one['media_variants'][0]['thumb']['jpeg'])->toContain('.thumb.jpg');
     });
+
+    it('the files list carries each file\'s variants (null when none)', function () {
+        $owner = User::factory()->create();
+        $image = mvFile($owner, mvJpeg(2000, 2500), attrs: ['width' => 2000, 'height' => 2500]);
+        MediaVariants::generate($image);
+        $plain = mvFile($owner, mvJpeg(10, 10));
+
+        $rows = collect($this->actingAs($owner)->getJson('/api/v1/files')->assertOk()->json('data'));
+
+        expect($rows->firstWhere('id', $image->ulid)['variants']['thumb'])->toMatchArray(['width' => 480, 'height' => 600])
+            ->and($rows->firstWhere('id', $image->ulid)['variants']['thumb']['jpeg'])->toContain('.thumb.jpg')
+            ->and($rows->firstWhere('id', $plain->ulid)['variants'])->toBeNull();
+    });
 });

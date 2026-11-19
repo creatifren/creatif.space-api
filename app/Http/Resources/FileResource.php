@@ -4,6 +4,7 @@ namespace App\Http\Resources;
 
 use App\Models\File;
 use App\Support\Media\MediaRetention;
+use App\Support\Media\MediaVariants;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
 
@@ -25,6 +26,9 @@ class FileResource extends JsonResource
             'mime_type' => $this->mime_type,
             'size_bytes' => $this->size_bytes,
             'url' => $this->url(),
+            /* The small copies (480 thumb, 1080 feed, video poster), or null:
+               Files and Compose's media picker draw these, not the original. */
+            'variants' => MediaVariants::urls($this->resource),
             'width' => $this->width,
             'height' => $this->height,
             'status' => $this->status,
