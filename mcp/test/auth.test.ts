@@ -104,6 +104,7 @@ describe('401 flow', () => {
         'get_approval_history',
         'get_connect_link',
         'send_feedback',
+        'list_clients', 'create_client', 'update_client', 'delete_client', 'set_channel_clients',
         'get_notification_settings', 'update_notification_settings',
         'create_insight_share_link', 'revoke_insight_share_link',
         'get_plan_calendar_link',

@@ -48,6 +48,8 @@ class AppServiceProvider extends ServiceProvider
      */
     public function boot(): void
     {
+        // Per-request memo of client labels per account (v7): never carried into the next request.
+        $this->app->terminating(fn () => \App\Support\ClientBadges::flush());
         Date::use(CarbonImmutable::class);
         OAuthRateLimits::register();
 

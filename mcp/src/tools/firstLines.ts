@@ -16,6 +16,13 @@ export const FIRST_LINES: Record<string, string> = {
   get_connect_link: 'Gives the user the creatif.space link to connect or reconnect a social network.',
   get_credits: 'Shows the user\'s plan, limits and Credits, and what each send costs.',
 
+  // Clients
+  list_clients: 'Lists the user\'s clients with their approver and channels, so posts, links and reports can be per client.',
+  create_client: 'Adds a client the user works for, with its approver and channels.',
+  update_client: 'Changes a client\'s name, colour, approver, report email or channels.',
+  delete_client: 'Removes a client label from the user\'s channels without deleting any posts.',
+  set_channel_clients: 'Sets which clients a channel belongs to, including a channel shared by several clients.',
+
   // Posts
   list_posts: 'Finds the user\'s posts by status, dates or channel; the plan_week and send_for_approval prompts start here.',
   get_post: 'Shows one post in full, with each channel\'s status and the review thread; send_for_approval checks posts with it.',

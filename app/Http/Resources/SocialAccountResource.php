@@ -5,6 +5,7 @@ namespace App\Http\Resources;
 use App\Enums\SocialAccountStatus;
 use App\Models\SocialAccount;
 use App\Support\ChannelHealth;
+use App\Support\ClientBadges;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
 
@@ -24,6 +25,8 @@ class SocialAccountResource extends JsonResource
             'id' => $this->ulid,
             'platform' => $this->platform,
             'username' => $this->username,
+            // v7: the client labels on this account (Channels › Labels).
+            'clients' => ClientBadges::forAccount($this->id),
             'profile_photo_url' => $this->profile_photo_url,
             // Connected under another relay reads as disconnected, so the
             // composer, Channels and Engage stop offering it with no app

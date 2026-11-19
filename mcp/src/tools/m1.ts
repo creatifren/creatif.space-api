@@ -42,6 +42,8 @@ export const listChannels = defineTool({
         id: a.id,
         platform: a.platform,
         username: a.username,
+        // v7: the clients this channel belongs to (several = a shared account).
+        clients: Array.isArray(a.clients) ? (a.clients as { id: string; name: string }[]).map((c) => ({ id: c.id, name: c.name })) : [],
         status: a.status,
         reconnect_required: reconnect,
         ...(reconnect ? { reconnect: reconnectHint(a) } : {}),
@@ -135,12 +137,13 @@ export const listPosts = defineTool({
     from: dateOrTime.optional().describe('Window start: a date (YYYY-MM-DD, UTC) or ISO 8601 time, e.g. 2026-11-01'),
     to: dateOrTime.optional().describe('Window end: a date (the whole day, UTC) or ISO 8601 time, e.g. 2026-11-30'),
     channel_id: ulid('Channel').optional().describe('Only posts going to this channel (id from list_channels)'),
+    client_id: ulid('Client').optional().describe('Only posts for this client: on any of its channels (id from list_clients)'),
     ...pageInput(100, 25, 'posts'),
   },
   annotations: READ_ONLY,
   notFound: { what: 'That channel', next: 'Call list_channels for valid channel ids, or call list_posts without channel_id.' },
   run: async (args, { v1 }) => {
-    const filters = { status: args.status, from: args.from, to: args.to, channel_id: args.channel_id };
+    const filters = { status: args.status, from: args.from, to: args.to, channel_id: args.channel_id, client_id: args.client_id };
     const { o } = decodeCursor('list_posts', filters, args.cursor);
     const from = args.from && DAY.test(args.from) ? `${args.from}T00:00:00Z` : args.from;
     const to = args.to && DAY.test(args.to) ? `${args.to}T23:59:59Z` : args.to;
@@ -156,7 +159,7 @@ export const listPosts = defineTool({
       let at = o;
       let exhausted = false;
       for (let round = 0; round < MAX_APPROVAL_ROUNDS && kept.length <= args.limit && !exhausted; round++) {
-        const res = await v1.get<{ data: V1Post[] }>('/social-posts', { status: 'scheduled', from, to, account_id: args.channel_id, limit: 100, offset: at || undefined });
+        const res = await v1.get<{ data: V1Post[] }>('/social-posts', { status: 'scheduled', from, to, account_id: args.channel_id, client_id: args.client_id, limit: 100, offset: at || undefined });
         for (const p of res.data) {
           at++;
           if (approval.includes(p.approval ?? '')) kept.push(p);
@@ -182,6 +185,7 @@ export const listPosts = defineTool({
       from,
       to,
       account_id: args.channel_id,
+      client_id: args.client_id,
       limit: ask,
       offset: o || undefined,
     });

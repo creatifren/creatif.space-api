@@ -4,6 +4,7 @@ namespace App\Http\Resources;
 
 use App\Models\SocialPost;
 use App\Models\SocialPostTarget;
+use App\Support\ClientBadges;
 use App\Support\Media\PostMediaVariants;
 use App\Support\PostDelivery;
 use App\Support\PublishFailure;
@@ -38,6 +39,8 @@ class SocialPostResource extends JsonResource
             // (PostDelivery): state published | partial | failed | pending and the
             // destination counts. Null for a draft or a cancelled post.
             'delivery' => $this->whenLoaded('targets', fn () => PostDelivery::summary($this->resource)),
+            // v7 client labels: every client on any of the post's accounts.
+            'clients' => $this->whenLoaded('targets', fn () => ClientBadges::forPost($this->resource)),
             'approval' => $this->approval,
             'approval_by' => $this->approval_by,
             'approval_at' => $this->approval_at,

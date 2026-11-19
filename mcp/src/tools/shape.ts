@@ -19,6 +19,8 @@ export interface V1Post {
   caption: string;
   type: string;
   labels: string[];
+  /** v7 client labels: every client on any of the post's channels. */
+  clients?: { id: string; name: string }[];
   media: { url: string; thumbnail_url?: string | null }[] | null;
   scheduled_at: string | null;
   status: string;
@@ -64,6 +66,7 @@ export function shapePost(p: V1Post, withComments = false) {
     fail_reason: p.fail_reason,
     ...(Object.keys(byChannel).length ? { captions_by_channel: byChannel } : {}),
     labels: p.labels ?? [],
+    clients: (p.clients ?? []).map((c) => ({ id: c.id, name: c.name })),
     media: (p.media ?? []).map((m) => m.url),
     channels: (p.targets ?? []).map((t) => ({
       channel_id: t.account.id,

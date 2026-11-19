@@ -20,6 +20,12 @@ exports[`tool annotations > match the snapshot 1`] = `
     "openWorld": false,
     "readOnly": false,
   },
+  "create_client": {
+    "destructive": false,
+    "idempotent": false,
+    "openWorld": false,
+    "readOnly": false,
+  },
   "create_content_plan": {
     "destructive": false,
     "idempotent": false,
@@ -42,6 +48,12 @@ exports[`tool annotations > match the snapshot 1`] = `
     "destructive": true,
     "idempotent": true,
     "openWorld": true,
+    "readOnly": false,
+  },
+  "delete_client": {
+    "destructive": true,
+    "idempotent": true,
+    "openWorld": false,
     "readOnly": false,
   },
   "discard_draft": {
@@ -153,6 +165,12 @@ exports[`tool annotations > match the snapshot 1`] = `
     "readOnly": true,
   },
   "list_channels": {
+    "destructive": false,
+    "idempotent": true,
+    "openWorld": false,
+    "readOnly": true,
+  },
+  "list_clients": {
     "destructive": false,
     "idempotent": true,
     "openWorld": false,
@@ -272,8 +290,20 @@ exports[`tool annotations > match the snapshot 1`] = `
     "openWorld": false,
     "readOnly": false,
   },
+  "set_channel_clients": {
+    "destructive": false,
+    "idempotent": true,
+    "openWorld": false,
+    "readOnly": false,
+  },
   "unkeep_file": {
     "destructive": true,
+    "idempotent": true,
+    "openWorld": false,
+    "readOnly": false,
+  },
+  "update_client": {
+    "destructive": false,
     "idempotent": true,
     "openWorld": false,
     "readOnly": false,

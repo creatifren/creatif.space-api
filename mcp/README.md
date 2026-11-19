@@ -120,6 +120,11 @@ redirect_uris, token_endpoint_auth_method: "none"}`. The API fetches it
 | `get_plan_calendar_link` (link_id) — ICS feed URL of a Content Plan (scheduled posts, first 60 characters of the caption); read-only, stable URL | read | `GET /social-approval-links/{id}/calendar` |
 | `get_approval_audit` (link_id) — every decision on one of the user's links: who, post, when, decision, comment; rows and CSV | read | `GET /social-approval-links/{id}/audit.csv` |
 | `send_feedback` (kind bug\|idea\|other, message, page) — to the creatif.space team; nothing public, no Credits; 10 an hour per user | draft | `POST /feedback` |
+| `list_clients` (limit, cursor) — the user's clients: approver, channels (shared ones marked), posts waiting | read | `GET /client-labels` |
+| `create_client` (name, color, initials, approver_email, approver_name, monthly_report_email, channel_ids) — a client label; nothing is sent | draft | `POST /client-labels` |
+| `update_client` (client_id + any field above) — channel_ids replaces the set | draft | `PATCH /client-labels/{id}` |
+| `delete_client` (client_id) — removes the label only; posts and links stay | draft | `DELETE /client-labels/{id}` |
+| `set_channel_clients` (channel_id, client_ids) — which clients one channel belongs to | draft | `PUT /social-accounts/{id}/client-labels` |
 | `get_notification_settings` — which emails the user gets: post_missed_or_failed (“Post missed / failed”; the publish_failed switch unless the API serves its own key), approval_decided, weekly_digest | read | `GET /me/notification-settings` |
 | `update_notification_settings` (post_missed_or_failed — or its older name publish_failed —, approval_decided, weekly_digest: true/false; timezone of the Monday 08:00 digest; at least one) | draft | `PATCH /me/notification-settings` |
 | `list_shared_with_me` — "Reports shared with you": Content Plans and Insight reports other users shared with this user's email | approvals:decide | `GET /me/reports/shared` |

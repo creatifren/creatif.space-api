@@ -197,4 +197,14 @@ class SocialAccount extends Model implements WorkspaceOwned
     {
         return $this->belongsTo(User::class);
     }
+
+    /**
+     * Client labels on this account (v7). A post here belongs to all of them.
+     *
+     * @return \Illuminate\Database\Eloquent\Relations\BelongsToMany<ClientLabel, $this>
+     */
+    public function clientLabels(): \Illuminate\Database\Eloquent\Relations\BelongsToMany
+    {
+        return $this->belongsToMany(ClientLabel::class, 'client_label_social_account');
+    }
 }
