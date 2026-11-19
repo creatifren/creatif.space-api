@@ -25,7 +25,8 @@ function reportOwner(): User
     $user = User::factory()->create(['timezone' => 'Asia/Makassar']);
     Subscription::factory()->for($user)->create();
 
-    return $user;
+    // Re-read: strict models need the column defaults (Report emails fields).
+    return User::query()->findOrFail($user->id);
 }
 
 it('keeps Report emails off until turned on, and saves the schedule and per-client switch', function () {

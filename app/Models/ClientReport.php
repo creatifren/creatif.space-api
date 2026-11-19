@@ -32,6 +32,9 @@ class ClientReport extends Model implements WorkspaceOwned
 
     protected $hidden = ['token', 'token_hash'];
 
+    /** Column defaults, so a fresh model reads like the stored row. */
+    protected $attributes = ['visibility' => 'link', 'open_count' => 0];
+
     protected function casts(): array
     {
         return [
