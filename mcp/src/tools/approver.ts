@@ -163,7 +163,7 @@ export const decideApproval = defineTool({
     link: z.string().trim().min(10).max(2048).describe('The link id from list_waiting_approvals (or the approval link URL)'),
     post_id: z.string().trim().min(10).max(26).describe('Post id from list_waiting_approvals'),
     decision: z.enum(['approve', 'revise']).describe('"approve", or "revise" to request changes'),
-    reason: z.string().trim().min(1).max(5000).optional().describe('Required for "revise": what should change (the sender reads it)'),
+    reason: z.string().trim().min(1).max(5000).optional().describe('Required for "revise": what should change (the sender reads it). Optional with "approve": a note that goes with the yes ("Approve with note")'),
     confirm: z.boolean().default(false).describe('Leave false first: you get a preview. Set true only after the user explicitly agreed to that preview.'),
   },
   annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: true, openWorldHint: true },

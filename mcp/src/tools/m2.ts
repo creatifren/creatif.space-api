@@ -184,9 +184,13 @@ export const createApprovalLink = defineTool({
     date_to: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'YYYY-MM-DD').optional().describe('Content Plan: last day shown, included (YYYY-MM-DD)'),
     timezone: z.string().trim().max(64).optional().describe('Content Plan: IANA timezone the dates are in, e.g. Asia/Jakarta (default: the account timezone)'),
     channel_ids: z.array(ulid('Channel')).max(20).optional().describe('Content Plan: only these channels (from list_channels); omit for all'),
-    approver_email: z.string().trim().email().max(254).describe('Email of the person who approves; they sign in with it to decide'),
+    approver_email: z.string().trim().email().max(254).optional().describe('Email of the person who approves; they sign in with it to decide. Optional with client_id when that client has an approver'),
+    client_id: z.string().trim().min(10).max(26).optional().describe('The client it is for (id from list_clients): fills the approver and the private client name'),
     title: z.string().trim().max(120).optional().describe('Shown to the client above the posts'),
     client_name: z.string().trim().max(120).optional().describe('Private note on who it is for; the client never sees it'),
+    views: z.array(z.enum(['grid', 'calendar', 'feed'])).min(1).max(3).optional().describe('The views the client can switch between; omit for all three'),
+    visibility: z.enum(['link', 'public']).optional().describe('"link" (default): only people with the link. "public": also listed on the user’s public profile — only if the user asks'),
+    replaces_link_id: z.string().trim().min(10).max(26).optional().describe('An older link of the user’s this one replaces: it is turned off and its page says it was replaced'),
     expires_in_hours: z.union([z.literal(48), z.literal(168), z.literal(720)]).optional().describe('48, 168 (7 days) or 720 (30 days); omit for no expiry'),
   },
   annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false },
@@ -199,6 +203,9 @@ export const createApprovalLink = defineTool({
     if (plan && (args.date_from === undefined || args.date_to === undefined)) {
       throw new ToolError('invalid_input', 'A Content Plan needs both date_from and date_to.', 'Pass both dates as YYYY-MM-DD.');
     }
+    if (!args.approver_email && !args.client_id) {
+      throw new ToolError('invalid_input', 'Who approves? Give approver_email, or client_id of a client that has an approver.', 'Ask the user for the approver’s email, or call list_clients and pass client_id.', { field: 'approver_email' });
+    }
     const ids = plan ? [] : [...new Set(args.post_ids)];
     let data: Record<string, unknown>;
     const body = {
@@ -210,9 +217,13 @@ export const createApprovalLink = defineTool({
             ...(args.channel_ids ? { channel_ids: args.channel_ids } : {}),
           }
         : { post_ids: ids }),
-      approver_email: args.approver_email,
+      ...(args.approver_email ? { approver_email: args.approver_email } : {}),
+      ...(args.client_id ? { client_id: args.client_id } : {}),
       ...(args.title ? { title: args.title } : {}),
       ...(args.client_name ? { client_name: args.client_name } : {}),
+      ...(args.views ? { views: args.views } : {}),
+      ...(args.visibility ? { visibility: args.visibility } : {}),
+      ...(args.replaces_link_id ? { replaces_link_id: args.replaces_link_id } : {}),
       ...(args.expires_in_hours ? { expires_in_hours: args.expires_in_hours } : {}),
     };
     try {

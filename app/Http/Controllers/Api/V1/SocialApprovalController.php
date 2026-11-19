@@ -93,6 +93,14 @@ class SocialApprovalController extends Controller
             'client_name' => ['sometimes', 'nullable', 'string', 'max:120'],
             // v7: the client label it is for; fills client_name and the approver.
             'client_id' => ['sometimes', 'nullable', 'string', 'max:26'],
+            // v7: the views the client can switch between (one or more); absent = all.
+            'views' => ['sometimes', 'nullable', 'array', 'min:1', 'max:3'],
+            'views.*' => ['string', Rule::in(SocialApprovalLink::VIEWS), 'distinct'],
+            // link (default) or public: also listed on the owner's public profile.
+            'visibility' => ['sometimes', 'string', Rule::in(['link', 'public'])],
+            // This link takes the place of an older one: that one is turned off
+            // and its page says "replaced" (UX review E2).
+            'replaces_link_id' => ['sometimes', 'nullable', 'string', 'max:26'],
             // Who may decide: the client signs in with this address (Google
             // or a one-time email link) to approve or ask for changes.
             'approver_email' => ['required', 'string', 'email:rfc', 'max:254'],
@@ -140,6 +148,8 @@ class SocialApprovalController extends Controller
             'title' => $validated['title'] ?? null,
             'client_name' => $validated['client_name'] ?? null,
             'client_label_id' => $validated['client_label_id'] ?? null,
+            'views' => isset($validated['views']) ? array_values($validated['views']) : null,
+            'visibility' => $validated['visibility'] ?? 'link',
             'approver_email' => $validated['approver_email'],
             'expires_at' => $hours ? now()->addHours($hours) : null,
         ]);
@@ -186,6 +196,8 @@ class SocialApprovalController extends Controller
             'title' => $validated['title'] ?? null,
             'client_name' => $validated['client_name'] ?? null,
             'client_label_id' => $validated['client_label_id'] ?? null,
+            'views' => isset($validated['views']) ? array_values($validated['views']) : null,
+            'visibility' => $validated['visibility'] ?? 'link',
             'approver_email' => $validated['approver_email'],
             'expires_at' => $hours ? now()->addHours($hours) : null,
         ] + self::scopeFields($user, $validated));
@@ -203,6 +215,19 @@ class SocialApprovalController extends Controller
      */
     private function created(SocialApprovalLink $link, array $validated): JsonResponse
     {
+        if (! empty($validated['replaces_link_id'])) {
+            $old = SocialApprovalLink::query()
+                ->where('user_id', $link->user_id)
+                ->where('ulid', $validated['replaces_link_id'])
+                ->whereKeyNot($link->id)
+                ->first();
+            if ($old !== null && $old->revoked_at === null) {
+                DB::transaction(function () use ($old, $link): void {
+                    $old->update(['revoked_at' => now(), 'replaced_by_id' => $link->id]);
+                    $this->releaseHeld($old->posts()->pluck('social_posts.id'), $old);
+                });
+            }
+        }
         $notify = (bool) ($validated['notify_approver'] ?? false);
         if ($notify) {
             Notification::route('mail', $link->approver_email)->notify(new ApprovalLinkShared($link));
@@ -290,7 +315,7 @@ class SocialApprovalController extends Controller
     public function links(Request $request): JsonResponse
     {
         $links = $this->withCounts(SocialApprovalLink::query())
-            ->with('clientLabel')
+            ->with(['clientLabel', 'replacedBy:id,ulid'])
             ->whereIn('user_id', self::workspaceIds($request->user()))
             ->latest('id')
             ->limit(200)
@@ -324,6 +349,9 @@ class SocialApprovalController extends Controller
             'title' => ['sometimes', 'nullable', 'string', 'max:120'],
             'client_name' => ['sometimes', 'nullable', 'string', 'max:120'],
             'client_id' => ['sometimes', 'nullable', 'string', 'max:26'],
+            'views' => ['sometimes', 'nullable', 'array', 'min:1', 'max:3'],
+            'views.*' => ['string', Rule::in(SocialApprovalLink::VIEWS), 'distinct'],
+            'visibility' => ['sometimes', 'string', Rule::in(['link', 'public'])],
             // Change who may decide (not removable: a link always has one
             // once set).
             'approver_email' => ['sometimes', 'string', 'email:rfc', 'max:254'],
@@ -401,6 +429,12 @@ class SocialApprovalController extends Controller
             $fields = array_intersect_key($validated, array_flip(['title', 'client_name', 'approver_email']));
             if (array_key_exists('client_id', $validated)) {
                 $fields['client_label_id'] = $validated['client_label_id'] ?? null;
+            }
+            if (array_key_exists('views', $validated)) {
+                $fields['views'] = $validated['views'] === null ? null : array_values($validated['views']);
+            }
+            if (isset($validated['visibility'])) {
+                $fields['visibility'] = $validated['visibility'];
             }
             if (array_key_exists('reminders', $validated)) {
                 $fields['reminders_enabled'] = (bool) $validated['reminders'];
@@ -772,7 +806,7 @@ class SocialApprovalController extends Controller
      */
     private function linkArray(SocialApprovalLink $link): array
     {
-        $link->loadMissing('clientLabel');
+        $link->loadMissing(['clientLabel', 'replacedBy:id,ulid']);
         $plan = $link->isScoped() ? PlanScope::counts($link) : null;
 
         return [
@@ -782,6 +816,10 @@ class SocialApprovalController extends Controller
             'client_name' => $link->client_name,
             // v7: the client label (id, name, initials, colour); null on a link for no client.
             'client' => $link->clientLabel?->toBadge(),
+            'views' => $link->clientViews(),
+            // link | public (listed on the owner's public profile).
+            'visibility' => $link->visibility ?? 'link',
+            'replaced_by' => $link->replacedBy?->ulid,
             // Null on links made before signed-in approvers until someone binds it.
             'approver_email' => $link->approver_email,
             'approver_bound_at' => $link->approver_bound_at?->toIso8601String(),

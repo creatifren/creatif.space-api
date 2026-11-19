@@ -210,9 +210,13 @@ Errors → next step: invalid_input → give either post_ids or both date_from a
 | `date_to` | string | no | Content Plan: last day shown, included (YYYY-MM-DD) |
 | `timezone` | string | no | Content Plan: IANA timezone the dates are in, e.g. Asia/Jakarta (default: the account timezone) |
 | `channel_ids` | array of string | no | Content Plan: only these channels (from list_channels); omit for all |
-| `approver_email` | string | yes | Email of the person who approves; they sign in with it to decide |
+| `approver_email` | string | no | Email of the person who approves; they sign in with it to decide. Optional with client_id when that client has an approver |
+| `client_id` | string | no | The client it is for (id from list_clients): fills the approver and the private client name |
 | `title` | string | no | Shown to the client above the posts |
 | `client_name` | string | no | Private note on who it is for; the client never sees it |
+| `views` | array of "grid" \| "calendar" \| "feed" | no | The views the client can switch between; omit for all three |
+| `visibility` | "link" \| "public" | no | "link" (default): only people with the link. "public": also listed on the user’s public profile — only if the user asks |
+| `replaces_link_id` | string | no | An older link of the user’s this one replaces: it is turned off and its page says it was replaced |
 | `expires_in_hours` | number or number or number | no | 48, 168 (7 days) or 720 (30 days); omit for no expiry |
 
 ## check_approval_status
@@ -572,7 +576,7 @@ Errors → next step: preview_stale → the post changed since the preview: show
 | `link` | string | yes | The link id from list_waiting_approvals (or the approval link URL) |
 | `post_id` | string | yes | Post id from list_waiting_approvals |
 | `decision` | "approve" \| "revise" | yes | "approve", or "revise" to request changes |
-| `reason` | string | no | Required for "revise": what should change (the sender reads it) |
+| `reason` | string | no | Required for "revise": what should change (the sender reads it). Optional with "approve": a note that goes with the yes ("Approve with note") |
 | `confirm` | boolean | no | Leave false first: you get a preview. Set true only after the user explicitly agreed to that preview. |
 
 ## list_shared_with_me
