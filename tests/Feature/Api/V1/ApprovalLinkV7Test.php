@@ -71,17 +71,20 @@ it('tells the client a link was replaced, turned off or expired — never a bare
 });
 
 it('shows each account its own caption and the client their progress', function () {
-    Http::fake(['*' => Http::response(['id' => 'post_ok', 'status' => 'scheduled'])]);
+    Http::fake(['api.postforme.test/*' => Http::response(['id' => 'post_ok', 'status' => 'scheduled'])]);
     $user = v7Owner();
     $custom = v7Held($user, 'We are proud to open our rooftop bar.');
     $same = v7Held($user);
-    $url = $this->actingAs($user)->postJson('/api/v1/social-approval-links', ['approver_email' => 'client@example.test', 'post_ids' => [$custom->ulid, $same->ulid]])->json('data.url');
+    // One account only: approving reaches the (faked) provider like any approval.
+    $single = SocialPost::factory()->for($user)->create(['provider_post_id' => null, 'approval' => 'awaiting']);
+    $single->targets()->create(['social_account_id' => SocialAccount::factory()->for($user)->create()->id, 'status' => 'pending']);
+    $url = $this->actingAs($user)->postJson('/api/v1/social-approval-links', ['approver_email' => 'client@example.test', 'post_ids' => [$custom->ulid, $same->ulid, $single->ulid]])->json('data.url');
     $token = basename($url);
     $this->app['auth']->forgetGuards();
 
     $page = $this->getJson("/api/v1/a/{$token}")->assertOk()
-        ->assertJsonPath('data.summary.total', 2)
-        ->assertJsonPath('data.summary.waiting', 2)
+        ->assertJsonPath('data.summary.total', 3)
+        ->assertJsonPath('data.summary.waiting', 3)
         ->assertJsonPath('data.summary.all_reviewed', false)
         ->json('data.posts');
     $byId = collect($page)->keyBy('id');
@@ -91,8 +94,8 @@ it('shows each account its own caption and the client their progress', function 
         ->and($byId[$same->ulid]['captions_differ'])->toBeFalse();
 
     // Approve with note (E4): the note is optional and stays with the yes.
-    asApprover($this)->postJson("/api/v1/a/{$token}/posts/{$custom->ulid}/decision", ['decision' => 'approve', 'note' => 'Love the photo'])->assertOk();
-    expect($custom->comments()->where('role', 'APPROVER')->value('body'))->toBe('Love the photo');
+    asApprover($this)->postJson("/api/v1/a/{$token}/posts/{$single->ulid}/decision", ['decision' => 'approve', 'note' => 'Love the photo'])->assertOk();
+    expect($single->comments()->where('role', 'APPROVER')->value('body'))->toBe('Love the photo');
     // Request changes needs its text.
     asApprover($this)->postJson("/api/v1/a/{$token}/posts/{$same->ulid}/decision", ['decision' => 'revise'])->assertStatus(422);
     asApprover($this)->postJson("/api/v1/a/{$token}/posts/{$same->ulid}/decision", ['decision' => 'revise', 'note' => 'x', 'reason' => 'Brighter photo'])->assertStatus(422);
@@ -101,5 +104,6 @@ it('shows each account its own caption and the client their progress', function 
     $this->getJson("/api/v1/a/{$token}")->assertOk()
         ->assertJsonPath('data.summary.reviewed', 2)
         ->assertJsonPath('data.summary.changes_requested', 1)
-        ->assertJsonPath('data.summary.all_reviewed', true);
+        ->assertJsonPath('data.summary.waiting', 1)
+        ->assertJsonPath('data.summary.all_reviewed', false);
 });
