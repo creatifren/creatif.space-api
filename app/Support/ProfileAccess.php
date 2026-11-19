@@ -7,9 +7,10 @@ use App\Models\User;
 use Illuminate\Validation\ValidationException;
 
 /**
- * v7 public profile rules by plan (decisions › Public URLs): Pro + Max get a
- * custom domain, extra fonts and a custom hex colour; Free keeps Lora +
- * Inter and three colour presets.
+ * v7 public profile rules by plan (decisions › Public URLs): Pro + Max get
+ * extra fonts and a custom hex colour; Free keeps Lora + Inter and three
+ * colour presets. A custom domain is Enterprise only (pricing page; Rizal
+ * 19 Nov).
  */
 final class ProfileAccess
 {
@@ -34,6 +35,11 @@ final class ProfileAccess
         unset($appearance['custom_light'], $appearance['custom_dark']);
 
         return $appearance;
+    }
+
+    public static function customDomain(User $user): bool
+    {
+        return Workspace::owner($user)->plan()->key === PlanKey::Enterprise;
     }
 
     /** @param  array<string, mixed>  $appearance */

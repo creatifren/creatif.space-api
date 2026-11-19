@@ -77,7 +77,7 @@ class PublicProfileResource extends JsonResource
             'layout' => $profile->getAttributes()['layout'] ?? 'link_in_bio',
             'contact' => $profile->contact ?? (object) [],
             // A verified custom domain (Pro + Max): every public page lives there.
-            'custom_domain' => ($profile->getAttributes()['custom_domain_verified_at'] ?? null) !== null && $this->user !== null && ProfileAccess::paid($this->user)
+            'custom_domain' => ($profile->getAttributes()['custom_domain_verified_at'] ?? null) !== null && $this->user !== null && ProfileAccess::customDomain($this->user)
                 ? $profile->getAttributes()['custom_domain'] : null,
             // v7 PAGES: public Galleries / Blogs, content plans and reports.
             'pages' => $this->user === null ? [] : [

@@ -13,7 +13,7 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\Rule;
 
 /**
- * v7 public profile: the custom domain (Pro + Max, CNAME → creatif.space;
+ * v7 public profile: the custom domain (Enterprise only, CNAME → creatif.space;
  * once verified it applies to every public page of the account), the
  * host → handle lookup the public site uses, and link tap counts.
  */
@@ -29,8 +29,8 @@ class ProfileDomainController extends Controller
     public function update(Request $request): JsonResponse
     {
         $user = $request->user();
-        if (! ProfileAccess::paid($user)) {
-            return response()->json(['message' => 'A custom domain is on Pro and Max.', 'reason' => 'plan_required', 'required_plan' => 'pro'], 402);
+        if (! ProfileAccess::customDomain($user)) {
+            return response()->json(['message' => 'A custom domain is part of Enterprise. Contact sales to set one up.', 'reason' => 'plan_required', 'required_plan' => 'enterprise'], 402);
         }
         $profile = $user->profile()->firstOrCreate([]);
         if (is_string($request->input('domain'))) {
@@ -80,7 +80,7 @@ class ProfileDomainController extends Controller
             ->with('user')
             ->first();
         abort_if($profile === null || $profile->user === null || $profile->user->status !== UserStatus::Active, 404);
-        abort_unless(ProfileAccess::paid($profile->user), 404);
+        abort_unless(ProfileAccess::customDomain($profile->user), 404);
         $handle = Handle::query()->where('user_id', $profile->user_id)->value('name');
         abort_if($handle === null, 404);
 
