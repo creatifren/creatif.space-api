@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Api\V1;
 use App\Http\Controllers\Controller;
 use App\Http\Resources\MyProfileResource;
 use App\Support\PlanQuota;
+use App\Support\ProfileAccess;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
@@ -35,6 +36,19 @@ class MyProfileController extends Controller
             // users.timezone the weekly digest reads (notification settings).
             'timezone' => ['sometimes', 'nullable', 'string', 'max:64', 'timezone:all'],
             'theme' => ['sometimes', 'string', 'in:light,dark,system'],
+            // v7 Language & region.
+            'week_start' => ['sometimes', 'integer', 'in:1,6,7'],
+            'time_format' => ['sometimes', 'string', 'in:24h,12h'],
+            // v7 public profile: Link in bio or Grid, and the Contact button
+            // (one primary channel + the others; no form).
+            'layout' => ['sometimes', 'string', 'in:link_in_bio,grid'],
+            'contact' => ['sometimes', 'nullable', 'array'],
+            'contact.primary' => ['sometimes', 'nullable', 'string', 'in:whatsapp,email,instagram,link'],
+            'contact.whatsapp' => ['sometimes', 'nullable', 'string', 'max:32'],
+            'contact.email' => ['sometimes', 'nullable', 'email', 'max:255'],
+            'contact.instagram' => ['sometimes', 'nullable', 'string', 'max:64'],
+            'contact.link_url' => ['sometimes', 'nullable', 'url', 'max:2048'],
+            'contact.link_label' => ['sometimes', 'nullable', 'string', 'max:40'],
             'mode' => ['sometimes', 'string', 'in:portfolio,freelance'],
             // Which layout the next new Space starts in — an account
             // setting, not a claim about any Space that exists.
@@ -97,7 +111,12 @@ class MyProfileController extends Controller
 
         $user = $request->user();
 
-        $accountFields = array_intersect_key($validated, array_flip(['name', 'locale', 'theme', 'timezone', 'avatar_url']));
+        $accountFields = array_intersect_key($validated, array_flip(['name', 'locale', 'theme', 'timezone', 'avatar_url', 'week_start', 'time_format']));
+        // v7: extra fonts and a custom hex colour are Pro + Max; Free keeps
+        // Lora + Inter and the three presets.
+        if (isset($validated['appearance']) && ! ProfileAccess::paid($request->user())) {
+            ProfileAccess::assertFreeAppearance($validated['appearance']);
+        }
         $profileFields = array_diff_key($validated, $accountFields);
 
         // The public profile is the link in bio: editing it is part of

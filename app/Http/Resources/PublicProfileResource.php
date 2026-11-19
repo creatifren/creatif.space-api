@@ -3,8 +3,11 @@
 namespace App\Http\Resources;
 
 use App\Enums\ProfileMode;
+use App\Models\ClientReport;
 use App\Models\Handle;
 use App\Models\Profile;
+use App\Models\SocialApprovalLink;
+use App\Support\ProfileAccess;
 use App\Support\Workspace;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
@@ -70,6 +73,24 @@ class PublicProfileResource extends JsonResource
             'branding' => $this->user === null
                 || ! Workspace::owner($this->user)->plan()->feature('branding_removed'),
             'spaces' => $spaces,
+            // v7: Link in bio or Grid, and the Contact button (no form).
+            'layout' => $profile->layout ?? 'link_in_bio',
+            'contact' => $profile->contact ?? (object) [],
+            // A verified custom domain (Pro + Max): every public page lives there.
+            'custom_domain' => $profile->custom_domain_verified_at !== null && $this->user !== null && ProfileAccess::paid($this->user)
+                ? $profile->custom_domain : null,
+            // v7 PAGES: public Galleries / Blogs, content plans and reports.
+            'pages' => $this->user === null ? [] : [
+                ...$this->user->spaces()->where('status', 'published')->where('visibility', 'public')->latest('published_at')->get()
+                    ->map(fn ($s) => ['kind' => $s->type ?? 'gallery', 'title' => $s->title, 'slug' => $s->slug])->all(),
+                ...SocialApprovalLink::query()->where('user_id', $this->user->id)->where('visibility', 'public')->whereNull('revoked_at')
+                    ->latest('id')->limit(20)->get()
+                    ->filter(fn (SocialApprovalLink $l) => ! $l->expired())
+                    ->map(fn (SocialApprovalLink $l) => ['kind' => 'content_plan', 'title' => $l->title ?: 'Content plan', 'url' => $l->url()])->values()->all(),
+                ...ClientReport::query()->where('user_id', $this->user->id)->where('visibility', 'public')->whereNull('revoked_at')
+                    ->latest('month')->limit(20)->get()
+                    ->map(fn (ClientReport $r) => ['kind' => 'report', 'title' => $r->month, 'url' => $r->url()])->all(),
+            ],
         ];
     }
 }

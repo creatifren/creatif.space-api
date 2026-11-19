@@ -31,6 +31,9 @@ class UserResource extends JsonResource
             'locale' => $this->locale,
             'theme' => $this->theme,
             'timezone' => $this->timezone,
+            // v7 Language & region.
+            'week_start' => (int) ($this->week_start ?? 1),
+            'time_format' => $this->time_format ?? '24h',
             'status' => $this->status,
             // Null for almost everybody. The sidebar shows /referral only
             // on "approved" — one nullable string here beats a second

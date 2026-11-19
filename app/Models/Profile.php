@@ -40,6 +40,8 @@ class Profile extends Model
         'freelance',
         'categories',
         'cover_url',
+        'layout',
+        'contact',
     ];
 
     /**
@@ -57,6 +59,8 @@ class Profile extends Model
             'seo' => 'array',
             'freelance' => 'array',
             'categories' => 'array',
+            'contact' => 'array',
+            'custom_domain_verified_at' => 'datetime',
         ];
     }
 

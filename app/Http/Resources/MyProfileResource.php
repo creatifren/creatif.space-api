@@ -39,6 +39,13 @@ class MyProfileResource extends JsonResource
             'freelance' => $this->freelance ?? (object) [],
             'categories' => $this->categories ?? [],
             'cover_url' => $this->cover_url,
+            // v7: Link in bio or Grid, the Contact button, the custom domain.
+            'layout' => $this->layout ?? 'link_in_bio',
+            'contact' => $this->contact ?? (object) [],
+            'custom_domain' => $this->custom_domain,
+            'custom_domain_verified' => $this->custom_domain_verified_at !== null,
+            'week_start' => (int) ($this->user->week_start ?? 1),
+            'time_format' => $this->user->time_format ?? '24h',
         ];
     }
 }
