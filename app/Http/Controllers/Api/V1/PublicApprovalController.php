@@ -11,6 +11,8 @@ use App\Exceptions\PublishPreflightFailed;
 use App\Exceptions\ScheduleBeyondHorizon;
 use App\Http\Controllers\Controller;
 use App\Jobs\SendApprovedHeldPosts;
+use App\Models\BlogPost;
+use App\Models\File;
 use App\Models\SocialApprovalDecision;
 use App\Models\SocialApprovalLink;
 use App\Models\SocialPost;
@@ -84,6 +86,18 @@ class PublicApprovalController extends Controller
         $this->media = PlanScope::media($posts);
 
         ProductEvents::approvalLinkOpened($link, $posts->count(), $request);
+        $documents = BlogPost::query()->where('social_approval_link_id', $link->id)->orderBy('id')->get();
+        $counts = PlanScope::counts($link);
+        // Blog posts on the link count toward the client's progress too.
+        foreach ($documents as $d) {
+            $counts['total']++;
+            $key = match ($d->status) {
+                'waiting' => PlanScope::STATE_WAITING,
+                'changes_requested' => PlanScope::STATE_CHANGES,
+                default => PlanScope::STATE_APPROVED,
+            };
+            $counts[$key] = ($counts[$key] ?? 0) + 1;
+        }
 
         return response()->json(['data' => [
             'editor' => $link->user->name,
@@ -104,13 +118,27 @@ class PublicApprovalController extends Controller
                 'from' => $filters['from'] ?? null,
                 'to' => $filters['to'] ?? null,
             ],
-            'counts' => $counts = PlanScope::counts($link),
+            'counts' => $counts,
             // v7 (UX review E2/E3): how far the client is, and whether all is reviewed.
             'summary' => self::summary($counts),
             // The views the owner lets the client switch between (grid, calendar, feed).
             'views' => $link->clientViews(),
             'window_days' => PlanQuota::scheduleWindowDays($link->user),
             'posts' => $posts->map(fn (SocialPost $p) => $this->postArray($p))->all(),
+            // v7: Blog posts that need the client's approval (press releases).
+            'documents' => $documents
+                ->map(fn (BlogPost $d) => [
+                    'id' => $d->ulid,
+                    'type' => 'blog_post',
+                    'title' => $d->title,
+                    'cover_url' => $d->cover_file_id === null ? null : File::query()->find($d->cover_file_id)?->url(),
+                    'blocks' => $d->publicBlocks(),
+                    // waiting | changes_requested | approved | published
+                    'state' => $d->status === 'published' ? 'approved' : $d->status,
+                    'approval_by' => $d->approval_by,
+                    'approval_at' => $d->approval_at?->toIso8601String(),
+                    'comment' => $d->approval_comment,
+                ])->all(),
         ]]);
     }
 
@@ -634,6 +662,49 @@ class PublicApprovalController extends Controller
                 ->filter(fn (SocialPostComment $c) => $c->resolved_at === null)
                 ->map(fn (SocialPostComment $c) => $c->toPublicArray())->values()->all(),
         ];
+    }
+
+    /**
+     * v7: the client decides on a Blog post on the link. Approve publishes
+     * it to the Blog (with an optional note); request changes needs the
+     * reason and sends it back to the owner as a draft-to-fix.
+     */
+    public function decideDocument(Request $request, string $token, string $document): JsonResponse
+    {
+        $link = $this->resolve($token);
+        if ($link instanceof JsonResponse) {
+            return $link;
+        }
+        $approver = ApproverGate::authorize($request, $link);
+        $validated = $request->validate([
+            'name' => ['sometimes', 'nullable', 'string', 'max:120'],
+            'decision' => ['required', 'in:approve,revise'],
+            'reason' => ['required_if:decision,revise', 'nullable', 'string', 'max:5000'],
+            'note' => ['sometimes', 'nullable', 'string', 'max:5000', 'prohibited_unless:decision,approve'],
+        ]);
+        $post = BlogPost::query()->where('social_approval_link_id', $link->id)->where('ulid', $document)->firstOrFail();
+        if ($post->status !== 'waiting') {
+            return response()->json(['message' => 'This post has already been decided.'], 422);
+        }
+        $name = self::displayName($validated['name'] ?? null, $approver);
+        if ($validated['decision'] === 'approve') {
+            $post->update([
+                'status' => 'published',
+                'published_at' => now(),
+                'approval_by' => $name,
+                'approval_at' => now(),
+                'approval_comment' => trim((string) ($validated['note'] ?? '')) ?: null,
+            ]);
+        } else {
+            $post->update([
+                'status' => 'changes_requested',
+                'approval_by' => $name,
+                'approval_at' => now(),
+                'approval_comment' => $validated['reason'],
+            ]);
+        }
+
+        return response()->json(['data' => ['id' => $post->ulid, 'state' => $post->status === 'published' ? 'approved' : $post->status]]);
     }
 
     /**

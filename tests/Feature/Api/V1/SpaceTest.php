@@ -19,7 +19,9 @@ describe('create', function () {
             ])
             ->assertCreated()
             ->assertJsonPath('data.status', 'draft')
-            ->assertJsonPath('data.visibility', 'private')
+            // v7: Link only by default.
+            ->assertJsonPath('data.visibility', 'link')
+            ->assertJsonPath('data.type', 'gallery')
             ->assertJsonPath('data.view_mode', 'editorial')
             ->assertJsonPath('data.slug', 'winter-noel-product-shoot')
             ->assertJsonMissingPath('data.approval_enabled');

@@ -22,6 +22,8 @@ class SpaceResource extends JsonResource
             'id' => $this->ulid,
             'title' => $this->title,
             'slug' => $this->slug,
+            // v7: gallery | blog.
+            'type' => $this->type ?? 'gallery',
             'description' => $this->description,
             'status' => $this->status,
             'visibility' => $this->visibility,
@@ -39,6 +41,9 @@ class SpaceResource extends JsonResource
                 'section' => $item->section,
                 'sort_order' => $item->sort_order,
                 'caption' => $item->caption,
+                'title' => $item->title,
+                'featured' => (bool) $item->featured,
+                'hidden' => (bool) $item->hidden,
                 'file' => [
                     'name' => $item->file->name,
                     'mime_type' => $item->file->mime_type,

@@ -3,17 +3,21 @@
 namespace App\Http\Controllers\Api\V1;
 
 use App\Enums\ActivityAction;
+use App\Enums\SocialPostStatus;
 use App\Enums\SpaceEventType;
 use App\Enums\SpaceStatus;
 use App\Enums\SpaceViewMode;
 use App\Http\Controllers\Controller;
 use App\Http\Resources\SpaceListResource;
 use App\Http\Resources\SpaceResource;
+use App\Jobs\AddPublishedPostToSpaces;
 use App\Models\Activity;
 use App\Models\File;
+use App\Models\SocialPost;
 use App\Models\Space;
 use App\Models\SpaceItem;
 use App\Support\PlanQuota;
+use App\Support\PostSpaces;
 use App\Support\SpacePublishConfirmation;
 use App\Support\Workspace;
 use Illuminate\Http\JsonResponse;
@@ -35,7 +39,7 @@ class SpaceController extends Controller
     public function index(Request $request): JsonResponse
     {
         $validated = $request->validate([
-            'tab' => ['sometimes', 'string', 'in:all,private,public,archived'],
+            'tab' => ['sometimes', 'string', 'in:all,private,link,public,archived'],
             'search' => ['sometimes', 'nullable', 'string', 'max:255'],
         ]);
 
@@ -58,6 +62,7 @@ class SpaceController extends Controller
         match ($tab) {
             'archived' => $query->where('status', SpaceStatus::Archived),
             'private' => $query->where('status', '!=', SpaceStatus::Archived)->where('visibility', 'private'),
+            'link' => $query->where('status', '!=', SpaceStatus::Archived)->where('visibility', 'link'),
             'public' => $query->where('status', '!=', SpaceStatus::Archived)->where('visibility', 'public'),
             default => $query->where('status', '!=', SpaceStatus::Archived),
         };
@@ -91,6 +96,12 @@ class SpaceController extends Controller
             'view_mode' => ['sometimes', 'string', 'in:editorial,grid,board'],
             'file_ids' => ['sometimes', 'array', 'min:1', 'max:100'],
             'file_ids.*' => ['string', 'max:26'],
+            // v7: Gallery or Blog, who can see it (Link only by default), the
+            // address (creatif.space/{username}/{slug}), downloads on galleries.
+            'type' => ['sometimes', 'string', 'in:gallery,blog'],
+            'visibility' => ['sometimes', 'string', 'in:private,link,public'],
+            'slug' => ['sometimes', 'string', 'min:1', 'max:80', 'regex:/^[a-z0-9-]+$/'],
+            'allow_downloads' => ['sometimes', 'boolean'],
         ]);
 
         $user = Workspace::owner($request->user());
@@ -105,10 +116,16 @@ class SpaceController extends Controller
             ? $this->readyFiles($user->id, $validated['file_ids'])
             : collect();
 
+        if (isset($validated['slug']) && Space::withTrashed()->where('user_id', $user->id)->where('slug', $validated['slug'])->exists()) {
+            throw ValidationException::withMessages(['slug' => 'That address is already used by another Space.']);
+        }
+
         $space = DB::transaction(function () use ($user, $validated, $files) {
             $space = $user->spaces()->create([
+                'type' => $validated['type'] ?? 'gallery',
+                'visibility' => $validated['visibility'] ?? 'link',
                 'title' => $validated['title'],
-                'slug' => Space::generateSlug($user, $validated['title']),
+                'slug' => $validated['slug'] ?? Space::generateSlug($user, $validated['title']),
                 /* The account's default when the caller named nothing. Read
                    through the profile, which may not exist yet — a Space can
                    be made before the profile screen is ever opened. */
@@ -116,7 +133,9 @@ class SpaceController extends Controller
                     ?? $user->profile?->default_view_mode
                     ?? SpaceViewMode::Editorial,
                 'design' => Space::emptyDesign(),
-                'settings' => Space::defaultSettings(),
+                'settings' => isset($validated['allow_downloads'])
+                    ? [...Space::defaultSettings(), 'allow_download' => (bool) $validated['allow_downloads']]
+                    : Space::defaultSettings(),
             ]);
 
             $order = 0;
@@ -131,6 +150,36 @@ class SpaceController extends Controller
         return (new SpaceResource($space->refresh()->load('items.file')))
             ->response()
             ->setStatusCode(201);
+    }
+
+    /**
+     * v7 Compose › "Also add to": the Galleries and Blogs a social post goes
+     * into when it is published (after approval if it needs one). Replaces
+     * the set; a post already published lands at once.
+     */
+    public function setPostSpaces(Request $request, SocialPost $socialPost): JsonResponse
+    {
+        $owner = Workspace::owner($request->user());
+        abort_unless($socialPost->user_id === $owner->id || $socialPost->user_id === $request->user()->id, 404);
+        abort_unless(Workspace::canWrite($request->user()), 403);
+        $validated = $request->validate([
+            'space_ids' => ['present', 'array', 'max:10'],
+            'space_ids.*' => ['string', 'max:26', 'distinct'],
+        ]);
+        $ids = Space::query()->where('user_id', $owner->id)->whereIn('ulid', $validated['space_ids'])->pluck('id')->all();
+        if (count($ids) !== count($validated['space_ids'])) {
+            throw ValidationException::withMessages(['space_ids' => 'One of these Spaces is not yours.']);
+        }
+        DB::table('social_post_space')->where('social_post_id', $socialPost->id)->whereNotIn('space_id', $ids)->whereNull('added_at')->delete();
+        foreach ($ids as $id) {
+            DB::table('social_post_space')->insertOrIgnore(['social_post_id' => $socialPost->id, 'space_id' => $id]);
+        }
+        PostSpaces::flush();
+        if ($socialPost->status === SocialPostStatus::Published) {
+            AddPublishedPostToSpaces::dispatch($socialPost->id);
+        }
+
+        return response()->json(['data' => ['post_id' => $socialPost->ulid, 'space_ids' => Space::query()->whereIn('id', $ids)->pluck('ulid')->all()]]);
     }
 
     /**
@@ -157,7 +206,7 @@ class SpaceController extends Controller
             'title' => ['sometimes', 'string', 'max:255'],
             'description' => ['sometimes', 'nullable', 'string', 'max:2000'],
             'slug' => ['sometimes', 'string', 'min:1', 'max:80', 'regex:/^[a-z0-9-]+$/'],
-            'visibility' => ['sometimes', 'string', 'in:private,public'],
+            'visibility' => ['sometimes', 'string', 'in:private,link,public'],
             'view_mode' => ['sometimes', 'string', 'in:editorial,grid,board'],
             'password' => ['sometimes', 'nullable', 'string', 'min:4', 'max:255'],
             'design' => ['sometimes', 'array'],
@@ -169,6 +218,12 @@ class SpaceController extends Controller
             'items.*.section' => ['sometimes', 'nullable', 'string', 'max:120'],
             'items.*.sort_order' => ['sometimes', 'integer', 'min:0'],
             'items.*.caption' => ['sometimes', 'nullable', 'string', 'max:2000'],
+            // v7 gallery: an item's title, Featured, Hidden from the page.
+            'items.*.title' => ['sometimes', 'nullable', 'string', 'max:160'],
+            'items.*.featured' => ['sometimes', 'boolean'],
+            'items.*.hidden' => ['sometimes', 'boolean'],
+            // v7 gallery: "Allow downloads of originals" (press / media kit).
+            'allow_downloads' => ['sometimes', 'boolean'],
         ]);
 
         if (strlen(json_encode($validated['design'] ?? []) ?: '') > 200_000) {
@@ -191,6 +246,9 @@ class SpaceController extends Controller
                 'title', 'description', 'slug', 'visibility', 'view_mode',
                 'design', 'settings', 'seo',
             ])));
+            if (array_key_exists('allow_downloads', $validated)) {
+                $space->settings = [...(array) ($space->settings ?? []), 'allow_download' => (bool) $validated['allow_downloads']];
+            }
 
             if (array_key_exists('password', $validated)) {
                 $space->password_hash = $validated['password'] === null
@@ -602,6 +660,9 @@ class SpaceController extends Controller
                 'section' => $row['section'] ?? null,
                 'sort_order' => (int) ($row['sort_order'] ?? 0),
                 'caption' => $row['caption'] ?? null,
+                'title' => $row['title'] ?? null,
+                'featured' => (bool) ($row['featured'] ?? false),
+                'hidden' => (bool) ($row['hidden'] ?? false),
             ];
 
             /** @var SpaceItem|null $item */

@@ -719,7 +719,7 @@ When to use: to find a Space id before publish_space, or to see which Spaces are
 
 Example: list_spaces { "status": "draft" } → { count, spaces: [{ id, title, status, visibility, items_count, url, updated_at }] }
 
-Spaces are not included on every plan. url is set only for a published Space (and only once the account has a username). visibility "private" means link only: once published, anyone with the link can open it, but it is not listed on the profile; "public" is also listed on the profile. A draft opens for nobody, whatever its visibility. visibility_means says it in words for the user.
+Spaces are not included on every plan. url is set only for a published Space (and only once the account has a username). visibility "link" (the default) means once published anyone with the link can open it, but it is not listed on the profile; "public" is also listed on the profile; "private" opens for nobody but the user. A draft opens for nobody, whatever its visibility. type is gallery or blog. visibility_means says it in words for the user.
 
 Errors → next step: plan_required → details.feature spaces — tell the user Spaces are not available on their plan, do not retry; scope_missing → reconnect and allow "read"; unauthorized → ask the user to reconnect the creatif.space connector; upstream_unavailable → wait a minute and call again; forbidden (403) → this seat or connection may not do this (e.g. a viewer, or a permission the connection was not given): the workspace owner or an editor can, or the user does it in creatif.space; do not retry; not_found (404) → the id is not in this workspace: take a fresh id from the matching list tool and call again.
 

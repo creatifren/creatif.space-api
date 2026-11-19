@@ -2,6 +2,8 @@
 
 namespace App\Http\Resources;
 
+use App\Models\BlogPost;
+use App\Models\File;
 use App\Models\Space;
 use App\Models\SpaceItem;
 use App\Support\Workspace;
@@ -53,6 +55,34 @@ class PublicSpaceResource extends JsonResource
             'id' => $this->ulid,
             'title' => $this->title,
             'slug' => $this->slug,
+            // v7: gallery | blog.
+            'type' => $this->type ?? 'gallery',
+            // v7 Gallery: the items in order, featured first, hidden left out.
+            'items' => $this->items
+                ->reject(fn (SpaceItem $i) => (bool) $i->hidden || $i->file === null)
+                ->sortBy([['featured', 'desc'], ['sort_order', 'asc']])
+                ->values()
+                ->map(fn (SpaceItem $i) => [
+                    'id' => $i->ulid,
+                    'title' => $i->title,
+                    'caption' => $i->caption,
+                    'featured' => (bool) $i->featured,
+                    'url' => $i->file->url(),
+                    'width' => $i->file->width,
+                    'height' => $i->file->height,
+                    'mime_type' => $i->file->mime_type,
+                ])->all(),
+            // v7 Blog: published posts only, newest first.
+            'posts' => ($this->type ?? 'gallery') !== 'blog' ? [] : $this->blogPosts()
+                ->where('status', 'published')->whereNotNull('published_at')
+                ->latest('published_at')->limit(100)->get()
+                ->map(fn (BlogPost $p) => [
+                    'id' => $p->ulid,
+                    'title' => $p->title,
+                    'slug' => $p->slug,
+                    'published_at' => $p->published_at?->toIso8601String(),
+                    'cover_url' => $p->cover_file_id === null ? null : File::query()->find($p->cover_file_id)?->url(),
+                ])->all(),
             'owner' => [
                 'name' => $this->user->name,
                 'handle' => $this->user->handle?->name,

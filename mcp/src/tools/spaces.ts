@@ -20,7 +20,8 @@ interface V1SpaceCard {
   title: string;
   slug: string;
   status: 'draft' | 'published' | 'archived';
-  visibility: 'private' | 'public';
+  visibility: 'private' | 'link' | 'public';
+  type?: 'gallery' | 'blog';
   has_password: boolean;
   expires_at: string | null;
   items_count?: number;
@@ -36,7 +37,8 @@ interface PublishPreview {
   status: string;
   publishable: boolean;
   url: string | null;
-  visibility: 'private' | 'public';
+  visibility: 'private' | 'link' | 'public';
+  type?: 'gallery' | 'blog';
   has_password: boolean;
   expires_at: string | null;
   items_count: number;
@@ -50,8 +52,9 @@ interface PublishPreview {
 
 /** What a visitor gets, in words the user can check. */
 const VISIBILITY = {
-  private: 'link only — anyone with the link can open it; it is not listed on the profile',
+  link: 'link only — anyone with the link can open it; it is not listed on the profile',
   public: 'public — anyone with the link can open it, and it is listed on the profile',
+  private: 'private — only the user can open it',
 } as const;
 
 const BLOCKED: Record<string, string> = {
@@ -72,8 +75,9 @@ function shapeSpace(s: V1SpaceCard) {
     title: s.title,
     slug: s.slug,
     status: s.status,
+    type: s.type ?? 'gallery',
     visibility: s.visibility,
-    // B11: "private" is not "nobody can see it" — a published private Space opens for anyone with the link.
+    // v7: link = opens by link (the default), public = also on the profile, private = only the user.
     visibility_means: VISIBILITY[s.visibility] ?? s.visibility,
     items_count: s.items_count ?? s.items?.length ?? 0,
     url: s.status === 'published' ? s.public_url : null,
@@ -98,7 +102,7 @@ export const listSpaces = defineTool({
     does: 'Lists the user’s creatif.space Spaces (shareable pages of library files), most recently changed first, with status (draft, published, archived), visibility, file count and the link of each published one.',
     when: 'to find a Space id before publish_space, or to see which Spaces are live and their links. To make a new one from library files, use create_space_from_files instead. Archived Spaces are listed only with status "archived".',
     example: 'list_spaces { "status": "draft" } → { count, spaces: [{ id, title, status, visibility, items_count, url, updated_at }] }',
-    rules: 'Spaces are not included on every plan. url is set only for a published Space (and only once the account has a username). visibility "private" means link only: once published, anyone with the link can open it, but it is not listed on the profile; "public" is also listed on the profile. A draft opens for nobody, whatever its visibility. visibility_means says it in words for the user.',
+    rules: 'Spaces are not included on every plan. url is set only for a published Space (and only once the account has a username). visibility "link" (the default) means once published anyone with the link can open it, but it is not listed on the profile; "public" is also listed on the profile; "private" opens for nobody but the user. A draft opens for nobody, whatever its visibility. type is gallery or blog. visibility_means says it in words for the user.',
     errors: [
       ['plan_required', 'details.feature spaces — tell the user Spaces are not available on their plan, do not retry'],
       ['scope_missing', 'reconnect and allow "read"'],
