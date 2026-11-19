@@ -876,7 +876,7 @@ Creates a client label, optionally with its approver and channels.
 
 When to use: when the user names a new client to work for, e.g. "add Kopi Senja as a client, @kopisenja is theirs, Dewi approves".
 
-Example: create_client { "name": "Kopi Senja", "approver_email": "dewi@kopisenja.id", "channel_ids": ["01JD…"] } → { client: { id, name, channels } }
+Example: create_client { "name": "Kopi Senja", "approver_email": "dewi@example.com", "channel_ids": ["01JD…"] } → { client: { id, name, channels } }
 
 Names are unique per user. Channel ids come from list_channels; an unknown id is ignored. Nothing is sent to the client.
 
@@ -902,7 +902,7 @@ Renames a client or changes its colour, initials, approver, monthly report email
 
 When to use: when the user changes who approves for a client, which channels are theirs, or turns their monthly report email off.
 
-Example: update_client { "client_id": "01JK…", "approver_email": "gm@ombak.id", "channel_ids": ["01JD…", "01JE…"] } → { client }
+Example: update_client { "client_id": "01JK…", "approver_email": "gm@example.com", "channel_ids": ["01JD…", "01JE…"] } → { client }
 
 Only the fields given change. channel_ids replaces the client’s whole channel set.
 
