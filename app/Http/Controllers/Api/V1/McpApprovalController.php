@@ -105,7 +105,9 @@ class McpApprovalController extends Controller
 
         return app(PublicApprovalController::class)->decideAs(
             $request, $link, $post, $user,
-            ['decision' => $validated['decision'], 'reason' => $validated['reason'] ?? null],
+            // v7 (UX review E4): with approve, the reason is the optional note.
+            ['decision' => $validated['decision'], 'reason' => $validated['reason'] ?? null,
+                'note' => $validated['decision'] === 'approve' ? ($validated['reason'] ?? null) : null],
             $relay,
             SendConfirmation::viaToken($request) ? 'mcp' : 'web',
         );

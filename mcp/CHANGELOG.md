@@ -14,6 +14,11 @@ Clients (v7, 19 Nov 2026):
 - New: `list_clients`, `create_client`, `update_client`, `delete_client`, `set_channel_clients`. Clients are labels on channels; one channel can carry several, and a post belongs to every client on its channels.
 - `list_posts` takes `client_id`; posts and `list_channels` rows carry `clients`.
 
+Approval links (v7, UX review E1/E2/E4/D5):
+
+- `create_approval_link` takes `client_id` (fills the approver), `views` (grid / calendar / feed), `visibility` (link by default; public only when asked) and `replaces_link_id` (the old link's page then says it was replaced).
+- `decide_approval`: with `approve`, `reason` is an optional note that goes with the yes.
+
 Scheduling window (18 Nov 2026):
 
 - Pro and Max schedule up to 90 days ahead (`get_credits` → `scheduling.window_days` 90); Free stays at 7. A post more than 30 days ahead is held by Creatif Space and sent — and charged — about 30 days before its time; `schedule_post`, `schedule_posts` and `publish_post` no longer refuse it with `schedule_horizon`.

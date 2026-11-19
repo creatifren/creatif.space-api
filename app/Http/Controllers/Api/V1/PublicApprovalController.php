@@ -104,7 +104,11 @@ class PublicApprovalController extends Controller
                 'from' => $filters['from'] ?? null,
                 'to' => $filters['to'] ?? null,
             ],
-            'counts' => PlanScope::counts($link),
+            'counts' => $counts = PlanScope::counts($link),
+            // v7 (UX review E2/E3): how far the client is, and whether all is reviewed.
+            'summary' => self::summary($counts),
+            // The views the owner lets the client switch between (grid, calendar, feed).
+            'views' => $link->clientViews(),
             'window_days' => PlanQuota::scheduleWindowDays($link->user),
             'posts' => $posts->map(fn (SocialPost $p) => $this->postArray($p))->all(),
         ]]);
@@ -129,6 +133,8 @@ class PublicApprovalController extends Controller
             'name' => ['sometimes', 'nullable', 'string', 'max:120'],
             'decision' => ['required', 'in:approve,revise'],
             'reason' => ['required_if:decision,revise', 'nullable', 'string', 'max:5000'],
+            // v7 (UX review E4): "Approve with note" — optional, only with approve.
+            'note' => ['sometimes', 'nullable', 'string', 'max:5000', 'prohibited_unless:decision,approve'],
         ]);
 
         return $this->decideAs($request, $link, $post, $approver, $validated, $relay, 'web');
@@ -140,7 +146,7 @@ class PublicApprovalController extends Controller
      * Free window, bind-on-first-use, idempotent repeats, one audit row.
      * The caller has already checked who the approver is.
      *
-     * @param  array{decision: string, reason?: string|null, name?: string|null}  $validated
+     * @param  array{decision: string, reason?: string|null, note?: string|null, name?: string|null}  $validated
      * @param  'web'|'mcp'  $source
      */
     public function decideAs(Request $request, SocialApprovalLink $link, string $post, User $approver, array $validated, SocialPostRelay $relay, string $source): JsonResponse
@@ -194,7 +200,16 @@ class PublicApprovalController extends Controller
             if (is_string($outcome)) {
                 return response()->json(['message' => $outcome], 422);
             }
-            ApproverGate::record($request, $link, $socialPost, SocialApprovalDecision::APPROVED, $approver, $name, $source);
+            $note = trim((string) ($validated['note'] ?? ''));
+            if ($note !== '') {
+                SocialPostComment::create([
+                    'social_post_id' => $socialPost->id,
+                    'author_name' => $name,
+                    'role' => 'APPROVER',
+                    'body' => $note,
+                ]);
+            }
+            ApproverGate::record($request, $link, $socialPost, SocialApprovalDecision::APPROVED, $approver, $name, $source, $note !== '' ? $note : null);
             // A post held for its slot already told the owner (HELD).
             if (! SocialPostRelay::heldForLater($socialPost->refresh())) {
                 $link->user->notify(new SocialPostDecided($link, SocialPostDecided::APPROVED, $name, 1, $socialPost));
@@ -553,10 +568,17 @@ class PublicApprovalController extends Controller
         }
         if ($link->revoked_at !== null) {
             // The name, as on 410: the dead page tells the client whom to ask.
-            return response()->json(['message' => 'This link was taken back.', 'editor' => $link->user->name], 409);
+            // v7 (UX review E2): replaced = a newer link took its place.
+            $replaced = $link->replaced_by_id !== null;
+
+            return response()->json([
+                'message' => $replaced ? 'This link was replaced by a newer one.' : 'This link was turned off.',
+                'state' => $replaced ? 'replaced' : 'revoked',
+                'editor' => $link->user->name,
+            ], 409);
         }
         if ($link->expired()) {
-            return response()->json(['message' => 'This link has expired.', 'editor' => $link->user->name], 410);
+            return response()->json(['message' => 'This link has expired.', 'state' => 'expired', 'editor' => $link->user->name], 410);
         }
 
         $this->link = $link;
@@ -601,10 +623,39 @@ class PublicApprovalController extends Controller
                 'platform' => $t->account->platform,
                 'username' => $t->account->username,
                 'caption' => $t->configuration['caption'] ?? null,
+                // v7 (UX review E1): the text that goes out on this account,
+                // and whether it differs from the post's caption.
+                'caption_effective' => ($t->configuration['caption'] ?? null) ?: $post->caption,
+                'custom_caption' => ($t->configuration['caption'] ?? null) !== null && ($t->configuration['caption'] ?? null) !== '' && $t->configuration['caption'] !== $post->caption,
             ])->all(),
+            'captions_differ' => $post->targets->contains(fn ($t) => ($t->configuration['caption'] ?? null) !== null
+                && ($t->configuration['caption'] ?? null) !== '' && $t->configuration['caption'] !== $post->caption),
             'comments' => $post->comments
                 ->filter(fn (SocialPostComment $c) => $c->resolved_at === null)
                 ->map(fn (SocialPostComment $c) => $c->toPublicArray())->values()->all(),
+        ];
+    }
+
+    /**
+     * The client's progress on a link: reviewed = approved (incl. scheduled /
+     * published since) + changes requested; all_reviewed when nothing waits.
+     *
+     * @param  array<string, int>  $counts  PlanScope::counts()
+     * @return array{total: int, reviewed: int, approved: int, changes_requested: int, waiting: int, all_reviewed: bool}
+     */
+    public static function summary(array $counts): array
+    {
+        $approved = ($counts[PlanScope::STATE_APPROVED] ?? 0) + ($counts[PlanScope::STATE_SCHEDULED] ?? 0) + ($counts[PlanScope::STATE_PUBLISHED] ?? 0);
+        $changes = $counts[PlanScope::STATE_CHANGES] ?? 0;
+        $waiting = $counts[PlanScope::STATE_WAITING] ?? 0;
+
+        return [
+            'total' => $counts['total'] ?? 0,
+            'reviewed' => $approved + $changes,
+            'approved' => $approved,
+            'changes_requested' => $changes,
+            'waiting' => $waiting,
+            'all_reviewed' => ($counts['total'] ?? 0) > 0 && $waiting === 0,
         ];
     }
 }

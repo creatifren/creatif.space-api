@@ -49,7 +49,7 @@ use Illuminate\Support\Str;
  */
 class SocialApprovalLink extends Model implements WorkspaceOwned
 {
-    protected $fillable = ['user_id', 'token', 'title', 'client_name', 'client_label_id', 'approver_email', 'approver_bound_at', 'scope_from', 'scope_to', 'scope_timezone', 'scope_starts_at', 'scope_ends_at', 'scope_account_ids', 'reminders_enabled', 'reminded_at', 'calendar_version', 'calendar_disabled_at', 'expires_at', 'extended_at', 'last_reminded_at', 'revoked_at'];
+    protected $fillable = ['user_id', 'token', 'title', 'client_name', 'client_label_id', 'views', 'visibility', 'replaced_by_id', 'approver_email', 'approver_bound_at', 'scope_from', 'scope_to', 'scope_timezone', 'scope_starts_at', 'scope_ends_at', 'scope_account_ids', 'reminders_enabled', 'reminded_at', 'calendar_version', 'calendar_disabled_at', 'expires_at', 'extended_at', 'last_reminded_at', 'revoked_at'];
 
     public function expired(): bool
     {
@@ -93,6 +93,7 @@ class SocialApprovalLink extends Model implements WorkspaceOwned
             'scope_starts_at' => UtcDateTime::class,
             'scope_ends_at' => UtcDateTime::class,
             'scope_account_ids' => 'array',
+            'views' => 'array',
             'reminders_enabled' => 'boolean',
             'reminded_at' => 'datetime',
             'calendar_version' => 'integer',
@@ -238,5 +239,24 @@ class SocialApprovalLink extends Model implements WorkspaceOwned
     public function clientLabel(): BelongsTo
     {
         return $this->belongsTo(ClientLabel::class);
+    }
+
+    /** The views a client can switch between (v7); null on the row = all three. */
+    public const VIEWS = ['grid', 'calendar', 'feed'];
+
+    /** @return list<string> */
+    public function clientViews(): array
+    {
+        $views = array_values(array_intersect(self::VIEWS, (array) ($this->views ?? [])));
+
+        return $views === [] ? self::VIEWS : $views;
+    }
+
+    /**
+     * @return BelongsTo<SocialApprovalLink, $this>
+     */
+    public function replacedBy(): BelongsTo
+    {
+        return $this->belongsTo(self::class, 'replaced_by_id');
     }
 }
