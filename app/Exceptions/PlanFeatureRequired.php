@@ -29,7 +29,7 @@ class PlanFeatureRequired extends RuntimeException
         'approval_clients' => 'Approval links for more than one client',
         'ai_caption' => 'Improve with AI and Add hashtags',
         'insight' => 'Insights and analytics',
-        'spaces' => 'Creating and editing Spaces and your link in bio',
+        'spaces' => 'Creating and editing Spaces',
         'alt_text' => 'AI alt text',
         'ai_reply_suggestions' => 'AI reply suggestions',
         'comment_to_dm' => 'Comment-to-DM',

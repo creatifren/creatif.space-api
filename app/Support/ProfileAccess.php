@@ -22,6 +22,20 @@ final class ProfileAccess
         return Workspace::owner($user)->plan()->key !== PlanKey::Free;
     }
 
+    /**
+     * Free never stores custom colour sets: the editor sends them with every
+     * save, but only the "Custom" palette (Pro + Max) reads them.
+     *
+     * @param  array<string, mixed>  $appearance
+     * @return array<string, mixed>
+     */
+    public static function stripCustom(array $appearance): array
+    {
+        unset($appearance['custom_light'], $appearance['custom_dark']);
+
+        return $appearance;
+    }
+
     /** @param  array<string, mixed>  $appearance */
     public static function assertFreeAppearance(array $appearance): void
     {

@@ -336,13 +336,40 @@ describe('rule 3 — features gated off on Free', function () {
         $this->actingAs($free)->deleteJson("/api/v1/spaces/{$draft->ulid}")->assertSuccessful();
     });
 
-    it('refuses editing the link in bio (public profile) on Free; account settings stay open', function () {
+    it('lets Free edit its public profile, limited to the free presets', function () {
         $free = v2Free();
 
-        v2Assert402($this->actingAs($free)->patchJson('/api/v1/me/profile', ['bio' => 'Hello']), 'spaces');
+        $this->actingAs($free)->patchJson('/api/v1/me/profile', [
+            'bio' => 'Hello',
+            'layout' => 'grid',
+            'contact' => ['primary' => 'email', 'email' => 'me@example.com'],
+            'appearance' => [
+                'palette' => 'Forest', 'font' => 'Lora', 'public_mode' => 'dark',
+                'custom_light' => ['bg' => '#000000'], 'custom_dark' => ['bg' => '#FFFFFF'],
+            ],
+        ])->assertOk()
+            ->assertJsonPath('data.bio', 'Hello')
+            ->assertJsonPath('data.appearance.palette', 'Forest')
+            ->assertJsonPath('data.appearance.public_mode', 'dark')
+            ->assertJsonMissingPath('data.appearance.custom_light')
+            ->assertJsonMissingPath('data.appearance.custom_dark');
         $this->actingAs($free)->patchJson('/api/v1/me/profile', ['name' => 'New name', 'theme' => 'dark', 'locale' => 'id'])->assertOk();
-        $this->actingAs(v2Pro())->patchJson('/api/v1/me/profile', ['bio' => 'Hello'])->assertOk();
     });
+
+    it('keeps custom colours and extra fonts for Pro and Max', function (string $field, array $appearance) {
+        $free = v2Free();
+
+        $this->actingAs($free)->patchJson('/api/v1/me/profile', ['appearance' => $appearance])
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors($field);
+        $this->actingAs(v2Pro())->patchJson('/api/v1/me/profile', ['appearance' => $appearance])
+            ->assertOk()
+            ->assertJsonPath($field === 'appearance.palette' ? 'data.appearance.palette' : 'data.appearance.font', $appearance[$field === 'appearance.palette' ? 'palette' : 'font']);
+    })->with([
+        'custom colour' => ['appearance.palette', ['palette' => 'Custom', 'custom_light' => ['bg' => '#111111']]],
+        'fourth preset' => ['appearance.palette', ['palette' => 'Sea']],
+        'extra font' => ['appearance.font', ['font' => 'Inter Display']],
+    ]);
 
     it('has a gate and a helper for the features with no endpoint yet', function (string $feature, string $helper) {
         $free = v2Free();

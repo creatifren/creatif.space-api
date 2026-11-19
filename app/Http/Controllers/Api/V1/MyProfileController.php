@@ -4,7 +4,6 @@ namespace App\Http\Controllers\Api\V1;
 
 use App\Http\Controllers\Controller;
 use App\Http\Resources\MyProfileResource;
-use App\Support\PlanQuota;
 use App\Support\ProfileAccess;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -112,19 +111,15 @@ class MyProfileController extends Controller
         $user = $request->user();
 
         $accountFields = array_intersect_key($validated, array_flip(['name', 'locale', 'theme', 'timezone', 'avatar_url', 'week_start', 'time_format']));
-        // v7: extra fonts and a custom hex colour are Pro + Max; Free keeps
-        // Lora + Inter and the three presets.
-        if (isset($validated['appearance']) && ! ProfileAccess::paid($request->user())) {
+        // v7 (Rizal 19 Nov): Free has a public profile and edits it, but
+        // can't customise it — extra fonts and a custom hex colour are Pro +
+        // Max; Free keeps Lora + Inter and the three presets. The custom
+        // domain has its own gate (ProfileDomainController).
+        if (isset($validated['appearance']) && ! ProfileAccess::paid($user)) {
             ProfileAccess::assertFreeAppearance($validated['appearance']);
+            $validated['appearance'] = ProfileAccess::stripCustom($validated['appearance']);
         }
         $profileFields = array_diff_key($validated, $accountFields);
-
-        // The public profile is the link in bio: editing it is part of
-        // `spaces` (Pro and Max, plans v2). Account settings stay open, and
-        // nothing already published is taken down.
-        if (array_diff_key($profileFields, ['default_view_mode' => true]) !== []) {
-            PlanQuota::requireFeature($user, 'spaces', (string) array_key_first(array_diff_key($profileFields, ['default_view_mode' => true])));
-        }
 
         $user->fill($accountFields);
         $user->save();
