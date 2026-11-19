@@ -65,6 +65,11 @@ in [mcp/README.md](mcp/README.md).
 | Engage | `list_conversations` | Comments and DMs, newest first | All |
 | Engage | `reply_to_conversation` | Reply to a comment or DM after a preview | All, may spend Credits |
 | Feedback | `send_feedback` | Send a bug or idea to the creatif.space team | All |
+| Clients | `list_clients` | List clients with approver and channels | All |
+| Clients | `create_client` | Add a client label | All |
+| Clients | `update_client` | Change a client's name, colour, approver, report email or channels | All |
+| Clients | `delete_client` | Remove a client label (posts stay) | All |
+| Clients | `set_channel_clients` | Set which clients a channel belongs to | All |
 | Settings | `get_notification_settings` | Which emails the user gets (post missed or failed, approvals, weekly digest) | All |
 | Settings | `update_notification_settings` | Turn those emails on or off | All |
 

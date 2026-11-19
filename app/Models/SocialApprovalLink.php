@@ -49,7 +49,7 @@ use Illuminate\Support\Str;
  */
 class SocialApprovalLink extends Model implements WorkspaceOwned
 {
-    protected $fillable = ['user_id', 'token', 'title', 'client_name', 'approver_email', 'approver_bound_at', 'scope_from', 'scope_to', 'scope_timezone', 'scope_starts_at', 'scope_ends_at', 'scope_account_ids', 'reminders_enabled', 'reminded_at', 'calendar_version', 'calendar_disabled_at', 'expires_at', 'extended_at', 'last_reminded_at', 'revoked_at'];
+    protected $fillable = ['user_id', 'token', 'title', 'client_name', 'client_label_id', 'approver_email', 'approver_bound_at', 'scope_from', 'scope_to', 'scope_timezone', 'scope_starts_at', 'scope_ends_at', 'scope_account_ids', 'reminders_enabled', 'reminded_at', 'calendar_version', 'calendar_disabled_at', 'expires_at', 'extended_at', 'last_reminded_at', 'revoked_at'];
 
     public function expired(): bool
     {
@@ -228,5 +228,15 @@ class SocialApprovalLink extends Model implements WorkspaceOwned
     public function url(): string
     {
         return config('app.public_url').'/a/'.$this->token;
+    }
+
+    /**
+     * The client this link is for (v7 client labels).
+     *
+     * @return BelongsTo<ClientLabel, $this>
+     */
+    public function clientLabel(): BelongsTo
+    {
+        return $this->belongsTo(ClientLabel::class);
     }
 }

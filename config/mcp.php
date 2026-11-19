@@ -171,6 +171,15 @@ return [
         'api.v1.me.approvals.decide' => 'approvals:decide',
         // list_shared_with_me: Content Plans sent to this account's email.
         'api.v1.me.reports.shared' => 'approvals:decide',
+        // v7 clients (list_clients / create_client / update_client /
+        // delete_client / set_channel_clients): labels on the user's own
+        // channels — nothing is sent to anyone.
+        'api.v1.client-labels.index' => 'read',
+        'api.v1.client-labels.show' => 'read',
+        'api.v1.client-labels.store' => 'draft',
+        'api.v1.client-labels.update' => 'draft',
+        'api.v1.client-labels.destroy' => 'draft',
+        'api.v1.social-accounts.client-labels' => 'draft',
         // send_feedback: a note to the team, nothing public, no Credits.
         'api.v1.feedback.store' => 'draft',
 

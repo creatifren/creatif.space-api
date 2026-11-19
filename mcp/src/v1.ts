@@ -43,6 +43,10 @@ export class V1Client {
     return this.request<T>('PATCH', path, body);
   }
 
+  put<T = unknown>(path: string, body: unknown): Promise<T> {
+    return this.request<T>('PUT', path, body);
+  }
+
   get<T = unknown>(path: string, query?: Query): Promise<T> {
     return this.request<T>('GET', path, undefined, query);
   }

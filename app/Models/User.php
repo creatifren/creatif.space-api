@@ -143,6 +143,16 @@ class User extends Authenticatable implements FilamentUser
     }
 
     /**
+     * Client labels (v7): the owner's clients, put on social accounts.
+     *
+     * @return HasMany<ClientLabel, $this>
+     */
+    public function clientLabels(): HasMany
+    {
+        return $this->hasMany(ClientLabel::class);
+    }
+
+    /**
      * @return HasMany<SocialPost, $this>
      */
     public function socialPosts(): HasMany

@@ -68,3 +68,8 @@ destructive; `send_approval_reminder`, `decide_approval`,
 | `get_notification_settings` | Get the user’s email notification settings | yes | no | no | Reads the user's email preferences. |
 | `update_notification_settings` | Turn creatif.space emails on or off | no | no | no | Changes the user's own email preferences. |
 | `send_feedback` | Send feedback to the creatif.space team | no | no | no | Sends the user's feedback to creatif.space only. |
+| `list_clients` | List clients | yes | no | no | Reads the user's own client labels. |
+| `create_client` | Create a client | no | no | no | Adds a label in the user's own workspace; nothing is sent to anyone. |
+| `update_client` | Update a client | no | no | no | Changes a label in the user's own workspace; nothing is sent to anyone. |
+| `delete_client` | Remove a client | no | yes | no | Removes a label for good; posts, channels and links stay. |
+| `set_channel_clients` | Set the clients of a channel | no | no | no | Changes which labels a channel carries in the user's own workspace. |

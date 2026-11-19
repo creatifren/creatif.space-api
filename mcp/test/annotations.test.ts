@@ -24,7 +24,7 @@ import { startApp, TOKEN_FULL } from './helpers.js';
 
 const READ_PREFIXES = /^(list|get|check)_/;
 const HINTS = ['readOnlyHint', 'destructiveHint', 'idempotentHint', 'openWorldHint'] as const;
-const DESTRUCTIVE = ['publish_post', 'schedule_post', 'schedule_posts', 'reply_to_conversation', 'discard_draft', 'unkeep_file', 'decide_approval', 'revoke_approval_link', 'revoke_insight_share_link', 'publish_space', 'retry_post', 'update_post', 'confirm_media_upload'];
+const DESTRUCTIVE = ['publish_post', 'schedule_post', 'schedule_posts', 'reply_to_conversation', 'discard_draft', 'unkeep_file', 'decide_approval', 'revoke_approval_link', 'revoke_insight_share_link', 'publish_space', 'retry_post', 'update_post', 'confirm_media_upload', 'delete_client'];
 const OPEN_WORLD = ['publish_post', 'schedule_post', 'schedule_posts', 'reply_to_conversation', 'publish_space', 'retry_post', 'send_approval_reminder', 'decide_approval', 'create_insight_share_link', 'create_content_plan'];
 /** What the ChatGPT Apps scan asked for, by name: these must never fall back. */
 const SCAN_REQUIRED: Record<string, Partial<Record<(typeof HINTS)[number], boolean>>> = {

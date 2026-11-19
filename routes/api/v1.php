@@ -8,6 +8,7 @@ use App\Http\Controllers\Api\V1\ApiKeyController;
 use App\Http\Controllers\Api\V1\ApprovalAuditController;
 use App\Http\Controllers\Api\V1\CaptionAssistController;
 use App\Http\Controllers\Api\V1\ChannelVerifyController;
+use App\Http\Controllers\Api\V1\ClientLabelController;
 use App\Http\Controllers\Api\V1\ConnectedAppController;
 use App\Http\Controllers\Api\V1\CreditsController;
 use App\Http\Controllers\Api\V1\CreemWebhookController;
@@ -487,6 +488,25 @@ Route::middleware(['auth:sanctum,mcp', EnforceTokenScope::class, EnsureNotPendin
     Route::delete('/social-approval-links/{socialApprovalLink}', [SocialApprovalController::class, 'revoke'])
         ->middleware('throttle:30,1')
         ->name('api.v1.social-approval-links.destroy');
+    // Client labels (v7): clients are labels on social accounts.
+    Route::get('/client-labels', [ClientLabelController::class, 'index'])
+        ->middleware('throttle:120,1')
+        ->name('api.v1.client-labels.index');
+    Route::post('/client-labels', [ClientLabelController::class, 'store'])
+        ->middleware('throttle:60,1')
+        ->name('api.v1.client-labels.store');
+    Route::get('/client-labels/{clientLabel}', [ClientLabelController::class, 'show'])
+        ->middleware('throttle:120,1')
+        ->name('api.v1.client-labels.show');
+    Route::patch('/client-labels/{clientLabel}', [ClientLabelController::class, 'update'])
+        ->middleware('throttle:60,1')
+        ->name('api.v1.client-labels.update');
+    Route::delete('/client-labels/{clientLabel}', [ClientLabelController::class, 'destroy'])
+        ->middleware('throttle:60,1')
+        ->name('api.v1.client-labels.destroy');
+    Route::put('/social-accounts/{socialAccount}/client-labels', [ClientLabelController::class, 'setForAccount'])
+        ->middleware('throttle:60,1')
+        ->name('api.v1.social-accounts.client-labels');
     Route::get('/social-plan-links', [SocialPlanLinkController::class, 'index'])
         ->middleware('throttle:60,1')
         ->name('api.v1.social-plan-links.index');

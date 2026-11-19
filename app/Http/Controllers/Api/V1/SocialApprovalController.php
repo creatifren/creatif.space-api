@@ -13,6 +13,7 @@ use App\Http\Controllers\Controller;
 use App\Http\Resources\SocialPostResource;
 use App\Models\InsightShareLink;
 use App\Models\SocialAccount;
+use App\Models\ClientLabel;
 use App\Models\SocialApprovalLink;
 use App\Models\SocialPost;
 use App\Models\SocialPostComment;
@@ -78,6 +79,7 @@ class SocialApprovalController extends Controller
      */
     public function link(Request $request): JsonResponse
     {
+        $label = $this->clientLabelFrom($request);
         $validated = $request->validate([
             // A fixed list of posts, or a scope — one of the two.
             'post_ids' => ['required_without:date_from', 'prohibits:date_from,date_to', 'array', 'min:1', 'max:50'],
@@ -89,6 +91,8 @@ class SocialApprovalController extends Controller
             'title' => ['sometimes', 'nullable', 'string', 'max:120'],
             // The editor's own note on who it is for; the client never sees it.
             'client_name' => ['sometimes', 'nullable', 'string', 'max:120'],
+            // v7: the client label it is for; fills client_name and the approver.
+            'client_id' => ['sometimes', 'nullable', 'string', 'max:26'],
             // Who may decide: the client signs in with this address (Google
             // or a one-time email link) to approve or ask for changes.
             'approver_email' => ['required', 'string', 'email:rfc', 'max:254'],
@@ -99,6 +103,7 @@ class SocialApprovalController extends Controller
             'approver_email.email' => 'That is not an email address.',
         ]);
 
+        $validated['client_label_id'] = $label?->id;
         PlanQuota::requireClientApprovals($request->user(), isset($validated['date_from']) ? 'date_from' : 'post_ids');
 
         if (isset($validated['date_from'])) {
@@ -134,6 +139,7 @@ class SocialApprovalController extends Controller
             'user_id' => Workspace::owner($request->user())->id,
             'title' => $validated['title'] ?? null,
             'client_name' => $validated['client_name'] ?? null,
+            'client_label_id' => $validated['client_label_id'] ?? null,
             'approver_email' => $validated['approver_email'],
             'expires_at' => $hours ? now()->addHours($hours) : null,
         ]);
@@ -179,6 +185,7 @@ class SocialApprovalController extends Controller
             'user_id' => Workspace::owner($user)->id,
             'title' => $validated['title'] ?? null,
             'client_name' => $validated['client_name'] ?? null,
+            'client_label_id' => $validated['client_label_id'] ?? null,
             'approver_email' => $validated['approver_email'],
             'expires_at' => $hours ? now()->addHours($hours) : null,
         ] + self::scopeFields($user, $validated));
@@ -283,6 +290,7 @@ class SocialApprovalController extends Controller
     public function links(Request $request): JsonResponse
     {
         $links = $this->withCounts(SocialApprovalLink::query())
+            ->with('clientLabel')
             ->whereIn('user_id', self::workspaceIds($request->user()))
             ->latest('id')
             ->limit(200)
@@ -311,9 +319,11 @@ class SocialApprovalController extends Controller
     {
         self::writable($request->user(), $socialApprovalLink->user_id);
 
+        $label = $this->clientLabelFrom($request, prefillApprover: false);
         $validated = $request->validate([
             'title' => ['sometimes', 'nullable', 'string', 'max:120'],
             'client_name' => ['sometimes', 'nullable', 'string', 'max:120'],
+            'client_id' => ['sometimes', 'nullable', 'string', 'max:26'],
             // Change who may decide (not removable: a link always has one
             // once set).
             'approver_email' => ['sometimes', 'string', 'email:rfc', 'max:254'],
@@ -331,6 +341,7 @@ class SocialApprovalController extends Controller
             // Content Plan reminder email to the approver, on or off.
             'reminders' => ['sometimes', 'boolean'],
         ]);
+        $validated['client_label_id'] = $label?->id;
 
         $link = $socialApprovalLink;
         if ($link->revoked_at !== null) {
@@ -388,6 +399,9 @@ class SocialApprovalController extends Controller
 
         DB::transaction(function () use ($link, $validated, $add, $remove, $scope): void {
             $fields = array_intersect_key($validated, array_flip(['title', 'client_name', 'approver_email']));
+            if (array_key_exists('client_id', $validated)) {
+                $fields['client_label_id'] = $validated['client_label_id'] ?? null;
+            }
             if (array_key_exists('reminders', $validated)) {
                 $fields['reminders_enabled'] = (bool) $validated['reminders'];
             }
@@ -731,10 +745,34 @@ class SocialApprovalController extends Controller
     }
 
     /**
+     * v7: `client_id` names one of the owner's client labels. It fills
+     * client_name and — on a new link — the approver, unless the request
+     * gives its own. Unknown or another user's label: 422.
+     */
+    private function clientLabelFrom(Request $request, bool $prefillApprover = true): ?ClientLabel
+    {
+        $id = $request->input('client_id');
+        if (! is_string($id) || $id === '') {
+            return null;
+        }
+        $label = $request->user()->clientLabels()->where('ulid', $id)->first();
+        if ($label === null) {
+            throw ValidationException::withMessages(['client_id' => 'That client is not one of yours.']);
+        }
+        $request->merge(array_filter([
+            'client_name' => $request->filled('client_name') ? null : $label->name,
+            'approver_email' => ! $prefillApprover || $request->filled('approver_email') ? null : $label->approver_email,
+        ], fn ($v) => $v !== null));
+
+        return $label;
+    }
+
+    /**
      * @return array<string, mixed>
      */
     private function linkArray(SocialApprovalLink $link): array
     {
+        $link->loadMissing('clientLabel');
         $plan = $link->isScoped() ? PlanScope::counts($link) : null;
 
         return [
@@ -742,6 +780,8 @@ class SocialApprovalController extends Controller
             'url' => $link->url(),
             'title' => $link->title,
             'client_name' => $link->client_name,
+            // v7: the client label (id, name, initials, colour); null on a link for no client.
+            'client' => $link->clientLabel?->toBadge(),
             // Null on links made before signed-in approvers until someone binds it.
             'approver_email' => $link->approver_email,
             'approver_bound_at' => $link->approver_bound_at?->toIso8601String(),

@@ -29,7 +29,7 @@ describe('list_channels', () => {
     const out = payload(res);
     expect(out.channels).toHaveLength(2);
     expect(out.channels[0]).toEqual({
-      id: IG, platform: 'instagram', username: 'instagram_user', status: 'connected', reconnect_required: false,
+      id: IG, platform: 'instagram', username: 'instagram_user', clients: [], status: 'connected', reconnect_required: false,
     });
     expect(out.channels[1].reconnect_required).toBe(true);
     expect(out.channels[0].profile_photo_url).toBeUndefined();

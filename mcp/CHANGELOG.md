@@ -7,6 +7,13 @@ Versions of the remote MCP server at `https://mcp.creatif.space/mcp`
 
 ## Unreleased
 
+Clients (v7, 19 Nov 2026):
+
+53 tools (was 48).
+
+- New: `list_clients`, `create_client`, `update_client`, `delete_client`, `set_channel_clients`. Clients are labels on channels; one channel can carry several, and a post belongs to every client on its channels.
+- `list_posts` takes `client_id`; posts and `list_channels` rows carry `clients`.
+
 Scheduling window (18 Nov 2026):
 
 - Pro and Max schedule up to 90 days ahead (`get_credits` → `scheduling.window_days` 90); Free stays at 7. A post more than 30 days ahead is held by Creatif Space and sent — and charged — about 30 days before its time; `schedule_post`, `schedule_posts` and `publish_post` no longer refuse it with `schedule_horizon`.

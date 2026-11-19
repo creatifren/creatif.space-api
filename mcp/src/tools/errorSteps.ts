@@ -31,6 +31,8 @@ export const NOT_FOUND_FOR: Record<string, NotFound> = {
   get_insight_csv_link: filters('A channel in channel_ids', 'list_channels'),
   create_insight_share_link: filters('A channel in channel_ids', 'list_channels'),
   get_connect_link: { what: 'That network', next: 'Call get_connect_link again with one of the networks its input lists.' },
+  list_clients: { what: 'The client list', next: 'Call list_clients again.' },
+  create_client: { what: 'A channel in channel_ids', next: 'Take channel ids from list_channels and call again.' },
   send_feedback: { what: 'The feedback inbox', next: 'Tell the user the message was not sent; they can send it from creatif.space → Help.' },
 };
 
@@ -92,4 +94,9 @@ export const STATE_TOOL: Record<string, string> = {
   get_notification_settings: 'get_notification_settings',
   update_notification_settings: 'get_notification_settings',
   send_feedback: 'send_feedback',
+  list_clients: 'list_clients',
+  create_client: 'list_clients',
+  update_client: 'list_clients',
+  delete_client: 'list_clients',
+  set_channel_clients: 'list_clients',
 };

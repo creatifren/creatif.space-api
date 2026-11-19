@@ -18,6 +18,7 @@ use App\Models\File;
 use App\Models\SocialPost;
 use App\Models\SocialPostComment;
 use App\Models\User;
+use App\Support\ClientBadges;
 use App\Support\Credits;
 use App\Support\Media\PostMediaVariants;
 use App\Support\PlanQuota;
@@ -58,11 +59,19 @@ class SocialPostController extends Controller
             'from' => ['sometimes', 'date'],
             'to' => ['sometimes', 'date'],
             'account_id' => ['sometimes', 'string', 'max:26'],
+            // v7 header filter: posts on any account carrying one of these clients.
+            'client_ids' => ['sometimes', 'array', 'max:50'],
+            'client_ids.*' => ['string', 'max:26'],
+            // One client (the MCP server's list_posts client_id).
+            'client_id' => ['sometimes', 'string', 'max:26'],
             // No `sometimes`: it would skip required_with when limit is absent.
             'limit' => ['required_with:offset', 'integer', 'min:1', 'max:100'],
             // Paging for the MCP list_posts cursor: skip this many (with limit).
             'offset' => ['sometimes', 'integer', 'min:0', 'max:100000'],
         ]);
+        if (isset($validated['client_id'])) {
+            $validated['client_ids'] = [...($validated['client_ids'] ?? []), $validated['client_id']];
+        }
 
         // A post whose slot passed still reading Scheduled means a result
         // webhook went missing; ask before answering.
@@ -83,6 +92,10 @@ class SocialPostController extends Controller
             ->when($validated['account_id'] ?? null, fn ($q, $account) => $q->whereHas(
                 'targets.account',
                 fn ($a) => $a->where('ulid', $account),
+            ))
+            ->when($validated['client_ids'] ?? null, fn ($q, $clients) => $q->whereHas(
+                'targets.account.clientLabels',
+                fn ($l) => $l->whereIn('client_labels.ulid', $clients),
             ));
 
         $posts = (clone $base)
@@ -101,6 +114,7 @@ class SocialPostController extends Controller
                 ->get();
         // The small copies of every post's media in one files query.
         PostMediaVariants::prime($request, $posts);
+        ClientBadges::prime($posts);
 
         return SocialPostResource::collection($posts)->additional(['meta' => [
             // How many posts each status filter returns under the same

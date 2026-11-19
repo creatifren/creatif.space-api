@@ -2,7 +2,7 @@
 
 <!-- Generated from the served tool list by `npm run docs:tools` (in mcp/). Do not edit by hand: test/tools-doc.test.ts fails in CI when this file is out of date. -->
 
-48 tools on `https://mcp.creatif.space/mcp`, in the order `tools/list` gives them. Scope is the OAuth permission a tool needs; the hints are its MCP annotations.
+53 tools on `https://mcp.creatif.space/mcp`, in the order `tools/list` gives them. Scope is the OAuth permission a tool needs; the hints are its MCP annotations.
 
 | Tool | Title | Scope | Read-only | Destructive |
 |---|---|---|---|---|
@@ -43,6 +43,11 @@
 | [`get_approval_history`](#get_approval_history) | Get the approval history of a post | `read` | yes | no |
 | [`get_connect_link`](#get_connect_link) | Get a link to connect a channel | `read` | yes | no |
 | [`send_feedback`](#send_feedback) | Send feedback to the creatif.space team | `draft` | no | no |
+| [`list_clients`](#list_clients) | List clients | `read` | yes | no |
+| [`create_client`](#create_client) | Create a client | `draft` | no | no |
+| [`update_client`](#update_client) | Update a client | `draft` | no | no |
+| [`delete_client`](#delete_client) | Remove a client | `draft` | no | yes |
+| [`set_channel_clients`](#set_channel_clients) | Set the clients of a channel | `draft` | no | no |
 | [`create_insight_share_link`](#create_insight_share_link) | Share an Insight report | `approve` | no | no |
 | [`revoke_insight_share_link`](#revoke_insight_share_link) | Revoke a shared Insight report | `approve` | no | yes |
 | [`get_plan_calendar_link`](#get_plan_calendar_link) | Get a Content Plan calendar feed link | `read` | yes | no |
@@ -95,6 +100,7 @@ Errors → next step: not_found → the channel_id is unknown: take one from lis
 | `from` | string or string | no | Window start: a date (YYYY-MM-DD, UTC) or ISO 8601 time, e.g. 2026-11-01 |
 | `to` | string or string | no | Window end: a date (the whole day, UTC) or ISO 8601 time, e.g. 2026-11-30 |
 | `channel_id` | string | no | Only posts going to this channel (id from list_channels) |
+| `client_id` | string | no | Only posts for this client: on any of its channels (id from list_clients) |
 | `limit` | integer | no | At most this many posts per page (1–100, default 25) |
 | `cursor` | string | no | next_cursor from the previous page of this same list (same filters); omit for the first page |
 
@@ -838,6 +844,121 @@ Errors → next step: rate_limited → the user sent 10 in the last hour: wait d
 | `kind` | "bug" \| "idea" \| "other" | yes | "bug", "idea" or "other" |
 | `message` | string | yes | The feedback, in the user’s words |
 | `page` | string | no | Where in creatif.space it happened, if the user said (e.g. "Content Plan → Calendar") |
+
+## list_clients
+
+**List clients** · scope `read` · read-only yes · destructive no · idempotent yes · open world no
+
+Lists the user's clients with their approver and channels, so posts, links and reports can be per client.
+
+Lists the user’s clients: name, colour, approver, their channels (a channel shared by several clients is marked), how many posts and how many wait for approval.
+
+When to use: when the user talks about a client by name, before list_posts with client_id, before create_approval_link for a client, or to see which channels belong to which client.
+
+Example: list_clients {} → { count, total, next_cursor: null, clients: [{ id: "01JK…", name: "Hotel Ombak", approver_email: "made@…", channels: [{ channel_id, platform: "instagram", username: "@ombakgroup", shared_with_other_clients: true }], waiting_for_approval: 1 }] }
+
+Read-only. A post belongs to every client on its channels.
+
+Errors → next step: upstream_unavailable → wait a minute and call again; plan_required (402) → a plan limit, or a feature this account's plan does not include (on some plans: posts scheduled at most 7 days ahead, at most 10 queued posts, approval links for one client); tell the user it is not available on their plan, and do not retry; forbidden (403) → this seat or connection may not do this (e.g. a viewer, or a permission the connection was not given): the workspace owner or an editor can, or the user does it in creatif.space; do not retry; not_found (404) → the id is not in this workspace: take a fresh id from the matching list tool and call again.
+
+| Input | Type | Required | Description |
+|---|---|---|---|
+| `limit` | integer | no | At most this many clients per page (1–200, default 50) |
+| `cursor` | string | no | next_cursor from the previous page of this same list (same filters); omit for the first page |
+
+## create_client
+
+**Create a client** · scope `draft` · read-only no · destructive no · idempotent no · open world no
+
+Adds a client the user works for, with its approver and channels.
+
+Creates a client label, optionally with its approver and channels.
+
+When to use: when the user names a new client to work for, e.g. "add Kopi Senja as a client, @kopisenja is theirs, Dewi approves".
+
+Example: create_client { "name": "Kopi Senja", "approver_email": "dewi@example.com", "channel_ids": ["01JD…"] } → { client: { id, name, channels } }
+
+Names are unique per user. Channel ids come from list_channels; an unknown id is ignored. Nothing is sent to the client.
+
+Errors → next step: invalid_input → fix what details.errors names (e.g. a client with that name already exists: use update_client); scope_missing → reconnect and allow "draft"; plan_required (402) → a plan limit, or a feature this account's plan does not include (on some plans: posts scheduled at most 7 days ahead, at most 10 queued posts, approval links for one client); tell the user it is not available on their plan, and do not retry; forbidden (403) → this seat or connection may not do this (e.g. a viewer, or a permission the connection was not given): the workspace owner or an editor can, or the user does it in creatif.space; do not retry; not_found (404) → the id is not in this workspace: take a fresh id from the matching list tool and call again.
+
+| Input | Type | Required | Description |
+|---|---|---|---|
+| `name` | string | yes | The client’s name, e.g. "Hotel Ombak" |
+| `color` | string | no | Colour as #RRGGBB, e.g. "#3E6A8A" |
+| `initials` | string | no | 1–3 letters shown in the client’s circle; default = first letters of the name |
+| `approver_email` | string | no | Who approves for this client; approval links for the client go to this address |
+| `approver_name` | string | no | The approver’s name, e.g. "Made Arsana, GM" |
+| `monthly_report_email` | boolean | no | Email the monthly report to the approver (default true) |
+| `channel_ids` | array of string | no | The client’s channels (ids from list_channels); replaces the current set |
+
+## update_client
+
+**Update a client** · scope `draft` · read-only no · destructive no · idempotent yes · open world no
+
+Changes a client's name, colour, approver, report email or channels.
+
+Renames a client or changes its colour, initials, approver, monthly report email or channels.
+
+When to use: when the user changes who approves for a client, which channels are theirs, or turns their monthly report email off.
+
+Example: update_client { "client_id": "01JK…", "approver_email": "gm@example.com", "channel_ids": ["01JD…", "01JE…"] } → { client }
+
+Only the fields given change. channel_ids replaces the client’s whole channel set.
+
+Errors → next step: invalid_input → fix what details.errors names; scope_missing → reconnect and allow "draft"; plan_required (402) → a plan limit, or a feature this account's plan does not include (on some plans: posts scheduled at most 7 days ahead, at most 10 queued posts, approval links for one client); tell the user it is not available on their plan, and do not retry; forbidden (403) → this seat or connection may not do this (e.g. a viewer, or a permission the connection was not given): the workspace owner or an editor can, or the user does it in creatif.space; do not retry; not_found (404) → the id is not in this workspace: take a fresh id from the matching list tool and call again.
+
+| Input | Type | Required | Description |
+|---|---|---|---|
+| `client_id` | string | yes | Client id, as returned by the list tools |
+| `name` | string | no | New name |
+| `color` | string | no | Colour as #RRGGBB, e.g. "#3E6A8A" |
+| `initials` | string | no | 1–3 letters shown in the client’s circle; default = first letters of the name |
+| `approver_email` | string | no | Who approves for this client; approval links for the client go to this address |
+| `approver_name` | string | no | The approver’s name, e.g. "Made Arsana, GM" |
+| `monthly_report_email` | boolean | no | Email the monthly report to the approver (default true) |
+| `channel_ids` | array of string | no | The client’s channels (ids from list_channels); replaces the current set |
+
+## delete_client
+
+**Remove a client** · scope `draft` · read-only no · destructive yes · idempotent yes · open world no
+
+Removes a client label from the user's channels without deleting any posts.
+
+Removes a client label; its channels, posts and approval links stay.
+
+When to use: only when the user clearly asks to remove a client they no longer work for.
+
+Example: delete_client { "client_id": "01JK…" } → { removed: true }
+
+Confirm with the user first. It cannot be undone, but nothing else is deleted: the label just comes off the channels.
+
+Errors → next step: scope_missing → reconnect and allow "draft"; plan_required (402) → a plan limit, or a feature this account's plan does not include (on some plans: posts scheduled at most 7 days ahead, at most 10 queued posts, approval links for one client); tell the user it is not available on their plan, and do not retry; forbidden (403) → this seat or connection may not do this (e.g. a viewer, or a permission the connection was not given): the workspace owner or an editor can, or the user does it in creatif.space; do not retry; not_found (404) → the id is not in this workspace: take a fresh id from the matching list tool and call again.
+
+| Input | Type | Required | Description |
+|---|---|---|---|
+| `client_id` | string | yes | Client id, as returned by the list tools |
+
+## set_channel_clients
+
+**Set the clients of a channel** · scope `draft` · read-only no · destructive no · idempotent yes · open world no
+
+Sets which clients a channel belongs to, including a channel shared by several clients.
+
+Sets which clients one channel belongs to; a channel can belong to several clients.
+
+When to use: when the user says a channel belongs to a client (or to more than one, e.g. a group account used by two hotels).
+
+Example: set_channel_clients { "channel_id": "01JD…", "client_ids": ["01JK…", "01JM…"] } → { channel_id, clients: [{ id, name }] }
+
+Replaces the channel’s whole client set; an empty list takes every client off it. Client ids come from list_clients.
+
+Errors → next step: invalid_input → a client id is not the user’s: take ids from list_clients; scope_missing → reconnect and allow "draft"; plan_required (402) → a plan limit, or a feature this account's plan does not include (on some plans: posts scheduled at most 7 days ahead, at most 10 queued posts, approval links for one client); tell the user it is not available on their plan, and do not retry; forbidden (403) → this seat or connection may not do this (e.g. a viewer, or a permission the connection was not given): the workspace owner or an editor can, or the user does it in creatif.space; do not retry; not_found (404) → the id is not in this workspace: take a fresh id from the matching list tool and call again.
+
+| Input | Type | Required | Description |
+|---|---|---|---|
+| `channel_id` | string | yes | Channel id, as returned by the list tools |
+| `client_ids` | array of string | yes | Every client this channel belongs to |
 
 ## create_insight_share_link
 
