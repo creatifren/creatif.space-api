@@ -20,6 +20,7 @@ use App\Models\User;
 use App\Notifications\ApprovalLinkShared;
 use App\Notifications\ApprovalReminder;
 use App\Support\Credits;
+use App\Support\Media\PostMediaVariants;
 use App\Support\PlanQuota;
 use App\Support\PlanScope;
 use App\Support\ProductEvents;
@@ -721,6 +722,7 @@ class SocialApprovalController extends Controller
             ->with(['targets.account', 'comments' => fn ($q) => $q->whereNull('resolved_at')->with('replies')])
             ->orderBy('scheduled_at')
             ->get();
+        PostMediaVariants::prime(request(), $posts);
 
         return [
             'link' => $this->linkArray($this->withCounts($link)),

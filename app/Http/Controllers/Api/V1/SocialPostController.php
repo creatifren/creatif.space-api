@@ -19,9 +19,10 @@ use App\Models\SocialPost;
 use App\Models\SocialPostComment;
 use App\Models\User;
 use App\Support\Credits;
+use App\Support\Media\PostMediaVariants;
 use App\Support\PlanQuota;
-use App\Support\ProductEvents;
 use App\Support\PostDelivery;
+use App\Support\ProductEvents;
 use App\Support\PublishPreflight;
 use App\Support\ScheduleHorizon;
 use App\Support\SendConfirmation;
@@ -84,8 +85,7 @@ class SocialPostController extends Controller
                 fn ($a) => $a->where('ulid', $account),
             ));
 
-        return SocialPostResource::collection(
-            (clone $base)
+        $posts = (clone $base)
                 // One definition with the badge and meta.counts (PostDelivery):
                 // "failed" also holds partly failed posts.
                 ->when($validated['status'] ?? null, fn ($q, $status) => PostDelivery::filter($q, $status))
@@ -98,8 +98,11 @@ class SocialPostController extends Controller
                 ->latest()
                 // A stable order for paging: same-second posts by id.
                 ->orderByDesc('id')
-                ->get(),
-        )->additional(['meta' => [
+                ->get();
+        // The small copies of every post's media in one files query.
+        PostMediaVariants::prime($request, $posts);
+
+        return SocialPostResource::collection($posts)->additional(['meta' => [
             // How many posts each status filter returns under the same
             // from / to / account_id (not limit): Today and the Posts tabs
             // read these. published and failed both count partial posts.
