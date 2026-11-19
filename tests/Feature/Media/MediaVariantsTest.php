@@ -292,4 +292,33 @@ describe('public payloads', function () {
             ->and($post['media_items'][0]['thumb_url'])->toContain('.thumb.')
             ->and($post['media_items'][0]['variants']['feed'])->toMatchArray(['width' => 1080, 'height' => 1080]);
     });
+
+    it('the dashboard posts list and a single post carry media_variants aligned with media (one files query for the list)', function () {
+        $owner = User::factory()->create();
+        $image = mvFile($owner, mvJpeg(2000, 2500), attrs: ['width' => 2000, 'height' => 2500]);
+        MediaVariants::generate($image);
+        $plain = mvFile($owner, mvJpeg(10, 10));
+        $media = [
+            ['url' => "https://bucket.r2.test/{$image->path}?X-Amz-Signature=x"],
+            ['url' => "https://bucket.r2.test/{$plain->path}?X-Amz-Signature=x"],
+            ['url' => 'https://cdn.test/elsewhere.jpg'],
+        ];
+        $post = mvPost($owner, $media);
+        mvPost($owner, []);
+
+        $list = $this->actingAs($owner)->getJson('/api/v1/social-posts')->assertOk()->json('data');
+        $row = collect($list)->firstWhere('id', $post->ulid);
+
+        expect($row['media'])->toBe($media)
+            ->and($row['media_variants'])->toHaveCount(3)
+            ->and($row['media_variants'][0]['thumb'])->toMatchArray(['width' => 480, 'height' => 600])
+            ->and($row['media_variants'][0]['thumb']['jpeg'])->toContain('.thumb.jpg')
+            ->and($row['media_variants'][0]['feed'])->toMatchArray(['width' => 1080, 'height' => 1350])
+            ->and($row['media_variants'][1])->toBeNull()
+            ->and($row['media_variants'][2])->toBeNull()
+            ->and(collect($list)->firstWhere('id', '!=', $post->ulid)['media_variants'])->toBe([]);
+
+        $one = $this->actingAs($owner)->getJson("/api/v1/social-posts/{$post->ulid}")->assertOk()->json('data');
+        expect($one['media_variants'][0]['thumb']['jpeg'])->toContain('.thumb.jpg');
+    });
 });

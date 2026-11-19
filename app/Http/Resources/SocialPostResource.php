@@ -4,6 +4,7 @@ namespace App\Http\Resources;
 
 use App\Models\SocialPost;
 use App\Models\SocialPostTarget;
+use App\Support\Media\PostMediaVariants;
 use App\Support\PostDelivery;
 use App\Support\PublishFailure;
 use Illuminate\Http\Request;
@@ -27,6 +28,9 @@ class SocialPostResource extends JsonResource
             'type' => $this->type,
             'labels' => $this->labels ?? [],
             'media' => $this->media,
+            // Small copies per media item (same order; null = not a library
+            // file or none made yet): the dashboard draws these, not the original.
+            'media_variants' => PostMediaVariants::for($request, $this->resource),
             'scheduled_at' => $this->scheduled_at,
             'status' => $this->status,
             'fail_reason' => $this->fail_reason,
