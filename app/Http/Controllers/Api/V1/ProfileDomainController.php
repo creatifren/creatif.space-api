@@ -33,6 +33,9 @@ class ProfileDomainController extends Controller
             return response()->json(['message' => 'A custom domain is on Pro and Max.', 'reason' => 'plan_required', 'required_plan' => 'pro'], 402);
         }
         $profile = $user->profile()->firstOrCreate([]);
+        if (is_string($request->input('domain'))) {
+            $request->merge(['domain' => mb_strtolower(trim($request->input('domain')))]);
+        }
         $validated = $request->validate([
             'domain' => [
                 'required', 'string', 'max:253',
