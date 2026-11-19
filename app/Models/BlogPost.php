@@ -37,6 +37,9 @@ class BlogPost extends Model implements WorkspaceOwned
 
     public const BLOCKS = ['photo', 'paragraph', 'heading', 'quote', 'list', 'divider'];
 
+    /** Column defaults, so a fresh model reads like the stored row. */
+    protected $attributes = ['status' => 'draft', 'needs_approval' => false];
+
     protected $fillable = ['space_id', 'user_id', 'social_post_id', 'title', 'slug', 'cover_file_id', 'blocks', 'status', 'needs_approval', 'social_approval_link_id', 'approval_by', 'approval_comment', 'approval_at', 'published_at'];
 
     protected function casts(): array
