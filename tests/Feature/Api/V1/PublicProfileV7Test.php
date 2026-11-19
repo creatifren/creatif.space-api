@@ -1,6 +1,7 @@
 <?php
 
 use App\Models\Handle;
+use App\Models\Plan;
 use App\Models\Profile;
 use App\Models\SocialApprovalLink;
 use App\Models\Space;
@@ -46,12 +47,16 @@ it('saves layout, contact, week start and time format, and shows them on the pub
         ->and(collect($page)->pluck('title')->all())->not->toContain('Not listed');
 });
 
-it('connects a custom domain on a paid plan only, and resolves it once verified', function () {
+it('connects a custom domain on Enterprise only, and resolves it once verified', function () {
     $free = profileOwner(false);
     $this->actingAs($free)->putJson('/api/v1/me/domain', ['domain' => 'studio.example.com'])->assertStatus(402);
+    $pro = User::factory()->create();
+    Subscription::factory()->for($pro)->create();
+    $this->actingAs($pro)->putJson('/api/v1/me/domain', ['domain' => 'studio.example.com'])
+        ->assertStatus(402)->assertJsonPath('required_plan', 'enterprise');
 
     $user = User::factory()->create();
-    Subscription::factory()->for($user)->create();
+    Subscription::factory()->for($user)->create(['plan_id' => Plan::query()->where('key', 'enterprise')->value('id')]);
     Handle::factory()->for($user)->create(['name' => 'studio']);
     $this->actingAs($user)->putJson('/api/v1/me/domain', ['domain' => 'Studio.Example.com'])->assertOk()
         ->assertJsonPath('data.domain', 'studio.example.com')
