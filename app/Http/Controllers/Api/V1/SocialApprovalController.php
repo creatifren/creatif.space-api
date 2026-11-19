@@ -315,7 +315,7 @@ class SocialApprovalController extends Controller
     public function links(Request $request): JsonResponse
     {
         $links = $this->withCounts(SocialApprovalLink::query())
-            ->with('clientLabel')
+            ->with(['clientLabel', 'replacedBy:id,ulid'])
             ->whereIn('user_id', self::workspaceIds($request->user()))
             ->latest('id')
             ->limit(200)
@@ -806,7 +806,7 @@ class SocialApprovalController extends Controller
      */
     private function linkArray(SocialApprovalLink $link): array
     {
-        $link->loadMissing('clientLabel');
+        $link->loadMissing(['clientLabel', 'replacedBy:id,ulid']);
         $plan = $link->isScoped() ? PlanScope::counts($link) : null;
 
         return [
