@@ -30,6 +30,13 @@ export const FIRST_LINES: Record<string, string> = {
   update_client_report: 'Edits a client report\'s summary or who can see it.',
   send_client_report: 'Emails a client\'s monthly report to their approver now.',
 
+  list_blog_posts: 'Lists the posts of one of the user\'s Blogs and where each stands.',
+  create_blog_post: 'Writes a draft Blog post or press release in one of the user\'s Blogs.',
+  update_blog_post: 'Edits a Blog post\'s title, cover, body or approval setting.',
+  publish_blog_post: 'Publishes a Blog post on the user\'s public Blog.',
+  send_blog_post_for_approval: 'Sends a Blog post to the client for approval before it is published.',
+  set_post_spaces: 'Adds a social post to Galleries or Blogs when it is published.',
+
   // Posts
   list_posts: 'Finds the user\'s posts by status, dates or channel; the plan_week and send_for_approval prompts start here.',
   get_post: 'Shows one post in full, with each channel\'s status and the review thread; send_for_approval checks posts with it.',

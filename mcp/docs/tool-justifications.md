@@ -79,3 +79,9 @@ destructive; `send_approval_reminder`, `decide_approval`,
 | `get_client_report` | Get a client’s monthly report | yes | no | no | Reads (and on first open, assembles) a report from the user's own Insight. |
 | `update_client_report` | Edit a client report | no | no | no | Changes the summary or visibility of the user's own report. |
 | `send_client_report` | Email a client report now | no | no | yes | Emails the report link to the client's approver. |
+| `list_blog_posts` | List a Blog’s posts | yes | no | no | Reads the user's own Blog posts. |
+| `create_blog_post` | Write a Blog post | no | no | no | Saves a draft in the user's own Blog; nothing is public. |
+| `update_blog_post` | Edit a Blog post | no | yes | no | Blocks replace the post's body. |
+| `publish_blog_post` | Publish a Blog post | no | yes | yes | Puts the post on the user's public Blog. |
+| `send_blog_post_for_approval` | Send a Blog post for approval | no | no | no | Puts the post on the user's own approval link; the user shares it. |
+| `set_post_spaces` | Also add a social post to a Gallery or Blog | no | no | no | Chooses the user's own Spaces for a post. |

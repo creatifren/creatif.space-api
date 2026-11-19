@@ -106,6 +106,7 @@ export const OUTPUT_SCHEMAS: Record<string, z.ZodRawShape> = {
  * a new read tool is a decision, not an omission.
  */
 export const UNSTRUCTURED = new Set([
+  'list_blog_posts',
   'get_report_settings',
   'list_client_reports',
   'get_client_report',

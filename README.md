@@ -76,6 +76,12 @@ in [mcp/README.md](mcp/README.md).
 | Reports | `get_client_report` | Open a client's monthly report | Pro, Max |
 | Reports | `update_client_report` | Edit a report's summary or visibility | Pro, Max |
 | Reports | `send_client_report` | Email a report to the client now | Pro, Max |
+| Blog | `list_blog_posts` | A Blog's posts and their status | Pro, Max |
+| Blog | `create_blog_post` | Write a draft Blog post or press release | Pro, Max |
+| Blog | `update_blog_post` | Edit a Blog post | Pro, Max |
+| Blog | `publish_blog_post` | Publish a Blog post | Pro, Max |
+| Blog | `send_blog_post_for_approval` | Send a Blog post to the client for approval | Pro, Max |
+| Spaces | `set_post_spaces` | Also add a social post to Galleries / Blogs | Pro, Max |
 | Settings | `get_notification_settings` | Which emails the user gets (post missed or failed, approvals, weekly digest) | All |
 | Settings | `update_notification_settings` | Turn those emails on or off | All |
 

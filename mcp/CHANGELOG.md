@@ -9,7 +9,7 @@ Versions of the remote MCP server at `https://mcp.creatif.space/mcp`
 
 Clients (v7, 19 Nov 2026):
 
-59 tools (was 48).
+65 tools (was 48).
 
 - New: `list_clients`, `create_client`, `update_client`, `delete_client`, `set_channel_clients`. Clients are labels on channels; one channel can carry several, and a post belongs to every client on its channels.
 - `list_posts` takes `client_id`; posts and `list_channels` rows carry `clients`.
@@ -17,6 +17,10 @@ Clients (v7, 19 Nov 2026):
 Monthly client reports (v7):
 
 - New: `get_report_settings`, `update_report_settings`, `list_client_reports`, `get_client_report`, `update_client_report`, `send_client_report`. One report per client per month from Insight, Link only by default, emailed to the client's approver on the user's day and hour.
+
+Blogs (v7):
+
+- New: `list_blog_posts`, `create_blog_post`, `update_blog_post`, `publish_blog_post`, `send_blog_post_for_approval`, `set_post_spaces`. A Blog post that needs approval is published only when the client approves; `list_spaces` rows carry `type` (gallery | blog) and visibility `link` is the default.
 
 Approval links (v7, UX review E1/E2/E4/D5):
 

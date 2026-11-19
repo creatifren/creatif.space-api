@@ -131,6 +131,12 @@ redirect_uris, token_endpoint_auth_method: "none"}`. The API fetches it
 | `get_client_report` (client_id, month YYYY-MM) — the report; made on first open | read | `POST /client-reports` |
 | `update_client_report` (report_id, summary, visibility) | draft | `PATCH /client-reports/{id}` |
 | `send_client_report` (report_id) — email it to the client's approver now | approve | `POST /client-reports/{id}/send` |
+| `list_blog_posts` (space_id, limit, cursor) — a Blog's posts and their status | read | `GET /spaces/{id}/posts` |
+| `create_blog_post` (space_id, title, blocks, cover_file_id, needs_approval) — a draft | draft | `POST /spaces/{id}/posts` |
+| `update_blog_post` (post_id + fields) — blocks replaces the body | draft | `PATCH /blog-posts/{id}` |
+| `publish_blog_post` (post_id) — public; refused when it needs approval | publish | `POST /blog-posts/{id}/publish` |
+| `send_blog_post_for_approval` (post_id, link_id \| client_id \| approver_email) | approve | `POST /blog-posts/{id}/send-for-approval` |
+| `set_post_spaces` (post_id, space_ids) — Also add to Galleries / Blogs on publish | draft | `PUT /social-posts/{id}/spaces` |
 | `get_notification_settings` — which emails the user gets: post_missed_or_failed (“Post missed / failed”; the publish_failed switch unless the API serves its own key), approval_decided, weekly_digest | read | `GET /me/notification-settings` |
 | `update_notification_settings` (post_missed_or_failed — or its older name publish_failed —, approval_decided, weekly_digest: true/false; timezone of the Monday 08:00 digest; at least one) | draft | `PATCH /me/notification-settings` |
 | `list_shared_with_me` — "Reports shared with you": Content Plans and Insight reports other users shared with this user's email | approvals:decide | `GET /me/reports/shared` |
