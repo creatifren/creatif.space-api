@@ -22,6 +22,10 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
  * @property array<string, mixed>|null $freelance
  * @property list<string>|null $categories
  * @property string|null $cover_url
+ * @property string|null $layout
+ * @property array<string, mixed>|null $contact
+ * @property string|null $custom_domain
+ * @property \Carbon\CarbonImmutable|null $custom_domain_verified_at
  */
 class Profile extends Model
 {
@@ -40,6 +44,8 @@ class Profile extends Model
         'freelance',
         'categories',
         'cover_url',
+        'layout',
+        'contact',
     ];
 
     /**
@@ -57,6 +63,8 @@ class Profile extends Model
             'seo' => 'array',
             'freelance' => 'array',
             'categories' => 'array',
+            'contact' => 'array',
+            'custom_domain_verified_at' => 'datetime',
         ];
     }
 

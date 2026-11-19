@@ -47,6 +47,7 @@ use App\Http\Controllers\Api\V1\OutstandConnectController;
 use App\Http\Controllers\Api\V1\PinterestBoardController;
 use App\Http\Controllers\Api\V1\PlanCalendarController;
 use App\Http\Controllers\Api\V1\PostApprovalAuditController;
+use App\Http\Controllers\Api\V1\ProfileDomainController;
 use App\Http\Controllers\Api\V1\ProfileFontController;
 use App\Http\Controllers\Api\V1\PublicApprovalController;
 use App\Http\Controllers\Api\V1\PublicHealthController;
@@ -214,6 +215,15 @@ Route::get('/profiles/{handle}', [PublicProfileController::class, 'show'])
 Route::get('/profiles/{handle}/spaces/{slug}', [PublicSpaceController::class, 'show'])
     ->middleware('throttle:300,1')
     ->name('api.v1.profiles.spaces.show');
+// v7 public profile: a tap on a profile link (contact, page), and the host
+// → handle lookup for a verified custom domain.
+Route::post('/profiles/{handle}/taps', [ProfileDomainController::class, 'tap'])
+    ->middleware('throttle:120,1')
+    ->name('api.v1.profiles.taps');
+Route::get('/public/domains/{host}', [ProfileDomainController::class, 'lookup'])
+    ->middleware('throttle:600,1')
+    ->name('api.v1.public.domains.show');
+
 // v7 Blog: one published post (never a draft or one waiting for approval).
 Route::get('/profiles/{handle}/spaces/{slug}/posts/{post}', [PublicSpaceController::class, 'post'])
     ->middleware('throttle:300,1')
@@ -503,6 +513,22 @@ Route::middleware(['auth:sanctum,mcp', EnforceTokenScope::class, EnsureNotPendin
     Route::delete('/social-approval-links/{socialApprovalLink}', [SocialApprovalController::class, 'revoke'])
         ->middleware('throttle:30,1')
         ->name('api.v1.social-approval-links.destroy');
+    // v7 Profile: custom domain (Pro + Max) and link taps.
+    Route::get('/me/domain', [ProfileDomainController::class, 'show'])
+        ->middleware('throttle:60,1')
+        ->name('api.v1.me.domain');
+    Route::put('/me/domain', [ProfileDomainController::class, 'update'])
+        ->middleware('throttle:20,1')
+        ->name('api.v1.me.domain.update');
+    Route::post('/me/domain/check', [ProfileDomainController::class, 'check'])
+        ->middleware('throttle:20,1')
+        ->name('api.v1.me.domain.check');
+    Route::delete('/me/domain', [ProfileDomainController::class, 'destroy'])
+        ->middleware('throttle:20,1')
+        ->name('api.v1.me.domain.destroy');
+    Route::get('/me/link-taps', [ProfileDomainController::class, 'taps'])
+        ->middleware('throttle:60,1')
+        ->name('api.v1.me.link-taps');
     // Monthly client reports + Preferences › Report emails (v7).
     Route::get('/me/report-settings', [ClientReportController::class, 'settings'])
         ->middleware('throttle:60,1')
