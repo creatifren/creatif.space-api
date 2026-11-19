@@ -27,7 +27,7 @@ class SpaceFactory extends Factory
             'slug' => Str::slug($title).'-'.fake()->unique()->numberBetween(1, 99999),
             'title' => $title,
             'status' => 'draft',
-            'visibility' => 'private',
+            'visibility' => 'link',
             'view_mode' => 'grid',
             'design' => Space::emptyDesign(),
             'settings' => Space::defaultSettings(),

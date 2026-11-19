@@ -7,6 +7,7 @@ use App\Models\SocialPostTarget;
 use App\Support\ClientBadges;
 use App\Support\Media\PostMediaVariants;
 use App\Support\PostDelivery;
+use App\Support\PostSpaces;
 use App\Support\PublishFailure;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
@@ -41,6 +42,8 @@ class SocialPostResource extends JsonResource
             'delivery' => $this->whenLoaded('targets', fn () => PostDelivery::summary($this->resource)),
             // v7 client labels: every client on any of the post's accounts.
             'clients' => $this->whenLoaded('targets', fn () => ClientBadges::forPost($this->resource)),
+            // v7 "Also add to": the Galleries / Blogs it goes into when published.
+            'also_add_to' => PostSpaces::for($this->id),
             'approval' => $this->approval,
             'approval_by' => $this->approval_by,
             'approval_at' => $this->approval_at,

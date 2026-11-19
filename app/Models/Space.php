@@ -44,6 +44,7 @@ class Space extends Model implements WorkspaceOwned
     use HasFactory, SoftDeletes;
 
     protected $fillable = [
+        'type',
         'slug',
         'title',
         'description',
@@ -211,5 +212,14 @@ class Space extends Model implements WorkspaceOwned
             'allow_download' => true,
             'discoverable' => false,
         ];
+    }
+
+    /** v7: Gallery (portfolio / media kit) or Blog. */
+    public const TYPES = ['gallery', 'blog'];
+
+    /** @return HasMany<BlogPost, $this> */
+    public function blogPosts(): HasMany
+    {
+        return $this->hasMany(BlogPost::class);
     }
 }

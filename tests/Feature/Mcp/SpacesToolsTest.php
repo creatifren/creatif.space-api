@@ -120,7 +120,7 @@ describe('create_space_from_files', function () {
             ->postJson('/api/v1/spaces', ['title' => 'Shoot', 'file_ids' => [$b->ulid, $a->ulid, $b->ulid]])
             ->assertCreated()
             ->assertJsonPath('data.status', 'draft')
-            ->assertJsonPath('data.visibility', 'private')
+            ->assertJsonPath('data.visibility', 'link')
             ->assertJsonCount(2, 'data.items');
 
         expect($res->json('data.items.0.file_id'))->toBe($b->ulid)
@@ -176,7 +176,7 @@ describe('publish_space', function () {
             ->assertJsonPath('data.publishable', true)
             ->assertJsonPath('data.url', 'https://creatif.space/studio/wedding')
             ->assertJsonPath('data.items_count', 1)
-            ->assertJsonPath('data.visibility', 'private')
+            ->assertJsonPath('data.visibility', 'link')
             ->assertJsonPath('data.has_password', false)
             ->assertJsonPath('data.blocked', [])
             ->json('data');

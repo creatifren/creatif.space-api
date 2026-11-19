@@ -23,9 +23,13 @@ class SpaceItem extends Model
 
     protected $fillable = [
         'file_id',
+        'social_post_id',
         'section',
+        'title',
         'sort_order',
         'caption',
+        'featured',
+        'hidden',
     ];
 
     /**

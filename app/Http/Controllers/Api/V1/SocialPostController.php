@@ -23,6 +23,7 @@ use App\Support\Credits;
 use App\Support\Media\PostMediaVariants;
 use App\Support\PlanQuota;
 use App\Support\PostDelivery;
+use App\Support\PostSpaces;
 use App\Support\ProductEvents;
 use App\Support\PublishPreflight;
 use App\Support\ScheduleHorizon;
@@ -115,6 +116,7 @@ class SocialPostController extends Controller
         // The small copies of every post's media in one files query.
         PostMediaVariants::prime($request, $posts);
         ClientBadges::prime($posts);
+        PostSpaces::prime($posts);
 
         return SocialPostResource::collection($posts)->additional(['meta' => [
             // How many posts each status filter returns under the same

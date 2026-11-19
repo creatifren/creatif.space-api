@@ -4,11 +4,11 @@ namespace App\Http\Controllers\Api\V1;
 
 use App\Enums\UserStatus;
 use App\Http\Controllers\Controller;
-use App\Jobs\BuildSpaceArchive;
-use App\Models\SpaceArchive;
 use App\Http\Resources\PublicSpaceResource;
+use App\Jobs\BuildSpaceArchive;
 use App\Models\Handle;
 use App\Models\Space;
+use App\Models\SpaceArchive;
 use App\Support\SpaceUnlockToken;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -182,6 +182,29 @@ class PublicSpaceController extends Controller
         ]);
     }
 
+    /**
+     * v7 Blog: one post, published only — a draft, a post waiting for the
+     * client or one sent back is never public (UX review H2).
+     */
+    public function post(Request $request, string $handle, string $slug, string $post): JsonResponse
+    {
+        $space = $this->resolve($handle, $slug);
+        if ($space->isExpired()) {
+            return response()->json(['expired' => true], 410);
+        }
+        if ($space->password_hash !== null && ! SpaceUnlockToken::verify($space, $request->query('st'))) {
+            return response()->json(['locked' => true], 423);
+        }
+        $record = $space->blogPosts()->where('slug', $post)->where('status', 'published')->whereNotNull('published_at')->first();
+        abort_if($record === null, 404);
+
+        return response()->json(['data' => [
+            ...BlogPostController::postArray($record),
+            'space' => ['title' => $space->title, 'slug' => $space->slug],
+            'owner' => ['name' => $space->user->name, 'handle' => $space->user->handle?->name],
+        ]]);
+    }
+
     private function resolve(string $handle, string $slug): Space
     {
         $record = Handle::query()
@@ -197,6 +220,8 @@ class PublicSpaceController extends Controller
             ->where('user_id', $record->user->id)
             ->where('slug', $slug)
             ->where('status', 'published')
+            // v7: private = the owner only; link and public open by address.
+            ->where('visibility', '!=', 'private')
             ->with(['items.file', 'user.profile'])
             ->first();
 

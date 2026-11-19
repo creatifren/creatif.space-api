@@ -6,6 +6,7 @@ use App\Casts\UtcDateTime;
 use App\Enums\SocialPostApproval;
 use App\Enums\SocialPostStatus;
 use App\Enums\SocialPostTargetStatus;
+use App\Jobs\AddPublishedPostToSpaces;
 use App\Models\Contracts\WorkspaceOwned;
 use App\Notifications\SocialPostFailed;
 use App\Services\DemoSocialProvider;
@@ -18,6 +19,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\DB;
 
 /**
  * @property int $id
@@ -127,6 +129,12 @@ class SocialPost extends Model implements WorkspaceOwned
         static::saved(function (self $post): void {
             if ($post->wasRecentlyCreated || $post->wasChanged('media')) {
                 MediaLinks::sync($post);
+            }
+            // v7 "Also add to": land in its Galleries / Blogs once it is out.
+            if (($post->wasRecentlyCreated || $post->wasChanged('status')) && $post->status === SocialPostStatus::Published
+                && ! $post->wasRecentlyCreated
+                && DB::table('social_post_space')->where('social_post_id', $post->id)->whereNull('added_at')->exists()) {
+                AddPublishedPostToSpaces::dispatch($post->id)->afterCommit();
             }
         });
     }

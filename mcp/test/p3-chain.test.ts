@@ -59,11 +59,11 @@ describe('AI captions dropped (13 Nov): no suggest_caption; get_credits features
 
 describe('B11: Space visibility in words', () => {
   it('list_spaces explains "private" as link only, and the description says a draft opens for nobody', async () => {
-    const space = { id: '01JSPACESPACESPACESPACESP1', title: 'Winter', slug: 'winter', status: 'published', visibility: 'private', items_count: 2, public_url: 'https://creatif.space/s/x', has_password: false, expires_at: null, published_at: null, updated_at: '2026-11-12T00:00:00Z' };
+    const space = { id: '01JSPACESPACESPACESPACESP1', title: 'Winter', slug: 'winter', status: 'published', visibility: 'link', items_count: 2, public_url: 'https://creatif.space/s/x', has_password: false, expires_at: null, published_at: null, updated_at: '2026-11-12T00:00:00Z' };
     const out = await call('list_spaces', {}, { 'GET /spaces': () => ({ body: { data: [space] } }) });
-    expect(out.spaces[0]).toMatchObject({ visibility: 'private', visibility_means: expect.stringMatching(/^link only — anyone with the link can open it/) });
+    expect(out.spaces[0]).toMatchObject({ visibility: 'link', visibility_means: expect.stringMatching(/^link only — anyone with the link can open it/) });
     const d = ALL_TOOLS.find((t) => t.name === 'list_spaces')!.description;
-    expect(d).toMatch(/"private" means link only/);
+    expect(d).toMatch(/"link" \(the default\) means once published anyone with the link can open it/);
     expect(ALL_TOOLS.find((t) => t.name === 'create_space_from_files')!.description).not.toMatch(/a private draft/);
   });
 });

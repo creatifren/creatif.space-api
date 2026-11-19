@@ -6,6 +6,7 @@ use App\Http\Controllers\Api\V1\AffiliateController;
 use App\Http\Controllers\Api\V1\AnalyticsController;
 use App\Http\Controllers\Api\V1\ApiKeyController;
 use App\Http\Controllers\Api\V1\ApprovalAuditController;
+use App\Http\Controllers\Api\V1\BlogPostController;
 use App\Http\Controllers\Api\V1\CaptionAssistController;
 use App\Http\Controllers\Api\V1\ChannelVerifyController;
 use App\Http\Controllers\Api\V1\ClientLabelController;
@@ -213,6 +214,10 @@ Route::get('/profiles/{handle}', [PublicProfileController::class, 'show'])
 Route::get('/profiles/{handle}/spaces/{slug}', [PublicSpaceController::class, 'show'])
     ->middleware('throttle:300,1')
     ->name('api.v1.profiles.spaces.show');
+// v7 Blog: one published post (never a draft or one waiting for approval).
+Route::get('/profiles/{handle}/spaces/{slug}/posts/{post}', [PublicSpaceController::class, 'post'])
+    ->middleware('throttle:300,1')
+    ->name('api.v1.profiles.spaces.posts.show');
 Route::get('/profiles/{handle}/spaces/{slug}/items/{item}/download', [PublicSpaceController::class, 'download'])
     ->middleware('throttle:60,1')
     ->name('api.v1.profiles.spaces.download');
@@ -241,6 +246,9 @@ Route::middleware(AcceptBeaconJson::class)->group(function () {
     Route::post('/a/{token}/posts/{post}/decision', [PublicApprovalController::class, 'decide'])
         ->middleware('throttle:30,1')
         ->name('api.v1.approval-links.decide');
+    Route::post('/a/{token}/documents/{document}/decision', [PublicApprovalController::class, 'decideDocument'])
+        ->middleware('throttle:30,1')
+        ->name('api.v1.a.documents.decision');
     Route::post('/a/{token}/posts/{post}/retract', [PublicApprovalController::class, 'retract'])
         ->middleware('throttle:30,1')
         ->name('api.v1.approval-links.retract');
@@ -667,6 +675,35 @@ Route::middleware(['auth:sanctum,mcp', EnforceTokenScope::class, EnsureNotPendin
     /* Append-only, unlike PATCH /spaces/{space} with an items array — that
        one reconciles, so "Add to Space" from the Files screen would have to
        send the whole document back. */
+    // v7 Compose › Also add to (Galleries / Blogs, on publish).
+    Route::put('/social-posts/{socialPost}/spaces', [SpaceController::class, 'setPostSpaces'])
+        ->middleware('throttle:60,1')
+        ->name('api.v1.social-posts.spaces');
+    // v7 Blog posts.
+    Route::get('/spaces/{space}/posts', [BlogPostController::class, 'index'])
+        ->middleware('throttle:120,1')
+        ->name('api.v1.spaces.posts.index');
+    Route::post('/spaces/{space}/posts', [BlogPostController::class, 'store'])
+        ->middleware('throttle:60,1')
+        ->name('api.v1.spaces.posts.store');
+    Route::get('/blog-posts/{blogPost}', [BlogPostController::class, 'show'])
+        ->middleware('throttle:120,1')
+        ->name('api.v1.blog-posts.show');
+    Route::patch('/blog-posts/{blogPost}', [BlogPostController::class, 'update'])
+        ->middleware('throttle:120,1')
+        ->name('api.v1.blog-posts.update');
+    Route::delete('/blog-posts/{blogPost}', [BlogPostController::class, 'destroy'])
+        ->middleware('throttle:60,1')
+        ->name('api.v1.blog-posts.destroy');
+    Route::post('/blog-posts/{blogPost}/publish', [BlogPostController::class, 'publish'])
+        ->middleware('throttle:60,1')
+        ->name('api.v1.blog-posts.publish');
+    Route::post('/blog-posts/{blogPost}/unpublish', [BlogPostController::class, 'unpublish'])
+        ->middleware('throttle:60,1')
+        ->name('api.v1.blog-posts.unpublish');
+    Route::post('/blog-posts/{blogPost}/send-for-approval', [BlogPostController::class, 'sendForApproval'])
+        ->middleware('throttle:30,1')
+        ->name('api.v1.blog-posts.send-for-approval');
     Route::post('/spaces/{space}/items', [SpaceController::class, 'addItems'])
         ->middleware('throttle:60,1')
         ->name('api.v1.spaces.items.store');

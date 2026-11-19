@@ -27,6 +27,8 @@ class SpaceListResource extends JsonResource
             'id' => $this->ulid,
             'title' => $this->title,
             'slug' => $this->slug,
+            // v7: gallery | blog.
+            'type' => $this->type ?? 'gallery',
             'status' => $this->status,
             'visibility' => $this->visibility,
             'view_mode' => $this->view_mode,

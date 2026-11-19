@@ -129,10 +129,12 @@ describe('public space', function () {
         $this->getJson('/api/v1/profiles/gone/spaces/was-live')->assertNotFound();
     });
 
-    it('serves private-but-published spaces (link-only, not blocked)', function () {
-        publishedSpaceFor(User::factory()->create(), ['visibility' => 'private']);
-
+    it('serves link-only spaces, and never a private one (v7)', function () {
+        publishedSpaceFor(User::factory()->create(), ['visibility' => 'link']);
         $this->getJson('/api/v1/profiles/rani/spaces/winter-noel')->assertOk();
+
+        Space::query()->update(['visibility' => 'private']);
+        $this->getJson('/api/v1/profiles/rani/spaces/winter-noel')->assertNotFound();
     });
 });
 
