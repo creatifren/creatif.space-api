@@ -2,7 +2,7 @@
 
 <!-- Generated from the served tool list by `npm run docs:tools` (in mcp/). Do not edit by hand: test/tools-doc.test.ts fails in CI when this file is out of date. -->
 
-53 tools on `https://mcp.creatif.space/mcp`, in the order `tools/list` gives them. Scope is the OAuth permission a tool needs; the hints are its MCP annotations.
+59 tools on `https://mcp.creatif.space/mcp`, in the order `tools/list` gives them. Scope is the OAuth permission a tool needs; the hints are its MCP annotations.
 
 | Tool | Title | Scope | Read-only | Destructive |
 |---|---|---|---|---|
@@ -48,6 +48,12 @@
 | [`update_client`](#update_client) | Update a client | `draft` | no | no |
 | [`delete_client`](#delete_client) | Remove a client | `draft` | no | yes |
 | [`set_channel_clients`](#set_channel_clients) | Set the clients of a channel | `draft` | no | no |
+| [`get_report_settings`](#get_report_settings) | Get Report emails settings | `read` | yes | no |
+| [`update_report_settings`](#update_report_settings) | Change Report emails settings | `draft` | no | no |
+| [`list_client_reports`](#list_client_reports) | List client reports | `read` | yes | no |
+| [`get_client_report`](#get_client_report) | Get a client’s monthly report | `read` | yes | no |
+| [`update_client_report`](#update_client_report) | Edit a client report | `draft` | no | no |
+| [`send_client_report`](#send_client_report) | Email a client report now | `approve` | no | no |
 | [`create_insight_share_link`](#create_insight_share_link) | Share an Insight report | `approve` | no | no |
 | [`revoke_insight_share_link`](#revoke_insight_share_link) | Revoke a shared Insight report | `approve` | no | yes |
 | [`get_plan_calendar_link`](#get_plan_calendar_link) | Get a Content Plan calendar feed link | `read` | yes | no |
@@ -963,6 +969,132 @@ Errors → next step: invalid_input → a client id is not the user’s: take id
 |---|---|---|---|
 | `channel_id` | string | yes | Channel id, as returned by the list tools |
 | `client_ids` | array of string | yes | Every client this channel belongs to |
+
+## get_report_settings
+
+**Get Report emails settings** · scope `read` · read-only yes · destructive no · idempotent yes · open world no
+
+Shows when monthly reports are emailed to the user's clients and which clients get one.
+
+Shows whether monthly reports are emailed to clients automatically, on which day and hour (the user’s timezone), the sender name, and which clients get one.
+
+When to use: when the user asks when client reports go out, or before changing that with update_report_settings.
+
+Example: get_report_settings {} → { enabled: true, send_day: 1, send_time: "09:00", timezone, from_name, clients: [{ id, name, approver_email, report_email }] }
+
+Read-only.
+
+Errors → next step: upstream_unavailable → wait a minute and call again; plan_required (402) → a plan limit, or a feature this account's plan does not include (on some plans: posts scheduled at most 7 days ahead, at most 10 queued posts, approval links for one client); tell the user it is not available on their plan, and do not retry; forbidden (403) → this seat or connection may not do this (e.g. a viewer, or a permission the connection was not given): the workspace owner or an editor can, or the user does it in creatif.space; do not retry; not_found (404) → the id is not in this workspace: take a fresh id from the matching list tool and call again.
+
+No input.
+
+## update_report_settings
+
+**Change Report emails settings** · scope `draft` · read-only no · destructive no · idempotent yes · open world no
+
+Changes when and to which clients monthly reports are emailed automatically.
+
+Turns automatic monthly client report emails on or off, and sets the day, hour, sender name and which clients get one.
+
+When to use: only when the user asks to change how or when their clients get the monthly report.
+
+Example: update_report_settings { "enabled": true, "send_day": 1, "send_time": "09:00", "clients": [{ "client_id": "01JK…", "report_email": false }] } → { enabled, send_day, … }
+
+Turning it on means each client with an approver email gets last month’s report by email on that day: confirm with the user first. send_day is 1–28; send_time is a whole hour (HH:00) in the user’s timezone.
+
+Errors → next step: invalid_input → fix what details.errors names (send_day 1–28, send_time HH:00); scope_missing → reconnect and allow "draft"; plan_required (402) → a plan limit, or a feature this account's plan does not include (on some plans: posts scheduled at most 7 days ahead, at most 10 queued posts, approval links for one client); tell the user it is not available on their plan, and do not retry; forbidden (403) → this seat or connection may not do this (e.g. a viewer, or a permission the connection was not given): the workspace owner or an editor can, or the user does it in creatif.space; do not retry; not_found (404) → the id is not in this workspace: take a fresh id from the matching list tool and call again.
+
+| Input | Type | Required | Description |
+|---|---|---|---|
+| `enabled` | boolean | no | Email reports to clients automatically |
+| `send_day` | integer | no | Day of the month, 1–28 |
+| `send_time` | string | no | Whole hour, e.g. "09:00", in the user’s timezone |
+| `from_name` | string or null | no | Sender name clients see; null = the user’s name |
+| `clients` | array of object { client_id, report_email } | no | Per client: send the report or not |
+
+## list_client_reports
+
+**List client reports** · scope `read` · read-only yes · destructive no · idempotent yes · open world no
+
+Lists the user's monthly client reports, scheduled and sent, and whether clients opened them.
+
+Lists this month’s monthly reports per client (scheduled or not, and to whom) and the reports already sent, with how often each client opened theirs.
+
+When to use: when the user asks about their clients’ monthly reports, which went out, or whether a client opened one.
+
+Example: list_client_reports {} → { automatic: true, send_on: "1st of the month, 09:00", scheduled: [{ client, month, to, will_send }], sent: [{ id, client, month, sent_at, open_count, url }] }
+
+Read-only. To open one report use get_client_report.
+
+Errors → next step: upstream_unavailable → wait a minute and call again; plan_required (402) → a plan limit, or a feature this account's plan does not include (on some plans: posts scheduled at most 7 days ahead, at most 10 queued posts, approval links for one client); tell the user it is not available on their plan, and do not retry; forbidden (403) → this seat or connection may not do this (e.g. a viewer, or a permission the connection was not given): the workspace owner or an editor can, or the user does it in creatif.space; do not retry; not_found (404) → the id is not in this workspace: take a fresh id from the matching list tool and call again.
+
+| Input | Type | Required | Description |
+|---|---|---|---|
+| `limit` | integer | no | At most this many sent reports per page (1–50, default 50) |
+| `cursor` | string | no | next_cursor from the previous page of this same list (same filters); omit for the first page |
+
+## get_client_report
+
+**Get a client’s monthly report** · scope `read` · read-only yes · destructive no · idempotent yes · open world no
+
+Opens a client's monthly report with KPIs, top posts and a share link.
+
+Opens one client’s monthly report: accounts, KPIs vs the month before, weekly reach, per account, top posts, content types, the summary and the share link; makes it if it does not exist yet.
+
+When to use: when the user wants to see, check or share a client’s report for a month — the monthly_report prompt.
+
+Example: get_client_report { "client_id": "01JK…", "month": "2026-10" } → { id, period, client, accounts, kpis, weekly_reach, by_account, top_posts, content_types, summary, url, visibility }
+
+month is YYYY-MM, not in the future. The share link is Link only unless the user made it public. The summary is a draft the user can change with update_client_report.
+
+Errors → next step: invalid_input → month must be YYYY-MM and not in the future; plan_required (402) → reports are not on the user’s plan: tell them, do not retry; forbidden (403) → this seat or connection may not do this (e.g. a viewer, or a permission the connection was not given): the workspace owner or an editor can, or the user does it in creatif.space; do not retry; not_found (404) → the id is not in this workspace: take a fresh id from the matching list tool and call again.
+
+| Input | Type | Required | Description |
+|---|---|---|---|
+| `client_id` | string | yes | Client id, as returned by the list tools |
+| `month` | string | yes | The month, YYYY-MM, e.g. "2026-10" |
+
+## update_client_report
+
+**Edit a client report** · scope `draft` · read-only no · destructive no · idempotent yes · open world no
+
+Edits a client report's summary or who can see it.
+
+Changes a client report’s summary text or who can see it (link, public on the user’s profile, or private).
+
+When to use: when the user rewrites the report summary or asks to make a report public or private.
+
+Example: update_client_report { "report_id": "01JR…", "summary": "A strong month: reach up 18%…" } → { report }
+
+Only the fields given change. Make it public only if the user asks: public reports are listed on their profile.
+
+Errors → next step: invalid_input → summary at most 3000 characters; visibility link | public | private; scope_missing → reconnect and allow "draft"; plan_required (402) → a plan limit, or a feature this account's plan does not include (on some plans: posts scheduled at most 7 days ahead, at most 10 queued posts, approval links for one client); tell the user it is not available on their plan, and do not retry; forbidden (403) → this seat or connection may not do this (e.g. a viewer, or a permission the connection was not given): the workspace owner or an editor can, or the user does it in creatif.space; do not retry; not_found (404) → the id is not in this workspace: take a fresh id from the matching list tool and call again.
+
+| Input | Type | Required | Description |
+|---|---|---|---|
+| `report_id` | string | yes | Report id, as returned by the list tools |
+| `summary` | string or null | no | The new summary; null = write a fresh draft |
+| `visibility` | "link" \| "public" \| "private" | no | link (default), public (on the profile) or private (link off) |
+
+## send_client_report
+
+**Email a client report now** · scope `approve` · read-only no · destructive no · idempotent no · open world yes
+
+Emails a client's monthly report to their approver now.
+
+Emails a client’s monthly report link to that client’s approver now.
+
+When to use: only when the user asks to send a report to a client right away.
+
+Example: send_client_report { "report_id": "01JR…" } → { sent_at, sent_to }
+
+It reaches the client: confirm with the user first. The client needs an approver email (update_client).
+
+Errors → next step: invalid_input → the client has no approver email: set one with update_client, then call again; scope_missing → reconnect and allow "approve"; plan_required (402) → a plan limit, or a feature this account's plan does not include (on some plans: posts scheduled at most 7 days ahead, at most 10 queued posts, approval links for one client); tell the user it is not available on their plan, and do not retry; forbidden (403) → this seat or connection may not do this (e.g. a viewer, or a permission the connection was not given): the workspace owner or an editor can, or the user does it in creatif.space; do not retry; not_found (404) → the id is not in this workspace: take a fresh id from the matching list tool and call again.
+
+| Input | Type | Required | Description |
+|---|---|---|---|
+| `report_id` | string | yes | Report id, as returned by the list tools |
 
 ## create_insight_share_link
 

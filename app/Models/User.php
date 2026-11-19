@@ -67,6 +67,10 @@ class User extends Authenticatable implements FilamentUser
         'theme',
         // Monthly Insight email (opt-in, Pro / Max owners).
         'insight_monthly_email',
+        'client_reports_enabled',
+        'report_send_day',
+        'report_send_time',
+        'report_from_name',
         // IANA zone for the weekly digest (Monday 08:00 there); null = the app's.
         'timezone',
         'weekly_digest_sent_on',
@@ -109,6 +113,8 @@ class User extends Authenticatable implements FilamentUser
             'is_staff' => 'boolean',
             'is_directory_reviewer' => 'boolean',
             'insight_monthly_email' => 'boolean',
+            'client_reports_enabled' => 'boolean',
+            'report_send_day' => 'integer',
             'storage_blocks' => 'integer',
             'storage_rental_ended_at' => 'datetime',
             'social_settings' => 'array',

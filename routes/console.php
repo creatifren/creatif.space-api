@@ -19,6 +19,7 @@ use App\Jobs\ReleaseCommissions;
 use App\Jobs\RenewMonthlyCredits;
 use App\Jobs\RetryRateLimitedPublishes;
 use App\Jobs\SendApprovedHeldPosts;
+use App\Jobs\SendClientReports;
 use App\Jobs\SendConnectNudges;
 use App\Jobs\SendContentPlanReminders;
 use App\Jobs\SendMonthlyInsightReports;
@@ -189,6 +190,8 @@ Schedule::call(new SchedulerHeartbeat)->everyMinute()->name('scheduler:heartbeat
  * switched it on in Settings → Insight.
  */
 Schedule::job(new SendMonthlyInsightReports)->monthlyOn(1, '09:00')->timezone(config('app.timezone'));
+// v7 Report emails: each owner's clients, on the owner's day and hour.
+Schedule::job(new SendClientReports)->hourlyAt(2);
 
 /*
  * Content Plan reminders: one email to the approver when posts still wait

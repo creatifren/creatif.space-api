@@ -9,6 +9,7 @@ use App\Http\Controllers\Api\V1\ApprovalAuditController;
 use App\Http\Controllers\Api\V1\CaptionAssistController;
 use App\Http\Controllers\Api\V1\ChannelVerifyController;
 use App\Http\Controllers\Api\V1\ClientLabelController;
+use App\Http\Controllers\Api\V1\ClientReportController;
 use App\Http\Controllers\Api\V1\ConnectedAppController;
 use App\Http\Controllers\Api\V1\CreditsController;
 use App\Http\Controllers\Api\V1\CreemWebhookController;
@@ -104,6 +105,12 @@ Route::get('/health', PublicHealthController::class)
 Route::get('/public/insight/{token}', PublicInsightController::class)
     ->middleware('throttle:60,1')
     ->name('api.v1.public.insight.show');
+
+// A client's monthly report ({frontend}/report/cr_{token}, v7): the token is
+// the credential. 409 {state: revoked} when turned off or private.
+Route::get('/public/client-reports/{token}', [ClientReportController::class, 'showPublic'])
+    ->middleware('throttle:60,1')
+    ->name('api.v1.public.client-reports.show');
 
 // The account export's emailed link (24 hours): the signature is the
 // credential, for one export.
@@ -488,6 +495,31 @@ Route::middleware(['auth:sanctum,mcp', EnforceTokenScope::class, EnsureNotPendin
     Route::delete('/social-approval-links/{socialApprovalLink}', [SocialApprovalController::class, 'revoke'])
         ->middleware('throttle:30,1')
         ->name('api.v1.social-approval-links.destroy');
+    // Monthly client reports + Preferences › Report emails (v7).
+    Route::get('/me/report-settings', [ClientReportController::class, 'settings'])
+        ->middleware('throttle:60,1')
+        ->name('api.v1.me.report-settings');
+    Route::patch('/me/report-settings', [ClientReportController::class, 'updateSettings'])
+        ->middleware('throttle:30,1')
+        ->name('api.v1.me.report-settings.update');
+    Route::get('/client-reports', [ClientReportController::class, 'index'])
+        ->middleware('throttle:60,1')
+        ->name('api.v1.client-reports.index');
+    Route::post('/client-reports', [ClientReportController::class, 'store'])
+        ->middleware('throttle:30,1')
+        ->name('api.v1.client-reports.store');
+    Route::get('/client-reports/{clientReport}', [ClientReportController::class, 'show'])
+        ->middleware('throttle:60,1')
+        ->name('api.v1.client-reports.show');
+    Route::patch('/client-reports/{clientReport}', [ClientReportController::class, 'update'])
+        ->middleware('throttle:30,1')
+        ->name('api.v1.client-reports.update');
+    Route::post('/client-reports/{clientReport}/send', [ClientReportController::class, 'send'])
+        ->middleware('throttle:10,1')
+        ->name('api.v1.client-reports.send');
+    Route::delete('/client-reports/{clientReport}/link', [ClientReportController::class, 'revoke'])
+        ->middleware('throttle:30,1')
+        ->name('api.v1.client-reports.revoke');
     // Client labels (v7): clients are labels on social accounts.
     Route::get('/client-labels', [ClientLabelController::class, 'index'])
         ->middleware('throttle:120,1')

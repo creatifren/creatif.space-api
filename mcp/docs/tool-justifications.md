@@ -73,3 +73,9 @@ destructive; `send_approval_reminder`, `decide_approval`,
 | `update_client` | Update a client | no | no | no | Changes a label in the user's own workspace; nothing is sent to anyone. |
 | `delete_client` | Remove a client | no | yes | no | Removes a label for good; posts, channels and links stay. |
 | `set_channel_clients` | Set the clients of a channel | no | no | no | Changes which labels a channel carries in the user's own workspace. |
+| `get_report_settings` | Get Report emails settings | yes | no | no | Reads the user's own report schedule. |
+| `update_report_settings` | Change Report emails settings | no | no | no | Turning it on emails the user's clients each month. |
+| `list_client_reports` | List client reports | yes | no | no | Reads the user's own reports. |
+| `get_client_report` | Get a client’s monthly report | yes | no | no | Reads (and on first open, assembles) a report from the user's own Insight. |
+| `update_client_report` | Edit a client report | no | no | no | Changes the summary or visibility of the user's own report. |
+| `send_client_report` | Email a client report now | no | no | yes | Emails the report link to the client's approver. |

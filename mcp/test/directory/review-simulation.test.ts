@@ -155,6 +155,6 @@ describe('directory review simulation (docs/directory-test-pack.md)', () => {
     const { tools } = await reviewer();
     // Open-world since the ChatGPT Apps scan (they reach another person); neither publishes or deletes anything.
     const quiet = tools.filter((t) => t.annotations?.openWorldHint && !t.annotations?.destructiveHint).map((t) => t.name).sort();
-    expect(quiet).toEqual(['create_content_plan', 'create_insight_share_link', 'send_approval_reminder']);
+    expect(quiet).toEqual(['create_content_plan', 'create_insight_share_link', 'send_approval_reminder', 'send_client_report']);
   });
 });

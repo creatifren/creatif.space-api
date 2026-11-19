@@ -41,6 +41,8 @@ describe('every tool × 401/403/404/409/422/429 → one plain next step', () => 
     it(`API answers ${status}`, async () => {
       let served = 0;
       app = await startApp({
+        // Every tool through one token: above the server's own 60 a minute.
+        rateLimit: 1000,
         routes: {
           '*': () => {
             served++;
