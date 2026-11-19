@@ -74,11 +74,11 @@ class PublicProfileResource extends JsonResource
                 || ! Workspace::owner($this->user)->plan()->feature('branding_removed'),
             'spaces' => $spaces,
             // v7: Link in bio or Grid, and the Contact button (no form).
-            'layout' => $profile->layout ?? 'link_in_bio',
+            'layout' => $profile->getAttributes()['layout'] ?? 'link_in_bio',
             'contact' => $profile->contact ?? (object) [],
             // A verified custom domain (Pro + Max): every public page lives there.
-            'custom_domain' => $profile->custom_domain_verified_at !== null && $this->user !== null && ProfileAccess::paid($this->user)
-                ? $profile->custom_domain : null,
+            'custom_domain' => ($profile->getAttributes()['custom_domain_verified_at'] ?? null) !== null && $this->user !== null && ProfileAccess::paid($this->user)
+                ? $profile->getAttributes()['custom_domain'] : null,
             // v7 PAGES: public Galleries / Blogs, content plans and reports.
             'pages' => $this->user === null ? [] : [
                 ...$this->user->spaces()->where('status', 'published')->where('visibility', 'public')->latest('published_at')->get()
