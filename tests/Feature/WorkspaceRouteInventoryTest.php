@@ -2,6 +2,7 @@
 
 use App\Http\Middleware\ScopeToWorkspace;
 use App\Models\ClientLabel;
+use App\Models\ClientReport;
 use App\Models\Contracts\WorkspaceOwned;
 use App\Models\File;
 use App\Models\FileVersion;
@@ -128,6 +129,7 @@ function wsiMake(string $class, User $owner, array $made): WorkspaceOwned
     return match ($class) {
         SocialPost::class => SocialPost::factory()->for($owner)->create(['provider_post_id' => null]),
         ClientLabel::class => ClientLabel::create(['user_id' => $owner->id, 'name' => 'Theirs '.str()->random(6)]),
+        ClientReport::class => ClientReport::create(['user_id' => $owner->id, 'month' => '2026-10']),
         SocialAccount::class => $account(),
         SocialPostComment::class => SocialPost::factory()->for($owner)->create()
             ->comments()->create(['author_name' => 'Andi', 'role' => 'COMMENTER', 'body' => 'Open']),

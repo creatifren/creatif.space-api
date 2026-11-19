@@ -125,6 +125,12 @@ redirect_uris, token_endpoint_auth_method: "none"}`. The API fetches it
 | `update_client` (client_id + any field above) — channel_ids replaces the set | draft | `PATCH /client-labels/{id}` |
 | `delete_client` (client_id) — removes the label only; posts and links stay | draft | `DELETE /client-labels/{id}` |
 | `set_channel_clients` (channel_id, client_ids) — which clients one channel belongs to | draft | `PUT /social-accounts/{id}/client-labels` |
+| `get_report_settings` — Report emails: on/off, day, hour, sender, per client | read | `GET /me/report-settings` |
+| `update_report_settings` (enabled, send_day 1–28, send_time HH:00, from_name, clients) — confirm first: it emails clients | draft | `PATCH /me/report-settings` |
+| `list_client_reports` (limit, cursor) — this month's scheduled reports and the sent ones, with opens | read | `GET /client-reports` |
+| `get_client_report` (client_id, month YYYY-MM) — the report; made on first open | read | `POST /client-reports` |
+| `update_client_report` (report_id, summary, visibility) | draft | `PATCH /client-reports/{id}` |
+| `send_client_report` (report_id) — email it to the client's approver now | approve | `POST /client-reports/{id}/send` |
 | `get_notification_settings` — which emails the user gets: post_missed_or_failed (“Post missed / failed”; the publish_failed switch unless the API serves its own key), approval_decided, weekly_digest | read | `GET /me/notification-settings` |
 | `update_notification_settings` (post_missed_or_failed — or its older name publish_failed —, approval_decided, weekly_digest: true/false; timezone of the Monday 08:00 digest; at least one) | draft | `PATCH /me/notification-settings` |
 | `list_shared_with_me` — "Reports shared with you": Content Plans and Insight reports other users shared with this user's email | approvals:decide | `GET /me/reports/shared` |

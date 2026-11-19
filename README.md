@@ -70,6 +70,12 @@ in [mcp/README.md](mcp/README.md).
 | Clients | `update_client` | Change a client's name, colour, approver, report email or channels | All |
 | Clients | `delete_client` | Remove a client label (posts stay) | All |
 | Clients | `set_channel_clients` | Set which clients a channel belongs to | All |
+| Reports | `get_report_settings` | When monthly reports are emailed to clients | Pro, Max |
+| Reports | `update_report_settings` | Change the report schedule, sender and clients | Pro, Max |
+| Reports | `list_client_reports` | Scheduled and sent client reports | Pro, Max |
+| Reports | `get_client_report` | Open a client's monthly report | Pro, Max |
+| Reports | `update_client_report` | Edit a report's summary or visibility | Pro, Max |
+| Reports | `send_client_report` | Email a report to the client now | Pro, Max |
 | Settings | `get_notification_settings` | Which emails the user gets (post missed or failed, approvals, weekly digest) | All |
 | Settings | `update_notification_settings` | Turn those emails on or off | All |
 

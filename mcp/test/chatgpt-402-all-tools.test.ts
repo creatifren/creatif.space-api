@@ -24,6 +24,7 @@ describe('every tool, ChatGPT client, API answers 402', () => {
   it('returns not_available_on_plan with no upgrade wording or link', async () => {
     let served402 = 0;
     app = await startApp({
+      rateLimit: 1000,
       routes: {
         '*': () => {
           served402++;

@@ -180,6 +180,15 @@ return [
         'api.v1.client-labels.update' => 'draft',
         'api.v1.client-labels.destroy' => 'draft',
         'api.v1.social-accounts.client-labels' => 'draft',
+        // v7 monthly client reports. get_client_report makes the month's row
+        // on first open (read: nothing leaves the workspace); turning
+        // automatic emails on, or sending now, reaches the client.
+        'api.v1.me.report-settings' => 'read',
+        'api.v1.me.report-settings.update' => 'draft',
+        'api.v1.client-reports.index' => 'read',
+        'api.v1.client-reports.store' => 'read',
+        'api.v1.client-reports.update' => 'draft',
+        'api.v1.client-reports.send' => 'approve',
         // send_feedback: a note to the team, nothing public, no Credits.
         'api.v1.feedback.store' => 'draft',
 

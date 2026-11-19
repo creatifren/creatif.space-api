@@ -23,6 +23,13 @@ export const FIRST_LINES: Record<string, string> = {
   delete_client: 'Removes a client label from the user\'s channels without deleting any posts.',
   set_channel_clients: 'Sets which clients a channel belongs to, including a channel shared by several clients.',
 
+  get_report_settings: 'Shows when monthly reports are emailed to the user\'s clients and which clients get one.',
+  update_report_settings: 'Changes when and to which clients monthly reports are emailed automatically.',
+  list_client_reports: 'Lists the user\'s monthly client reports, scheduled and sent, and whether clients opened them.',
+  get_client_report: 'Opens a client\'s monthly report with KPIs, top posts and a share link.',
+  update_client_report: 'Edits a client report\'s summary or who can see it.',
+  send_client_report: 'Emails a client\'s monthly report to their approver now.',
+
   // Posts
   list_posts: 'Finds the user\'s posts by status, dates or channel; the plan_week and send_for_approval prompts start here.',
   get_post: 'Shows one post in full, with each channel\'s status and the review thread; send_for_approval checks posts with it.',

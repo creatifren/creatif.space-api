@@ -63,6 +63,12 @@ const ARGS: Record<string, Record<string, unknown>> = {
   update_client: { client_id: ID, name: 'Kopi Senja Co' },
   delete_client: { client_id: ID },
   set_channel_clients: { channel_id: ID, client_ids: [ID] },
+  get_report_settings: {},
+  update_report_settings: { enabled: false },
+  list_client_reports: {},
+  get_client_report: { client_id: ID, month: '2026-10' },
+  update_client_report: { report_id: ID, summary: 'A good month.' },
+  send_client_report: { report_id: ID },
   get_notification_settings: {},
   update_notification_settings: { weekly_digest: false },
   create_insight_share_link: { from: '2026-10-01', to: '2026-10-31' },
@@ -87,7 +93,8 @@ describe('API 429 → rate_limited on every tool', () => {
   });
 
   it('every tool: code rate_limited, the API message, retry_after_seconds from Retry-After, a next step', async () => {
-    app = await startApp({ routes: all429({ body: { message: 'Too many requests with this token. Try again in 17 seconds.', error: 'rate_limited' }, headers: { 'Retry-After': '17' } }) });
+    // Every tool through one token: above the server's own 60 a minute.
+    app = await startApp({ rateLimit: 1000, routes: all429({ body: { message: 'Too many requests with this token. Try again in 17 seconds.', error: 'rate_limited' }, headers: { 'Retry-After': '17' } }) });
     const c = await app.connect(TOKEN);
     for (const [name, args] of Object.entries(ARGS)) {
       const res = await c.callTool({ name, arguments: args });
