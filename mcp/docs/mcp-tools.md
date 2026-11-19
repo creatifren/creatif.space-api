@@ -2,7 +2,7 @@
 
 <!-- Generated from the served tool list by `npm run docs:tools` (in mcp/). Do not edit by hand: test/tools-doc.test.ts fails in CI when this file is out of date. -->
 
-59 tools on `https://mcp.creatif.space/mcp`, in the order `tools/list` gives them. Scope is the OAuth permission a tool needs; the hints are its MCP annotations.
+65 tools on `https://mcp.creatif.space/mcp`, in the order `tools/list` gives them. Scope is the OAuth permission a tool needs; the hints are its MCP annotations.
 
 | Tool | Title | Scope | Read-only | Destructive |
 |---|---|---|---|---|
@@ -54,6 +54,12 @@
 | [`get_client_report`](#get_client_report) | Get a client’s monthly report | `read` | yes | no |
 | [`update_client_report`](#update_client_report) | Edit a client report | `draft` | no | no |
 | [`send_client_report`](#send_client_report) | Email a client report now | `approve` | no | no |
+| [`list_blog_posts`](#list_blog_posts) | List a Blog’s posts | `read` | yes | no |
+| [`create_blog_post`](#create_blog_post) | Write a Blog post | `draft` | no | no |
+| [`update_blog_post`](#update_blog_post) | Edit a Blog post | `draft` | no | yes |
+| [`publish_blog_post`](#publish_blog_post) | Publish a Blog post | `publish` | no | yes |
+| [`send_blog_post_for_approval`](#send_blog_post_for_approval) | Send a Blog post for approval | `approve` | no | no |
+| [`set_post_spaces`](#set_post_spaces) | Also add a social post to a Gallery or Blog | `draft` | no | no |
 | [`create_insight_share_link`](#create_insight_share_link) | Share an Insight report | `approve` | no | no |
 | [`revoke_insight_share_link`](#revoke_insight_share_link) | Revoke a shared Insight report | `approve` | no | yes |
 | [`get_plan_calendar_link`](#get_plan_calendar_link) | Get a Content Plan calendar feed link | `read` | yes | no |
@@ -1095,6 +1101,141 @@ Errors → next step: invalid_input → the client has no approver email: set on
 | Input | Type | Required | Description |
 |---|---|---|---|
 | `report_id` | string | yes | Report id, as returned by the list tools |
+
+## list_blog_posts
+
+**List a Blog’s posts** · scope `read` · read-only yes · destructive no · idempotent yes · open world no
+
+Lists the posts of one of the user's Blogs and where each stands.
+
+Lists the posts of one of the user’s Blogs with their status: draft, waiting (for the client), changes_requested, approved or published.
+
+When to use: when the user asks about their blog or press posts, or before editing one. Blog ids come from list_spaces (type blog).
+
+Example: list_blog_posts { "space_id": "01JS…" } → { posts: [{ id, title, slug, status: "waiting", needs_approval: true }] }
+
+Read-only. Only published posts are visible on the public Blog.
+
+Errors → next step: invalid_input → that Space is a Gallery, not a Blog: pick one with type blog from list_spaces; plan_required (402) → a plan limit, or a feature this account's plan does not include (on some plans: posts scheduled at most 7 days ahead, at most 10 queued posts, approval links for one client); tell the user it is not available on their plan, and do not retry; forbidden (403) → this seat or connection may not do this (e.g. a viewer, or a permission the connection was not given): the workspace owner or an editor can, or the user does it in creatif.space; do not retry; not_found (404) → the id is not in this workspace: take a fresh id from the matching list tool and call again.
+
+| Input | Type | Required | Description |
+|---|---|---|---|
+| `space_id` | string | yes | Blog (Space) id, as returned by the list tools |
+| `limit` | integer | no | At most this many posts per page (1–100, default 25) |
+| `cursor` | string | no | next_cursor from the previous page of this same list (same filters); omit for the first page |
+
+## create_blog_post
+
+**Write a Blog post** · scope `draft` · read-only no · destructive no · idempotent no · open world no
+
+Writes a draft Blog post or press release in one of the user's Blogs.
+
+Writes a draft post in one of the user’s Blogs: title, optional cover, and blocks (paragraph, heading, quote, list, photo, divider).
+
+When to use: when the user asks for a blog post, a news item or a press release. A press release is a Blog post that needs client approval (needs_approval true).
+
+Example: create_blog_post { "space_id": "01JS…", "title": "Ombak opens rooftop bar", "blocks": [{ "type": "paragraph", "text": "…" }], "needs_approval": true } → { post: { id, status: "draft" } }
+
+It stays a draft: nothing is public until publish_blog_post (no approval needed) or the client approves it (send_blog_post_for_approval). Photo blocks take file ids from list_files.
+
+Errors → next step: invalid_input → fix what details.errors names (a photo must be a ready library file); scope_missing → reconnect and allow "draft"; plan_required (402) → a plan limit, or a feature this account's plan does not include (on some plans: posts scheduled at most 7 days ahead, at most 10 queued posts, approval links for one client); tell the user it is not available on their plan, and do not retry; forbidden (403) → this seat or connection may not do this (e.g. a viewer, or a permission the connection was not given): the workspace owner or an editor can, or the user does it in creatif.space; do not retry; not_found (404) → the id is not in this workspace: take a fresh id from the matching list tool and call again.
+
+| Input | Type | Required | Description |
+|---|---|---|---|
+| `space_id` | string | yes | Blog (Space) id, as returned by the list tools |
+| `title` | string | yes | The headline |
+| `blocks` | array of object { type, text } or object { type, text } or object { type, text } or object { type, items } or object { type, file_id, caption } or object { type } | no | The body, in order |
+| `cover_file_id` | string | no | Cover photo (from list_files) |
+| `needs_approval` | boolean | no | The client approves it before it is published |
+
+## update_blog_post
+
+**Edit a Blog post** · scope `draft` · read-only no · destructive yes · idempotent yes · open world no
+
+Edits a Blog post's title, cover, body or approval setting.
+
+Changes a Blog post’s title, cover, blocks or whether it needs client approval.
+
+When to use: when the user asks to rewrite or fix a blog post, or to act on the client’s requested changes.
+
+Example: update_blog_post { "post_id": "01JB…", "blocks": [{ "type": "paragraph", "text": "…" }] } → { post }
+
+Only the fields given change; blocks replaces the whole body. A post the client sent back returns to draft when edited.
+
+Errors → next step: invalid_input → fix what details.errors names; scope_missing → reconnect and allow "draft"; plan_required (402) → a plan limit, or a feature this account's plan does not include (on some plans: posts scheduled at most 7 days ahead, at most 10 queued posts, approval links for one client); tell the user it is not available on their plan, and do not retry; forbidden (403) → this seat or connection may not do this (e.g. a viewer, or a permission the connection was not given): the workspace owner or an editor can, or the user does it in creatif.space; do not retry; not_found (404) → the id is not in this workspace: take a fresh id from the matching list tool and call again.
+
+| Input | Type | Required | Description |
+|---|---|---|---|
+| `post_id` | string | yes | Blog post id, as returned by the list tools |
+| `title` | string | no |  |
+| `blocks` | array of object { type, text } or object { type, text } or object { type, text } or object { type, items } or object { type, file_id, caption } or object { type } | no |  |
+| `cover_file_id` | string or null | no |  |
+| `needs_approval` | boolean | no |  |
+
+## publish_blog_post
+
+**Publish a Blog post** · scope `publish` · read-only no · destructive yes · idempotent yes · open world yes
+
+Publishes a Blog post on the user's public Blog.
+
+Publishes a Blog post on the user’s public Blog.
+
+When to use: only when the user asks to publish it now. A post that needs approval is published by the client’s approval instead.
+
+Example: publish_blog_post { "post_id": "01JB…" } → preview; then publish_blog_post { "post_id": "01JB…", "confirm": true } → { post: { status: "published", published_at } }
+
+Two steps: without confirm it only returns a preview (title, status) to show the user; only after they explicitly agree call again with confirm: true. Refused (invalid_input, reason needs_approval) for a post that needs the client’s approval and does not have it.
+
+Errors → next step: invalid_input → it needs the client’s approval first: use send_blog_post_for_approval; scope_missing → reconnect and allow "publish"; plan_required (402) → a plan limit, or a feature this account's plan does not include (on some plans: posts scheduled at most 7 days ahead, at most 10 queued posts, approval links for one client); tell the user it is not available on their plan, and do not retry; forbidden (403) → this seat or connection may not do this (e.g. a viewer, or a permission the connection was not given): the workspace owner or an editor can, or the user does it in creatif.space; do not retry; not_found (404) → the id is not in this workspace: take a fresh id from the matching list tool and call again.
+
+| Input | Type | Required | Description |
+|---|---|---|---|
+| `post_id` | string | yes | Blog post id, as returned by the list tools |
+| `confirm` | boolean | no | false (default) = preview only; true = publish, after the user agreed to the preview |
+
+## send_blog_post_for_approval
+
+**Send a Blog post for approval** · scope `approve` · read-only no · destructive no · idempotent no · open world no
+
+Sends a Blog post to the client for approval before it is published.
+
+Puts a Blog post on an approval link for the client; it is published to the Blog when they approve.
+
+When to use: when the user wants a client to approve a blog post or press release first.
+
+Example: send_blog_post_for_approval { "post_id": "01JB…", "client_id": "01JK…" } → { post: { status: "waiting" }, approval_link: { id, url } }
+
+Give link_id (an approval link the user already has), or client_id (a client with an approver), or approver_email. Share the returned url with the client.
+
+Errors → next step: invalid_input → who approves? give client_id of a client with an approver, or approver_email; scope_missing → reconnect and allow "approve"; plan_required (402) → a plan limit, or a feature this account's plan does not include (on some plans: posts scheduled at most 7 days ahead, at most 10 queued posts, approval links for one client); tell the user it is not available on their plan, and do not retry; forbidden (403) → this seat or connection may not do this (e.g. a viewer, or a permission the connection was not given): the workspace owner or an editor can, or the user does it in creatif.space; do not retry; not_found (404) → the id is not in this workspace: take a fresh id from the matching list tool and call again.
+
+| Input | Type | Required | Description |
+|---|---|---|---|
+| `post_id` | string | yes | Blog post id, as returned by the list tools |
+| `link_id` | string | no | Approval link id, as returned by the list tools |
+| `client_id` | string | no | Client id, as returned by the list tools |
+| `approver_email` | string | no |  |
+
+## set_post_spaces
+
+**Also add a social post to a Gallery or Blog** · scope `draft` · read-only no · destructive no · idempotent yes · open world no
+
+Adds a social post to Galleries or Blogs when it is published.
+
+Chooses the Galleries and Blogs a social post also goes into when it is published (after approval if it needs one).
+
+When to use: when the user says a post should also go in their portfolio, a gallery or a blog.
+
+Example: set_post_spaces { "post_id": "01JP…", "space_ids": ["01JS…"] } → { post_id, space_ids }
+
+Replaces the set; [] removes them all. A Gallery gets the post’s photos; a Blog gets a post made from the caption and photos. Space ids from list_spaces.
+
+Errors → next step: invalid_input → a Space is not the user’s: take ids from list_spaces; scope_missing → reconnect and allow "draft"; plan_required (402) → a plan limit, or a feature this account's plan does not include (on some plans: posts scheduled at most 7 days ahead, at most 10 queued posts, approval links for one client); tell the user it is not available on their plan, and do not retry; forbidden (403) → this seat or connection may not do this (e.g. a viewer, or a permission the connection was not given): the workspace owner or an editor can, or the user does it in creatif.space; do not retry; not_found (404) → the id is not in this workspace: take a fresh id from the matching list tool and call again.
+
+| Input | Type | Required | Description |
+|---|---|---|---|
+| `post_id` | string | yes | Post id, as returned by the list tools |
+| `space_ids` | array of string | yes |  |
 
 ## create_insight_share_link
 

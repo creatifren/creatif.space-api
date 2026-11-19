@@ -20,6 +20,12 @@ exports[`tool annotations > match the snapshot 1`] = `
     "openWorld": false,
     "readOnly": false,
   },
+  "create_blog_post": {
+    "destructive": false,
+    "idempotent": false,
+    "openWorld": false,
+    "readOnly": false,
+  },
   "create_client": {
     "destructive": false,
     "idempotent": false,
@@ -176,6 +182,12 @@ exports[`tool annotations > match the snapshot 1`] = `
     "openWorld": false,
     "readOnly": true,
   },
+  "list_blog_posts": {
+    "destructive": false,
+    "idempotent": true,
+    "openWorld": false,
+    "readOnly": true,
+  },
   "list_channels": {
     "destructive": false,
     "idempotent": true,
@@ -242,6 +254,12 @@ exports[`tool annotations > match the snapshot 1`] = `
     "openWorld": false,
     "readOnly": true,
   },
+  "publish_blog_post": {
+    "destructive": true,
+    "idempotent": true,
+    "openWorld": true,
+    "readOnly": false,
+  },
   "publish_post": {
     "destructive": true,
     "idempotent": false,
@@ -302,6 +320,12 @@ exports[`tool annotations > match the snapshot 1`] = `
     "openWorld": true,
     "readOnly": false,
   },
+  "send_blog_post_for_approval": {
+    "destructive": false,
+    "idempotent": false,
+    "openWorld": false,
+    "readOnly": false,
+  },
   "send_client_report": {
     "destructive": false,
     "idempotent": false,
@@ -320,7 +344,19 @@ exports[`tool annotations > match the snapshot 1`] = `
     "openWorld": false,
     "readOnly": false,
   },
+  "set_post_spaces": {
+    "destructive": false,
+    "idempotent": true,
+    "openWorld": false,
+    "readOnly": false,
+  },
   "unkeep_file": {
+    "destructive": true,
+    "idempotent": true,
+    "openWorld": false,
+    "readOnly": false,
+  },
+  "update_blog_post": {
     "destructive": true,
     "idempotent": true,
     "openWorld": false,

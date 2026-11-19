@@ -189,6 +189,15 @@ return [
         'api.v1.client-reports.store' => 'read',
         'api.v1.client-reports.update' => 'draft',
         'api.v1.client-reports.send' => 'approve',
+        // v7 Blogs: drafts and edits are draft scope; publishing puts it on
+        // the public Blog (publish); approval puts it on the user's own link.
+        'api.v1.spaces.posts.index' => 'read',
+        'api.v1.spaces.posts.store' => 'draft',
+        'api.v1.blog-posts.show' => 'read',
+        'api.v1.blog-posts.update' => 'draft',
+        'api.v1.blog-posts.publish' => 'publish',
+        'api.v1.blog-posts.send-for-approval' => 'approve',
+        'api.v1.social-posts.spaces' => 'draft',
         // send_feedback: a note to the team, nothing public, no Credits.
         'api.v1.feedback.store' => 'draft',
 
