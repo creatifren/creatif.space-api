@@ -19,9 +19,7 @@ final class ProfileAccess
 
     public static function paid(User $user): bool
     {
-        $key = Workspace::owner($user)->plan()->key;
-
-        return $key instanceof PlanKey ? $key !== PlanKey::Free : $key !== 'free';
+        return Workspace::owner($user)->plan()->key !== PlanKey::Free;
     }
 
     /** @param  array<string, mixed>  $appearance */
