@@ -115,7 +115,7 @@ final class ClientReportBuilder
             $kinds[$kind]++;
         }
 
-        return array_values(array_map(fn ($type, $n) => ['type' => $type, 'posts' => $n], array_keys($kinds), $kinds));
+        return array_map(fn ($type, $n) => ['type' => $type, 'posts' => $n], array_keys($kinds), $kinds);
     }
 
     /**
