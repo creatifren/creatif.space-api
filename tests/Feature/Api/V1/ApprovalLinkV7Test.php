@@ -11,6 +11,13 @@ use Illuminate\Support\Facades\Http;
    between, Link only by default, replaced / turned off / expired pages, the
    client's progress, captions per account, and "Approve with note". */
 
+beforeEach(function () {
+    config([
+        'services.postforme.key' => 'test-key',
+        'services.postforme.base_url' => 'https://api.postforme.test/v1',
+    ]);
+});
+
 function v7Owner(): User
 {
     $user = User::factory()->create();
