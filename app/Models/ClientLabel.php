@@ -80,7 +80,11 @@ class ClientLabel extends Model implements WorkspaceOwned
         return $this->hasMany(SocialApprovalLink::class);
     }
 
-    /** The short form screens and the MCP server show next to a post or account. */
+    /**
+     * The short form screens and the MCP server show next to a post or account.
+     *
+     * @return array{id: string, name: string, initials: string|null, color: string}
+     */
     public function toBadge(): array
     {
         return ['id' => $this->ulid, 'name' => $this->name, 'initials' => $this->initials, 'color' => $this->color];

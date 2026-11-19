@@ -744,9 +744,6 @@ class SocialApprovalController extends Controller
     }
 
     /**
-     * @return array<string, mixed>
-     */
-    /**
      * v7: `client_id` names one of the owner's client labels. It fills
      * client_name and — on a new link — the approver, unless the request
      * gives its own. Unknown or another user's label: 422.
@@ -769,6 +766,9 @@ class SocialApprovalController extends Controller
         return $label;
     }
 
+    /**
+     * @return array<string, mixed>
+     */
     private function linkArray(SocialApprovalLink $link): array
     {
         $plan = $link->isScoped() ? PlanScope::counts($link) : null;
