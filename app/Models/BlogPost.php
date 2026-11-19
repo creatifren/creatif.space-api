@@ -25,6 +25,11 @@ use Illuminate\Support\Str;
  * @property bool $needs_approval
  * @property int|null $social_approval_link_id
  * @property \Carbon\CarbonImmutable|null $published_at
+ * @property \Carbon\CarbonImmutable|null $approval_at
+ * @property string|null $approval_by
+ * @property string|null $approval_comment
+ * @property int|null $cover_file_id
+ * @property \Carbon\CarbonImmutable|null $updated_at
  */
 class BlogPost extends Model implements WorkspaceOwned
 {
@@ -100,7 +105,7 @@ class BlogPost extends Model implements WorkspaceOwned
      */
     public function publicBlocks(): array
     {
-        $blocks = array_values(array_filter((array) ($this->blocks ?? []), fn ($b) => is_array($b) && in_array($b['type'] ?? null, self::BLOCKS, true)));
+        $blocks = array_values(array_filter($this->blocks ?? [], fn (array $b) => in_array($b['type'] ?? null, self::BLOCKS, true)));
         $ids = array_values(array_filter(array_map(fn ($b) => $b['type'] === 'photo' ? ($b['file_id'] ?? null) : null, $blocks)));
         $files = $ids === [] ? collect() : File::query()->whereIn('ulid', $ids)->where('user_id', $this->user_id)->get()->keyBy('ulid');
 

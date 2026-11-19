@@ -687,6 +687,7 @@ class PublicApprovalController extends Controller
             return response()->json(['message' => 'This post has already been decided.'], 422);
         }
         $name = self::displayName($validated['name'] ?? null, $approver);
+        $state = $validated['decision'] === 'approve' ? 'approved' : 'changes_requested';
         if ($validated['decision'] === 'approve') {
             $post->update([
                 'status' => 'published',
@@ -704,7 +705,7 @@ class PublicApprovalController extends Controller
             ]);
         }
 
-        return response()->json(['data' => ['id' => $post->ulid, 'state' => $post->status === 'published' ? 'approved' : $post->status]]);
+        return response()->json(['data' => ['id' => $post->ulid, 'state' => $state]]);
     }
 
     /**
