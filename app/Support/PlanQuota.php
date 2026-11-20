@@ -98,6 +98,25 @@ class PlanQuota
     }
 
     /**
+     * Client labels allowed (backlog #2, Rizal 20 Nov: Free = 1). Same
+     * ceiling as approval clients — Free gets one client everywhere; a
+     * paid plan has none. Sample (demo) labels are left out.
+     *
+     * @throws PlanFeatureRequired
+     */
+    public static function requireClientLabelRoom(User $user, string $field = 'name'): void
+    {
+        $limit = static::approvalClientsLimit($user);
+        if ($limit === null) {
+            return;
+        }
+
+        if ($user->clientLabels()->real()->count() >= $limit) {
+            throw PlanFeatureRequired::clientLabels($user, $limit, $field);
+        }
+    }
+
+    /**
      * A time inside the plan's scheduling window? Compared in UTC against
      * now: exactly `days` ahead is still in. Null (send now / on approval)
      * always is.
