@@ -31,6 +31,7 @@ use Illuminate\Support\Str;
  * @property string|null $approval_comment
  * @property int|null $cover_file_id
  * @property \Carbon\CarbonImmutable|null $updated_at
+ * @property bool $is_demo sample data (App\Support\SampleData)
  */
 class BlogPost extends Model implements WorkspaceOwned
 {

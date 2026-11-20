@@ -48,6 +48,7 @@ use Illuminate\Support\Str;
  * @property CarbonImmutable|null $last_reminded_at
  * @property CarbonImmutable|null $revoked_at
  * @property CarbonImmutable|null $created_at
+ * @property bool $is_demo sample data (App\Support\SampleData)
  */
 class SocialApprovalLink extends Model implements WorkspaceOwned
 {

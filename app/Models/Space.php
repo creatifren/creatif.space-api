@@ -38,6 +38,7 @@ use Illuminate\Support\Str;
  * @property int|null $downloaded_files
  * @property CarbonImmutable|null $created_at
  * @property CarbonImmutable|null $updated_at
+ * @property bool $is_demo sample data (App\Support\SampleData)
  */
 class Space extends Model implements WorkspaceOwned
 {

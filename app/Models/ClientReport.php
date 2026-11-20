@@ -24,6 +24,7 @@ use Illuminate\Support\Str;
  * @property \Carbon\CarbonImmutable|null $sent_at
  * @property \Carbon\CarbonImmutable|null $revoked_at
  * @property int $open_count
+ * @property bool $is_demo sample data (App\Support\SampleData)
  */
 class ClientReport extends Model implements WorkspaceOwned
 {

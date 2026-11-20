@@ -17,6 +17,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
  * @property string|null $subject_id
  * @property string $summary
  * @property array<string, mixed>|null $meta
+ * @property bool $is_demo sample data (App\Support\SampleData)
  */
 class Activity extends Model
 {

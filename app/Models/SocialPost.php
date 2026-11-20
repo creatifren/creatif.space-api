@@ -42,6 +42,7 @@ use Illuminate\Support\Facades\DB;
  * @property string|null $approval_by
  * @property CarbonImmutable|null $approval_at
  * @property CarbonImmutable|null $review_requested_at
+ * @property bool $is_demo sample data (App\Support\SampleData)
  */
 class SocialPost extends Model implements WorkspaceOwned
 {

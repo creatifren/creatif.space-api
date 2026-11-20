@@ -24,6 +24,7 @@ use Illuminate\Support\Str;
  * @property string|null $approver_email
  * @property string|null $approver_name
  * @property bool $report_email
+ * @property bool $is_demo sample data (App\Support\SampleData)
  */
 class ClientLabel extends Model implements WorkspaceOwned
 {
