@@ -72,3 +72,13 @@ it('v10.1 Post settings: approval_default and remind_approver start on and switc
         ->assertUnprocessable()
         ->assertJsonValidationErrors(['remind_approver']);
 });
+
+it('P6: keeps saved replies (max 20, each up to 500 characters)', function () {
+    $user = User::factory()->create();
+
+    $this->actingAs($user)->getJson('/api/v1/me/social-settings')->assertJsonPath('data.saved_replies', []);
+    $this->actingAs($user)->patchJson('/api/v1/me/social-settings', ['saved_replies' => ['Thanks so much!', 'We open daily 8:00–22:00.']])
+        ->assertOk()->assertJsonPath('data.saved_replies.1', 'We open daily 8:00–22:00.');
+    $this->actingAs($user)->patchJson('/api/v1/me/social-settings', ['saved_replies' => array_fill(0, 21, 'x')])
+        ->assertUnprocessable();
+});

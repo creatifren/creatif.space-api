@@ -11,6 +11,7 @@ use App\Models\File;
 use App\Models\SocialPost;
 use App\Models\Transfer;
 use App\Models\User;
+use App\Support\ClientBadges;
 use App\Support\Workspace;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -103,6 +104,26 @@ class NotificationController extends Controller
             ->sortByDesc('created_at')
             ->values()
             ->take(100);
+
+        /* P6 (Builder A): each row's clients (v7 labels on the post's accounts),
+           for Activity's Clients filter. A row about no post has none. */
+        $ulids = $rows->map(fn (array $r) => $r['kind'] === 'notification'
+            ? ($r['data']['post_id'] ?? null)
+            : (($r['subject']['type'] ?? null) === 'social_post' ? $r['subject']['id'] : null))
+            ->filter(fn ($u) => is_string($u))->unique()->values()->all();
+        $posts = $ulids === [] ? collect() : SocialPost::query()
+            ->whereIn('user_id', [Workspace::owner($user)->id, $user->id])
+            ->whereIn('ulid', $ulids)
+            ->with('targets')
+            ->get()
+            ->keyBy('ulid');
+        ClientBadges::prime($posts->values());
+        $rows = $rows->map(function (array $r) use ($posts) {
+            $ulid = $r['kind'] === 'notification' ? ($r['data']['post_id'] ?? null) : (($r['subject']['type'] ?? null) === 'social_post' ? $r['subject']['id'] : null);
+            $post = is_string($ulid) ? $posts->get($ulid) : null;
+
+            return $r + ['clients' => $post instanceof SocialPost ? ClientBadges::forPost($post) : []];
+        })->values();
 
         return response()->json([
             'data' => $rows,

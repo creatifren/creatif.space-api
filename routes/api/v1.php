@@ -27,6 +27,7 @@ use App\Http\Controllers\Api\V1\HealthController;
 use App\Http\Controllers\Api\V1\InboxCommentController;
 use App\Http\Controllers\Api\V1\InboxController;
 use App\Http\Controllers\Api\V1\InboxFeedController;
+use App\Http\Controllers\Api\V1\InboxFeedbackController;
 use App\Http\Controllers\Api\V1\InsightBestTimesController;
 use App\Http\Controllers\Api\V1\InsightExportController;
 use App\Http\Controllers\Api\V1\InsightPdfExportController;
@@ -636,6 +637,11 @@ Route::middleware(['auth:sanctum,mcp', EnforceTokenScope::class, EnsureNotPendin
             ->middleware('throttle:30,1')
             ->name('api.v1.inbox.feed.reply');
     });
+    // P6 (Builder A): Inbox › Feedback — client notes from approval links.
+    // Not the relay's, so it stays on when INBOX_ENABLED is off.
+    Route::get('/inbox/feedback', [InboxFeedbackController::class, 'index'])
+        ->middleware('throttle:60,1')
+        ->name('api.v1.inbox.feedback.index');
 
     // Crefile — the file library (R2-hosted)
     Route::get('/files', [FileController::class, 'index'])->name('api.v1.files.index');

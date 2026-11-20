@@ -264,6 +264,8 @@ class InboxController extends Controller
             'open_conversations' => (int) $threads->sum('open_conversations'),
             'unread_comments' => $unreadComments,
             'unreplied_comments' => $accounts->sum('unreplied_comments'),
+            // Inbox › Feedback (P6): open client notes nobody answered yet.
+            'unread_feedback' => InboxFeedbackController::unreadCount($ids),
             // The one number for the nav badge.
             'total_unread' => $unreadConversations + $unreadComments,
             'accounts' => $accounts,

@@ -158,6 +158,7 @@ return [
     'api.v1.inbox.feed.index' => 'Comments and DMs in one feed',
     'api.v1.inbox.feed.show' => 'One feed item',
     'api.v1.inbox.feed.reply' => 'Reply to a feed item',
+    'api.v1.inbox.feedback.index' => 'Client feedback from approval links (open, unread, done)',
     'api.v1.files.index' => 'List library files',
     'api.v1.folders.store' => 'Create a folder',
     'api.v1.folders.update' => 'Rename or move a folder',
