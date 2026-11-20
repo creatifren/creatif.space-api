@@ -165,6 +165,12 @@ Schedule::job(new SendApprovedHeldPosts)->everyFiveMinutes()->withoutOverlapping
 Schedule::command('ops:daily-digest')->dailyAt('06:20');
 
 /*
+ * Owner alert: connected social accounts reach 80, then 900 (Outstand plan
+ * size). One mail per step.
+ */
+Schedule::command('ops:accounts-alert')->hourlyAt(17)->withoutOverlapping();
+
+/*
  * Accounts whose deletion grace period (30 days) has passed are purged.
  */
 Schedule::command('accounts:purge-deleted')->dailyAt('03:25')->withoutOverlapping();
