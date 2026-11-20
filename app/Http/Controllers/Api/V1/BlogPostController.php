@@ -60,7 +60,7 @@ class BlogPostController extends Controller
                 'id' => $p->approvalLink->ulid,
                 'url' => $p->approvalLink->url(),
                 'revoked' => $p->approvalLink->revoked_at !== null,
-                'client' => $p->approvalLink->clientLabel?->name ?? $p->approvalLink->client_name,
+                'client' => $p->approvalLink->clientLabel->name ?? $p->approvalLink->client_name,
                 'approver' => [
                     'name' => $p->approvalLink->clientLabel?->approver_name,
                     'email' => $p->approvalLink->approver_email,
