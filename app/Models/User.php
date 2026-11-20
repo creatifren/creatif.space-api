@@ -71,6 +71,7 @@ class User extends Authenticatable implements FilamentUser
         'report_send_day',
         'report_send_time',
         'report_from_name',
+        'business_name',
         'week_start',
         'time_format',
         // IANA zone for the weekly digest (Monday 08:00 there); null = the app's.

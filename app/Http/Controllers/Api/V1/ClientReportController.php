@@ -39,6 +39,8 @@ class ClientReportController extends Controller
             'send_day' => ['sometimes', 'integer', 'min:1', 'max:28'],
             'send_time' => ['sometimes', 'string', 'regex:/^([01]\d|2[0-3]):00$/'],
             'from_name' => ['sometimes', 'nullable', 'string', 'max:120'],
+            // Profile › Account › Business name on reports ("Prepared by"; empty = your name).
+            'business_name' => ['sometimes', 'nullable', 'string', 'max:120'],
             'clients' => ['sometimes', 'array', 'max:200'],
             'clients.*.id' => ['required_with:clients', 'string', 'max:26'],
             'clients.*.report_email' => ['required_with:clients', 'boolean'],
@@ -52,7 +54,9 @@ class ClientReportController extends Controller
             'client_reports_enabled' => $validated['enabled'] ?? null,
             'report_send_day' => $validated['send_day'] ?? null,
             'report_send_time' => $validated['send_time'] ?? null,
-        ], fn ($v) => $v !== null) + (array_key_exists('from_name', $validated) ? ['report_from_name' => $validated['from_name']] : []))->save();
+        ], fn ($v) => $v !== null)
+            + (array_key_exists('from_name', $validated) ? ['report_from_name' => $validated['from_name']] : [])
+            + (array_key_exists('business_name', $validated) ? ['business_name' => trim((string) $validated['business_name']) ?: null] : []))->save();
 
         foreach ($validated['clients'] ?? [] as $c) {
             $user->clientLabels()->where('ulid', $c['id'])->update(['report_email' => $c['report_email']]);
@@ -213,6 +217,7 @@ class ClientReportController extends Controller
             'timezone' => $user->timezone ?: config('app.timezone'),
             'from_name' => $user->report_from_name,
             'from_name_default' => $user->name.' · Creatif Space',
+            'business_name' => $user->business_name,
             'available' => PlanQuota::hasFeature($user, 'insight'),
             'clients' => $user->clientLabels()->orderBy('name')->get()->map(fn (ClientLabel $l) => [
                 ...$l->toBadge(),
