@@ -30,6 +30,10 @@ enum NotificationType: string
     // it would mean client uploads start bouncing without a word.
     case StorageQuota = 'storage.quota';
 
+    // Credits under 20% of the plan's Monthly Credits (prototype v9.1, P10):
+    // scheduled posts stop when they run out — money, not a preference.
+    case CreditsLow = 'credits.low';
+
     /**
      * The types a user may switch off — what Settings → Notifications shows.
      *
