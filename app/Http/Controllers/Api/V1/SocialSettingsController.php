@@ -21,7 +21,7 @@ class SocialSettingsController extends Controller
      * Content Plan reminder email (SendContentPlanReminders), once, 24 hours
      * before the first waiting post. Both on unless turned off.
      */
-    private const EMPTY = ['timetable' => [], 'labels' => [], 'templates' => [], 'views' => [], 'approval_default' => true, 'remind_approver' => true];
+    private const EMPTY = ['timetable' => [], 'labels' => [], 'templates' => [], 'views' => [], 'approval_default' => true, 'remind_approver' => true, 'saved_replies' => []];
 
     public function show(Request $request): JsonResponse
     {
@@ -57,6 +57,9 @@ class SocialSettingsController extends Controller
             // keep the old one, uncoloured.
             'approval_default' => ['sometimes', 'boolean'],
             'remind_approver' => ['sometimes', 'boolean'],
+            // P6 Inbox: replies saved for one tap, above every reply box.
+            'saved_replies' => ['sometimes', 'array', 'max:20'],
+            'saved_replies.*' => ['string', 'min:1', 'max:500', 'distinct'],
             'renamed' => ['sometimes', 'array', 'max:50'],
             'renamed.*' => ['string', 'max:40'],
         ]);
