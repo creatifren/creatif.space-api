@@ -3,7 +3,9 @@
 namespace App\Http\Controllers\Api\V1;
 
 use App\Http\Controllers\Controller;
+use App\Models\ClientLabel;
 use App\Models\InsightShareLink;
+use App\Models\SocialAccount;
 use App\Notifications\InsightReportShared;
 use App\Support\Insight\InsightClients;
 use App\Support\Insight\InsightPeriod;
@@ -56,7 +58,9 @@ class InsightShareController extends Controller
             throw ValidationException::withMessages(['channels' => 'Connect a channel first: there is nothing to share.']);
         }
 
-        $link = InsightShareLink::issue($owner, $user, $period, $channels, $v['recipient_email'] ?? null);
+        // Made through Claude (an MCP token) → "created by Claude" on Shared links.
+        $via = $request->attributes->get('mcp_token') !== null ? 'mcp' : 'app';
+        $link = InsightShareLink::issue($owner, $user, $period, $channels, $v['recipient_email'] ?? null, $via);
         $url = InsightShareLink::url((string) $link->plainToken);
 
         if ($link->recipient_email !== null) {
@@ -105,11 +109,31 @@ class InsightShareController extends Controller
                 'label' => $link->period()->label('en'),
             ],
             'channel_ids' => $link->channel_ids,
+            // The clients of these channels (labels), for "Hotel Ombak · last 28 days".
+            'clients' => $this->clients($link),
+            'view_count' => (int) ($link->view_count ?? 0),
+            'last_viewed_at' => $link->last_viewed_at?->utc()->toIso8601String(),
+            'created_via' => $link->created_via ?? 'app',
             'recipient_email' => $link->recipient_email,
             'status' => $link->revoked() ? 'revoked' : ($link->expired() ? 'expired' : 'active'),
             'expires_at' => $link->expires_at->utc()->toIso8601String(),
             'revoked_at' => $link->revoked_at?->utc()->toIso8601String(),
             'created_at' => $link->created_at?->utc()->toIso8601String(),
         ];
+    }
+
+    /** @return list<array<string, mixed>> */
+    private function clients(InsightShareLink $link): array
+    {
+        return SocialAccount::query()
+            ->whereIn('ulid', $link->channel_ids)
+            ->with('clientLabels')
+            ->get()
+            ->flatMap(fn (SocialAccount $a) => $a->clientLabels)
+            ->unique('id')
+            ->sortBy('name')
+            ->map(fn (ClientLabel $l) => $l->toBadge())
+            ->values()
+            ->all();
     }
 }
