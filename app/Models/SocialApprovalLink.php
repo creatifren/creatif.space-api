@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Models\Concerns\HasSampleFlag;
 use App\Casts\UtcDateTime;
 use App\Models\Contracts\WorkspaceOwned;
 use Carbon\CarbonImmutable;
@@ -47,9 +48,12 @@ use Illuminate\Support\Str;
  * @property CarbonImmutable|null $last_reminded_at
  * @property CarbonImmutable|null $revoked_at
  * @property CarbonImmutable|null $created_at
+ * @property bool $is_demo sample data (App\Support\SampleData)
  */
 class SocialApprovalLink extends Model implements WorkspaceOwned
 {
+    use HasSampleFlag;
+
     protected $fillable = ['user_id', 'token', 'title', 'client_name', 'client_label_id', 'views', 'visibility', 'replaced_by_id', 'approver_email', 'approver_bound_at', 'opened_at', 'scope_from', 'scope_to', 'scope_timezone', 'scope_starts_at', 'scope_ends_at', 'scope_account_ids', 'reminders_enabled', 'reminded_at', 'calendar_version', 'calendar_disabled_at', 'expires_at', 'extended_at', 'last_reminded_at', 'revoked_at'];
 
     public function expired(): bool

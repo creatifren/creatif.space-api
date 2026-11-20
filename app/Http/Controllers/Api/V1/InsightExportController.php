@@ -168,6 +168,7 @@ class InsightExportController extends Controller
     private function accounts(Collection $workspace, mixed $channels): Collection
     {
         $query = SocialAccount::query()
+            ->notSample()
             ->whereIn('user_id', $workspace)
             ->where('status', SocialAccountStatus::Connected)
             ->orderBy('id');

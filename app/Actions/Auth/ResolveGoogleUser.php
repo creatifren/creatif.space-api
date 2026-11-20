@@ -7,6 +7,7 @@ use App\Exceptions\GoogleLoginRefused;
 use App\Models\User;
 use App\Support\AutoHandle;
 use App\Support\Onboarding;
+use App\Support\SampleData;
 use App\Support\ProductEvents;
 use App\Support\ReferralAttribution;
 use App\Support\SignupAttribution;
@@ -80,6 +81,8 @@ class ResolveGoogleUser
             // client who signed in only to answer an approval or a plan.
             if (! Onboarding::isClientLanding($request->session()->get('next_path') ?? $request->input('next'))) {
                 Onboarding::welcome($user);
+                // Sample content so the app makes sense at once (prototype v10).
+                SampleData::seedQuietly($user);
             }
         } elseif ($user->google_id === null) {
             // Existing (non-staff) account signing in with Google for the first time.

@@ -184,6 +184,7 @@ class ClientLabelController extends Controller
             'approver_email' => $label->approver_email,
             'approver_name' => $label->approver_name,
             'report_email' => $label->report_email,
+            'sample' => (bool) $label->is_demo,
             'accounts' => $label->accounts->map(fn (SocialAccount $a) => [
                 'id' => $a->ulid,
                 'platform' => $a->platform,

@@ -11,6 +11,7 @@ use App\Support\Onboarding;
 use App\Support\ProductEvents;
 use App\Support\ReferralAttribution;
 use App\Support\SafePath;
+use App\Support\SampleData;
 use App\Support\SignupAttribution;
 use App\Support\TeamInvite;
 use Illuminate\Auth\Events\PasswordReset;
@@ -177,6 +178,8 @@ class PasswordAuthController extends Controller
         // email, once (not for a client on their way to an approval).
         if (! Onboarding::isClientLanding($user->signup_next_path)) {
             Onboarding::welcome($user);
+            // Sample content so the app makes sense at once (prototype v10).
+            SampleData::seedQuietly($user);
         }
 
         /* Where the signup asked to land, checked again on the way out —

@@ -45,6 +45,8 @@ class SocialPostResource extends JsonResource
             // v7 "Also add to": the Galleries / Blogs it goes into when published.
             'also_add_to' => PostSpaces::for($this->id),
             'approval' => $this->approval,
+            // Sample data (SampleData): the app badges it "Sample".
+            'sample' => (bool) $this->is_demo,
             'approval_by' => $this->approval_by,
             'approval_at' => $this->approval_at,
             // A draft the owner shows the client on a Content Plan.

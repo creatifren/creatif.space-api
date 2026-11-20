@@ -27,6 +27,8 @@ class SocialAccountResource extends JsonResource
             'username' => $this->username,
             // v7: the client labels on this account (Channels › Labels).
             'clients' => ClientBadges::forAccount($this->id),
+            // Sample data (SampleData): shown with a Sample badge, never in Post to.
+            'sample' => $this->isSample(),
             'profile_photo_url' => $this->profile_photo_url,
             // Connected under another relay reads as disconnected, so the
             // composer, Channels and Engage stop offering it with no app

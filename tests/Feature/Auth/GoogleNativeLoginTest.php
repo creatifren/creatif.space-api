@@ -106,9 +106,14 @@ describe('a valid token', function () {
         $this->analytics->assertCapturedOnce('user_signed_up');
     });
 
-    it('lands on Home without a next, or with one that leaves our origin', function (?string $next) {
-        gnPost(gnToken(), $next)->assertOk()->assertExactJson(['redirect' => 'https://app.test/home']);
+    it('sends a new account to Connect channels without a next, or with one that leaves our origin', function (?string $next) {
+        gnPost(gnToken(), $next)->assertOk()->assertExactJson(['redirect' => 'https://app.test/onboarding']);
     })->with([null, 'https://evil.test/x', '//evil.test']);
+
+    it('lands a returning account on Home without a next', function () {
+        User::factory()->create(['email' => 'old@example.com', 'google_id' => 'g-100']);
+        gnPost(gnToken(), null)->assertOk()->assertExactJson(['redirect' => 'https://app.test/home']);
+    });
 
     it('signs a returning user in by google_id, with no signup event', function () {
         $user = User::factory()->create(['email' => 'old@example.com', 'google_id' => 'g-100']);

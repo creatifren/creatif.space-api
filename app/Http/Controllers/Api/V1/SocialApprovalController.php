@@ -582,6 +582,9 @@ class SocialApprovalController extends Controller
         self::writable($request->user(), $socialApprovalLink->user_id);
         $link = $socialApprovalLink;
 
+        if ($link->is_demo) {
+            return response()->json(['message' => 'This is a sample link: reminders never go out.', 'code' => 'sample'], 422);
+        }
         if ($link->revoked_at !== null || $link->expired()) {
             return response()->json(['message' => 'This link is no longer live — make a new one, or extend it first.', 'code' => 'link_not_live'], 422);
         }
@@ -825,6 +828,7 @@ class SocialApprovalController extends Controller
             'approver_bound_at' => $link->approver_bound_at?->toIso8601String(),
             // v10: first opened by someone other than the owner; null = not opened.
             'opened_at' => $link->opened_at?->toIso8601String(),
+            'sample' => (bool) $link->is_demo,
             // 'list' (fixed posts) or 'plan' (Content Plan: scope below).
             'kind' => $link->isScoped() ? 'plan' : 'list',
             'scope' => PlanScope::toArray($link),

@@ -40,7 +40,7 @@ class SendClientReports implements ShouldQueue
                         continue;
                     }
                     $month = $now->subMonthNoOverflow()->format('Y-m');
-                    $user->clientLabels()->where('report_email', true)->whereNotNull('approver_email')->each(function (ClientLabel $label) use ($builder, $user, $month): void {
+                    $user->clientLabels()->where('is_demo', false)->where('report_email', true)->whereNotNull('approver_email')->each(function (ClientLabel $label) use ($builder, $user, $month): void {
                         $report = ClientReport::query()->firstOrCreate(['client_label_id' => $label->id, 'month' => $month], ['user_id' => $user->id]);
                         if ($report->sent_at !== null || $report->revoked_at !== null) {
                             return;

@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Models\Concerns\HasSampleFlag;
 use App\Models\Contracts\WorkspaceOwned;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -30,9 +31,12 @@ use Illuminate\Support\Str;
  * @property string|null $approval_comment
  * @property int|null $cover_file_id
  * @property \Carbon\CarbonImmutable|null $updated_at
+ * @property bool $is_demo sample data (App\Support\SampleData)
  */
 class BlogPost extends Model implements WorkspaceOwned
 {
+    use HasSampleFlag;
+
     public const STATUSES = ['draft', 'waiting', 'changes_requested', 'approved', 'published'];
 
     public const BLOCKS = ['photo', 'paragraph', 'heading', 'quote', 'list', 'divider'];

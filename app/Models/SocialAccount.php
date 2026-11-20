@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Support\SampleData;
 use App\Enums\SocialAccountStatus;
 use App\Enums\SocialPlatform;
 use App\Models\Contracts\WorkspaceOwned;
@@ -44,6 +45,9 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
  */
 class SocialAccount extends Model implements WorkspaceOwned
 {
+    /** provider_account_id prefix of the sample accounts (SampleData). */
+    public const SAMPLE_PREFIX = 'sample_';
+
     /** @use HasFactory<SocialAccountFactory> */
     use HasFactory;
 
@@ -99,6 +103,14 @@ class SocialAccount extends Model implements WorkspaceOwned
             $account->provider ??= (string) config('services.social.provider');
         });
 
+        // Connected apps and API keys never see the sample accounts.
+        static::addGlobalScope('hide_sample_from_tokens', function (Builder $query) {
+            if (SampleData::hiddenForThisRequest()) {
+                $query->where(fn (Builder $q) => $q->whereNull($q->qualifyColumn('provider_account_id'))
+                    ->orWhere($q->qualifyColumn('provider_account_id'), 'not like', self::SAMPLE_PREFIX.'%'));
+            }
+        });
+
         // A channel that becomes disconnected takes its Engage data with it
         // (P1 privacy): its DMs and comments are deleted at once.
         static::updated(function (self $account): void {
@@ -136,13 +148,33 @@ class SocialAccount extends Model implements WorkspaceOwned
     protected function usable(Builder $query): void
     {
         $query->where('status', SocialAccountStatus::Connected)
-            ->where(fn (Builder $q) => $q->where('provider', self::currentProvider())->orWhere('is_demo', true));
+            ->where(fn (Builder $q) => $q->where('provider', self::currentProvider())->orWhere('is_demo', true))
+            ->notSample();
     }
 
     public function isUsable(): bool
     {
         return $this->status === SocialAccountStatus::Connected
-            && ($this->provider === self::currentProvider() || $this->is_demo);
+            && ($this->provider === self::currentProvider() || $this->is_demo)
+            && ! $this->isSample();
+    }
+
+    /**
+     * Sample accounts (App\Support\SampleData: "Demo · Instagram"): fake,
+     * not on the publishing relay, never in Post to, quotas or Insight.
+     *
+     * @param  Builder<self>  $query
+     */
+    #[Scope]
+    protected function notSample(Builder $query): void
+    {
+        $query->where(fn (Builder $q) => $q->whereNull($q->qualifyColumn('provider_account_id'))
+            ->orWhere($q->qualifyColumn('provider_account_id'), 'not like', self::SAMPLE_PREFIX.'%'));
+    }
+
+    public function isSample(): bool
+    {
+        return $this->is_demo && str_starts_with((string) $this->provider_account_id, self::SAMPLE_PREFIX);
     }
 
     /** Connected under another relay: the user has to reconnect it. The demo channel never is. */

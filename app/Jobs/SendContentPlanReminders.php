@@ -40,6 +40,7 @@ class SendContentPlanReminders implements ShouldQueue
         $now = CarbonImmutable::now();
 
         SocialApprovalLink::query()
+            ->real()
             ->live()
             ->whereNotNull('scope_from')
             ->whereNotNull('approver_email')

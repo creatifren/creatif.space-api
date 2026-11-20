@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Models\Concerns\HasSampleFlag;
 use App\Models\Contracts\WorkspaceOwned;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -23,9 +24,12 @@ use Illuminate\Support\Str;
  * @property string|null $approver_email
  * @property string|null $approver_name
  * @property bool $report_email
+ * @property bool $is_demo sample data (App\Support\SampleData)
  */
 class ClientLabel extends Model implements WorkspaceOwned
 {
+    use HasSampleFlag;
+
     protected $fillable = ['user_id', 'name', 'initials', 'color', 'approver_email', 'approver_name', 'report_email'];
 
     /** The colour presets the app offers; any #RRGGBB is accepted. */

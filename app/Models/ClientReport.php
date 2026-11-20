@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Models\Concerns\HasSampleFlag;
 use App\Models\Contracts\WorkspaceOwned;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -23,9 +24,12 @@ use Illuminate\Support\Str;
  * @property \Carbon\CarbonImmutable|null $sent_at
  * @property \Carbon\CarbonImmutable|null $revoked_at
  * @property int $open_count
+ * @property bool $is_demo sample data (App\Support\SampleData)
  */
 class ClientReport extends Model implements WorkspaceOwned
 {
+    use HasSampleFlag;
+
     public const VISIBILITY = ['link', 'public', 'private'];
 
     protected $fillable = ['user_id', 'client_label_id', 'month', 'visibility', 'summary', 'summary_edited_at', 'sent_at', 'sent_to', 'open_count', 'last_opened_at', 'revoked_at'];

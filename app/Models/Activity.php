@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Models\Concerns\HasSampleFlag;
 use App\Enums\ActivityAction;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -16,9 +17,12 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
  * @property string|null $subject_id
  * @property string $summary
  * @property array<string, mixed>|null $meta
+ * @property bool $is_demo sample data (App\Support\SampleData)
  */
 class Activity extends Model
 {
+    use HasSampleFlag;
+
     protected $table = 'activity_log';
 
     /** Only ever written once, so there is nothing for `updated_at` to say. */

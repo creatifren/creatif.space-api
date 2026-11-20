@@ -51,6 +51,7 @@ class SendApprovedHeldPosts implements ShouldQueue
     public function handle(SocialPostRelay $relay): void
     {
         $held = SocialPost::query()
+            ->real()
             ->where('status', SocialPostStatus::Scheduled)
             ->where(fn ($q) => $q
                 ->where('approval', SocialPostApproval::Approved->value)

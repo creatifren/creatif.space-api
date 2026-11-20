@@ -52,6 +52,8 @@ return [
     'api.v1.me' => 'The signed-in user',
     'api.v1.me.tour' => 'Mark the dashboard tour as seen',
     'api.v1.me.onboarding' => 'Get started checklist: channel, draft, sent to a client, published',
+    'api.v1.me.sample-data.show' => 'Is there sample data on the account (new accounts start with some)',
+    'api.v1.me.sample-data.destroy' => 'Remove all sample data in one call',
     'api.v1.me.export.store' => 'Request an account data export (emailed as a link)',
     'api.v1.me.export.show' => 'Status of the latest account export',
     'api.v1.feedback.store' => 'Send feedback to the creatif.space team',

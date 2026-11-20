@@ -26,6 +26,7 @@ class SpaceListResource extends JsonResource
         return [
             'id' => $this->ulid,
             'title' => $this->title,
+            'sample' => (bool) $this->is_demo,
             'slug' => $this->slug,
             // v7: gallery | blog.
             'type' => $this->type ?? 'gallery',

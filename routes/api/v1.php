@@ -38,6 +38,7 @@ use App\Http\Controllers\Api\V1\InsightTopPostsController;
 use App\Http\Controllers\Api\V1\McpActivityController;
 use App\Http\Controllers\Api\V1\McpApprovalController;
 use App\Http\Controllers\Api\V1\MeController;
+use App\Http\Controllers\Api\V1\SampleDataController;
 use App\Http\Controllers\Api\V1\MyProfileController;
 use App\Http\Controllers\Api\V1\NotificationController;
 use App\Http\Controllers\Api\V1\NotificationSettingsController;
@@ -358,6 +359,11 @@ Route::middleware(['auth:sanctum,mcp', EnforceTokenScope::class, EnsureNotPendin
     Route::post('/me/tour', TourController::class)->name('api.v1.me.tour');
     // Today's "Get started" checklist: four steps from the data, with when each first happened.
     Route::get('/me/onboarding', OnboardingController::class)->name('api.v1.me.onboarding');
+    // Sample data (prototype v10): is there any left, and Remove sample data.
+    Route::get('/me/sample-data', [SampleDataController::class, 'show'])->name('api.v1.me.sample-data.show');
+    Route::delete('/me/sample-data', [SampleDataController::class, 'destroy'])
+        ->middleware('throttle:10,1')
+        ->name('api.v1.me.sample-data.destroy');
     // Tester feedback to the team inbox (MCP send_feedback): 10 an hour per user.
     Route::post('/feedback', FeedbackController::class)
         ->middleware('throttle:10,60')

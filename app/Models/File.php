@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Models\Concerns\HasSampleFlag;
 use App\Models\Contracts\WorkspaceOwned;
 use App\Support\Media\FileSignature;
 use Carbon\CarbonImmutable;
@@ -43,9 +44,12 @@ use Illuminate\Support\Facades\Storage;
  * @property CarbonImmutable|null $purge_at
  * @property CarbonImmutable|null $kept_at
  * @property CarbonImmutable|null $created_at
+ * @property bool $is_demo sample data (App\Support\SampleData)
  */
 class File extends Model implements WorkspaceOwned
 {
+    use HasSampleFlag;
+
     /** @use HasFactory<FileFactory> */
     use HasFactory;
 
