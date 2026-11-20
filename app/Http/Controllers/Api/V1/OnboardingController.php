@@ -39,15 +39,16 @@ class OnboardingController extends Controller
     {
         $ids = Workspace::memberIds(Workspace::owner($request->user()))->all();
 
-        $connect = SocialAccount::query()->whereIn('user_id', $ids)->min('created_at');
-        $draft = SocialPost::query()->whereIn('user_id', $ids)->min('created_at');
-        $send = SocialApprovalLink::query()->whereIn('user_id', $ids)->min('created_at');
+        $connect = SocialAccount::query()->notSample()->whereIn('user_id', $ids)->min('created_at');
+        $draft = SocialPost::query()->real()->whereIn('user_id', $ids)->min('created_at');
+        $send = SocialApprovalLink::query()->real()->whereIn('user_id', $ids)->min('created_at');
         $publish = SocialPostTarget::query()
             ->where('status', SocialPostTargetStatus::Published)
-            ->whereHas('post', fn ($q) => $q->whereIn('user_id', $ids))
+            ->whereHas('post', fn ($q) => $q->whereIn('user_id', $ids)->where('is_demo', false))
             ->min('updated_at');
 
         $latestDraft = SocialPost::query()
+            ->real()
             ->whereIn('user_id', $ids)
             ->where('status', SocialPostStatus::Draft)
             ->latest('created_at')

@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Models\Concerns\HasSampleFlag;
 use App\Models\Contracts\WorkspaceOwned;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -33,6 +34,8 @@ use Illuminate\Support\Str;
  */
 class BlogPost extends Model implements WorkspaceOwned
 {
+    use HasSampleFlag;
+
     public const STATUSES = ['draft', 'waiting', 'changes_requested', 'approved', 'published'];
 
     public const BLOCKS = ['photo', 'paragraph', 'heading', 'quote', 'list', 'divider'];

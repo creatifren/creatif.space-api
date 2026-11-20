@@ -599,6 +599,10 @@ class PublicApprovalController extends Controller
         if ($link === null || $link->user === null || $link->user->status === UserStatus::PendingDeletion) {
             abort(404);
         }
+        // A sample link (SampleData) opens for its owner only.
+        if ($link->is_demo && ! Workspace::memberIds($link->user)->contains(auth()->id())) {
+            abort(404);
+        }
         if ($link->revoked_at !== null) {
             // The name, as on 410: the dead page tells the client whom to ask.
             // v7 (UX review E2): replaced = a newer link took its place.

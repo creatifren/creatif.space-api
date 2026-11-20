@@ -30,6 +30,7 @@ class RetryRateLimitedPublishes implements ShouldQueue
     public function handle(SocialPostRelay $relay): void
     {
         $due = SocialPostTarget::query()
+            ->whereHas('post', fn ($q) => $q->where('is_demo', false))
             ->where('status', SocialPostTargetStatus::Pending)
             ->whereNotNull('retry_at')
             ->where('retry_at', '<=', now())

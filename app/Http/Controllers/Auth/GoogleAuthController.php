@@ -121,7 +121,13 @@ class GoogleAuthController extends Controller
         /* Where to land: the page the guard interrupted, checked a second
            time because a session value is only as trustworthy as what was
            put in it — otherwise Home. */
-        return redirect(self::landing($request->session()->pull('next_path')));
+        // A new account starts on Connect channels (prototype v10.1
+        // onboarding) unless it was headed somewhere (a plan pick, a link).
+        $next = $request->session()->pull('next_path');
+
+        return redirect($user->wasRecentlyCreated && SafePath::of($next) === '/'
+            ? config('app.frontend_url').'/onboarding'
+            : self::landing($next));
     }
 
     /**
@@ -185,7 +191,9 @@ class GoogleAuthController extends Controller
         Auth::login($user, remember: true);
         $request->session()->regenerate();
 
-        return response()->json(['redirect' => self::landing(is_string($next) ? $next : null)]);
+        return response()->json(['redirect' => $user->wasRecentlyCreated && SafePath::of(is_string($next) ? $next : null) === '/'
+            ? config('app.frontend_url').'/onboarding'
+            : self::landing(is_string($next) ? $next : null)]);
     }
 
     /** The frontend page to land on: $next if it is one of ours, Home otherwise. */

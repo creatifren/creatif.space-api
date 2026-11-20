@@ -72,6 +72,7 @@ class NotifyMissedPosts implements ShouldQueue
     private static function candidates(): Builder
     {
         return SocialPost::query()
+            ->real()
             ->where('status', SocialPostStatus::Scheduled)
             ->whereNull('failure_notified_at')
             ->whereNotNull('scheduled_at')

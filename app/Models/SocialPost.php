@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Models\Concerns\HasSampleFlag;
 use App\Casts\UtcDateTime;
 use App\Enums\SocialPostApproval;
 use App\Enums\SocialPostStatus;
@@ -44,6 +45,8 @@ use Illuminate\Support\Facades\DB;
  */
 class SocialPost extends Model implements WorkspaceOwned
 {
+    use HasSampleFlag;
+
     /** @use HasFactory<SocialPostFactory> */
     use HasFactory;
 

@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Models\Concerns\HasSampleFlag;
 use App\Enums\ActivityAction;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -19,6 +20,8 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
  */
 class Activity extends Model
 {
+    use HasSampleFlag;
+
     protected $table = 'activity_log';
 
     /** Only ever written once, so there is nothing for `updated_at` to say. */

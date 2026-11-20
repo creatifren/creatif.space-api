@@ -11,6 +11,7 @@ use App\Support\Onboarding;
 use App\Support\ProductEvents;
 use App\Support\ReferralAttribution;
 use App\Support\SafePath;
+use App\Support\SampleData;
 use App\Support\SignupAttribution;
 use App\Support\TeamInvite;
 use Illuminate\Http\JsonResponse;
@@ -114,6 +115,8 @@ class EmailCodeAuthController extends Controller
             ] + ProductEvents::utmFrom($request) + SignupAttribution::touchFrom($request));
             if (! Onboarding::isClientLanding($next)) {
                 Onboarding::welcome($user);
+                // Sample content so the app makes sense at once (prototype v10).
+                SampleData::seedQuietly($user);
             }
         } elseif ($user->email_verified_at === null) {
             // The code proves the address.

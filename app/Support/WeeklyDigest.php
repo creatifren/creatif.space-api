@@ -53,17 +53,17 @@ final class WeeklyDigest
         $app = (string) config('app.timezone');
         [$fromApp, $toApp] = [$from->setTimezone($app), $to->setTimezone($app)];
 
-        $published = SocialPost::query()->where('user_id', $user->id)
+        $published = SocialPost::query()->real()->where('user_id', $user->id)
             ->whereHas('targets', fn (Builder $q) => $q->where('status', SocialPostTargetStatus::Published)
                 ->where('updated_at', '>=', $fromApp)->where('updated_at', '<', $toApp))
             ->count();
 
-        $waiting = SocialPost::query()->where('user_id', $user->id)
+        $waiting = SocialPost::query()->real()->where('user_id', $user->id)
             ->where('status', SocialPostStatus::Scheduled)
             ->whereIn('approval', [SocialPostApproval::Awaiting->value, SocialPostApproval::Client->value])
             ->count();
 
-        $failedQuery = SocialPost::query()->where('user_id', $user->id)
+        $failedQuery = SocialPost::query()->real()->where('user_id', $user->id)
             ->whereHas('targets', fn (Builder $q) => $q->where('status', SocialPostTargetStatus::Failed)
                 ->where('updated_at', '>=', $fromApp)->where('updated_at', '<', $toApp));
 

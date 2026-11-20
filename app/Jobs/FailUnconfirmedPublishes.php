@@ -117,6 +117,7 @@ class FailUnconfirmedPublishes implements ShouldQueue
         $due = now()->subMinutes(self::AFTER_MINUTES);
 
         return SocialPost::query()
+            ->real()
             ->where('status', SocialPostStatus::Scheduled)
             ->whereNotNull('provider_post_id')
             ->where('updated_at', '>', now()->subHours(self::LOOKBACK_HOURS))

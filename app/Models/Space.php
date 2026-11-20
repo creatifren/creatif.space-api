@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Models\Concerns\HasSampleFlag;
 use App\Enums\SpaceStatus;
 use App\Enums\SpaceViewMode;
 use App\Enums\SpaceVisibility;
@@ -40,6 +41,8 @@ use Illuminate\Support\Str;
  */
 class Space extends Model implements WorkspaceOwned
 {
+    use HasSampleFlag;
+
     /** @use HasFactory<SpaceFactory> */
     use HasFactory, SoftDeletes;
 

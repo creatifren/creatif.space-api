@@ -80,7 +80,7 @@ final class Onboarding
             || ($attributes['welcome_sent_at'] ?? null) === null
             || $user->status !== UserStatus::Active
             || Analytics::isInternal($user)
-            || $user->socialAccounts()->exists()
+            || $user->socialAccounts()->notSample()->exists()
             || ! $user->wants(NotificationType::ProductNews, 'email')) {
             return false;
         }

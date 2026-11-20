@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Models\Concerns\HasSampleFlag;
 use App\Models\Contracts\WorkspaceOwned;
 use App\Support\Media\FileSignature;
 use Carbon\CarbonImmutable;
@@ -46,6 +47,8 @@ use Illuminate\Support\Facades\Storage;
  */
 class File extends Model implements WorkspaceOwned
 {
+    use HasSampleFlag;
+
     /** @use HasFactory<FileFactory> */
     use HasFactory;
 

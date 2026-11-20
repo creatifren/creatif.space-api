@@ -135,6 +135,7 @@ class PlanQuota
         $owner = Workspace::owner($user);
 
         return SocialPost::query()
+            ->real()
             ->whereIn('user_id', Workspace::memberIds($owner))
             ->where('status', SocialPostStatus::Scheduled)
             ->where(fn ($q) => $q
@@ -177,6 +178,7 @@ class PlanQuota
     public static function approvalClients(User $user, ?SocialApprovalLink $except = null): Collection
     {
         return SocialApprovalLink::query()
+            ->real()
             ->where('user_id', Workspace::owner($user)->id)
             ->live()
             ->when($except !== null, fn ($q) => $q->whereKeyNot($except->getKey()))
@@ -226,7 +228,7 @@ class PlanQuota
      */
     public static function totalUsed(User $user): int
     {
-        return $user->spaces()->count();
+        return $user->spaces()->where('is_demo', false)->count();
     }
 
     /**
@@ -234,7 +236,7 @@ class PlanQuota
      */
     public static function activeUsed(User $user): int
     {
-        return $user->spaces()->where('status', SpaceStatus::Published)->count();
+        return $user->spaces()->where('is_demo', false)->where('status', SpaceStatus::Published)->count();
     }
 
     public static function totalLimit(User $user): ?int

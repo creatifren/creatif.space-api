@@ -180,6 +180,7 @@ class SocialPostRelay
      */
     private static function routeDemo(SocialPost $post): void
     {
+        self::refuseSample($post);
         $accounts = $post->targets()->with('account')->get()->pluck('account')->filter();
         $demo = $accounts->filter(fn ($a) => $a instanceof SocialAccount && $a->is_demo)->count();
 
@@ -278,8 +279,23 @@ class SocialPostRelay
      *
      * @throws AccountReconnectRequired
      */
+    /**
+     * Sample posts (SampleData) never go out, never spend Credits.
+     *
+     * @throws ValidationException
+     */
+    public static function refuseSample(SocialPost $post): void
+    {
+        if ($post->is_demo) {
+            throw ValidationException::withMessages([
+                'post' => 'This is sample content: it never goes out. Make your own post, or remove the sample data.',
+            ]);
+        }
+    }
+
     public static function ensureUsable(SocialPost $post): void
     {
+        self::refuseSample($post);
         AccountReconnectRequired::unlessUsable(
             $post->targets()->with('account')->orderBy('id')->get()->pluck('account')->filter(),
         );
@@ -686,6 +702,7 @@ class SocialPostRelay
      */
     public function retryFailed(SocialPost $post): int
     {
+        self::refuseSample($post);
         return Cache::lock("social-post:{$post->id}:retry", 60)->block(10, function () use ($post): int {
             $post->refresh();
             $failed = self::failedTargets($post);
