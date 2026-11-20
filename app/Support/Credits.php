@@ -11,6 +11,7 @@ use App\Models\SocialPost;
 use App\Models\SocialPostTarget;
 use App\Models\User;
 use App\Models\WalletTransaction;
+use App\Notifications\CreditsLow;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
@@ -225,6 +226,8 @@ final class Credits
                 ]);
             }
         });
+
+        CreditsLow::checkAndSend($owner);
     }
 
     /**
@@ -505,7 +508,7 @@ final class Credits
         $owner = self::owner($user);
         self::renewMonthly($owner);
 
-        return DB::transaction(function () use ($owner, $price, $note, $field) {
+        $parts = DB::transaction(function () use ($owner, $price, $note, $field) {
             User::query()->whereKey($owner->id)->lockForUpdate()->first();
 
             $monthly = min($price, Wallet::balance($owner, Wallet::MONTHLY));
@@ -527,6 +530,10 @@ final class Credits
 
             return [$monthly, $topup];
         });
+
+        CreditsLow::checkAndSend($owner);
+
+        return $parts;
     }
 
     /**
