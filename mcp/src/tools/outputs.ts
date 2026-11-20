@@ -111,6 +111,7 @@ export const UNSTRUCTURED = new Set([
   'list_client_reports',
   'get_client_report',
   'list_clients',
+  'list_hashtag_sets',
   'list_conversations',
   'list_approval_links',
   'list_shared_with_me',

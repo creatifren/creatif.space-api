@@ -28,6 +28,8 @@ export interface V1Post {
   approval: string | null;
   approval_by?: string | null;
   approval_at?: string | null;
+  /** v10.2: posted as the first comment after publish (IG / FB / LinkedIn). */
+  first_comment?: string | null;
   author?: string;
   comments?: Obj[];
   created_at: string;
@@ -66,6 +68,7 @@ export function shapePost(p: V1Post, withComments = false) {
     fail_reason: p.fail_reason,
     ...(Object.keys(byChannel).length ? { captions_by_channel: byChannel } : {}),
     labels: p.labels ?? [],
+    ...(p.first_comment ? { first_comment: p.first_comment } : {}),
     clients: (p.clients ?? []).map((c) => ({ id: c.id, name: c.name })),
     media: (p.media ?? []).map((m) => m.url),
     channels: (p.targets ?? []).map((t) => ({

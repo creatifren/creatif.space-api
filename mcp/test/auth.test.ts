@@ -104,7 +104,7 @@ describe('401 flow', () => {
         'get_approval_history',
         'get_connect_link',
         'send_feedback',
-        'list_clients', 'create_client', 'update_client', 'delete_client', 'set_channel_clients',
+        'list_clients', 'list_hashtag_sets', 'create_client', 'update_client', 'delete_client', 'set_channel_clients',
         'get_report_settings', 'update_report_settings', 'list_client_reports', 'get_client_report', 'update_client_report', 'send_client_report',
         'list_blog_posts', 'create_blog_post', 'update_blog_post', 'publish_blog_post', 'send_blog_post_for_approval', 'set_post_spaces',
         'get_notification_settings', 'update_notification_settings',

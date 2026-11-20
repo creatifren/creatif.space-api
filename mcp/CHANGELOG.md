@@ -7,6 +7,13 @@ Versions of the remote MCP server at `https://mcp.creatif.space/mcp`
 
 ## Unreleased
 
+Hashtag sets + First comment (v10.2, 20 Nov 2026):
+
+66 tools (was 65).
+
+- New: `list_hashtag_sets` — the user's saved hashtag sets per client (Post settings › Hashtag sets).
+- `draft_post` and `update_post` take `first_comment` (posted under the post after it publishes on Instagram, Facebook, LinkedIn); posts carry `first_comment`.
+
 Clients (v7, 19 Nov 2026):
 
 65 tools (was 48).

@@ -59,6 +59,7 @@ const ARGS: Record<string, Record<string, unknown>> = {
   get_connect_link: { network: 'instagram' },
   send_feedback: { kind: 'idea', message: 'More filters please' },
   list_clients: {},
+  list_hashtag_sets: {},
   create_client: { name: 'Kopi Senja' },
   update_client: { client_id: ID, name: 'Kopi Senja Co' },
   delete_client: { client_id: ID },

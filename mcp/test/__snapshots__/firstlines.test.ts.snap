@@ -39,6 +39,7 @@ exports[`tool first lines > match the snapshot 1`] = `
   "list_conversations": "Shows the comments and DMs people sent to the user's channels, newest first.",
   "list_failed_posts": "Shows which posts failed to publish in the last 30 days and why, so the user can fix them and use retry_post.",
   "list_files": "Finds files in the user's library to attach to a post.",
+  "list_hashtag_sets": "Lists the user's saved hashtag sets per client, to add to a caption or a first comment.",
   "list_posts": "Finds the user's posts by status, dates or channel; the plan_week and send_for_approval prompts start here.",
   "list_shared_with_me": "Lists the plans and reports other people shared with this user to look at.",
   "list_spaces": "Lists the user's Spaces, the shareable pages of their library files.",
