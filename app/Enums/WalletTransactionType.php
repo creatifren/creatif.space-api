@@ -35,4 +35,8 @@ enum WalletTransactionType: string
     case CreditsReply = 'credits_reply';
     /** A reply the provider refused gives its Credits back. */
     case CreditsReplyReturn = 'credits_reply_return';
+    /** AI reply suggestions (Pro/Max, 300 per tap — backlog #2). */
+    case CreditsAi = 'credits_ai';
+    /** An AI tap that got no answer gives its Credits back. */
+    case CreditsAiReturn = 'credits_ai_return';
 }

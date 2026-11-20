@@ -554,6 +554,75 @@ final class Credits
         }
     }
 
+    /** One tap on AI reply suggestions (CREDITS_PER_SUGGESTION, default 300). */
+    public static function perSuggestion(): int
+    {
+        return max(0, (int) config('services.inbox.credits_per_suggestion', 300));
+    }
+
+    /**
+     * Pay for one AI tap, Monthly Credits first, then Top-up. Returns the
+     * parts taken, [Monthly, Top-up], for returnAi when the AI fails.
+     *
+     * @return array{0: int, 1: int}
+     *
+     * @throws ValidationException
+     */
+    public static function chargeAi(User $user, int $price, string $note, string $field = 'item'): array
+    {
+        if ($price <= 0) {
+            return [0, 0];
+        }
+
+        $owner = self::owner($user);
+        self::renewMonthly($owner);
+
+        $parts = DB::transaction(function () use ($owner, $price, $note, $field) {
+            User::query()->whereKey($owner->id)->lockForUpdate()->first();
+
+            $monthly = min($price, Wallet::balance($owner, Wallet::MONTHLY));
+            $topup = $price - $monthly;
+
+            if ($topup > 0) {
+                try {
+                    Wallet::debit($owner, WalletTransactionType::CreditsAi, $topup, null, null, $note, Wallet::CREDITS);
+                } catch (RuntimeException) {
+                    throw ValidationException::withMessages([
+                        $field => "Suggestions cost {$price} Credits and the balance has ".self::total($owner).' — top up to use them.',
+                    ]);
+                }
+            }
+
+            if ($monthly > 0) {
+                Wallet::debit($owner, WalletTransactionType::CreditsAi, $monthly, null, null, $note.' · Monthly Credits', Wallet::MONTHLY);
+            }
+
+            return [$monthly, $topup];
+        });
+
+        CreditsLow::checkAndSend($owner);
+
+        return $parts;
+    }
+
+    /**
+     * Give back what chargeAi took, each part to its bucket.
+     *
+     * @param  array{0: int, 1: int}  $parts
+     */
+    public static function returnAi(User $user, array $parts, string $why): void
+    {
+        $owner = self::owner($user);
+        [$monthly, $topup] = $parts;
+
+        if ($topup > 0) {
+            Wallet::credit($owner, WalletTransactionType::CreditsAiReturn, $topup, null, null, $why, Wallet::CREDITS);
+        }
+        if ($monthly > 0) {
+            Wallet::credit($owner, WalletTransactionType::CreditsAiReturn, $monthly, null, null, $why, Wallet::MONTHLY);
+        }
+    }
+
     /**
      * Credits taken for sends handed over but not yet out: [Top-up, Monthly].
      *

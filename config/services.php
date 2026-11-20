@@ -134,6 +134,8 @@ return [
         'enabled' => (bool) env('INBOX_ENABLED', true),
         // Credits one Inbox reply costs (DM, comment reply, private reply). 0 = free.
         'credits_per_reply' => (int) env('CREDITS_PER_REPLY', 0),
+        // AI reply suggestions: Credits per tap (3 suggestions). Backlog #2, Rizal 20 Nov.
+        'credits_per_suggestion' => (int) env('CREDITS_PER_SUGGESTION', 300),
     ],
 
     // Social posting — Post for Me relays posts to the nine platforms. One

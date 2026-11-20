@@ -28,6 +28,7 @@ use App\Http\Controllers\Api\V1\HealthController;
 use App\Http\Controllers\Api\V1\InboxCommentController;
 use App\Http\Controllers\Api\V1\InboxController;
 use App\Http\Controllers\Api\V1\InboxFeedController;
+use App\Http\Controllers\Api\V1\InboxSuggestionController;
 use App\Http\Controllers\Api\V1\InboxFeedbackController;
 use App\Http\Controllers\Api\V1\InsightBestTimesController;
 use App\Http\Controllers\Api\V1\InsightExportController;
@@ -651,6 +652,10 @@ Route::middleware(['auth:sanctum,mcp', EnforceTokenScope::class, EnsureNotPendin
         Route::post('/feed/{item}/reply', [InboxFeedController::class, 'reply'])
             ->middleware('throttle:30,1')
             ->name('api.v1.inbox.feed.reply');
+        // Backlog #2 (Builder A): AI reply suggestions, Pro/Max, 300 Credits a tap.
+        Route::post('/feed/{item}/suggestions', InboxSuggestionController::class)
+            ->middleware('throttle:20,1')
+            ->name('api.v1.inbox.feed.suggestions');
     });
     // P6 (Builder A): Inbox › Feedback — client notes from approval links.
     // Not the relay's, so it stays on when INBOX_ENABLED is off.
