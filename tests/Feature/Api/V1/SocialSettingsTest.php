@@ -52,3 +52,23 @@ it('labels any post, even a published one, without touching the provider', funct
         ->assertOk()
         ->assertJsonPath('data.labels', ['Promo']);
 });
+
+it('v10.1 Post settings: approval_default and remind_approver start on and switch off', function () {
+    $user = User::factory()->create();
+
+    $this->actingAs($user)->getJson('/api/v1/me/social-settings')
+        ->assertOk()
+        ->assertJsonPath('data.approval_default', true)
+        ->assertJsonPath('data.remind_approver', true);
+
+    $this->actingAs($user)->patchJson('/api/v1/me/social-settings', ['approval_default' => false, 'remind_approver' => false])
+        ->assertOk()
+        ->assertJsonPath('data.approval_default', false)
+        ->assertJsonPath('data.remind_approver', false);
+
+    expect($user->fresh()->social_settings['remind_approver'])->toBeFalse();
+
+    $this->actingAs($user)->patchJson('/api/v1/me/social-settings', ['remind_approver' => 'maybe'])
+        ->assertUnprocessable()
+        ->assertJsonValidationErrors(['remind_approver']);
+});

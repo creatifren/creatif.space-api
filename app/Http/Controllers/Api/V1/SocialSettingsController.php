@@ -15,7 +15,13 @@ use Illuminate\Http\Request;
  */
 class SocialSettingsController extends Controller
 {
-    private const EMPTY = ['timetable' => [], 'labels' => [], 'templates' => [], 'views' => []];
+    /**
+     * v10.1 Post settings: `approval_default` — new posts need approval for
+     * clients with an approver (Compose's default); `remind_approver` — the
+     * Content Plan reminder email (SendContentPlanReminders), once, 24 hours
+     * before the first waiting post. Both on unless turned off.
+     */
+    private const EMPTY = ['timetable' => [], 'labels' => [], 'templates' => [], 'views' => [], 'approval_default' => true, 'remind_approver' => true];
 
     public function show(Request $request): JsonResponse
     {
@@ -49,6 +55,8 @@ class SocialSettingsController extends Controller
             // { old name: new name } — the posts carrying a renamed label
             // follow it. A post stores the name, so without this it would
             // keep the old one, uncoloured.
+            'approval_default' => ['sometimes', 'boolean'],
+            'remind_approver' => ['sometimes', 'boolean'],
             'renamed' => ['sometimes', 'array', 'max:50'],
             'renamed.*' => ['string', 'max:40'],
         ]);
@@ -64,6 +72,11 @@ class SocialSettingsController extends Controller
                     $post->update(['labels' => $labels]);
                 }
             });
+        }
+        foreach (['approval_default', 'remind_approver'] as $flag) {
+            if (array_key_exists($flag, $validated)) {
+                $validated[$flag] = (bool) $validated[$flag];
+            }
         }
         $settings = $validated + ($owner->social_settings ?? []) + self::EMPTY;
         $owner->forceFill(['social_settings' => $settings])->save();
