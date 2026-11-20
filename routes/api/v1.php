@@ -742,6 +742,10 @@ Route::middleware(['auth:sanctum,mcp', EnforceTokenScope::class, EnsureNotPendin
     Route::post('/blog-posts/{blogPost}/send-for-approval', [BlogPostController::class, 'sendForApproval'])
         ->middleware('throttle:30,1')
         ->name('api.v1.blog-posts.send-for-approval');
+    // P8 (Builder B): every blog post of the owner (Today + Approvals, v10.2).
+    Route::get('/blog-posts', [BlogPostController::class, 'all'])
+        ->middleware('throttle:120,1')
+        ->name('api.v1.blog-posts.index');
     Route::post('/spaces/{space}/items', [SpaceController::class, 'addItems'])
         ->middleware('throttle:60,1')
         ->name('api.v1.spaces.items.store');

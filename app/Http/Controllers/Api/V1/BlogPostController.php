@@ -30,6 +30,46 @@ class BlogPostController extends Controller
         return response()->json(['data' => $posts->map(fn (BlogPost $p) => $this->postArray($p, false))->all()]);
     }
 
+    /**
+     * Every blog post across the owner's Blogs, for Today › "Blog posts · N"
+     * and Content › Approvals › Sent (prototype v10.2). `status` filters
+     * (comma list: draft, waiting, changes_requested, approved, published).
+     * Each row carries its Blog, the approval link + approver, and the
+     * number of client comments (the approval note). No blocks.
+     */
+    public function all(Request $request): JsonResponse
+    {
+        PlanQuota::requireFeature($request->user(), 'spaces');
+        $validated = $request->validate([
+            'status' => ['sometimes', 'string', 'max:80', 'regex:/^(draft|waiting|changes_requested|approved|published)(,(draft|waiting|changes_requested|approved|published))*$/'],
+        ]);
+        $owner = Workspace::owner($request->user());
+        $posts = BlogPost::query()
+            ->where('user_id', $owner->id)
+            ->when(isset($validated['status']), fn ($q) => $q->whereIn('status', explode(',', $validated['status'])))
+            ->with(['space:id,ulid,title,slug', 'approvalLink.clientLabel'])
+            ->latest('updated_at')
+            ->limit(100)
+            ->get();
+
+        return response()->json(['data' => $posts->map(fn (BlogPost $p) => [
+            ...$this->postArray($p, false),
+            'sample' => (bool) $p->is_demo,
+            'space' => $p->space === null ? null : ['id' => $p->space->ulid, 'title' => $p->space->title, 'slug' => $p->space->slug],
+            'approval_link' => $p->approvalLink === null ? null : [
+                'id' => $p->approvalLink->ulid,
+                'url' => $p->approvalLink->url(),
+                'revoked' => $p->approvalLink->revoked_at !== null,
+                'client' => $p->approvalLink->clientLabel?->name ?? $p->approvalLink->client_name,
+                'approver' => [
+                    'name' => $p->approvalLink->clientLabel?->approver_name,
+                    'email' => $p->approvalLink->approver_email,
+                ],
+            ],
+            'comments_count' => ($p->approval_comment ?? '') !== '' ? 1 : 0,
+        ])->all()]);
+    }
+
     public function store(Request $request, Space $space): JsonResponse
     {
         $this->ownBlog($request, $space);
