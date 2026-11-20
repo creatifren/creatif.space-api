@@ -7,6 +7,7 @@ use App\Http\Resources\MyProfileResource;
 use App\Support\ProfileAccess;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Validation\ValidationException;
 
 class MyProfileController extends Controller
 {
@@ -63,8 +64,6 @@ class MyProfileController extends Controller
             'socials.dribbble' => ['sometimes', 'nullable', 'string', 'max:255'],
             'socials.whatsapp' => ['sometimes', 'nullable', 'string', 'max:32'],
             'appearance' => ['sometimes', 'array'],
-            // Style presets, every plan (backlog #2): Editorial · Clean · Studio.
-            'appearance.preset' => ['sometimes', 'nullable', 'string', 'in:editorial,clean,studio'],
 
             /* Share-card overrides. Limits mirror what the platforms crop
                at (60/160) and what the Settings screen counts against. */
@@ -117,6 +116,14 @@ class MyProfileController extends Controller
         // can't customise it — extra fonts and a custom hex colour are Pro +
         // Max; Free keeps Lora + Inter and the three presets. The custom
         // domain has its own gate (ProfileDomainController).
+        // Style presets, every plan (backlog #2): Editorial · Clean · Studio.
+        // Checked by hand: a nested rule would make validated() drop every
+        // other appearance key.
+        $preset = $validated['appearance']['preset'] ?? null;
+        if ($preset !== null && ! in_array($preset, ['editorial', 'clean', 'studio'], true)) {
+            throw ValidationException::withMessages(['appearance.preset' => 'Pick Editorial, Clean or Studio.']);
+        }
+
         if (isset($validated['appearance']) && ! ProfileAccess::paid($user)) {
             ProfileAccess::assertFreeAppearance($validated['appearance']);
             $validated['appearance'] = ProfileAccess::stripCustom($validated['appearance']);
