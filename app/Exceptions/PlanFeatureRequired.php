@@ -17,7 +17,7 @@ use RuntimeException;
  * The message is written to be passed on as it stands: it names the limit
  * and carries the upgrade link.
  *
- * Features: schedule_window, queue_limit, approval_clients, and every
+ * Features: schedule_window, queue_limit, approval_clients, client_labels, and every
  * feature gate in PlanQuota::FEATURES.
  */
 class PlanFeatureRequired extends RuntimeException
@@ -27,6 +27,7 @@ class PlanFeatureRequired extends RuntimeException
     /** What each feature is called in a sentence ("… is on Pro and Max."). */
     private const NAMES = [
         'approval_clients' => 'Approval links for more than one client',
+        'client_labels' => 'More than one client',
         'ai_caption' => 'Improve with AI and Add hashtags',
         'insight' => 'Insights and analytics',
         'spaces' => 'Creating and editing Spaces',
@@ -72,6 +73,14 @@ class PlanFeatureRequired extends RuntimeException
 
         return self::make($user, 'approval_clients', $field,
             "On Free, approval links are for {$clients} at a time. Approval for more clients is on Pro and Max.", $limit);
+    }
+
+    public static function clientLabels(User $user, int $limit, string $field = 'name'): self
+    {
+        $clients = $limit === 1 ? 'one client' : "{$limit} clients";
+
+        return self::make($user, 'client_labels', $field,
+            "On Free, you can have {$clients}. More clients are on Pro and Max.", $limit);
     }
 
     private static function make(User $user, string $feature, string $field, string $sentence, ?int $limit = null): self

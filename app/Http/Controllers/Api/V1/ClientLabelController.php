@@ -7,6 +7,7 @@ use App\Http\Controllers\Controller;
 use App\Models\ClientLabel;
 use App\Models\SocialAccount;
 use App\Support\ClientBadges;
+use App\Support\PlanQuota;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -49,6 +50,8 @@ class ClientLabelController extends Controller
         if ($user->clientLabels()->count() >= self::MAX) {
             return response()->json(['message' => 'You have '.self::MAX.' clients — remove one to add another.'], 422);
         }
+        // Free: one client (backlog #2, Rizal 20 Nov). Sample labels don't count.
+        PlanQuota::requireClientLabelRoom($user);
 
         $label = $user->clientLabels()->create([
             'name' => trim($validated['name']),

@@ -1,6 +1,7 @@
 <?php
 
 use App\Exceptions\PlanFeatureRequired;
+use App\Models\ClientLabel;
 use App\Models\EnterpriseLead;
 use App\Models\Plan;
 use App\Models\SocialAccount;
@@ -297,6 +298,18 @@ describe('rule 2 — approval on Free', function () {
 });
 
 describe('rule 3 — features gated off on Free', function () {
+    it('lets Free have one client (sample labels not counted), Pro many', function () {
+        $user = v2Free();
+        ClientLabel::forceCreate(['user_id' => $user->id, 'name' => 'Kopi Senja', 'is_demo' => true]);
+        $this->actingAs($user)->postJson('/api/v1/client-labels', ['name' => 'Acme'])->assertCreated();
+        v2Assert402($this->actingAs($user)->postJson('/api/v1/client-labels', ['name' => 'Globex']), 'client_labels', 1);
+
+        $pro = v2Pro();
+        foreach (['Acme', 'Globex', 'Initech'] as $client) {
+            $this->actingAs($pro)->postJson('/api/v1/client-labels', ['name' => $client])->assertCreated();
+        }
+    });
+
     it('refuses AI captions and hashtags on Free, answers on Pro', function (string $mode) {
         v2Assert402($this->actingAs(v2Free())->postJson('/api/v1/social-captions/assist', ['mode' => $mode, 'caption' => 'x']), 'ai_caption');
         $this->actingAs(v2Pro())->postJson('/api/v1/social-captions/assist', ['mode' => $mode, 'caption' => 'Kopi pagi di Senja, buka jam 7.'])->assertOk();
