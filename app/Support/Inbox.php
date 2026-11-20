@@ -45,15 +45,6 @@ final class Inbox
     }
 
     /**
-     * Keeps a conversation or comment query to channels that are not
-     * disconnected.
-     *
-     * @template TModel of Model
-     *
-     * @param  Builder<TModel>  $query
-     * @return Builder<TModel>
-     */
-    /**
      * Sample data (prototype v10): a sample conversation or comment answers
      * nothing — 422 `sample` before any Credits or relay. Null otherwise.
      */
@@ -69,6 +60,15 @@ final class Inbox
         ], 422);
     }
 
+    /**
+     * Keeps a conversation or comment query to channels that are not
+     * disconnected.
+     *
+     * @template TModel of Model
+     *
+     * @param  Builder<TModel>  $query
+     * @return Builder<TModel>
+     */
     public static function liveChannels(Builder $query): Builder
     {
         return $query->whereHas('account', fn (Builder $a) => $a->where('status', '!=', SocialAccountStatus::Disconnected->value));
