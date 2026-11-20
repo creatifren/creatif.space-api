@@ -82,3 +82,31 @@ it('P6: keeps saved replies (max 20, each up to 500 characters)', function () {
     $this->actingAs($user)->patchJson('/api/v1/me/social-settings', ['saved_replies' => array_fill(0, 21, 'x')])
         ->assertUnprocessable();
 });
+
+it('v10.2: keeps hashtag sets per client and the First comment switch', function () {
+    $user = User::factory()->create();
+    $kopi = \App\Models\ClientLabel::create(['user_id' => $user->id, 'name' => 'Kopi Senja']);
+    $other = \App\Models\ClientLabel::create(['user_id' => User::factory()->create()->id, 'name' => 'Not mine']);
+
+    $this->actingAs($user)->getJson('/api/v1/me/social-settings')
+        ->assertJsonPath('data.hashtag_sets', [])
+        ->assertJsonPath('data.first_comment', false);
+
+    $res = $this->actingAs($user)->patchJson('/api/v1/me/social-settings', [
+        'first_comment' => true,
+        'hashtag_sets' => [
+            ['name' => 'Coffee', 'tags' => ['kopisenja', '#kopilokal #baristalife', '#kopisenja'], 'client_id' => $kopi->ulid],
+            ['id' => 'hs_keep', 'name' => 'Theirs', 'tags' => ['#x'], 'client_id' => $other->ulid],
+        ],
+    ])->assertOk();
+
+    $res->assertJsonPath('data.first_comment', true)
+        ->assertJsonPath('data.hashtag_sets.0.tags', ['#kopisenja', '#kopilokal', '#baristalife'])
+        ->assertJsonPath('data.hashtag_sets.0.client_id', $kopi->ulid)
+        ->assertJsonPath('data.hashtag_sets.1.id', 'hs_keep')
+        ->assertJsonPath('data.hashtag_sets.1.client_id', null);
+    expect($res->json('data.hashtag_sets.0.id'))->toStartWith('hs_');
+
+    $this->actingAs($user)->patchJson('/api/v1/me/social-settings', ['hashtag_sets' => [['name' => 'Empty', 'tags' => [], 'client_id' => null]]])
+        ->assertUnprocessable();
+});
