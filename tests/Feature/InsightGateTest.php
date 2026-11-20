@@ -155,5 +155,7 @@ it('has no Insight read route outside the gated list (new ones must be added her
         // Free; the public page is 404 once the workspace has no Insight.
         'api.v1.insight.share.index',
         'api.v1.public.insight.show',
+        // tests/Feature/PostMetricsTest.php: Free gets data null + meta.insight (Post page, Builder B).
+        'api.v1.social-posts.metrics',
     ]);
 });

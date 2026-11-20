@@ -1006,6 +1006,12 @@ class OutstandService implements SocialProvider
         return 'outstand:metrics:'.sha1($postId.'|'.$accountId);
     }
 
+    /** Post page "Reach so far": one post on one account, through the same 30-minute cache. */
+    public function postMetrics(string $postId, string $accountId): array
+    {
+        return $this->metricsForMany([$postId], $accountId)[$postId] ?? [];
+    }
+
     /** microtime() after which feed() stops reading per-post analytics (set by InsightCollector). */
     public static ?float $metricsDeadline = null;
 

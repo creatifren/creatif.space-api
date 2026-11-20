@@ -757,6 +757,10 @@ Route::middleware(['auth:sanctum,mcp', EnforceTokenScope::class, EnsureNotPendin
     Route::post('/blog-posts/{blogPost}/send-for-approval', [BlogPostController::class, 'sendForApproval'])
         ->middleware('throttle:30,1')
         ->name('api.v1.blog-posts.send-for-approval');
+    // Post page (Builder B, 21 Nov, lent by A): a published post's reach / views / engagement per account.
+    Route::get('/social-posts/{socialPost}/metrics', [SocialPostController::class, 'metrics'])
+        ->middleware('throttle:60,1')
+        ->name('api.v1.social-posts.metrics');
     // P8 (Builder B): every blog post of the owner (Today + Approvals, v10.2).
     Route::get('/blog-posts', [BlogPostController::class, 'all'])
         ->middleware('throttle:120,1')

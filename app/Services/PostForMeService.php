@@ -408,4 +408,10 @@ class PostForMeService implements SocialProvider
     {
         return null;
     }
+
+    public function postMetrics(string $postId, string $accountId): array
+    {
+        // The feed carries the numbers; no per-post read here.
+        return [];
+    }
 }
