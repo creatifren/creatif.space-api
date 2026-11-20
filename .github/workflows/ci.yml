@@ -64,7 +64,9 @@ jobs:
           # The PHP app: everything but mcp/, docs, markdown and the
           # manual-only registry workflow.
           php=$(printf '%s\n' "$files" | grep -Ev '^(mcp/|docs/)|\.md$|^\.github/workflows/mcp-registry\.yml$' || true)
-          if [ -n "$php$ci" ]; then echo "php=true"; else echo "php=false"; fi >> "$GITHUB_OUTPUT"
+          # PHP tests read mcp/src (McpRouteAllowlistTest: every route a tool calls is allowlisted).
+          mcpsrc=$(printf '%s\n' "$files" | grep -E '^mcp/src/' || true)
+          if [ -n "$php$ci$mcpsrc" ]; then echo "php=true"; else echo "php=false"; fi >> "$GITHUB_OUTPUT"
           if [ -n "$mcp$ci" ]; then echo "mcp=true"; else echo "mcp=false"; fi >> "$GITHUB_OUTPUT"
 
       # Public repository guard, on every PR and every push to main: no real
