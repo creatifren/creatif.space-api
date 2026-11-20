@@ -134,6 +134,9 @@ class InboxController extends Controller
             'file_ids.*' => ['string', 'max:26', 'distinct'],
         ]);
         $account = $conversation->account;
+        if ($sample = Inbox::refuseSample($account)) {
+            return $sample;
+        }
         AccountReconnectRequired::unlessUsable([$account], 'content');
 
         if ($account->needsReconnectForMessages()) {
@@ -201,8 +204,11 @@ class InboxController extends Controller
     {
         Gate::authorize('view', $conversation);
 
+        // A sample conversation is only marked read here: there is no relay.
         try {
-            $providers->for($conversation->account)->markConversationRead($conversation->provider_conversation_id);
+            if (! $conversation->account->is_demo) {
+                $providers->for($conversation->account)->markConversationRead($conversation->provider_conversation_id);
+            }
         } catch (Throwable $e) {
             return Inbox::error($e, $conversation->account) ?? throw $e;
         }

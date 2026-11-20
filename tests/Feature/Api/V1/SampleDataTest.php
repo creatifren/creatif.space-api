@@ -5,6 +5,8 @@ use App\Models\ClientLabel;
 use App\Models\ClientReport;
 use App\Models\SocialAccount;
 use App\Models\SocialApprovalLink;
+use App\Models\SocialComment;
+use App\Models\SocialConversation;
 use App\Models\SocialPost;
 use App\Models\Space;
 use App\Models\User;
@@ -96,4 +98,36 @@ it('says whether sample data is left, and removes all of it', function () {
         ->and(SocialAccount::query()->where('user_id', $user->id)->count())->toBe(0)
         ->and(ClientLabel::query()->where('user_id', $user->id)->count())->toBe(0)
         ->and(Space::withTrashed()->where('user_id', $user->id)->count())->toBe(0);
+});
+
+it('v10 S: pictures on the posts, two sample DMs and two comments that answer nothing and go with the sample accounts', function () {
+    $user = sampleUser();
+
+    $posts = SocialPost::query()->where('user_id', $user->id)->where('is_demo', true)->get();
+    expect($posts->filter(fn (SocialPost $p) => str_ends_with((string) ($p->media[0]['url'] ?? ''), '.jpg'))->count())->toBe(8);
+    foreach ($posts as $post) {
+        $file = public_path('sample/'.basename((string) $post->media[0]['url']));
+        expect(is_file($file))->toBeTrue();
+    }
+
+    $feed = $this->actingAs($user)->getJson('/api/v1/inbox/feed')->assertOk()->json('data');
+    expect(collect($feed)->where('type', 'dm')->count())->toBe(2)
+        ->and(collect($feed)->where('type', 'comment')->count())->toBe(2)
+        ->and(collect($feed)->every(fn ($i) => $i['channel']['sample'] === true))->toBeTrue();
+
+    $dm = SocialConversation::query()->where('user_id', $user->id)->firstOrFail();
+    $this->actingAs($user)->getJson("/api/v1/inbox/conversations/{$dm->ulid}")->assertOk()
+        ->assertJsonPath('data.sample', true)
+        ->assertJsonCount(1, 'data.messages');
+    $this->actingAs($user)->postJson("/api/v1/inbox/conversations/{$dm->ulid}/messages", ['content' => 'Yes!'])
+        ->assertStatus(422)->assertJsonPath('code', 'sample');
+    $this->actingAs($user)->postJson("/api/v1/inbox/conversations/{$dm->ulid}/read")->assertOk();
+
+    $comment = SocialComment::query()->where('user_id', $user->id)->firstOrFail();
+    $this->actingAs($user)->postJson("/api/v1/inbox/comments/{$comment->ulid}/reply", ['content' => 'Thanks!'])
+        ->assertStatus(422)->assertJsonPath('code', 'sample');
+
+    $this->actingAs($user)->deleteJson('/api/v1/me/sample-data')->assertOk();
+    expect(SocialConversation::query()->where('user_id', $user->id)->count())->toBe(0)
+        ->and(SocialComment::query()->where('user_id', $user->id)->count())->toBe(0);
 });

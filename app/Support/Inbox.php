@@ -45,6 +45,22 @@ final class Inbox
     }
 
     /**
+     * Sample data (prototype v10): a sample conversation or comment answers
+     * nothing — 422 `sample` before any Credits or relay. Null otherwise.
+     */
+    public static function refuseSample(?SocialAccount $account): ?JsonResponse
+    {
+        if ($account === null || ! $account->is_demo) {
+            return null;
+        }
+
+        return response()->json([
+            'message' => 'This is sample content, so replies don’t go anywhere. Remove sample data and connect your own account to answer real messages.',
+            'code' => 'sample',
+        ], 422);
+    }
+
+    /**
      * Keeps a conversation or comment query to channels that are not
      * disconnected.
      *

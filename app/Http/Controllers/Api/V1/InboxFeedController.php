@@ -177,6 +177,8 @@ class InboxFeedController extends Controller
             'id' => $row->account->ulid,
             'platform' => $row->account->platform,
             'username' => $row->account->username,
+            // Sample data (prototype v10): badged "Sample", never answered.
+            'sample' => (bool) $row->account->is_demo,
         ];
 
         if ($row instanceof SocialConversation) {
