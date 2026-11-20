@@ -125,3 +125,21 @@ it('adds a published post\'s library photos to a Gallery (Add work, Builder B)',
     $this->actingAs($user)->postJson("/api/v1/spaces/{$gallery->ulid}/items", ['social_post_id' => $bare->ulid])
         ->assertStatus(422)->assertJsonValidationErrors('social_post_id');
 });
+
+it('lists every blog post of the owner with its Blog, approver and comment count (Builder B)', function () {
+    $user = spacesV7Owner();
+    $blog = Space::factory()->for($user)->create(['type' => 'blog', 'title' => 'Hotel Ombak News']);
+    $id = $this->actingAs($user)->postJson("/api/v1/spaces/{$blog->ulid}/posts", ['title' => 'Ombak opens rooftop bar'])->json('data.id');
+    $this->actingAs($user)->postJson("/api/v1/blog-posts/{$id}/send-for-approval", ['approver_email' => 'made@ombak.example'])->assertOk();
+    $this->actingAs($user)->postJson("/api/v1/spaces/{$blog->ulid}/posts", ['title' => 'A draft'])->assertCreated();
+    BlogPost::query()->where('ulid', $id)->update(['approval_comment' => 'Change "neighbours" please']);
+
+    $rows = $this->actingAs($user)->getJson('/api/v1/blog-posts?status=waiting,changes_requested')->assertOk()->json('data');
+    expect($rows)->toHaveCount(1)
+        ->and($rows[0]['title'])->toBe('Ombak opens rooftop bar')
+        ->and($rows[0]['space']['title'])->toBe('Hotel Ombak News')
+        ->and($rows[0]['approval_link']['approver']['email'])->toBe('made@ombak.example')
+        ->and($rows[0]['comments_count'])->toBe(1);
+    $this->actingAs($user)->getJson('/api/v1/blog-posts')->assertOk()->assertJsonCount(2, 'data');
+    $this->actingAs($user)->getJson('/api/v1/blog-posts?status=nope')->assertStatus(422);
+});
