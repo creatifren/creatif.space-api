@@ -182,6 +182,7 @@ function wsiValue(string $name, User $owner): string
         'ulid' => tap(File::factory()->for($owner)->create(), fn (File $f) => $f->delete())->ulid,
         'apiKey' => (string) $owner->createToken('theirs')->accessToken->getKey(),
         'clientId' => (string) str()->uuid(),
+        'key' => str_repeat('0', 32),
         'item' => 'dm_'.wsiMake(SocialConversation::class, $owner, [])->getRouteKey(),
         'post' => wsiMake(SocialPost::class, $owner, [])->getRouteKey(),
         default => throw new RuntimeException("No value for {$name}."),

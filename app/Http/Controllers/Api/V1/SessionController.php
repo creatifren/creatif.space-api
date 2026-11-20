@@ -131,7 +131,11 @@ class SessionController extends Controller
 
         $guard = Auth::guard('web');
         if ($guard instanceof SessionGuard && $guard->check() && (string) $guard->id() === (string) $user->getKey()) {
-            $guard->login($user, remember: true);
+            // A full row: the recaller cookie is signed with the password hash.
+            $fresh = User::query()->find($user->getKey());
+            if ($fresh !== null) {
+                $guard->login($fresh, remember: true);
+            }
         }
     }
 }
