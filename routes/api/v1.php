@@ -21,6 +21,7 @@ use App\Http\Controllers\Api\V1\FileController;
 use App\Http\Controllers\Api\V1\FileVersionController;
 use App\Http\Controllers\Api\V1\FolderController;
 use App\Http\Controllers\Api\V1\GooglePlayBillingController;
+use App\Http\Controllers\Api\V1\GooglePlayCreditsController;
 use App\Http\Controllers\Api\V1\GooglePlayWebhookController;
 use App\Http\Controllers\Api\V1\HandleController;
 use App\Http\Controllers\Api\V1\HealthController;
@@ -361,6 +362,10 @@ Route::middleware(['auth:sanctum', EnsureNotPendingDeletion::class])->group(func
 Route::post('/billing/google/verify', [GooglePlayBillingController::class, 'verify'])
     ->middleware(['auth:sanctum', 'throttle:20,1'])
     ->name('api.v1.billing.google.verify');
+// P10 (Builder A): a Play Credits top-up (one-time, consumable).
+Route::post('/billing/google/credits', [GooglePlayCreditsController::class, 'store'])
+    ->middleware(['auth:sanctum', 'throttle:20,1'])
+    ->name('api.v1.billing.google.credits');
 
 // Authenticated: Sanctum SPA cookie, or a bearer token (OAuth access token
 // or personal API key) — which EnforceTokenScope fences to config('mcp.routes').

@@ -52,6 +52,7 @@ return [
     'api.v1.me.sessions.destroy' => 'Sign out one device',
     'api.v1.me.mcp-activity' => 'Recent activity of connected apps',
     'api.v1.billing.google.verify' => 'Verify a Google Play purchase',
+    'api.v1.billing.google.credits' => 'Add Credits from a Google Play top-up',
     'api.v1.me' => 'The signed-in user',
     'api.v1.me.tour' => 'Mark the dashboard tour as seen',
     'api.v1.me.onboarding' => 'Get started checklist: channel, draft, sent to a client, published',
