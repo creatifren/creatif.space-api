@@ -67,7 +67,11 @@ class InboxFeedbackController extends Controller
         ]);
     }
 
-    /** Unanswered, open client notes — the Feedback tab's badge (InboxController::summary). */
+    /**
+     * Unanswered, open client notes — the Feedback tab's badge (InboxController::summary).
+     *
+     * @param  list<int>  $userIds
+     */
     public static function unreadCount(array $userIds): int
     {
         return SocialPostComment::query()
@@ -87,7 +91,7 @@ class InboxFeedbackController extends Controller
 
         return $c->toPublicArray() + [
             'replied' => $c->replies->contains(fn (SocialPostComment $r) => $r->role === 'EDITOR'),
-            'sample' => (bool) ($post?->is_demo ?? false),
+            'sample' => $post instanceof SocialPost && $post->is_demo,
             'clients' => $post instanceof SocialPost ? ClientBadges::forPost($post) : [],
             'post' => $post instanceof SocialPost ? [
                 'id' => $post->ulid,
