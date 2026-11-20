@@ -160,6 +160,8 @@ class SocialPostController extends Controller
             // Facebook's cap — the largest of the nine; per-platform limits
             // are the composer's concern.
             'caption' => ['required', 'string', 'max:63206'],
+            // v10.2: posted as the first comment on IG / FB / LinkedIn once live.
+            'first_comment' => ['sometimes', 'nullable', 'string', 'max:2200'],
             'account_ids' => ['required', 'array', 'min:1', 'max:20'],
             'account_ids.*' => ['string'],
             // Per-account caption override: { <account ulid>: "text" }.
@@ -313,6 +315,7 @@ class SocialPostController extends Controller
             $post = $user->socialPosts()->create([
                 'ulid' => $ulid,
                 'caption' => $validated['caption'],
+                'first_comment' => trim((string) ($validated['first_comment'] ?? '')) ?: null,
                 'type' => $type,
                 'labels' => $validated['labels'] ?? null,
                 'media' => $validated['media'] ?? null,
@@ -389,6 +392,7 @@ class SocialPostController extends Controller
 
         $validated = $request->validate([
             'caption' => ['sometimes', 'string', 'max:63206'],
+            'first_comment' => ['sometimes', 'nullable', 'string', 'max:2200'],
             'scheduled_at' => ['sometimes', 'date', 'after:now'],
             // Replaces the post's media (the composer's list, as on create).
             'media' => ['sometimes', 'array', 'max:10'],
@@ -427,7 +431,19 @@ class SocialPostController extends Controller
             ], 409);
         }
 
+        // v10.2: the first comment is ours until the post is out — kept here, never sent with the post.
+        if (array_key_exists('first_comment', $validated)) {
+            $socialPost->first_comment = trim((string) $validated['first_comment']) ?: null;
+            unset($validated['first_comment']);
+            if ($validated === [] || array_keys($validated) === ['labels']) {
+                $socialPost->save();
+            }
+        }
+
         // Labels alone are our own filing: any post, any status, no provider.
+        if ($validated === []) {
+            return new SocialPostResource($socialPost->load('targets.account'));
+        }
         if (array_keys($validated) === ['labels']) {
             $socialPost->update(['labels' => $validated['labels']]);
 

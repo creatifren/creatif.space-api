@@ -8,6 +8,7 @@ use App\Enums\SocialPostApproval;
 use App\Enums\SocialPostStatus;
 use App\Enums\SocialPostTargetStatus;
 use App\Jobs\AddPublishedPostToSpaces;
+use App\Jobs\PostFirstComment;
 use App\Models\Contracts\WorkspaceOwned;
 use App\Notifications\SocialPostFailed;
 use App\Services\DemoSocialProvider;
@@ -71,6 +72,7 @@ class SocialPost extends Model implements WorkspaceOwned
         'approval_by',
         'approval_at',
         'review_requested_at',
+        'first_comment',
     ];
 
     /**
@@ -139,6 +141,11 @@ class SocialPost extends Model implements WorkspaceOwned
                 && ! $post->wasRecentlyCreated
                 && DB::table('social_post_space')->where('social_post_id', $post->id)->whereNull('added_at')->exists()) {
                 AddPublishedPostToSpaces::dispatch($post->id)->afterCommit();
+            }
+            // v10.2 First comment: once it is out, on IG / FB / LinkedIn.
+            if (! $post->wasRecentlyCreated && $post->wasChanged('status') && $post->status === SocialPostStatus::Published
+                && trim((string) $post->first_comment) !== '') {
+                PostFirstComment::dispatch($post->id)->afterCommit();
             }
         });
     }

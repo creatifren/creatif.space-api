@@ -29,6 +29,8 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
  * @property int|null $charged_credits Top-up Credits this destination paid; null on legacy rows (a CREDITS one = 300)
  * @property int|null $charged_monthly Monthly Credits this destination paid
  * @property CarbonImmutable|null $charged_at
+ * @property \Carbon\CarbonImmutable|null $first_comment_at v10.2 first comment posted on this account
+ * @property string|null $first_comment_error why it was not (not_supported = skipped)
  */
 class SocialPostTarget extends Model
 {
@@ -46,6 +48,8 @@ class SocialPostTarget extends Model
 
     protected $fillable = [
         'social_post_id',
+        'first_comment_at',
+        'first_comment_error',
         'social_account_id',
         'configuration',
         'status',
@@ -72,6 +76,7 @@ class SocialPostTarget extends Model
     {
         return [
             'configuration' => 'array',
+            'first_comment_at' => 'datetime',
             'status' => SocialPostTargetStatus::class,
             'charged_credits' => 'integer',
             'charged_monthly' => 'integer',

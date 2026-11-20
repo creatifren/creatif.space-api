@@ -27,6 +27,8 @@ class SocialPostResource extends JsonResource
         return [
             'id' => $this->ulid,
             'caption' => $this->caption,
+            // v10.2: posted as the first comment on IG / FB / LinkedIn once live.
+            'first_comment' => $this->first_comment,
             'type' => $this->type,
             'labels' => $this->labels ?? [],
             'media' => $this->media,
@@ -71,6 +73,8 @@ class SocialPostResource extends JsonResource
                         ? (string) $target->configuration['caption']
                         : null,
                     'status' => $target->status,
+                    // v10.2 First comment on this account: posted | failed | skipped | pending | null (none asked).
+                    'first_comment' => self::firstComment($this->resource, $target),
                     'fail_reason' => $target->fail_reason,
                     // PublishFailure reason code (needs_video, missing_board, …):
                     // one of PublishFailure::codes(); null when nothing went wrong.
@@ -97,5 +101,20 @@ class SocialPostResource extends JsonResource
                 ],
             )->all()),
         ];
+    }
+
+    /** Where this account's first comment stands; null when the post has none or the network takes none. */
+    private static function firstComment(SocialPost $post, SocialPostTarget $target): ?string
+    {
+        if (trim((string) $post->first_comment) === '' || ! in_array($target->account?->platform?->value, \App\Jobs\PostFirstComment::NETWORKS, true)) {
+            return null;
+        }
+
+        return match (true) {
+            $target->first_comment_at !== null => 'posted',
+            $target->first_comment_error === 'not_supported' => 'skipped',
+            $target->first_comment_error !== null => 'failed',
+            default => 'pending',
+        };
     }
 }
