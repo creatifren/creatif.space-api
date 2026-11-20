@@ -29,6 +29,9 @@ use Illuminate\Support\Str;
  * @property CarbonImmutable|null $recipient_notified_at
  * @property CarbonImmutable $expires_at
  * @property CarbonImmutable|null $revoked_at
+ * @property int $view_count opens of the public page (not the owner's)
+ * @property CarbonImmutable|null $last_viewed_at
+ * @property string $created_via app | mcp ("created by Claude")
  * @property CarbonImmutable|null $created_at
  */
 class InsightShareLink extends Model implements WorkspaceOwned
@@ -38,6 +41,7 @@ class InsightShareLink extends Model implements WorkspaceOwned
     protected $fillable = [
         'owner_id', 'user_id', 'token_hash', 'period_from', 'period_to', 'period_kind',
         'channel_ids', 'recipient_email', 'recipient_token', 'recipient_notified_at', 'expires_at', 'revoked_at',
+        'view_count', 'last_viewed_at', 'created_via',
     ];
 
     /** @var list<string> */
@@ -56,6 +60,8 @@ class InsightShareLink extends Model implements WorkspaceOwned
             'period_to' => 'immutable_date',
             'channel_ids' => 'array',
             'expires_at' => 'immutable_datetime',
+            'last_viewed_at' => 'immutable_datetime',
+            'view_count' => 'integer',
             'revoked_at' => 'immutable_datetime',
             'recipient_token' => 'encrypted',
             'recipient_notified_at' => 'immutable_datetime',
@@ -79,7 +85,7 @@ class InsightShareLink extends Model implements WorkspaceOwned
      *
      * @param  list<string>  $channelIds
      */
-    public static function issue(User $owner, User $by, InsightPeriod $period, array $channelIds, ?string $recipientEmail = null): self
+    public static function issue(User $owner, User $by, InsightPeriod $period, array $channelIds, ?string $recipientEmail = null, string $via = 'app'): self
     {
         $token = Str::random(43);
         $recipient = $recipientEmail === null || trim($recipientEmail) === '' ? null : mb_strtolower(trim($recipientEmail));
@@ -96,6 +102,7 @@ class InsightShareLink extends Model implements WorkspaceOwned
             // Only a recipient link can be listed back, so only it keeps the token (encrypted).
             'recipient_token' => $recipient === null ? null : $token,
             'expires_at' => now()->addDays(self::TTL_DAYS),
+            'created_via' => $via,
         ]);
         $link->plainToken = $token;
 

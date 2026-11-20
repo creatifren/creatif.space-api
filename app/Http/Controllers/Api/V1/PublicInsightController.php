@@ -37,6 +37,11 @@ class PublicInsightController extends Controller
             return response()->json(['expired' => true, 'message' => 'This report link has expired.'], 410);
         }
 
+        // Shared links shows "N views"; the owner's own opens don't count.
+        if (request()->user('sanctum')?->id !== $link->owner_id) {
+            $link->increment('view_count', 1, ['last_viewed_at' => now()]);
+        }
+
         $report = self::publicView(InsightSummary::present($collector->collectCached(
             $link->owner,
             InsightPdfBuilder::accounts($link->owner, $link->channel_ids),

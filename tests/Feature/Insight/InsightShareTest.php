@@ -133,3 +133,21 @@ it('validates the period and the channels', function (array $body, string $field
     '93 days' => [['from' => '2026-07-01', 'to' => '2026-10-01'], 'to'],
     'foreign channel' => [['from' => '2026-10-01', 'to' => '2026-10-31', 'channels' => '01JNOTMINENOTMINENOTMINE00'], 'channels'],
 ]);
+
+it('counts views of the public page, not the owner\'s own, and says who made the link', function () {
+    ['owner' => $owner] = InsightFixture::workspace();
+    $link = shareLink($this, $owner);
+
+    // The owner opening it is not a view.
+    $this->actingAs($owner)->getJson('/api/v1/public/insight/'.$link['token'])->assertOk();
+    app('auth')->forgetGuards();
+    $this->getJson('/api/v1/public/insight/'.$link['token'])->assertOk();
+    $this->getJson('/api/v1/public/insight/'.$link['token'])->assertOk();
+
+    $this->actingAs($owner)->getJson('/api/v1/insight/share')
+        ->assertOk()
+        ->assertJsonPath('data.0.view_count', 2)
+        ->assertJsonPath('data.0.created_via', 'app')
+        ->assertJsonPath('data.0.clients', []);
+    expect(InsightShareLink::query()->sole()->last_viewed_at)->not->toBeNull();
+});
