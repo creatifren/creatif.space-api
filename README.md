@@ -66,6 +66,7 @@ in [mcp/README.md](mcp/README.md).
 | Engage | `reply_to_conversation` | Reply to a comment or DM after a preview | All, may spend Credits |
 | Feedback | `send_feedback` | Send a bug or idea to the creatif.space team | All |
 | Clients | `list_clients` | List clients with approver and channels | All |
+| Clients | `list_hashtag_sets` | List saved hashtag sets per client | All |
 | Clients | `create_client` | Add a client label | All |
 | Clients | `update_client` | Change a client's name, colour, approver, report email or channels | All |
 | Clients | `delete_client` | Remove a client label (posts stay) | All |

@@ -2,7 +2,7 @@
 
 <!-- Generated from the served tool list by `npm run docs:tools` (in mcp/). Do not edit by hand: test/tools-doc.test.ts fails in CI when this file is out of date. -->
 
-65 tools on `https://mcp.creatif.space/mcp`, in the order `tools/list` gives them. Scope is the OAuth permission a tool needs; the hints are its MCP annotations.
+66 tools on `https://mcp.creatif.space/mcp`, in the order `tools/list` gives them. Scope is the OAuth permission a tool needs; the hints are its MCP annotations.
 
 | Tool | Title | Scope | Read-only | Destructive |
 |---|---|---|---|---|
@@ -48,6 +48,7 @@
 | [`update_client`](#update_client) | Update a client | `draft` | no | no |
 | [`delete_client`](#delete_client) | Remove a client | `draft` | no | yes |
 | [`set_channel_clients`](#set_channel_clients) | Set the clients of a channel | `draft` | no | no |
+| [`list_hashtag_sets`](#list_hashtag_sets) | List hashtag sets | `read` | yes | no |
 | [`get_report_settings`](#get_report_settings) | Get Report emails settings | `read` | yes | no |
 | [`update_report_settings`](#update_report_settings) | Change Report emails settings | `draft` | no | no |
 | [`list_client_reports`](#list_client_reports) | List client reports | `read` | yes | no |
@@ -168,7 +169,7 @@ When to use: to create any new post; it is always the safe first step. The user 
 
 Example: draft_post { "caption": "Winter set is live", "channel_ids": ["01JD…"], "file_ids": ["01JE…"], "captions_by_channel": { "01JF…": "Shorter for X" } }
 
-Media: library file ids (from list_files, or from confirm_media_upload for a file you just uploaded) and/or public https media URLs, 10 items in all. captions_by_channel overrides the caption for channels that are also in channel_ids. type picks the placement on Facebook, Instagram and Threads.
+Media: library file ids (from list_files, or from confirm_media_upload for a file you just uploaded) and/or public https media URLs, 10 items in all. captions_by_channel overrides the caption for channels that are also in channel_ids. type picks the placement on Facebook, Instagram and Threads. first_comment is posted under the post after it publishes (Instagram, Facebook, LinkedIn); saved hashtags come from list_hashtag_sets.
 
 Errors → next step: file_not_ready → call confirm_media_upload for that file, or take ids from list_files; invalid_input → fix what details names (e.g. a captions_by_channel id not in channel_ids, more than 10 media); not_found → take channel ids from list_channels and file ids from list_files; reconnect_required → the user reconnects the channel in creatif.space → Channels; scope_missing → reconnect and allow "draft"; upstream_unavailable → check list_posts before calling again — it may have been saved; plan_required (402) → a plan limit, or a feature this account's plan does not include (on some plans: posts scheduled at most 7 days ahead, at most 10 queued posts, approval links for one client); tell the user it is not available on their plan, and do not retry; forbidden (403) → this seat or connection may not do this (e.g. a viewer, or a permission the connection was not given): the workspace owner or an editor can, or the user does it in creatif.space; do not retry.
 
@@ -180,6 +181,7 @@ Errors → next step: file_not_ready → call confirm_media_upload for that file
 | `media_urls` | array of string | no | Public https image/video URLs to attach |
 | `captions_by_channel` | object | no | Per-channel caption overrides: { "<channel id>": "caption" } |
 | `type` | "post" \| "reels" \| "story" | no | Placement on Facebook, Instagram and Threads; others post normally |
+| `first_comment` | string | no | Posted as the first comment once the post is out (Instagram, Facebook, LinkedIn; other networks skip it), e.g. a hashtag set |
 
 ## get_credits
 
@@ -294,6 +296,7 @@ Errors → next step: not_editable → details.status says why; tell the user to
 | `labels` | array of string | no | Replaces the post’s labels |
 | `file_ids` | array of string | no | Replaces the post’s media with these library files ([] removes all media) |
 | `add_file_ids` | array of string | no | Adds these library files after the post’s current media |
+| `first_comment` | string | no | The first comment posted once the post is out (Instagram, Facebook, LinkedIn); "" removes it |
 
 ## schedule_post
 
@@ -975,6 +978,28 @@ Errors → next step: invalid_input → a client id is not the user’s: take id
 |---|---|---|---|
 | `channel_id` | string | yes | Channel id, as returned by the list tools |
 | `client_ids` | array of string | yes | Every client this channel belongs to |
+
+## list_hashtag_sets
+
+**List hashtag sets** · scope `read` · read-only yes · destructive no · idempotent yes · open world no
+
+Lists the user's saved hashtag sets per client, to add to a caption or a first comment.
+
+Lists the user’s saved hashtag sets: name, hashtags and the client each belongs to (or none = every client).
+
+When to use: before draft_post or update_post when the user asks for "our hashtags" or a client’s usual hashtags: add a set’s tags to the caption, or put them in first_comment.
+
+Example: list_hashtag_sets { "client_id": "01JK…" } → { count, total, next_cursor: null, sets: [{ id, name: "Kopi Senja core", tags: ["#kopisenja", "#coffeetime"], client_id: "01JK…" }] }
+
+Read-only. client_id narrows to that client’s sets plus the sets for every client. Sets are edited in creatif.space → Post settings → Hashtag sets.
+
+Errors → next step: upstream_unavailable → wait a minute and call again; plan_required (402) → a plan limit, or a feature this account's plan does not include (on some plans: posts scheduled at most 7 days ahead, at most 10 queued posts, approval links for one client); tell the user it is not available on their plan, and do not retry; forbidden (403) → this seat or connection may not do this (e.g. a viewer, or a permission the connection was not given): the workspace owner or an editor can, or the user does it in creatif.space; do not retry; not_found (404) → the id is not in this workspace: take a fresh id from the matching list tool and call again.
+
+| Input | Type | Required | Description |
+|---|---|---|---|
+| `client_id` | string | no | Only this client’s sets and the sets for every client (id from list_clients) |
+| `limit` | integer | no | At most this many hashtag sets per page (1–100, default 50) |
+| `cursor` | string | no | next_cursor from the previous page of this same list (same filters); omit for the first page |
 
 ## get_report_settings
 

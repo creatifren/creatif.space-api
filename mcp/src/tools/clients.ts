@@ -172,4 +172,36 @@ export const setChannelClients = defineTool({
   },
 });
 
-export const clientTools = [listClients, createClient, updateClient, deleteClient, setChannelClients];
+/* P12 (Builder A): Hashtag sets (prototype v10.2) — saved hashtags per client, Post settings › Hashtag sets. */
+interface V1HashtagSet {
+  id?: string | null;
+  name: string;
+  tags: string[];
+  client_id: string | null;
+}
+
+export const listHashtagSets = defineTool({
+  name: 'list_hashtag_sets',
+  title: 'List hashtag sets',
+  description: describeTool({
+    does: 'Lists the user’s saved hashtag sets: name, hashtags and the client each belongs to (or none = every client).',
+    when: 'before draft_post or update_post when the user asks for "our hashtags" or a client’s usual hashtags: add a set’s tags to the caption, or put them in first_comment.',
+    example: 'list_hashtag_sets { "client_id": "01JK…" } → { count, total, next_cursor: null, sets: [{ id, name: "Kopi Senja core", tags: ["#kopisenja", "#coffeetime"], client_id: "01JK…" }] }',
+    rules: 'Read-only. client_id narrows to that client’s sets plus the sets for every client. Sets are edited in creatif.space → Post settings → Hashtag sets.',
+    errors: [['upstream_unavailable', 'wait a minute and call again']],
+  }),
+  scope: 'read',
+  input: {
+    client_id: ulid('Client').optional().describe('Only this client’s sets and the sets for every client (id from list_clients)'),
+    ...pageInput(100, 50, 'hashtag sets'),
+  },
+  annotations: READ_ONLY,
+  run: async (args, { v1 }) => {
+    const { data } = await v1.get<{ data: { hashtag_sets?: V1HashtagSet[] } }>('/me/social-settings');
+    const all = (data.hashtag_sets ?? []).filter((s) => !args.client_id || s.client_id === null || s.client_id === args.client_id);
+    const { page, next_cursor, total } = pageOf('list_hashtag_sets', { client_id: args.client_id }, all, args.limit, args.cursor);
+    return { count: page.length, total, sets: page.map((s) => ({ id: s.id ?? null, name: s.name, tags: s.tags, client_id: s.client_id })), next_cursor };
+  },
+});
+
+export const clientTools = [listClients, createClient, updateClient, deleteClient, setChannelClients, listHashtagSets];

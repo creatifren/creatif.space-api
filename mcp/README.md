@@ -121,6 +121,7 @@ redirect_uris, token_endpoint_auth_method: "none"}`. The API fetches it
 | `get_approval_audit` (link_id) — every decision on one of the user's links: who, post, when, decision, comment; rows and CSV | read | `GET /social-approval-links/{id}/audit.csv` |
 | `send_feedback` (kind bug\|idea\|other, message, page) — to the creatif.space team; nothing public, no Credits; 10 an hour per user | draft | `POST /feedback` |
 | `list_clients` (limit, cursor) — the user's clients: approver, channels (shared ones marked), posts waiting | read | `GET /client-labels` |
+| `list_hashtag_sets` (client_id, limit, cursor) — saved hashtag sets per client, for a caption or first comment | read | `GET /me/social-settings` |
 | `create_client` (name, color, initials, approver_email, approver_name, monthly_report_email, channel_ids) — a client label; nothing is sent | draft | `POST /client-labels` |
 | `update_client` (client_id + any field above) — channel_ids replaces the set | draft | `PATCH /client-labels/{id}` |
 | `delete_client` (client_id) — removes the label only; posts and links stay | draft | `DELETE /client-labels/{id}` |

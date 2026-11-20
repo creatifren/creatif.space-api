@@ -449,6 +449,7 @@ export const updatePost = defineTool({
     labels: z.array(z.string().max(40)).max(10).optional().describe('Replaces the post’s labels'),
     file_ids: z.array(ulid('File')).max(10).optional().describe('Replaces the post’s media with these library files ([] removes all media)'),
     add_file_ids: z.array(ulid('File')).min(1).max(10).optional().describe('Adds these library files after the post’s current media'),
+    first_comment: z.string().trim().max(2200).optional().describe('The first comment posted once the post is out (Instagram, Facebook, LinkedIn); "" removes it'),
   },
   annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: true, openWorldHint: false },
   notFound: { what: 'That post', next: 'Check the post id: find it with list_posts (status draft for drafts) and call again.' },
@@ -459,9 +460,9 @@ export const updatePost = defineTool({
       });
     }
     const changesMedia = args.file_ids !== undefined || args.add_file_ids !== undefined;
-    if (args.caption === undefined && args.scheduled_at === undefined && args.labels === undefined && !changesMedia) {
-      throw new ToolError('invalid_input', 'Nothing to change: no field to update was given.', 'Call again with at least one of caption, scheduled_at, labels, file_ids or add_file_ids.', {
-        fields: ['caption', 'scheduled_at', 'labels', 'file_ids', 'add_file_ids'],
+    if (args.caption === undefined && args.scheduled_at === undefined && args.labels === undefined && args.first_comment === undefined && !changesMedia) {
+      throw new ToolError('invalid_input', 'Nothing to change: no field to update was given.', 'Call again with at least one of caption, scheduled_at, labels, file_ids, add_file_ids or first_comment.', {
+        fields: ['caption', 'scheduled_at', 'labels', 'file_ids', 'add_file_ids', 'first_comment'],
       });
     }
     // The API decides what may change (drafts and posts waiting for approval
@@ -488,6 +489,7 @@ export const updatePost = defineTool({
       ...(args.caption !== undefined ? { caption: args.caption } : {}),
       ...(args.scheduled_at !== undefined ? { scheduled_at: args.scheduled_at } : {}),
       ...(args.labels !== undefined ? { labels: args.labels } : {}),
+      ...(args.first_comment !== undefined ? { first_comment: args.first_comment === '' ? null : args.first_comment } : {}),
       ...(args.file_ids !== undefined ? { media: [], file_ids: args.file_ids } : {}),
       ...(args.add_file_ids !== undefined ? { media: keptMedia(current), file_ids: args.add_file_ids } : {}),
     });

@@ -283,7 +283,7 @@ export const draftPost = defineTool({
     does: "Saves a DRAFT post in creatif.space for the given channels — nothing is published or scheduled and no Credits are spent (on every plan).",
     when: "to create any new post; it is always the safe first step. The user reviews and sends it from creatif.space, or you send it later with schedule_post / publish_post (with the user’s explicit agreement) or share it with create_approval_link. To change an existing draft, use update_post instead of drafting again.",
     example: "draft_post { \"caption\": \"Winter set is live\", \"channel_ids\": [\"01JD…\"], \"file_ids\": [\"01JE…\"], \"captions_by_channel\": { \"01JF…\": \"Shorter for X\" } }",
-    rules: "Media: library file ids (from list_files, or from confirm_media_upload for a file you just uploaded) and/or public https media URLs, 10 items in all. captions_by_channel overrides the caption for channels that are also in channel_ids. type picks the placement on Facebook, Instagram and Threads.",
+    rules: "Media: library file ids (from list_files, or from confirm_media_upload for a file you just uploaded) and/or public https media URLs, 10 items in all. captions_by_channel overrides the caption for channels that are also in channel_ids. type picks the placement on Facebook, Instagram and Threads. first_comment is posted under the post after it publishes (Instagram, Facebook, LinkedIn); saved hashtags come from list_hashtag_sets.",
     errors: [
       ["file_not_ready", "call confirm_media_upload for that file, or take ids from list_files"],
       ["invalid_input", "fix what details names (e.g. a captions_by_channel id not in channel_ids, more than 10 media)"],
@@ -304,6 +304,7 @@ export const draftPost = defineTool({
       .optional()
       .describe('Per-channel caption overrides: { "<channel id>": "caption" }'),
     type: z.enum(['post', 'reels', 'story']).default('post').describe('Placement on Facebook, Instagram and Threads; others post normally'),
+    first_comment: z.string().trim().min(1).max(2200).optional().describe('Posted as the first comment once the post is out (Instagram, Facebook, LinkedIn; other networks skip it), e.g. a hashtag set'),
   },
   annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false },
   notFound: { what: 'A channel or file', next: 'Take channel ids from list_channels and file ids from list_files (or confirm_media_upload), then call again.' },
@@ -332,6 +333,7 @@ export const draftPost = defineTool({
       ...(args.media_urls?.length ? { media: args.media_urls.map((url) => ({ url })) } : {}),
       ...(args.file_ids?.length ? { file_ids: args.file_ids } : {}),
       type: args.type,
+      ...(args.first_comment ? { first_comment: args.first_comment } : {}),
       draft: true,
     });
     return {

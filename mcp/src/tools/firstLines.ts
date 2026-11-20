@@ -17,6 +17,7 @@ export const FIRST_LINES: Record<string, string> = {
   get_credits: 'Shows the user\'s plan, limits and Credits, and what each send costs.',
 
   // Clients
+  list_hashtag_sets: 'Lists the user\'s saved hashtag sets per client, to add to a caption or a first comment.',
   list_clients: 'Lists the user\'s clients with their approver and channels, so posts, links and reports can be per client.',
   create_client: 'Adds a client the user works for, with its approver and channels.',
   update_client: 'Changes a client\'s name, colour, approver, report email or channels.',

@@ -224,6 +224,12 @@ exports[`tool annotations > match the snapshot 1`] = `
     "openWorld": false,
     "readOnly": true,
   },
+  "list_hashtag_sets": {
+    "destructive": false,
+    "idempotent": true,
+    "openWorld": false,
+    "readOnly": true,
+  },
   "list_posts": {
     "destructive": false,
     "idempotent": true,
