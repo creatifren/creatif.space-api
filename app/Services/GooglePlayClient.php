@@ -74,6 +74,48 @@ class GooglePlayClient
         }
     }
 
+    /**
+     * purchases.products.get — a one-time product (P10 Credits top-ups).
+     * purchaseState 0 = purchased, 1 = cancelled, 2 = pending; consumptionState 1 = consumed.
+     *
+     * @return array<string, mixed>
+     *
+     * @throws GooglePlayRefused invalid_token (Google answered 400/404/410)
+     * @throws GooglePlayUnavailable
+     */
+    public function getProduct(string $productId, string $purchaseToken): array
+    {
+        $url = $this->app().'/purchases/products/'.rawurlencode($productId).'/tokens/'.rawurlencode($purchaseToken);
+        $response = $this->send(fn (PendingRequest $http) => $http->get($url));
+
+        if (in_array($response->status(), [400, 404, 410], true)) {
+            throw GooglePlayRefused::invalidToken();
+        }
+        $body = $response->json();
+        if (! $response->successful() || ! is_array($body)) {
+            throw new GooglePlayUnavailable('products.get answered HTTP '.$response->status());
+        }
+
+        return $body;
+    }
+
+    /**
+     * purchases.products.consume — after the Credits are granted, so the
+     * same top-up can be bought again (consuming also acknowledges).
+     *
+     * @throws GooglePlayUnavailable
+     */
+    public function consume(string $productId, string $purchaseToken): void
+    {
+        $url = $this->app().'/purchases/products/'.rawurlencode($productId)
+            .'/tokens/'.rawurlencode($purchaseToken).':consume';
+        $response = $this->send(fn (PendingRequest $http) => $http->withBody('{}', 'application/json')->post($url));
+
+        if (! $response->successful()) {
+            throw new GooglePlayUnavailable('consume answered HTTP '.$response->status());
+        }
+    }
+
     private function app(): string
     {
         return self::API_URL.rawurlencode((string) config('services.google_play.package_name'));

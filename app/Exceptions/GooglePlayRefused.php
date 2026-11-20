@@ -27,6 +27,11 @@ class GooglePlayRefused extends RuntimeException
         return new self(422, 'unknown_product', 'That product isn’t a creatif.space plan.');
     }
 
+    public static function unknownCredits(): self
+    {
+        return new self(422, 'unknown_product', 'That product isn’t a creatif.space Credits top-up.');
+    }
+
     public static function accountMismatch(): self
     {
         return new self(403, 'account_mismatch', 'That purchase belongs to another creatif.space account.');
