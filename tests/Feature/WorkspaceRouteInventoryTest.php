@@ -49,6 +49,8 @@ const WSI_NOT_WORKSPACE_MODELS = [
     'apiKey' => 'personal API key id',
     // OAuth clients: revoked from the caller's own grants only (404 otherwise).
     'clientId' => 'OAuth client id',
+    // Signed-in devices: a hash of a session id, looked up only among the caller's own sessions (404 otherwise).
+    'key' => 'signed-in device key',
     // Trash: looked up only in the caller's workspace trash (404 otherwise).
     'ulid' => 'trashed file ulid',
     // Engage feed (MCP): a typed id, dm_<ulid> or comment_<ulid>, looked up
@@ -180,6 +182,7 @@ function wsiValue(string $name, User $owner): string
         'ulid' => tap(File::factory()->for($owner)->create(), fn (File $f) => $f->delete())->ulid,
         'apiKey' => (string) $owner->createToken('theirs')->accessToken->getKey(),
         'clientId' => (string) str()->uuid(),
+        'key' => str_repeat('0', 32),
         'item' => 'dm_'.wsiMake(SocialConversation::class, $owner, [])->getRouteKey(),
         'post' => wsiMake(SocialPost::class, $owner, [])->getRouteKey(),
         default => throw new RuntimeException("No value for {$name}."),
