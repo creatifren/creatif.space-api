@@ -215,4 +215,10 @@ class DemoSocialProvider implements SocialProvider
     {
         return [];
     }
+
+    public function postMetrics(string $postId, string $accountId): array
+    {
+        // The directory reviewer's channel: fixed numbers, never a network call.
+        return ['reach' => 1240, 'likes' => 86, 'comments' => 9, 'shares' => 4, 'saved' => 12];
+    }
 }

@@ -139,6 +139,8 @@ return [
     'api.v1.blog-posts.send-for-approval' => 'Send a Blog post to the client for approval',
     // P8 (Builder B)
     'api.v1.blog-posts.index' => 'List the owner\'s Blog posts across Blogs (status filter)',
+    // Post page (Builder B, 21 Nov)
+    'api.v1.social-posts.metrics' => 'A published post\'s reach, views and engagement per account (Pro and Max)',
     'api.v1.profiles.spaces.posts.show' => 'A published Blog post on a public Blog',
     'api.v1.a.documents.decision' => 'The client approves a Blog post, or asks for changes',
     'api.v1.client-labels.index' => 'List your clients (labels on social accounts)',

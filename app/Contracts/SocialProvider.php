@@ -173,6 +173,14 @@ interface SocialProvider
      */
     public function feed(string $accountId, ?string $cursor = null, int $limit = 25): array;
 
+    /**
+     * One published post's raw numbers on one account (Post page "Reach so
+     * far", Builder B 21 Nov); [] when the relay has none (unknown, never zero).
+     *
+     * @return array<string, mixed>
+     */
+    public function postMetrics(string $postId, string $accountId): array;
+
     /** Is this delivery really from the provider? Unconfigured rejects everything. */
     public function verifyWebhook(Request $request): bool;
 

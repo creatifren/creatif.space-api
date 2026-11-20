@@ -10,6 +10,7 @@ use App\Enums\SocialPostStatus;
 use App\Enums\SocialPostTargetStatus;
 use App\Exceptions\AccountReconnectRequired;
 use App\Exceptions\NeedsPublishTime;
+use App\Exceptions\PlanFeatureRequired;
 use App\Http\Controllers\Controller;
 use App\Http\Middleware\CapTokenSends;
 use App\Http\Resources\SocialPostResource;
@@ -19,6 +20,8 @@ use App\Models\SocialPost;
 use App\Models\SocialPostComment;
 use App\Models\User;
 use App\Support\ClientBadges;
+use App\Support\Insight\InsightCollector;
+use App\Support\Insight\PostMetrics;
 use App\Support\Credits;
 use App\Support\Media\PostMediaVariants;
 use App\Support\PlanQuota;
@@ -147,6 +150,59 @@ class SocialPostController extends Controller
         Gate::allowIf(fn ($user) => $socialPost->user_id === $user->id);
 
         return new SocialPostResource($socialPost->load(['targets.account', 'comments.replies', 'user:id,name']));
+    }
+
+    /**
+     * Post page "Reach so far" (prototype v10.2 `post`, Builder B 21 Nov,
+     * lent by A): a published post's numbers, read from the relay per
+     * account (30-minute cache) — never stored. Insight is Pro/Max: on Free
+     * the numbers are null and meta.insight says why. A destination not out
+     * yet, a sample account or a relay without numbers adds nothing; a
+     * total is null when no account reported it (unknown, never zero).
+     */
+    public function metrics(Request $request, SocialPost $socialPost, SocialProviders $providers): JsonResponse
+    {
+        Gate::allowIf(fn ($user) => $socialPost->user_id === $user->id);
+
+        if (! PlanQuota::hasFeature($request->user(), 'insight')) {
+            return response()->json([
+                'data' => null,
+                'meta' => ['insight' => array_diff_key(PlanFeatureRequired::feature($request->user(), 'insight', 'metrics')->body(), ['errors' => true])],
+            ]);
+        }
+
+        $rows = [];
+        foreach ($socialPost->load('targets.account')->targets as $target) {
+            $account = $target->account;
+            $postId = $target->retry_provider_post_id ?? $socialPost->provider_post_id;
+            if ($target->status !== SocialPostTargetStatus::Published || $account === null || $account->is_demo || $postId === null) {
+                continue;
+            }
+            try {
+                $m = PostMetrics::from($providers->for($account)->postMetrics($postId, $account->provider_account_id));
+            } catch (Throwable) {
+                $m = PostMetrics::from([]);
+            }
+            $rows[] = [
+                'account_id' => $account->ulid,
+                'platform' => $account->platform,
+                'username' => $account->username,
+                'reach' => $m['reach'],
+                'views' => $m['views'],
+                'engagement' => InsightCollector::engagement($m),
+            ];
+        }
+
+        $sum = function (string $k) use ($rows): ?int {
+            $v = array_filter(array_column($rows, $k), fn ($x) => $x !== null);
+
+            return $v === [] ? null : (int) array_sum($v);
+        };
+
+        return response()->json([
+            'data' => ['reach' => $sum('reach'), 'views' => $sum('views'), 'engagement' => $sum('engagement'), 'accounts' => $rows],
+            'meta' => ['insight' => null],
+        ]);
     }
 
     /**
