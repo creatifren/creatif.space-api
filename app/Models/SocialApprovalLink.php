@@ -31,6 +31,7 @@ use Illuminate\Support\Str;
  * @property string|null $client_name
  * @property string|null $approver_email
  * @property CarbonImmutable|null $approver_bound_at
+ * @property CarbonImmutable|null $opened_at first opened by someone other than the owner
  * @property CarbonImmutable|null $scope_from
  * @property CarbonImmutable|null $scope_to
  * @property string|null $scope_timezone
@@ -49,7 +50,7 @@ use Illuminate\Support\Str;
  */
 class SocialApprovalLink extends Model implements WorkspaceOwned
 {
-    protected $fillable = ['user_id', 'token', 'title', 'client_name', 'client_label_id', 'views', 'visibility', 'replaced_by_id', 'approver_email', 'approver_bound_at', 'scope_from', 'scope_to', 'scope_timezone', 'scope_starts_at', 'scope_ends_at', 'scope_account_ids', 'reminders_enabled', 'reminded_at', 'calendar_version', 'calendar_disabled_at', 'expires_at', 'extended_at', 'last_reminded_at', 'revoked_at'];
+    protected $fillable = ['user_id', 'token', 'title', 'client_name', 'client_label_id', 'views', 'visibility', 'replaced_by_id', 'approver_email', 'approver_bound_at', 'opened_at', 'scope_from', 'scope_to', 'scope_timezone', 'scope_starts_at', 'scope_ends_at', 'scope_account_ids', 'reminders_enabled', 'reminded_at', 'calendar_version', 'calendar_disabled_at', 'expires_at', 'extended_at', 'last_reminded_at', 'revoked_at'];
 
     public function expired(): bool
     {
@@ -87,6 +88,7 @@ class SocialApprovalLink extends Model implements WorkspaceOwned
             'last_reminded_at' => 'datetime',
             'revoked_at' => 'datetime',
             'approver_bound_at' => 'datetime',
+            'opened_at' => 'datetime',
             'scope_from' => 'date',
             'scope_to' => 'date',
             // UTC instants, read back as UTC (UtcDateTime), like scheduled_at.
