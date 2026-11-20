@@ -126,7 +126,7 @@ class InboxSuggestionController extends Controller
         if ($text === '') {
             return '';
         }
-        $caption = trim((string) ($row->post?->caption ?? ''));
+        $caption = trim((string) ($row->post->caption ?? ''));
 
         return ($caption !== '' ? 'Brand post: '.mb_substr($caption, 0, 1000)."\n" : '').'Them (comment): '.mb_substr($text, 0, 1000);
     }
