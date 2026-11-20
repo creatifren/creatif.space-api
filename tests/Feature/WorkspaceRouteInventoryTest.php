@@ -49,6 +49,8 @@ const WSI_NOT_WORKSPACE_MODELS = [
     'apiKey' => 'personal API key id',
     // OAuth clients: revoked from the caller's own grants only (404 otherwise).
     'clientId' => 'OAuth client id',
+    // Signed-in devices: a hash of a session id, looked up only among the caller's own sessions (404 otherwise).
+    'key' => 'signed-in device key',
     // Trash: looked up only in the caller's workspace trash (404 otherwise).
     'ulid' => 'trashed file ulid',
     // Engage feed (MCP): a typed id, dm_<ulid> or comment_<ulid>, looked up

@@ -40,6 +40,7 @@ use App\Http\Controllers\Api\V1\McpActivityController;
 use App\Http\Controllers\Api\V1\McpApprovalController;
 use App\Http\Controllers\Api\V1\MeController;
 use App\Http\Controllers\Api\V1\SampleDataController;
+use App\Http\Controllers\Api\V1\SessionController;
 use App\Http\Controllers\Api\V1\MyProfileController;
 use App\Http\Controllers\Api\V1\NotificationController;
 use App\Http\Controllers\Api\V1\NotificationSettingsController;
@@ -345,6 +346,15 @@ Route::middleware(['auth:sanctum', EnsureNotPendingDeletion::class])->group(func
 
     // What connected apps and API keys did — never the content.
     Route::get('/me/mcp-activity', McpActivityController::class)->name('api.v1.me.mcp-activity');
+
+    // P11 (Builder A): Account & security › Signed in on — browsers + the Android app.
+    Route::get('/me/sessions', [SessionController::class, 'index'])->name('api.v1.me.sessions.index');
+    Route::delete('/me/sessions', [SessionController::class, 'destroyOthers'])
+        ->middleware('throttle:10,1')
+        ->name('api.v1.me.sessions.destroy-others');
+    Route::delete('/me/sessions/{key}', [SessionController::class, 'destroy'])
+        ->middleware('throttle:20,1')
+        ->name('api.v1.me.sessions.destroy');
 });
 
 // Google Play Billing: the Android app hands over a Play purchase.
