@@ -145,3 +145,21 @@ describe('this week', function () {
             ->toBe([]);
     });
 });
+
+it('P6: carries the clients of the post a row is about (for the Clients filter)', function () {
+    $user = User::factory()->create();
+    $account = \App\Models\SocialAccount::factory()->for($user)->create();
+    $client = new \App\Models\ClientLabel;
+    $client->forceFill(['user_id' => $user->id, 'name' => 'Hotel Ombak', 'initials' => 'HO', 'color' => '#3D6B8A'])->save();
+    $client->accounts()->sync([$account->id]);
+    $post = \App\Models\SocialPost::factory()->for($user)->create();
+    $post->targets()->create(['social_account_id' => $account->id, 'status' => 'pending']);
+    Activity::log($user, ActivityAction::PostReschedule, 'Moved a post', 'social_post', $post->ulid);
+    Activity::log($user, ActivityAction::Upload, 'Uploaded a file', 'file', 'f1');
+
+    $rows = $this->actingAs($user)->getJson('/api/v1/me/activity')->assertOk()->json('data');
+    $moved = collect($rows)->firstWhere('summary', 'Moved a post');
+    $file = collect($rows)->firstWhere('summary', 'Uploaded a file');
+    expect($moved['clients'][0]['name'])->toBe('Hotel Ombak')
+        ->and($file['clients'])->toBe([]);
+});
