@@ -20,7 +20,8 @@ use Throwable;
  * Content Plan reminders: when a live plan still has posts waiting on the
  * approver and the first of them is scheduled within the next 24 hours,
  * email the approver — once per link (reminded_at), never when the link
- * has reminders off (reminders_enabled).
+ * has reminders off (reminders_enabled) or its owner turned "Remind the
+ * approver" off in Post settings (social_settings.remind_approver).
  *
  * "Waiting" is the same rule as the approver's "Waiting your approval"
  * list (SocialApprovalController::waiting).
@@ -59,6 +60,9 @@ class SendContentPlanReminders implements ShouldQueue
     private function remind(SocialApprovalLink $link, CarbonImmutable $now): void
     {
         if ($link->user === null || $link->user->status === UserStatus::PendingDeletion) {
+            return;
+        }
+        if (($link->user->social_settings['remind_approver'] ?? true) === false) {
             return;
         }
 

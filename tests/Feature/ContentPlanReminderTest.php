@@ -163,3 +163,13 @@ it('is scheduled every 15 minutes', function () {
         ->filter(fn ($e) => str_contains((string) $e->description, SendContentPlanReminders::class));
     expect($events)->toHaveCount(1)->and($events->first()->expression)->toBe('*/15 * * * *');
 });
+
+it('sends nothing when the owner turned "Remind the approver" off in Post settings', function () {
+    [$owner, $link] = crPlan('2026-12-02 02:00:00');
+    $owner->forceFill(['social_settings' => ['remind_approver' => false]])->save();
+
+    crRun();
+
+    Notification::assertNothingSent();
+    expect($link->fresh()->reminded_at)->toBeNull();
+});
