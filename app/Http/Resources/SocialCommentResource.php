@@ -18,6 +18,8 @@ class SocialCommentResource extends JsonResource
 
         return [
             'id' => $this->ulid,
+            // Sample data (prototype v10): badged "Sample", replies refused.
+            'sample' => (bool) $this->account?->is_demo,
             'account' => [
                 'id' => $this->account->ulid,
                 'platform' => $this->account->platform,

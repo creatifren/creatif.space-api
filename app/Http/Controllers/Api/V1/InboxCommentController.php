@@ -61,6 +61,9 @@ class InboxCommentController extends Controller
         Gate::authorize('reply', $comment);
         $validated = $request->validate(['content' => ['required', 'string', 'max:2200']]);
         $account = $comment->account;
+        if ($sample = Inbox::refuseSample($account)) {
+            return $sample;
+        }
         AccountReconnectRequired::unlessUsable([$account], 'content');
 
         if ($comment->provider_post_id === null) {
@@ -101,6 +104,9 @@ class InboxCommentController extends Controller
         Gate::authorize('reply', $comment);
         $validated = $request->validate(['content' => ['required', 'string', 'max:1000']]);
         $account = $comment->account;
+        if ($sample = Inbox::refuseSample($account)) {
+            return $sample;
+        }
         AccountReconnectRequired::unlessUsable([$account], 'content');
 
         if ($comment->network !== 'instagram') {

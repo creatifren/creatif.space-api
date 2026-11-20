@@ -15,6 +15,8 @@ use App\Models\ClientReport;
 use App\Models\File;
 use App\Models\SocialAccount;
 use App\Models\SocialApprovalLink;
+use App\Models\SocialComment;
+use App\Models\SocialConversation;
 use App\Models\SocialPost;
 use App\Models\SocialPostComment;
 use App\Models\Space;
@@ -30,7 +32,9 @@ use Throwable;
  * 20 Nov 2026): a new account opens with one client "Kopi Senja" (approver
  * Dewi), two fake accounts ("Demo · Instagram", "Demo · TikTok"), 8 posts
  * in every state, an approval link (Week 48), a report (this month), a
- * Gallery and a Blog post waiting for approval. Every row carries
+ * Gallery and a Blog post waiting for approval, two DMs and two comments
+ * (on the sample accounts, so they go with them), and a picture on every
+ * post but the draft (public/sample/*.jpg). Every row carries
  * is_demo = true; the accounts are the demo relay's (nothing is ever sent)
  * with provider_account_id "sample_…".
  *
@@ -92,14 +96,16 @@ final class SampleData
             $client->accounts()->sync([$ig->id, $tt->id]);
 
             $at = fn (int $days, int $hour) => $now->addDays($days)->setTime($hour, 0);
-            self::post($user, [$ig], 'Draft: weekend brunch menu. Swap the photo before sending.', SocialPostStatus::Draft, null);
-            $w1 = self::post($user, [$ig], 'Something new is coming to the bar on Friday. Save the date.', SocialPostStatus::Draft, $at(3, 10), SocialPostApproval::Client);
-            $w2 = self::post($user, [$ig, $tt], 'Slow mornings, good coffee. Our new single origin is here.', SocialPostStatus::Draft, $at(4, 8), SocialPostApproval::Client);
-            $changes = self::post($user, [$ig], 'Fresh croissants from our kitchen. Perfect with a flat white.', SocialPostStatus::Draft, $at(5, 8), SocialPostApproval::Revision);
-            self::post($user, [$tt], 'Latte art in 30 seconds. Watch till the end.', SocialPostStatus::Draft, $at(6, 18), SocialPostApproval::Approved);
-            self::post($user, [$ig], 'Open late this Saturday. See you after 9.', SocialPostStatus::Scheduled, $at(2, 19));
-            self::post($user, [$ig, $tt], 'Thank you for 1,000 followers. Coffee is on us this Friday.', SocialPostStatus::Published, $at(-3, 9));
-            self::post($user, [$ig], '3 tips for better coffee at home. Save this for later.', SocialPostStatus::Failed, $at(-1, 19), fail: 'Instagram refused the image: it is wider than 1.91:1.');
+            self::post($user, [$ig], 'Draft: weekend brunch menu. Swap the photo before sending.', SocialPostStatus::Draft, null, picture: 'brunch');
+            $w1 = self::post($user, [$ig], 'Something new is coming to the bar on Friday. Save the date.', SocialPostStatus::Draft, $at(3, 10), SocialPostApproval::Client, picture: 'bar');
+            $w2 = self::post($user, [$ig, $tt], 'Slow mornings, good coffee. Our new single origin is here.', SocialPostStatus::Draft, $at(4, 8), SocialPostApproval::Client, picture: 'single-origin');
+            $changes = self::post($user, [$ig], 'Fresh croissants from our kitchen. Perfect with a flat white.', SocialPostStatus::Draft, $at(5, 8), SocialPostApproval::Revision, picture: 'croissant');
+            self::post($user, [$tt], 'Latte art in 30 seconds. Watch till the end.', SocialPostStatus::Draft, $at(6, 18), SocialPostApproval::Approved, picture: 'latte-art');
+            self::post($user, [$ig], 'Open late this Saturday. See you after 9.', SocialPostStatus::Scheduled, $at(2, 19), picture: 'open-late');
+            $published = self::post($user, [$ig, $tt], 'Thank you for 1,000 followers. Coffee is on us this Friday.', SocialPostStatus::Published, $at(-3, 9), picture: 'thank-you');
+            self::post($user, [$ig], '3 tips for better coffee at home. Save this for later.', SocialPostStatus::Failed, $at(-1, 19), fail: 'Instagram refused the image: it is wider than 1.91:1.', picture: 'coffee-tips');
+
+            self::inbox($user, $ig, $published, $now);
 
             SocialPostComment::query()->create([
                 'social_post_id' => $changes->id,
@@ -208,15 +214,78 @@ final class SampleData
         return $account;
     }
 
+    /** A sample picture's address (public/sample/{name}.jpg on the API). */
+    public static function picture(string $name): string
+    {
+        return rtrim((string) config('app.url'), '/').'/sample/'.$name.'.jpg';
+    }
+
+    /**
+     * Two DMs and two comments on the sample Instagram account. They live on
+     * the sample account (no is_demo of their own): removing it removes them
+     * by cascade. Already "synced", so nothing ever asks the demo relay.
+     */
+    private static function inbox(User $user, SocialAccount $ig, SocialPost $published, CarbonImmutable $now): void
+    {
+        $dms = [
+            ['rina.eats', 'Rina', 'Hi! Do you take bookings for 8 people this Saturday?', 40, 1],
+            ['budi_wfc', 'Budi', 'Is the wifi good for working? Thinking of coming tomorrow.', 300, 0],
+        ];
+        foreach ($dms as [$username, $name, $text, $minutes, $unread]) {
+            $conversation = SocialConversation::query()->create([
+                'user_id' => $user->id,
+                'social_account_id' => $ig->id,
+                'provider' => DemoSocialProvider::NAME,
+                'provider_conversation_id' => SocialAccount::SAMPLE_PREFIX.Str::lower((string) Str::ulid()),
+                'network' => 'instagram',
+                'contact_id' => SocialAccount::SAMPLE_PREFIX.$username,
+                'contact_username' => $username,
+                'contact_name' => $name,
+                'last_message_preview' => $text,
+                'last_message_at' => $now->subMinutes($minutes),
+                'last_inbound_at' => $now->subMinutes($minutes),
+                'unread_count' => $unread,
+                'status' => SocialConversation::OPEN,
+                'messages_synced_at' => $now,
+            ]);
+            $conversation->messages()->create([
+                'direction' => 'in',
+                'content' => $text,
+                'status' => 'sent',
+                'source' => 'contact',
+                'sent_at' => $now->subMinutes($minutes),
+            ]);
+        }
+
+        $comments = [
+            ['dewi.ks', 'Congrats! See you Friday.', 90],
+            ['kopi.lover', 'Is the free coffee for any drink?', 30],
+        ];
+        foreach ($comments as [$username, $text, $minutes]) {
+            SocialComment::query()->create([
+                'user_id' => $user->id,
+                'social_account_id' => $ig->id,
+                'social_post_id' => $published->id,
+                'provider' => DemoSocialProvider::NAME,
+                'comment_id' => SocialAccount::SAMPLE_PREFIX.Str::lower((string) Str::ulid()),
+                'author_id' => SocialAccount::SAMPLE_PREFIX.$username,
+                'author_username' => $username,
+                'text' => $text,
+                'network' => 'instagram',
+                'commented_at' => $now->subMinutes($minutes),
+            ]);
+        }
+    }
+
     /** @param  list<SocialAccount>  $accounts */
-    private static function post(User $user, array $accounts, string $caption, SocialPostStatus $status, ?CarbonImmutable $at, ?SocialPostApproval $approval = null, ?string $fail = null): SocialPost
+    private static function post(User $user, array $accounts, string $caption, SocialPostStatus $status, ?CarbonImmutable $at, ?SocialPostApproval $approval = null, ?string $fail = null, ?string $picture = null): SocialPost
     {
         $post = new SocialPost;
         $post->forceFill([
             'user_id' => $user->id,
             'provider' => DemoSocialProvider::NAME,
             'caption' => $caption,
-            'media' => null,
+            'media' => $picture === null ? null : [['url' => self::picture($picture)]],
             'scheduled_at' => $at,
             'status' => $status,
             'fail_reason' => $fail,
