@@ -116,7 +116,7 @@ class SocialSettingsController extends Controller
     {
         $clients = $owner->clientLabels()->pluck('ulid')->all();
 
-        return array_values(array_map(function (array $set) use ($clients): array {
+        return array_map(function (array $set) use ($clients): array {
             $tags = [];
             foreach ($set['tags'] as $tag) {
                 foreach (preg_split('/[\s,]+/', $tag) ?: [] as $one) {
@@ -133,6 +133,6 @@ class SocialSettingsController extends Controller
                 'tags' => array_slice($tags, 0, 30),
                 'client_id' => in_array($set['client_id'] ?? null, $clients, true) ? $set['client_id'] : null,
             ];
-        }, $sets));
+        }, $sets);
     }
 }
