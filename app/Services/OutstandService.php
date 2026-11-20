@@ -1390,6 +1390,25 @@ class OutstandService implements SocialProvider
         return $out;
     }
 
+    /**
+     * A top-level comment on a published post from one of its accounts
+     * (v10.2 First comment). Same Outstand replies endpoint, no parent.
+     *
+     * @return array{id: string|null}
+     *
+     * @throws ConnectionException
+     */
+    public function commentOnPost(string $postId, string $content, string $accountUsername): array
+    {
+        $response = $this->inbox(fn (PendingRequest $c) => $c->post('/posts/'.rawurlencode($postId).'/replies', [
+            'content' => $content,
+            'account_username' => ltrim($accountUsername, '@'),
+        ]));
+        $row = (array) ($response->json('data') ?? $response->json('reply') ?? $response->json() ?? []);
+
+        return ['id' => self::pick($row, 'id', 'commentId', 'platformCommentId', 'platform_comment_id')];
+    }
+
     /** @throws ConnectionException */
     public function replyToComment(string $postId, string $commentId, string $content, string $accountUsername): array
     {
