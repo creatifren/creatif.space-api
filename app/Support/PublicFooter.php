@@ -61,7 +61,7 @@ final class PublicFooter
      */
     public static function contact(?User $user): array
     {
-        $c = (array) ($user?->profile?->contact ?? []);
+        $c = (array) ($user?->profile->contact ?? []);
 
         return [
             'whatsapp' => isset($c['whatsapp']) && $c['whatsapp'] !== '' ? (string) $c['whatsapp'] : null,
