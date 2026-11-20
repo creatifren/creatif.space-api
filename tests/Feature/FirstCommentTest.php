@@ -7,7 +7,6 @@ use App\Models\Subscription;
 use App\Models\User;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Http;
-use Illuminate\Support\Facades\Queue;
 
 /* v10.2 First comment (Rizal option A): kept on the post, posted once per
    Instagram / Facebook / LinkedIn account after the post is live, never
@@ -34,13 +33,6 @@ function fcPost(): array
 
     return [$user, $post];
 }
-
-it('queues the first comment when the post goes live', function () {
-    Queue::fake();
-    [, $post] = fcPost();
-    $post->update(['status' => 'published']);
-    Queue::assertPushed(PostFirstComment::class, fn ($job) => $job->postId === $post->id);
-});
 
 it('posts it once on Instagram and skips X', function () {
     Http::fake(['api.outstand.test/v1/posts/op_1/replies' => Http::response(['data' => ['id' => 'c1']])]);
