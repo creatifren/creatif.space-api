@@ -114,3 +114,15 @@ it('shows each account its own caption and the client their progress', function 
         ->assertJsonPath('data.summary.waiting', 1)
         ->assertJsonPath('data.summary.all_reviewed', false);
 });
+
+it('marks a link opened on the first open by someone other than the owner', function () {
+    $user = v7Owner();
+    $link = $this->actingAs($user)->postJson('/api/v1/social-approval-links', ['approver_email' => 'client@example.test', 'post_ids' => [v7Held($user)->ulid]])
+        ->assertCreated()->assertJsonPath('data.opened_at', null)->json('data');
+
+    $this->app['auth']->forgetGuards();
+    $this->getJson('/api/v1/a/'.basename($link['url']))->assertOk();
+
+    $this->actingAs($user)->getJson('/api/v1/social-approval-links')->assertOk()
+        ->assertJsonPath('data.0.opened_at', fn ($v) => is_string($v) && $v !== '');
+});

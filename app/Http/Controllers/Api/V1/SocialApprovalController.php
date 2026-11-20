@@ -823,6 +823,8 @@ class SocialApprovalController extends Controller
             // Null on links made before signed-in approvers until someone binds it.
             'approver_email' => $link->approver_email,
             'approver_bound_at' => $link->approver_bound_at?->toIso8601String(),
+            // v10: first opened by someone other than the owner; null = not opened.
+            'opened_at' => $link->opened_at?->toIso8601String(),
             // 'list' (fixed posts) or 'plan' (Content Plan: scope below).
             'kind' => $link->isScoped() ? 'plan' : 'list',
             'scope' => PlanScope::toArray($link),

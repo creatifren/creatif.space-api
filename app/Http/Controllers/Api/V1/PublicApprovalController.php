@@ -86,6 +86,11 @@ class PublicApprovalController extends Controller
         $this->media = PlanScope::media($posts);
 
         ProductEvents::approvalLinkOpened($link, $posts->count(), $request);
+        // v10 link card "opened": the first open by anyone but the owner
+        // (the owner's own "See as client" does not count).
+        if ($link->opened_at === null && ApproverGate::sessionUser($request)?->id !== $link->user_id) {
+            $link->forceFill(['opened_at' => now()])->saveQuietly();
+        }
         $documents = BlogPost::query()->where('social_approval_link_id', $link->id)->orderBy('id')->get();
         $counts = PlanScope::counts($link);
         // Blog posts on the link count toward the client's progress too.
