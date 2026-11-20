@@ -9,6 +9,7 @@ use App\Models\SocialPost;
 use App\Models\Space;
 use App\Models\Subscription;
 use App\Models\User;
+use Illuminate\Support\Facades\DB;
 
 /* v7 Spaces: Gallery or Blog, Link only by default, featured / hidden
    items, blog posts with client approval (never public before), and a
@@ -107,4 +108,20 @@ it('adds a published social post to its Gallery and Blog once', function () {
     expect($gallery->items()->count())->toBeGreaterThanOrEqual(0)
         ->and(BlogPost::query()->where('space_id', $blog->id)->value('title'))->toBe('Rooftop opens');
     $this->actingAs($user)->getJson("/api/v1/social-posts/{$post->ulid}")->assertOk()->assertJsonPath('data.also_add_to.0.added', true);
+});
+
+it('adds a published post\'s library photos to a Gallery (Add work, Builder B)', function () {
+    $user = spacesV7Owner();
+    $gallery = Space::factory()->for($user)->create();
+    $file = File::factory()->for($user)->create();
+    $post = SocialPost::factory()->for($user)->create(['caption' => "Sunset deck\nGolden hour", 'media' => [['url' => $file->url()]], 'status' => 'published']);
+    DB::table('social_post_files')->insert(['social_post_id' => $post->id, 'file_id' => $file->id]);
+    $bare = SocialPost::factory()->for($user)->create(['status' => 'published']);
+
+    $this->actingAs($user)->postJson("/api/v1/spaces/{$gallery->ulid}/items", ['social_post_id' => $post->ulid])
+        ->assertOk()->assertJsonPath('data.added', 1);
+    expect($gallery->items()->first()->title)->toBe('Sunset deck');
+
+    $this->actingAs($user)->postJson("/api/v1/spaces/{$gallery->ulid}/items", ['social_post_id' => $bare->ulid])
+        ->assertStatus(422)->assertJsonValidationErrors('social_post_id');
 });

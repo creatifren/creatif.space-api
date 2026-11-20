@@ -560,9 +560,23 @@ class SpaceController extends Controller
         abort_unless(Workspace::canWrite($request->user()), 403);
 
         $validated = $request->validate([
-            'file_ids' => ['required', 'array', 'min:1', 'max:100'],
+            'file_ids' => ['required_without:social_post_id', 'array', 'min:1', 'max:100'],
             'file_ids.*' => ['string', 'max:26'],
+            // v10 Gallery › Add work › a published post: its library photos,
+            // titled with the caption's first line (as Compose › Also add to).
+            'social_post_id' => ['sometimes', 'string', 'max:26'],
         ]);
+
+        $post = null;
+        if (isset($validated['social_post_id'])) {
+            $post = SocialPost::query()->where('user_id', $space->user_id)->where('ulid', $validated['social_post_id'])->first();
+            abort_if($post === null, 404);
+            $postFiles = $post->belongsToMany(File::class, 'social_post_files')->where('files.status', File::STATUS_READY)->get();
+            if ($postFiles->isEmpty()) {
+                throw ValidationException::withMessages(['social_post_id' => 'This post has no photos from your Media library to add.']);
+            }
+            $validated['file_ids'] = $postFiles->pluck('ulid')->all();
+        }
 
         $files = $this->readyFiles($space->user_id, $validated['file_ids']);
 
@@ -582,6 +596,7 @@ class SpaceController extends Controller
                 $space->items()->create([
                     'file_id' => $file->id,
                     'sort_order' => ++$next,
+                    ...($post !== null ? ['social_post_id' => $post->id, 'title' => AddPublishedPostToSpaces::firstLine((string) $post->caption, 80)] : []),
                 ]);
             }
 
