@@ -54,6 +54,8 @@ class SpaceController extends Controller
            at midnight means a view is never counted twice. */
         $today = now()->startOfDay();
         $query->withSum(['dailyStats as views_before_today' => fn ($q) => $q->where('date', '<', $today->toDateString())], 'views')
+            // v10 card: "1.2K views · 30 days" = the 29 closed days before today + today.
+            ->withSum(['dailyStats as views_29d' => fn ($q) => $q->where('date', '<', $today->toDateString())->where('date', '>=', $today->copy()->subDays(29)->toDateString())], 'views')
             ->withCount(['events as views_today' => fn ($q) => $q
                 ->where('type', SpaceEventType::View)
                 ->where('is_ai_crawler', false)

@@ -41,10 +41,26 @@ class SpaceListResource extends JsonResource
             /* Owner-only list, aggregate counts only: no visitor data. Null
                when the list was loaded without the counts (never a fake 0). */
             'views_count' => $this->viewsCount(),
+            // v10 card: views in the last 30 days (null when not loaded).
+            'views_30d' => $this->views30d(),
+            // v10 card: "Gallery · downloads on" (press / media kit).
+            'allow_downloads' => (bool) ($this->settings['allow_download'] ?? true),
             'cover_url' => $firstPhoto?->file?->url(),
             'published_at' => $this->published_at,
             'updated_at' => $this->updated_at,
         ];
+    }
+
+    private function views30d(): ?int
+    {
+        $before = $this->resource->getAttribute('views_29d');
+        $today = $this->resource->getAttribute('views_today');
+
+        if ($before === null && $today === null) {
+            return null;
+        }
+
+        return (int) $before + (int) $today;
     }
 
     /** The two halves SpaceController::index loads; null without them. */

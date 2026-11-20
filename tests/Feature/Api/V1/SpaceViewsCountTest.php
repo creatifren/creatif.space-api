@@ -70,3 +70,18 @@ it('never counts another account\'s Spaces', function () {
         ->assertJsonCount(1, 'data')
         ->assertJsonPath('data.0.views_count', 0);
 });
+
+it('gives the v10 card its 30-day views and the downloads flag (Builder B)', function () {
+    $user = User::factory()->create();
+    $space = Space::factory()->for($user)->create(['settings' => ['allow_download' => false]]);
+
+    SpaceDailyStat::factory()->for($space)->create(['date' => '2026-10-01', 'views' => 100]); // older than 30 days
+    SpaceDailyStat::factory()->for($space)->create(['date' => '2026-10-14', 'views' => 4]); // day 29 back: in
+    SpaceDailyStat::factory()->for($space)->create(['date' => '2026-11-11', 'views' => 5]);
+    SpaceEvent::factory()->for($space)->on(now()->subHour())->create();
+
+    $this->actingAs($user)->getJson('/api/v1/spaces')->assertOk()
+        ->assertJsonPath('data.0.views_30d', 4 + 5 + 1)
+        ->assertJsonPath('data.0.views_count', 100 + 4 + 5 + 1)
+        ->assertJsonPath('data.0.allow_downloads', false);
+});
