@@ -40,6 +40,16 @@ final class InsightSummary
                 $data['weekly_reach'],
                 array_keys($data['weekly_reach']),
             ),
+            // One point per week of the period, for the Analytics sparklines.
+            // Null = not reported that week. Older cached data has no 'weekly'.
+            'weekly' => array_map(fn (int $i) => [
+                'week_start' => $weeks[$i][0]->toDateString(),
+                'reach' => $data['weekly_reach'][$i] ?? null,
+                'engagement' => $data['weekly'][$i]['engagement'] ?? null,
+                'engagement_rate' => isset($data['weekly'][$i]['rate']) ? round($data['weekly'][$i]['rate'], 4) : null,
+                'posts' => $data['weekly'][$i]['posts'] ?? null,
+                'followers' => $data['weekly'][$i]['followers'] ?? null,
+            ], array_keys($weeks)),
             'channels' => array_map(fn (array $c) => [
                 'id' => $c['id'],
                 'platform' => $c['platform'],

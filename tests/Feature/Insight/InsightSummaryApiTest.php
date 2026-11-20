@@ -148,3 +148,18 @@ it('keeps an answer for a few minutes instead of walking the feeds again', funct
     $this->travel(InsightSummaryController::CACHE_MINUTES + 1)->minutes();
     $this->actingAs($owner)->getJson('/api/v1/insight/summary?month=2026-10')->assertOk()->assertJsonPath('data.totals.posts', 0);
 });
+
+it('gives one point per week for the Analytics sparklines', function () {
+    ['owner' => $owner] = InsightFixture::workspace();
+
+    $res = $this->actingAs($owner)->getJson('/api/v1/insight/summary?month=2026-10')->assertOk();
+
+    $weekly = $res->json('data.weekly');
+    expect($weekly)->toHaveCount(5)
+        ->and($weekly[0]['week_start'])->toBe('2026-10-01')
+        ->and($weekly[0]['reach'])->toBe(11400)
+        // The weeks add up to the month.
+        ->and(array_sum(array_column($weekly, 'posts')))->toBe($res->json('data.totals.posts'))
+        ->and(array_sum(array_column($weekly, 'engagement')))->toBe($res->json('data.totals.engagement'))
+        ->and(array_keys($weekly[0]))->toBe(['week_start', 'reach', 'engagement', 'engagement_rate', 'posts', 'followers']);
+});
