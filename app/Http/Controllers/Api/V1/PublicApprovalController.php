@@ -25,6 +25,7 @@ use App\Support\Credits;
 use App\Support\PlanQuota;
 use App\Support\PlanScope;
 use App\Support\ProductEvents;
+use App\Support\PublicFooter;
 use App\Support\PublishFailure;
 use App\Support\ScheduleHorizon;
 use App\Support\SocialPostRelay;
@@ -111,6 +112,8 @@ class PublicApprovalController extends Controller
             // The owner's plan, as public Spaces read it: the page hides its
             // footer slogan when branding is removed.
             'branding_removed' => Workspace::owner($link->user)->plan()->feature('branding_removed'),
+            // Footer per plan (Free full · Pro/Max one line · Enterprise none).
+            ...PublicFooter::fields($link->user),
             // Who may decide, and whether the person looking can.
             'approver' => ApproverGate::viewer($request, $link),
             // Content Plan: the scope (null on a fixed-list link), the
@@ -612,10 +615,13 @@ class PublicApprovalController extends Controller
                 'message' => $replaced ? 'This link was replaced by a newer one.' : 'This link was turned off.',
                 'state' => $replaced ? 'replaced' : 'revoked',
                 'editor' => $link->user->name,
+                // The turned-off page: footer + the owner's public contact.
+                ...PublicFooter::fields($link->user),
+                'contact' => PublicFooter::contact($link->user),
             ], 409);
         }
         if ($link->expired()) {
-            return response()->json(['message' => 'This link has expired.', 'state' => 'expired', 'editor' => $link->user->name], 410);
+            return response()->json(['message' => 'This link has expired.', 'state' => 'expired', 'editor' => $link->user->name, ...PublicFooter::fields($link->user), 'contact' => PublicFooter::contact($link->user)], 410);
         }
 
         $this->link = $link;

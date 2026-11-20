@@ -9,6 +9,7 @@ use App\Http\Controllers\Controller;
 use App\Models\SocialPlanLink;
 use App\Models\SocialPost;
 use App\Support\PlanScope;
+use App\Support\PublicFooter;
 use App\Support\Workspace;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -123,6 +124,7 @@ class SocialPlanLinkController extends Controller
             // The owner's plan, as public Spaces read it: the page hides its
             // footer slogan when branding is removed.
             'branding_removed' => Workspace::owner($link->user)->plan()->feature('branding_removed'),
+            ...PublicFooter::fields($link->user),
             'accounts' => $accounts->map(fn ($a) => ['platform' => $a->platform, 'username' => $a->username])->all(),
             'posts' => $posts->map(fn (SocialPost $p) => [
                 'id' => $p->ulid,

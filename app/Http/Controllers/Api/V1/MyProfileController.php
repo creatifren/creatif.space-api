@@ -63,6 +63,8 @@ class MyProfileController extends Controller
             'socials.dribbble' => ['sometimes', 'nullable', 'string', 'max:255'],
             'socials.whatsapp' => ['sometimes', 'nullable', 'string', 'max:32'],
             'appearance' => ['sometimes', 'array'],
+            // Style presets, every plan (backlog #2): Editorial · Clean · Studio.
+            'appearance.preset' => ['sometimes', 'nullable', 'string', 'in:editorial,clean,studio'],
 
             /* Share-card overrides. Limits mirror what the platforms crop
                at (60/160) and what the Settings screen counts against. */

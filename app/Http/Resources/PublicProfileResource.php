@@ -8,6 +8,7 @@ use App\Models\Handle;
 use App\Models\Profile;
 use App\Models\SocialApprovalLink;
 use App\Support\ProfileAccess;
+use App\Support\PublicFooter;
 use App\Support\Workspace;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
@@ -72,6 +73,8 @@ class PublicProfileResource extends JsonResource
             // rides on the team's plan.
             'branding' => $this->user === null
                 || ! Workspace::owner($this->user)->plan()->feature('branding_removed'),
+            // Footer per plan (Free full · Pro/Max one line · Enterprise none).
+            ...PublicFooter::fields($this->user),
             'spaces' => $spaces,
             // v7: Link in bio or Grid, and the Contact button (no form).
             'layout' => $profile->getAttributes()['layout'] ?? 'link_in_bio',
