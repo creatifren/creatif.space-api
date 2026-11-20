@@ -181,6 +181,8 @@ return [
         'api.v1.client-labels.update' => 'draft',
         'api.v1.client-labels.destroy' => 'draft',
         'api.v1.social-accounts.client-labels' => 'draft',
+        // list_hashtag_sets (P12): reads the user's saved hashtag sets — Post settings only, nothing leaves.
+        'api.v1.me.social-settings.show' => 'read',
         // v7 monthly client reports. get_client_report makes the month's row
         // on first open (read: nothing leaves the workspace); turning
         // automatic emails on, or sending now, reaches the client.
