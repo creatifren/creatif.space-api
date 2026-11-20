@@ -97,3 +97,20 @@ it('emails last month to each client with an approver on the owner\'s day and ho
     Notification::assertSentOnDemandTimes(ClientReportReady::class, 1);
     expect(ClientReport::query()->where('client_label_id', $on->id)->value('sent_to'))->toBe('dewi@example.test');
 });
+
+it('signs reports with the business name on reports, else the account name', function () {
+    $user = reportOwner();
+    $label = ClientLabel::create(['user_id' => $user->id, 'name' => 'Kopi Senja']);
+    $month = now()->subMonth()->format('Y-m');
+
+    $this->actingAs($user)->postJson('/api/v1/client-reports', ['client_id' => $label->ulid, 'month' => $month])
+        ->assertJsonPath('data.prepared_by', $user->name);
+
+    $this->actingAs($user)->patchJson('/api/v1/me/report-settings', ['business_name' => '  Rizal Studio '])
+        ->assertOk()->assertJsonPath('data.business_name', 'Rizal Studio');
+    $this->actingAs($user)->postJson('/api/v1/client-reports', ['client_id' => $label->ulid, 'month' => $month])
+        ->assertJsonPath('data.prepared_by', 'Rizal Studio');
+
+    $this->actingAs($user)->patchJson('/api/v1/me/report-settings', ['business_name' => ''])
+        ->assertOk()->assertJsonPath('data.business_name', null);
+});

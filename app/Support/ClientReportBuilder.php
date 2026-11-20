@@ -47,7 +47,8 @@ final class ClientReportBuilder
             'month' => $report->month,
             'period' => ['from' => $period->from->toDateString(), 'to' => $period->to->toDateString(), 'label' => $period->label('en')],
             'client' => $label?->toBadge(),
-            'prepared_by' => $owner->report_from_name ?: $owner->name,
+            // Profile › Account › Business name on reports; empty = the account's name.
+            'prepared_by' => $owner->business_name ?: $owner->name,
             'accounts' => $accounts->map(fn (SocialAccount $a) => [
                 'id' => $a->ulid,
                 'platform' => $a->platform->value,
