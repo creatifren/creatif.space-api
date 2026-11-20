@@ -151,6 +151,7 @@ final class InsightCollector
                 'previous' => $before + ['followers_delta' => $this->sumOrNull(array_column($channels, 'followers_prev_delta'))],
             ],
             'weekly_reach' => $this->weeklyTotal($channels, count($period->weeks())),
+            'weekly' => $this->weeklySeries($channels, count($period->weeks())),
             'top_posts' => $top,
             'top_ranked' => array_slice($ranked, 0, self::TOP_RANKED),
             // Every picture the layouts can show (each channel's top posts):
@@ -322,6 +323,24 @@ final class InsightCollector
                 $period->weeks(),
             );
 
+        // Per-week numbers for the Analytics sparklines (P7): posts, engagement
+        // and the rate's parts from the feed, followers from our snapshots.
+        $series = array_map(function (array $w) use ($inPeriod, $account): array {
+            $posts = $inPeriod === null ? null : array_values(array_filter(
+                $inPeriod,
+                fn ($p) => $p['posted_at']->greaterThanOrEqualTo($w[0]) && $p['posted_at']->lessThanOrEqualTo($w[1]),
+            ));
+            $m = $this->metrics($posts);
+
+            return [
+                'posts' => $m['posts'],
+                'engagement' => $m['engagement'],
+                'rate_engagement' => $m['rate_engagement'],
+                'rate_reach' => $m['rate_reach'],
+                'followers' => $this->followersOn($account, $w[1]),
+            ];
+        }, $period->weeks());
+
         return [[
             'id' => $account->ulid,
             'platform' => $account->platform->value,
@@ -336,6 +355,7 @@ final class InsightCollector
             'ranked' => $ranked,
             'best_times' => InsightBestTimes::of($inPeriod),
             'weekly_reach' => $weekly,
+            'weekly' => $series,
             'notes' => $notes,
         ], $notes];
     }
@@ -438,6 +458,50 @@ final class InsightCollector
         }
 
         return array_map(fn (int $i) => (int) array_sum(array_column($rows, $i)), range(0, $weeks - 1));
+    }
+
+    /**
+     * The followers reading on or before $day, or null without a snapshot
+     * (or for a network we do not count).
+     */
+    private function followersOn(SocialAccount $account, CarbonImmutable $day): ?int
+    {
+        if (in_array($account->platform, RefreshFollowerCount::SKIPPED, true)) {
+            return null;
+        }
+
+        $snapshot = FollowerSnapshot::query()
+            ->where('social_account_id', $account->id)
+            ->whereDate('on', '<=', $day->toDateString())
+            ->orderByDesc('on')
+            ->first();
+
+        return $snapshot?->followers;
+    }
+
+    /**
+     * The workspace's numbers per week: sums over the channels; a metric is
+     * null for a week when no channel reported it.
+     *
+     * @param  list<array<string, mixed>>  $channels
+     * @return list<array{posts: int|float|null, engagement: int|float|null, rate: float|null, followers: int|float|null}>
+     */
+    private function weeklySeries(array $channels, int $weeks): array
+    {
+        $out = [];
+        for ($i = 0; $i < $weeks; $i++) {
+            $rows = array_map(fn (array $c) => $c['weekly'][$i] ?? [], $channels);
+            $re = $this->sumOrNull(array_column($rows, 'rate_engagement'));
+            $rr = $this->sumOrNull(array_column($rows, 'rate_reach'));
+            $out[] = [
+                'posts' => $this->sumOrNull(array_column($rows, 'posts')),
+                'engagement' => $this->sumOrNull(array_column($rows, 'engagement')),
+                'rate' => $re !== null && ($rr ?? 0) > 0 ? $re / $rr : null,
+                'followers' => $this->sumOrNull(array_column($rows, 'followers')),
+            ];
+        }
+
+        return $out;
     }
 
     /**
