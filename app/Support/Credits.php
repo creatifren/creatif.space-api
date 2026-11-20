@@ -394,6 +394,8 @@ final class Credits
                 WalletTransactionType::CreditsSendReturn->value,
                 WalletTransactionType::CreditsReply->value,
                 WalletTransactionType::CreditsReplyReturn->value,
+                WalletTransactionType::CreditsAi->value,
+                WalletTransactionType::CreditsAiReturn->value,
             ])
             ->groupBy('type')
             ->selectRaw('type, SUM(amount) as total')
@@ -404,8 +406,9 @@ final class Credits
         $spent = fn (WalletTransactionType ...$types) => max(0, -1 * (int) collect($types)->sum(fn ($t) => (int) ($sums[$t->value] ?? 0)));
         $publish = $spent(WalletTransactionType::CreditsSend, WalletTransactionType::CreditsSendReturn);
         $reply = $spent(WalletTransactionType::CreditsReply, WalletTransactionType::CreditsReplyReturn);
+        $ai = $spent(WalletTransactionType::CreditsAi, WalletTransactionType::CreditsAiReturn);
 
-        return ['publish' => $publish, 'reply' => $reply, 'ai' => 0, 'total' => $publish + $reply];
+        return ['publish' => $publish, 'reply' => $reply, 'ai' => $ai, 'total' => $publish + $reply + $ai];
     }
 
     /** @deprecated the allowance became Monthly Credits; same cycle. */
