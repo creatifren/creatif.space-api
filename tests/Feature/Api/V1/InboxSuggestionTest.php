@@ -70,7 +70,8 @@ it('gives three suggestions for a DM and takes 300 Credits', function () {
         ->assertJsonPath('data.suggestions', ['Kami buka jam 7 pagi!', 'Jam 7, sampai ketemu!', 'Besok buka jam 7 ya.'])
         ->assertJsonPath('data.credits', 300);
 
-    expect(Credits::total($user))->toBe($before - 300);
+    expect(Credits::total($user))->toBe($before - 300)
+        ->and(Credits::spendThisCycle($user)['ai'])->toBe(300);
     Http::assertSent(fn ($r) => str_contains($r['messages'][0]['content'], 'Them: Buka jam berapa besok?'));
 });
 
