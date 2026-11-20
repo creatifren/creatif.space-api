@@ -6,6 +6,7 @@ use App\Models\BlogPost;
 use App\Models\File;
 use App\Models\Space;
 use App\Models\SpaceItem;
+use App\Support\PublicFooter;
 use App\Support\Workspace;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
@@ -106,6 +107,8 @@ class PublicSpaceResource extends JsonResource
             'allow_download' => (bool) ($this->settings['allow_download'] ?? true),
             // Same rule as the profile: paid plans drop the "Made with" line.
             'branding' => ! Workspace::owner($this->user)->plan()->feature('branding_removed'),
+            // Footer per plan (Free full · Pro/Max one line · Enterprise none).
+            ...PublicFooter::fields($this->user),
             'seo' => $this->seo,
             'visibility' => $this->visibility,
             'published_at' => $this->published_at,

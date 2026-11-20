@@ -84,7 +84,7 @@ class AddPublishedPostToSpaces implements ShouldQueue
         ]);
     }
 
-    private static function firstLine(string $text, int $max): string
+    public static function firstLine(string $text, int $max): string
     {
         return Str::limit(trim((string) strtok($text, "\n")), $max, '…');
     }
