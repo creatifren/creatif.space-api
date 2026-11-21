@@ -32,6 +32,7 @@ beforeEach(function () {
 function sgWorld(bool $pro = true): array
 {
     $user = User::factory()->create();
+    $u = (string) $user->id; // unique per call: sgWorld() may run twice in one test
     if ($pro) {
         Subscription::factory()->for($user)->create();
     }
@@ -39,21 +40,21 @@ function sgWorld(bool $pro = true): array
     Credits::renewMonthly($user); // Pro's Monthly Credits in place before the tap
     $account = SocialAccount::factory()->for($user)->create([
         'platform' => 'instagram', 'provider' => 'outstand', 'username' => 'kopisenja',
-        'provider_account_id' => 'acc_kopi', 'messages_scope_at' => now(), 'inbox_synced_at' => now(),
+        'provider_account_id' => 'acc_kopi_'.$u, 'messages_scope_at' => now(), 'inbox_synced_at' => now(),
     ]);
     $thread = SocialConversation::query()->create([
         'user_id' => $user->id, 'social_account_id' => $account->id, 'provider' => 'outstand',
-        'provider_conversation_id' => 'conv_1', 'network' => 'instagram', 'contact_id' => 'ig_1',
+        'provider_conversation_id' => 'conv_'.$u, 'network' => 'instagram', 'contact_id' => 'ig_1',
         'contact_username' => 'fan', 'last_message_at' => now(), 'last_inbound_at' => now(),
         'unread_count' => 1, 'status' => 'open', 'messages_synced_at' => now(),
     ]);
     SocialMessage::query()->create([
-        'social_conversation_id' => $thread->id, 'provider_message_id' => 'm1',
+        'social_conversation_id' => $thread->id, 'provider_message_id' => 'm_'.$u,
         'direction' => 'in', 'content' => 'Buka jam berapa besok?', 'status' => 'received',
     ]);
     $comment = SocialComment::query()->create([
         'user_id' => $user->id, 'social_account_id' => $account->id, 'provider' => 'outstand',
-        'provider_post_id' => 'p1', 'platform_post_id' => '1789', 'comment_id' => 'c1',
+        'provider_post_id' => 'p_'.$u, 'platform_post_id' => '1789'.$u, 'comment_id' => 'c_'.$u,
         'author_id' => 'ig_fan', 'author_username' => 'fan', 'text' => 'Love this!',
         'network' => 'instagram', 'commented_at' => now(),
     ]);
