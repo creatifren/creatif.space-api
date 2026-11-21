@@ -48,11 +48,12 @@ class NotificationSettingsController extends Controller
     {
         $rules = array_fill_keys(array_keys(self::SETTINGS), ['sometimes', 'boolean']);
         $rules['timezone'] = ['sometimes', 'nullable', 'string', 'timezone:all'];
+        $rules['push'] = ['sometimes', 'boolean'];
         $validated = $request->validate($rules);
 
         if ($validated === []) {
             return response()->json([
-                'message' => 'Send at least one of: '.implode(', ', [...array_keys(self::SETTINGS), 'timezone']).'.',
+                'message' => 'Send at least one of: '.implode(', ', [...array_keys(self::SETTINGS), 'timezone', 'push']).'.',
                 'errors' => ['settings' => ['Send at least one setting.']],
             ], 422);
         }
@@ -61,6 +62,10 @@ class NotificationSettingsController extends Controller
         if (array_key_exists('timezone', $validated)) {
             $user->forceFill(['timezone' => $validated['timezone']])->save();
             unset($validated['timezone']);
+        }
+        if (array_key_exists('push', $validated)) {
+            $user->forceFill(['push_enabled' => (bool) $validated['push']])->save();
+            unset($validated['push']);
         }
         foreach ($validated as $name => $on) {
             $user->notificationPreferences()->updateOrCreate(
@@ -78,6 +83,8 @@ class NotificationSettingsController extends Controller
         return [
             ...array_map(fn (NotificationType $type) => $user->wants($type, 'email'), self::SETTINGS),
             'timezone' => WeeklyDigest::timezone($user),
+            // Push on this person's phones (Android app): one switch, on by default.
+            'push' => (bool) ($user->push_enabled ?? true),
         ];
     }
 }

@@ -117,6 +117,7 @@ class User extends Authenticatable implements FilamentUser
             'is_directory_reviewer' => 'boolean',
             'insight_monthly_email' => 'boolean',
             'client_reports_enabled' => 'boolean',
+            'push_enabled' => 'boolean',
             'report_send_day' => 'integer',
             'storage_blocks' => 'integer',
             'storage_rental_ended_at' => 'datetime',
@@ -196,6 +197,12 @@ class User extends Authenticatable implements FilamentUser
     /**
      * @return HasMany<NotificationPreference, $this>
      */
+    /** Phones registered for push (FCM). */
+    public function deviceTokens(): HasMany
+    {
+        return $this->hasMany(DeviceToken::class);
+    }
+
     public function notificationPreferences(): HasMany
     {
         return $this->hasMany(NotificationPreference::class);

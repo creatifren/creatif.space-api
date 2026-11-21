@@ -253,4 +253,6 @@ return [
     'api.v1.me.notification-preferences.update' => 'Update notification preferences',
     'api.v1.me.notification-settings' => 'Email settings: publish_failed, approval_decided, weekly_digest',
     'api.v1.me.notification-settings.update' => 'Turn the publish_failed, approval_decided or weekly_digest email on or off',
+    'api.v1.devices.store' => 'Register this phone for push notifications (Android app)',
+    'api.v1.devices.destroy' => 'Forget this phone for push notifications (on sign-out)',
 ];

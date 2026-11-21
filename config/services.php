@@ -223,4 +223,13 @@ return [
         ],
     ],
 
+    /*
+     * Push (FCM HTTP v1). FCM_CREDENTIALS = the Firebase service account key:
+     * a path to the JSON file, the JSON itself, or the JSON in base64.
+     * Empty = push is off (no errors). Project: the company Google account › Creatif Space.
+     */
+    'fcm' => [
+        'credentials' => env('FCM_CREDENTIALS'),
+    ],
+
 ];
