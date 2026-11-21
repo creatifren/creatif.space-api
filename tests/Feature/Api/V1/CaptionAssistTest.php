@@ -112,3 +112,36 @@ it('says so when the endpoint fails or is not set up', function () {
 it('POST /ai/caption is gone', function () {
     $this->actingAs(captionUser())->postJson('/api/v1/ai/caption', ['brief' => 'Coffee promo'])->assertNotFound();
 });
+
+/* Rizal 21 Nov (prototype v10.5): Standard = Sonnet 30 Credits, Extra = Opus 100 Credits; Credits back on failure. */
+it('charges by tier and picks the model', function (string $quality, string $model, int $price) {
+    config(['services.ai.model_standard' => 'sonnet']);
+    Http::fake(['ai.test/v1/messages' => Http::response(['content' => [['type' => 'text', 'text' => 'Better caption']]])]);
+    $user = captionUser();
+    \App\Support\Credits::grant($user, 1_000, 'Test');
+    \App\Support\Credits::renewMonthly($user);
+    $before = \App\Support\Credits::total($user);
+
+    $this->actingAs($user)
+        ->postJson('/api/v1/social-captions/assist', ['mode' => 'rewrite', 'caption' => CA_CAPTION, 'quality' => $quality])
+        ->assertOk()->assertJsonPath('data.credits', $price);
+
+    expect(\App\Support\Credits::total($user))->toBe($before - $price);
+    Http::assertSent(fn (HttpRequest $r) => $r['model'] === $model);
+})->with([
+    'standard' => ['standard', 'sonnet', 30],
+    'extra' => ['extra', 'm', 100],
+]);
+
+it('gives the tier Credits back when the AI fails, and no quality stays free', function () {
+    Http::fake(['ai.test/v1/messages' => Http::response(['error' => 'x'], 529)]);
+    $user = captionUser();
+    \App\Support\Credits::grant($user, 1_000, 'Test');
+    \App\Support\Credits::renewMonthly($user);
+    $before = \App\Support\Credits::total($user);
+
+    $this->actingAs($user)->postJson('/api/v1/social-captions/assist', ['mode' => 'hashtags', 'caption' => CA_CAPTION, 'quality' => 'extra'])->assertStatus(502);
+    $this->actingAs($user)->postJson('/api/v1/social-captions/assist', ['mode' => 'hashtags', 'caption' => CA_CAPTION])->assertStatus(502);
+
+    expect(\App\Support\Credits::total($user))->toBe($before);
+});
