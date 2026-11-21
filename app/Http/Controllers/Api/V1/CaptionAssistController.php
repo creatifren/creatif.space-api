@@ -16,7 +16,7 @@ use Illuminate\Validation\ValidationException;
  * The composer's "Improve with AI" (rewrite) and "Add hashtags" — the only
  * AI path (Rizal, 13 Nov: no caption written from scratch). It works on
  * text the user already wrote: at least ai_assist.min_chars non-whitespace
- * characters (AI_ASSIST_MIN_CHARS, default 20), else 422. Any
+ * characters (AI_ASSIST_MIN_CHARS, default 10 — Rizal 21 Nov), else 422. Any
  * Claude through the Anthropic Messages API (ANTHROPIC_API_KEY, model from
  * ANTHROPIC_MODEL, default claude-opus-5-5 — Rizal, 19 Nov). No fallback to
  * another provider: a failure is a plain 502.
@@ -51,7 +51,7 @@ class CaptionAssistController extends Controller
         ]);
         $quality = $validated['quality'] ?? null;
 
-        $min = max(1, (int) config('ai_assist.min_chars', 20));
+        $min = max(1, (int) config('ai_assist.min_chars', 10));
         if (mb_strlen((string) preg_replace('/\s+/u', '', $validated['caption'])) < $min) {
             throw ValidationException::withMessages([
                 'caption' => "Write at least {$min} characters of your caption first — AI improves and adds hashtags to what you wrote.",
