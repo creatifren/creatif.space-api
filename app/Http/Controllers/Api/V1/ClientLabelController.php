@@ -86,6 +86,9 @@ class ClientLabelController extends Controller
                 };
             }
         }
+        if (array_key_exists('reply_style', $validated)) {
+            $fields['reply_style'] = \App\Support\ReplyStyle::clean($validated['reply_style']);
+        }
         $clientLabel->update($fields);
 
         ClientBadges::flush();
@@ -150,6 +153,8 @@ class ClientLabelController extends Controller
             'report_email' => ['sometimes', 'boolean'],
             'account_ids' => ['sometimes', 'nullable', 'array', 'max:500'],
             'account_ids.*' => ['string', 'max:26'],
+            // v10.6: "Own style for this client" (null = the workspace default).
+            ...\App\Support\ReplyStyle::rules('reply_style'),
         ];
     }
 
@@ -187,6 +192,7 @@ class ClientLabelController extends Controller
             'approver_email' => $label->approver_email,
             'approver_name' => $label->approver_name,
             'report_email' => $label->report_email,
+            'reply_style' => $label->reply_style,
             'sample' => (bool) $label->is_demo,
             'accounts' => $label->accounts->map(fn (SocialAccount $a) => [
                 'id' => $a->ulid,

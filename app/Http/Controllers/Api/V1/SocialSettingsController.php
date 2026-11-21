@@ -27,7 +27,7 @@ class SocialSettingsController extends Controller
      * client ({id, name, tags, client_id}), Compose's Hashtags button;
      * `first_comment` — Compose shows a First comment field (off by default).
      */
-    private const EMPTY = ['timetable' => [], 'labels' => [], 'templates' => [], 'views' => [], 'approval_default' => true, 'remind_approver' => true, 'saved_replies' => [], 'hashtag_sets' => [], 'first_comment' => false];
+    private const EMPTY = ['timetable' => [], 'labels' => [], 'templates' => [], 'views' => [], 'approval_default' => true, 'remind_approver' => true, 'saved_replies' => [], 'hashtag_sets' => [], 'first_comment' => false, 'reply_style' => null];
 
     public function show(Request $request): JsonResponse
     {
@@ -74,6 +74,8 @@ class SocialSettingsController extends Controller
             'hashtag_sets.*.tags.*' => ['string', 'min:1', 'max:100'],
             'hashtag_sets.*.client_id' => ['present', 'nullable', 'string', 'max:26'],
             'first_comment' => ['sometimes', 'boolean'],
+            // v10.6 Preferences › Reply style: the workspace default for AI replies.
+            ...\App\Support\ReplyStyle::rules('reply_style'),
             'renamed' => ['sometimes', 'array', 'max:50'],
             'renamed.*' => ['string', 'max:40'],
         ]);
@@ -92,6 +94,9 @@ class SocialSettingsController extends Controller
         }
         if (array_key_exists('hashtag_sets', $validated)) {
             $validated['hashtag_sets'] = self::hashtagSets($owner, $validated['hashtag_sets']);
+        }
+        if (array_key_exists('reply_style', $validated)) {
+            $validated['reply_style'] = \App\Support\ReplyStyle::clean($validated['reply_style']);
         }
         foreach (['approval_default', 'remind_approver', 'first_comment'] as $flag) {
             if (array_key_exists($flag, $validated)) {

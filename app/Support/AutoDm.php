@@ -91,7 +91,7 @@ class AutoDm
         }
 
         $text = $mode === 'ai'
-            ? ReplyAi::dm($rule['message'], ReplyAi::context($comment))
+            ? ReplyAi::dm($rule['message'], ReplyAi::context($comment), ReplyStyle::prompt(ReplyStyle::forAccount($account)))
             : trim($rule['message']);
 
         $error = null;
