@@ -123,7 +123,7 @@ it('includes Insight share links, notification settings and the approval audit â
         'recipient_email' => 'boss@client.test', 'recipient_token' => Crypt::encryptString('SHARE_TOKEN_PLAIN'),
         'expires_at' => now()->addDays(30), 'created_at' => now(), 'updated_at' => now(),
     ]);
-    $this->actingAs($owner)->patchJson('/api/v1/me/notification-settings', ['weekly_digest' => false, 'timezone' => 'Indian/Maldives'])->assertOk();
+    $this->actingAs($owner)->patchJson('/api/v1/me/notification-settings', ['weekly_digest' => false, 'timezone' => 'Indian/Maldives', 'push' => true])->assertOk();
     // The owner, as an approver on someone else's link.
     $theirs = SocialApprovalLink::create(['user_id' => User::factory()->create()->id, 'title' => 'Their plan', 'approver_email' => 'a.test@owner.test']);
     SocialApprovalDecision::create([
@@ -143,7 +143,7 @@ it('includes Insight share links, notification settings and the approval audit â
         ]);
 
     $settings = json_decode($files['notification_settings.json'], true);
-    expect($settings['settings'])->toBe(['publish_failed' => true, 'approval_decided' => true, 'weekly_digest' => false, 'timezone' => 'Indian/Maldives'])
+    expect($settings['settings'])->toBe(['publish_failed' => true, 'approval_decided' => true, 'weekly_digest' => false, 'timezone' => 'Indian/Maldives', 'push' => true])
         ->and(collect($settings['preferences'])->firstWhere('type', 'digest.weekly'))->toBe(['type' => 'digest.weekly', 'email' => false, 'bell' => true]);
 
     $audit = json_decode($files['approval_audit.json'], true);

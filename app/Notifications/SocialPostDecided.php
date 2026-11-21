@@ -5,6 +5,7 @@ namespace App\Notifications;
 use App\Enums\NotificationType;
 use App\Models\SocialApprovalLink;
 use App\Models\SocialPost;
+use App\Notifications\Channels\PushChannel;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Notifications\Messages\MailMessage;
@@ -46,9 +47,31 @@ class SocialPostDecided extends Notification implements ShouldQueue
      */
     public function via(object $notifiable): array
     {
-        return in_array($this->decision, [self::BLOCKED, self::HELD], true)
-            ? ['mail', 'database']
-            : NotificationChannels::for($notifiable, NotificationType::SocialPostDecision);
+        if (in_array($this->decision, [self::BLOCKED, self::HELD], true)) {
+            return ['mail', 'database'];
+        }
+        $via = NotificationChannels::for($notifiable, NotificationType::SocialPostDecision);
+
+        /* Push (approved / changes requested) follows the bell switch of the same type. */
+        return in_array('database', $via, true) ? [...$via, ...PushChannel::when($notifiable)] : $via;
+    }
+
+    /** @return array{title: string, body: string, url: string} */
+    public function toPush(object $notifiable): array
+    {
+        if ($this->decision === self::REVISE) {
+            return [
+                'title' => 'Changes requested',
+                'body' => "{$this->by} asked for changes on a post",
+                'url' => $this->post !== null ? '/post/'.$this->post->ulid : '/post?view=approvals',
+            ];
+        }
+
+        return [
+            'title' => 'Approved',
+            'body' => "{$this->by} approved {$this->count} ".($this->count === 1 ? 'post' : 'posts'),
+            'url' => '/post?view=approvals',
+        ];
     }
 
     public function toMail(object $notifiable): MailMessage

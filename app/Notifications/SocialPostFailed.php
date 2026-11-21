@@ -4,6 +4,7 @@ namespace App\Notifications;
 
 use App\Enums\NotificationType;
 use App\Models\SocialPost;
+use App\Notifications\Channels\PushChannel;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Notifications\Messages\MailMessage;
@@ -25,7 +26,25 @@ class SocialPostFailed extends Notification implements ShouldQueue
      */
     public function via(object $notifiable): array
     {
-        return NotificationChannels::for($notifiable, NotificationType::SocialPostFailed);
+        $via = NotificationChannels::for($notifiable, NotificationType::SocialPostFailed);
+
+        /* Push follows the bell switch of the same type. */
+        return in_array('database', $via, true) ? [...$via, ...PushChannel::when($notifiable)] : $via;
+    }
+
+    /** @return array{title: string, body: string, url: string} */
+    public function toPush(object $notifiable): array
+    {
+        $networks = $this->post->targets()->with('account')->get()
+            ->map(fn ($t) => $t->account?->platform)->filter()->unique()
+            ->map(fn ($p) => match ((string) $p) { 'linkedin' => 'LinkedIn', 'tiktok' => 'TikTok', 'youtube' => 'YouTube', 'x' => 'X', default => ucfirst((string) $p) })
+            ->implode(', ');
+
+        return [
+            'title' => 'A post didn’t publish',
+            'body' => ($networks !== '' ? 'A post to '.$networks : 'A post').' failed — tap to retry.',
+            'url' => '/post/'.$this->post->ulid,
+        ];
     }
 
     public function toMail(object $notifiable): MailMessage

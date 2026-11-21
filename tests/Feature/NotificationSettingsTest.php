@@ -18,7 +18,7 @@ describe('GET /me/notification-settings', function () {
         $this->actingAs(User::factory()->create())
             ->getJson('/api/v1/me/notification-settings')
             ->assertOk()
-            ->assertExactJson(['data' => ['publish_failed' => true, 'approval_decided' => true, 'weekly_digest' => true, 'timezone' => config('app.timezone')]]);
+            ->assertExactJson(['data' => ['publish_failed' => true, 'approval_decided' => true, 'weekly_digest' => true, 'timezone' => config('app.timezone'), 'push' => true]]);
     });
 
     it('needs a signed-in user', function () {
@@ -32,7 +32,7 @@ describe('PATCH /me/notification-settings', function () {
 
         $this->actingAs($user)->patchJson('/api/v1/me/notification-settings', ['weekly_digest' => false])
             ->assertOk()
-            ->assertExactJson(['data' => ['publish_failed' => true, 'approval_decided' => true, 'weekly_digest' => false, 'timezone' => config('app.timezone')]]);
+            ->assertExactJson(['data' => ['publish_failed' => true, 'approval_decided' => true, 'weekly_digest' => false, 'timezone' => config('app.timezone'), 'push' => true]]);
 
         $user = $user->fresh();
         expect($user->wants(NotificationType::WeeklyDigest, 'email'))->toBeFalse()

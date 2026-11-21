@@ -60,6 +60,8 @@ const WSI_NOT_WORKSPACE_MODELS = [
     // through a live link addressed to the caller's verified email (`link`;
     // none or unknown answers 404).
     'post' => 'post on an approval link addressed to the caller',
+    // Push: an FCM token, deleted from the caller's own phones only (404 otherwise).
+    'token' => 'push device token',
 ];
 
 beforeEach(function () {
@@ -185,6 +187,7 @@ function wsiValue(string $name, User $owner): string
         'key' => str_repeat('0', 32),
         'item' => 'dm_'.wsiMake(SocialConversation::class, $owner, [])->getRouteKey(),
         'post' => wsiMake(SocialPost::class, $owner, [])->getRouteKey(),
+        'token' => $owner->deviceTokens()->create(['token' => 'fcm-'.str()->random(40), 'platform' => 'android'])->token,
         default => throw new RuntimeException("No value for {$name}."),
     };
 }

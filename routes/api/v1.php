@@ -15,6 +15,7 @@ use App\Http\Controllers\Api\V1\ConnectedAppController;
 use App\Http\Controllers\Api\V1\CreditsController;
 use App\Http\Controllers\Api\V1\CreemWebhookController;
 use App\Http\Controllers\Api\V1\DeliveryLogController;
+use App\Http\Controllers\Api\V1\DeviceTokenController;
 use App\Http\Controllers\Api\V1\EnterpriseContactController;
 use App\Http\Controllers\Api\V1\FeedbackController;
 use App\Http\Controllers\Api\V1\FileController;
@@ -358,6 +359,15 @@ Route::middleware(['auth:sanctum', EnsureNotPendingDeletion::class])->group(func
     Route::delete('/me/sessions/{key}', [SessionController::class, 'destroy'])
         ->middleware('throttle:20,1')
         ->name('api.v1.me.sessions.destroy');
+
+    // Push (Builder A, 21 Nov): the Android app registers / forgets this phone.
+    Route::post('/devices', [DeviceTokenController::class, 'store'])
+        ->middleware('throttle:30,1')
+        ->name('api.v1.devices.store');
+    Route::delete('/devices/{token}', [DeviceTokenController::class, 'destroy'])
+        ->middleware('throttle:30,1')
+        ->where('token', '[A-Za-z0-9:_\-]+')
+        ->name('api.v1.devices.destroy');
 });
 
 // Google Play Billing: the Android app hands over a Play purchase.
