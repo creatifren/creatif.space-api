@@ -34,6 +34,9 @@ enum NotificationType: string
     // scheduled posts stop when they run out — money, not a preference.
     case CreditsLow = 'credits.low';
 
+    // v10.5: a post's Auto DM paused because Credits ran out — money, bell only.
+    case AutoDmPaused = 'auto_dm.paused';
+
     /**
      * The types a user may switch off — what Settings → Notifications shows.
      *

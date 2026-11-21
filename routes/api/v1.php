@@ -29,6 +29,7 @@ use App\Http\Controllers\Api\V1\InboxCommentController;
 use App\Http\Controllers\Api\V1\InboxController;
 use App\Http\Controllers\Api\V1\InboxFeedController;
 use App\Http\Controllers\Api\V1\InboxSuggestionController;
+use App\Http\Controllers\Api\V1\AutoDmController;
 use App\Http\Controllers\Api\V1\InboxFeedbackController;
 use App\Http\Controllers\Api\V1\InsightBestTimesController;
 use App\Http\Controllers\Api\V1\InsightExportController;
@@ -897,6 +898,15 @@ Route::middleware(['auth:sanctum,mcp', EnforceTokenScope::class, EnsureNotPendin
     Route::post('/social-posts/{socialPost}/review', [SocialApprovalController::class, 'markForReview'])
         ->middleware('throttle:60,1')
         ->name('api.v1.social-posts.review');
+
+    // v10.5 (Builder A): Auto DM on comment, per post — Pro/Max, 100 (Fixed text) / 300 (Written by AI) Credits a DM.
+    Route::get('/social-posts/{socialPost}/auto-dm', [AutoDmController::class, 'show'])->name('api.v1.social-posts.auto-dm');
+    Route::put('/social-posts/{socialPost}/auto-dm', [AutoDmController::class, 'update'])
+        ->middleware('throttle:30,1')
+        ->name('api.v1.social-posts.auto-dm.update');
+    Route::delete('/social-posts/{socialPost}/auto-dm', [AutoDmController::class, 'destroy'])
+        ->middleware('throttle:30,1')
+        ->name('api.v1.social-posts.auto-dm.destroy');
 
     // Bell, Needs Attention, and the five switches
     Route::get('/me/attention', [NotificationController::class, 'attention'])->name('api.v1.me.attention');

@@ -31,6 +31,7 @@ use Illuminate\Support\Facades\DB;
  * @property string|null $client_platform web | android_app | android_twa (analytics)
  * @property string|null $provider_post_id
  * @property string $caption
+ * @property array{keyword: string, mode: string, message: string, paused_at?: string|null}|null $auto_dm v10.5 Auto DM on comment
  * @property string $type
  * @property list<string>|null $labels
  * @property array<int, array{url: string}>|null $media
@@ -73,6 +74,7 @@ class SocialPost extends Model implements WorkspaceOwned
         'approval_at',
         'review_requested_at',
         'first_comment',
+        'auto_dm',
     ];
 
     /**
@@ -93,6 +95,8 @@ class SocialPost extends Model implements WorkspaceOwned
             'labels' => 'array',
             'approval_at' => 'datetime',
             'review_requested_at' => 'datetime',
+            // v10.5 Auto DM on comment: {keyword, mode, message, paused_at?}
+            'auto_dm' => 'array',
         ];
     }
 
@@ -171,6 +175,12 @@ class SocialPost extends Model implements WorkspaceOwned
     /**
      * @return HasMany<SocialPostTarget, $this>
      */
+    /** v10.5 Auto DMs this post's rule sent. @return HasMany<SocialAutoDm, $this> */
+    public function autoDms(): HasMany
+    {
+        return $this->hasMany(SocialAutoDm::class);
+    }
+
     public function targets(): HasMany
     {
         return $this->hasMany(SocialPostTarget::class);
