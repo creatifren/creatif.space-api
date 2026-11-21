@@ -100,7 +100,7 @@ it('gives the Credits back when the DM fails', function () {
 
 it('pauses and rings the bell when Credits run out; saving resumes', function () {
     [$user, $ig, $post] = adSetup(credits: 0);
-    Credits::grant($user, 50, 'Test');
+    config(['services.inbox.credits_auto_dm_fixed' => 100_000_000]); // more than any plan's Monthly Credits
     [$providers, $sent] = adProviders();
 
     $row = AutoDm::handle(adComment($ig, 'c1', 'INFO'), $providers);
