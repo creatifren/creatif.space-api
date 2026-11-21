@@ -34,7 +34,7 @@ function pushOn(): void
 function pushUser(): User
 {
     $user = User::factory()->create();
-    $user->deviceTokens()->create(['token' => str_repeat('a', 40), 'platform' => 'android', 'last_seen_at' => now()]);
+    $user->deviceTokens()->create(['token' => 'fcm-'.$user->id.'-'.str_repeat('a', 36), 'platform' => 'android', 'last_seen_at' => now()]);
 
     return $user;
 }
@@ -59,12 +59,13 @@ describe('POST /devices', function () {
         $this->actingAs(User::factory()->create())->postJson('/api/v1/devices', [])->assertUnprocessable()->assertJsonValidationErrors('token');
     });
 
-    it('DELETE forgets only the signed-in person\'s phone', function () {
+    it('DELETE forgets only the signed-in person\'s phone (another\'s: 404)', function () {
         $a = pushUser();
         $b = User::factory()->create();
-        $this->actingAs($b)->deleteJson('/api/v1/devices/'.str_repeat('a', 40))->assertNoContent();
+        $token = $a->deviceTokens()->value('token');
+        $this->actingAs($b)->deleteJson('/api/v1/devices/'.$token)->assertNotFound();
         expect($a->deviceTokens()->count())->toBe(1);
-        $this->actingAs($a)->deleteJson('/api/v1/devices/'.str_repeat('a', 40))->assertNoContent();
+        $this->actingAs($a)->deleteJson('/api/v1/devices/'.$token)->assertNoContent();
         expect($a->deviceTokens()->count())->toBe(0);
     });
 });
@@ -115,7 +116,7 @@ describe('PushChannel', function () {
         $user->notify(new SocialPostFailed($post));
 
         Http::assertSent(fn ($r) => str_contains($r->url(), 'fcm.googleapis.com/v1/projects/creatif-space-test/messages:send')
-            && $r['message']['token'] === str_repeat('a', 40)
+            && $r['message']['token'] === $user->deviceTokens()->value('token')
             && $r['message']['notification']['title'] === 'A post didn’t publish'
             && $r['message']['data']['url'] === '/post/'.$post->ulid);
     });

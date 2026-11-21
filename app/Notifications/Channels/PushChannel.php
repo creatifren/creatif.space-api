@@ -22,7 +22,7 @@ class PushChannel
      */
     public static function when(object $notifiable): array
     {
-        if (! $notifiable instanceof User || ! $notifiable->push_enabled || ! Fcm::configured()) {
+        if (! $notifiable instanceof User || ! $notifiable->pushEnabled() || ! Fcm::configured()) {
             return [];
         }
 

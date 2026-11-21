@@ -194,6 +194,12 @@ class User extends Authenticatable implements FilamentUser
         return $this->hasMany(Transfer::class);
     }
 
+    /** The "Push notifications" switch (users.push_enabled, default on). */
+    public function pushEnabled(): bool
+    {
+        return (bool) ($this->attributes['push_enabled'] ?? true);
+    }
+
     /**
      * Phones registered for push (FCM).
      *

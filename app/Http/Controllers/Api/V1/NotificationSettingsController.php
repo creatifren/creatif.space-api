@@ -84,7 +84,7 @@ class NotificationSettingsController extends Controller
             ...array_map(fn (NotificationType $type) => $user->wants($type, 'email'), self::SETTINGS),
             'timezone' => WeeklyDigest::timezone($user),
             // Push on this person's phones (Android app): one switch, on by default.
-            'push' => (bool) ($user->push_enabled ?? true),
+            'push' => $user->pushEnabled(),
         ];
     }
 }
