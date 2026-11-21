@@ -27,8 +27,8 @@ use Illuminate\Validation\ValidationException;
  * Two tiers (Rizal 21 Nov, prototype v10.5): `quality=standard` = Sonnet
  * (services.ai.model_standard), 30 Credits; `quality=extra` = Opus
  * (services.ai.model), 100 Credits (ai_assist.credits). Credits back
- * when the AI does not answer. No `quality` = the old path (Opus, no
- * Credits) until the app sends it.
+ * when the AI does not answer. No `quality` = standard (Rizal 21 Nov: the
+ * old free Opus path is closed now that the app sends it, app #331).
  */
 class CaptionAssistController extends Controller
 {
@@ -49,7 +49,7 @@ class CaptionAssistController extends Controller
             'caption' => ['required', 'string', 'max:5000'],
             'quality' => ['sometimes', 'in:standard,extra'],
         ]);
-        $quality = $validated['quality'] ?? null;
+        $quality = $validated['quality'] ?? 'standard';
 
         $min = max(1, (int) config('ai_assist.min_chars', 10));
         if (mb_strlen((string) preg_replace('/\s+/u', '', $validated['caption'])) < $min) {
@@ -62,8 +62,8 @@ class CaptionAssistController extends Controller
         abort_unless($config['key'] && $config['base_url'] && $config['model'], 503, 'AI is not set up.');
         $model = $quality === 'standard' ? (($config['model_standard'] ?? null) ?: $config['model']) : $config['model'];
 
-        $price = $quality === null ? 0 : (int) config("ai_assist.credits.{$quality}", $quality === 'extra' ? 100 : 30);
-        $label = ($validated['mode'] === 'rewrite' ? 'Improve with AI' : 'Add hashtags').' · '.ucfirst((string) $quality);
+        $price = (int) config("ai_assist.credits.{$quality}", $quality === 'extra' ? 100 : 30);
+        $label = ($validated['mode'] === 'rewrite' ? 'Improve with AI' : 'Add hashtags').' · '.ucfirst($quality);
         $parts = Credits::chargeAi($request->user(), $price, $label, 'quality');
         $fail = function () use ($request, $parts, $label): never {
             Credits::returnAi($request->user(), $parts, $label.' · no answer');

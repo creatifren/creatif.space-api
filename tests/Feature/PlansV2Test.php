@@ -312,7 +312,9 @@ describe('rule 3 — features gated off on Free', function () {
 
     it('refuses AI captions and hashtags on Free, answers on Pro', function (string $mode) {
         v2Assert402($this->actingAs(v2Free())->postJson('/api/v1/social-captions/assist', ['mode' => $mode, 'caption' => 'x']), 'ai_caption');
-        $this->actingAs(v2Pro())->postJson('/api/v1/social-captions/assist', ['mode' => $mode, 'caption' => 'Kopi pagi di Senja, buka jam 7.'])->assertOk();
+        $pro = v2Pro();
+        \App\Support\Credits::grant($pro, 1_000, 'Test'); // no quality = standard, 30 Credits (21 Nov)
+        $this->actingAs($pro)->postJson('/api/v1/social-captions/assist', ['mode' => $mode, 'caption' => 'Kopi pagi di Senja, buka jam 7.'])->assertOk();
     })->with(['rewrite', 'hashtags']);
 
     it('refuses insight (analytics) on Free, answers on Pro', function () {
