@@ -144,7 +144,7 @@ it('includes Insight share links, notification settings and the approval audit â
 
     $settings = json_decode($files['notification_settings.json'], true);
     expect($settings['settings'])->toBe(['problems_email' => false, 'publish_failed' => false, 'push' => true, 'push_events' => ['approved' => true, 'changes' => true, 'post_problem' => true, 'channel' => true, 'credits' => true], 'timezone' => 'Indian/Maldives'])
-        ->and(collect($settings['preferences'])->firstWhere('type', 'digest.weekly'))->toBe(['type' => 'digest.weekly', 'email' => false, 'bell' => true]);
+        ->and(collect($settings['preferences'])->firstWhere('type', 'social.post.failed'))->toBe(['type' => 'social.post.failed', 'email' => false, 'bell' => true]);
 
     $audit = json_decode($files['approval_audit.json'], true);
     expect($audit['on_your_links'])->toHaveCount(1)
