@@ -20,10 +20,8 @@ use App\Jobs\RenewMonthlyCredits;
 use App\Jobs\RetryRateLimitedPublishes;
 use App\Jobs\SendApprovedHeldPosts;
 use App\Jobs\SendClientReports;
-use App\Jobs\SendConnectNudges;
 use App\Jobs\SendContentPlanReminders;
 use App\Jobs\SendMonthlyInsightReports;
-use App\Jobs\SendWeeklyDigests;
 use App\Jobs\SnapshotFollowerCounts;
 use App\Jobs\SyncInboxes;
 use App\Jobs\VerifyChannels;
@@ -209,13 +207,9 @@ Schedule::job(new SendContentPlanReminders)->everyFifteenMinutes()->withoutOverl
 // Account exports: the ZIP goes once its 24-hour link has expired.
 Schedule::job(new PruneAccountExports)->hourly();
 
-// The weekly digest: Monday 08:00 in each user's timezone (hourly, so
-// every zone's 08:xx comes round once; sent once per week).
-Schedule::job(new SendWeeklyDigests)->hourly()->withoutOverlapping();
-
-// Day 2 with no channel connected: one "connect your first channel" email
-// per account, ever (App\Support\Onboarding).
-Schedule::job(new SendConnectNudges)->hourly()->withoutOverlapping();
+// v10.8 (Rizal 21 Nov 2026): email only what needs action — the weekly
+// digest (SendWeeklyDigests) and the day-2 "connect your first channel"
+// email (SendConnectNudges) are no longer scheduled. Today shows both.
 
 // A scheduled post whose time passed 30 minutes ago and has not gone out:
 // one "Post missed" email per post, on the publish_failed switch.

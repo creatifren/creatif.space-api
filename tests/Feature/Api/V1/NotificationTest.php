@@ -45,34 +45,20 @@ describe('preferences', function () {
 });
 
 describe('delivery', function () {
-    it('sends on both channels by default', function () {
+    // v10.8: a Space opening is bell-only — no email, and the bell has no switches.
+    it('puts a Space opening in the bell only', function () {
         $user = User::factory()->create();
         $space = Space::factory()->for($user)->create();
 
-        expect((new SpaceOpened($space))->via($user))
-            ->toBe(['mail', 'database']);
+        expect((new SpaceOpened($space))->via($user))->toBe(['database']);
     });
 
-    it('drops the channel the user switched off', function () {
+    it('keeps the bell even when old switches say off', function () {
         $user = User::factory()->create();
-        NotificationPreference::factory()->for($user)->create([
-            'type' => 'space.opened',
-            'email_enabled' => false,
-        ]);
+        NotificationPreference::factory()->for($user)->silenced()->create(['type' => 'space.opened']);
         $space = Space::factory()->for($user)->create();
 
-        expect((new SpaceOpened($space))->via($user->fresh()))
-            ->toBe(['database']);
-    });
-
-    it('sends nothing at all when both are off', function () {
-        $user = User::factory()->create();
-        NotificationPreference::factory()->for($user)->silenced()->create([
-            'type' => 'space.opened',
-        ]);
-        $space = Space::factory()->for($user)->create();
-
-        expect((new SpaceOpened($space))->via($user->fresh()))->toBe([]);
+        expect((new SpaceOpened($space))->via($user->fresh()))->toBe(['database']);
     });
 });
 

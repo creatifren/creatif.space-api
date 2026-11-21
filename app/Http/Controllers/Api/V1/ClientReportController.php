@@ -203,6 +203,8 @@ class ClientReportController extends Controller
             summary: (string) ($data['summary'] ?? ''),
         ));
         $report->forceFill(['sent_at' => now(), 'sent_to' => $label->approver_email])->save();
+        // v10.8: the owner's bell says it went (no email, no push).
+        $report->user?->notify(new \App\Notifications\ClientReportSent($report->ulid, $label->name, (string) $data['period']['label'], $label->approver_email));
     }
 
     /** @return array<string, mixed> */

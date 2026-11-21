@@ -4,7 +4,6 @@ namespace App\Notifications;
 
 use App\Enums\NotificationType;
 use App\Models\SocialPost;
-use App\Notifications\Channels\PushChannel;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Notifications\Messages\MailMessage;
@@ -26,10 +25,7 @@ class SocialPostFailed extends Notification implements ShouldQueue
      */
     public function via(object $notifiable): array
     {
-        $via = NotificationChannels::for($notifiable, NotificationType::SocialPostFailed);
-
-        /* Push follows the bell switch of the same type. */
-        return in_array('database', $via, true) ? [...$via, ...PushChannel::when($notifiable)] : $via;
+        return [...NotificationChannels::for($notifiable, NotificationType::SocialPostFailed), ...NotificationChannels::push($notifiable, 'post_problem')];
     }
 
     /** @return array{title: string, body: string, url: string} */

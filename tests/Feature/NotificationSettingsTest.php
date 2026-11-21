@@ -6,19 +6,32 @@ use App\Models\SocialPost;
 use App\Models\User;
 use App\Notifications\SocialPostDecided;
 use App\Notifications\SocialPostFailed;
+use App\Notifications\SpaceOpened;
 
 /*
- * Item 8: GET / PATCH /me/notification-settings — publish_failed,
- * approval_decided, weekly_digest (email; default on), and the emails
- * read the same switches.
+ * Prototype v10.8 (Rizal 21 Nov 2026): GET / PATCH /me/notification-settings
+ * — problems_email ("Problems that need you", default on), push (master),
+ * push_events (5, default on), timezone. Bell = everything; email only what
+ * needs action; no per-approval emails.
  */
 
+function nsDefaults(array $over = []): array
+{
+    return array_replace_recursive([
+        'problems_email' => true,
+        'publish_failed' => true,
+        'push' => true,
+        'push_events' => ['approved' => true, 'changes' => true, 'post_problem' => true, 'channel' => true, 'credits' => true],
+        'timezone' => config('app.timezone'),
+    ], $over);
+}
+
 describe('GET /me/notification-settings', function () {
-    it('has all three on before anything is touched', function () {
+    it('has everything on before anything is touched', function () {
         $this->actingAs(User::factory()->create())
             ->getJson('/api/v1/me/notification-settings')
             ->assertOk()
-            ->assertExactJson(['data' => ['publish_failed' => true, 'approval_decided' => true, 'weekly_digest' => true, 'timezone' => config('app.timezone'), 'push' => true]]);
+            ->assertExactJson(['data' => nsDefaults()]);
     });
 
     it('needs a signed-in user', function () {
@@ -27,40 +40,38 @@ describe('GET /me/notification-settings', function () {
 });
 
 describe('PATCH /me/notification-settings', function () {
-    it('turns one off and leaves the others, the bell and the other preferences alone', function () {
+    it('turns the problems email off (publish_failed is the same switch)', function () {
         $user = User::factory()->create();
 
-        $this->actingAs($user)->patchJson('/api/v1/me/notification-settings', ['weekly_digest' => false])
+        $this->actingAs($user)->patchJson('/api/v1/me/notification-settings', ['problems_email' => false])
             ->assertOk()
-            ->assertExactJson(['data' => ['publish_failed' => true, 'approval_decided' => true, 'weekly_digest' => false, 'timezone' => config('app.timezone'), 'push' => true]]);
-
-        $user = $user->fresh();
-        expect($user->wants(NotificationType::WeeklyDigest, 'email'))->toBeFalse()
-            ->and($user->wants(NotificationType::WeeklyDigest, 'bell'))->toBeTrue()
-            ->and($user->notificationPreferences()->count())->toBe(1);
-
-        // The same switch as Settings → Notifications.
-        $row = collect($this->actingAs($user)->getJson('/api/v1/me/notification-preferences')->json('data'))
-            ->firstWhere('type', 'digest.weekly');
-        expect($row['email_enabled'])->toBeFalse();
-    });
-
-    it('turns them back on, several at once', function () {
-        $user = User::factory()->create();
-        $this->actingAs($user)->patchJson('/api/v1/me/notification-settings', ['publish_failed' => false, 'approval_decided' => false])->assertOk();
+            ->assertExactJson(['data' => nsDefaults(['problems_email' => false, 'publish_failed' => false])]);
+        expect($user->fresh()->wants(NotificationType::SocialPostFailed, 'email'))->toBeFalse();
 
         $this->actingAs($user)->patchJson('/api/v1/me/notification-settings', ['publish_failed' => true])
-            ->assertOk()
-            ->assertJsonPath('data.publish_failed', true)
-            ->assertJsonPath('data.approval_decided', false);
+            ->assertOk()->assertJsonPath('data.problems_email', true);
     });
 
-    it('refuses an empty body, a non-boolean, and ignores unknown names', function () {
+    it('turns one push event off and leaves the others', function () {
+        $user = User::factory()->create();
+
+        $this->actingAs($user)->patchJson('/api/v1/me/notification-settings', ['push_events' => ['approved' => false]])
+            ->assertOk()
+            ->assertExactJson(['data' => nsDefaults(['push_events' => ['approved' => false]])]);
+        $this->actingAs($user)->patchJson('/api/v1/me/notification-settings', ['push_events' => ['credits' => false], 'push' => false])
+            ->assertOk()
+            ->assertJsonPath('data.push_events.approved', false)
+            ->assertJsonPath('data.push_events.credits', false)
+            ->assertJsonPath('data.push', false);
+        expect($user->fresh()->pushWants('channel'))->toBeFalse('the master switch is off');
+    });
+
+    it('refuses an empty body, a non-boolean, and unknown names alone', function () {
         $user = User::factory()->create();
 
         $this->actingAs($user)->patchJson('/api/v1/me/notification-settings', [])->assertUnprocessable();
-        $this->actingAs($user)->patchJson('/api/v1/me/notification-settings', ['weekly_digest' => 'sometimes'])
-            ->assertUnprocessable()->assertJsonValidationErrors('weekly_digest');
+        $this->actingAs($user)->patchJson('/api/v1/me/notification-settings', ['problems_email' => 'sometimes'])
+            ->assertUnprocessable()->assertJsonValidationErrors('problems_email');
         $this->actingAs($user)->patchJson('/api/v1/me/notification-settings', ['billing' => false])->assertUnprocessable();
 
         expect($user->notificationPreferences()->count())->toBe(0);
@@ -70,13 +81,11 @@ describe('PATCH /me/notification-settings', function () {
         $alice = User::factory()->create();
         $bob = User::factory()->create();
 
-        $this->actingAs($alice)->patchJson('/api/v1/me/notification-settings', ['publish_failed' => false])->assertOk();
+        $this->actingAs($alice)->patchJson('/api/v1/me/notification-settings', ['problems_email' => false])->assertOk();
 
-        $this->actingAs($bob)->getJson('/api/v1/me/notification-settings')->assertJsonPath('data.publish_failed', true);
+        $this->actingAs($bob)->getJson('/api/v1/me/notification-settings')->assertJsonPath('data.problems_email', true);
     });
-});
 
-describe('timezone (the weekly digest’s Monday 08:00)', function () {
     it('sets a valid IANA zone, refuses another, and null resets it', function () {
         $user = User::factory()->create();
 
@@ -86,34 +95,36 @@ describe('timezone (the weekly digest’s Monday 08:00)', function () {
             ->assertUnprocessable()->assertJsonValidationErrors('timezone');
         $this->actingAs($user)->patchJson('/api/v1/me/notification-settings', ['timezone' => null])
             ->assertOk()->assertJsonPath('data.timezone', config('app.timezone'));
-
-        expect($user->fresh()->timezone)->toBeNull()
-            ->and($user->notificationPreferences()->count())->toBe(0);
     });
 });
 
-describe('the emails respect them', function () {
-    it('sends no publish-failed email when publish_failed is off (the bell stays)', function () {
+describe('v10.8: who gets an email', function () {
+    it('a failed post: bell always, email while problems_email is on', function () {
         $user = User::factory()->create();
         $post = SocialPost::factory()->for($user)->create();
 
-        expect((new SocialPostFailed($post))->via($user))->toContain('mail');
+        expect((new SocialPostFailed($post))->via($user))->toContain('mail')->toContain('database');
 
-        $this->actingAs($user)->patchJson('/api/v1/me/notification-settings', ['publish_failed' => false])->assertOk();
+        $this->actingAs($user)->patchJson('/api/v1/me/notification-settings', ['problems_email' => false])->assertOk();
 
         expect((new SocialPostFailed($post))->via($user->fresh()))->not->toContain('mail')->toContain('database');
     });
 
-    it('sends no approval email when approval_decided is off', function () {
+    it('approved / changes requested: bell only, never an email', function () {
         $user = User::factory()->create();
         $link = SocialApprovalLink::query()->create(['user_id' => $user->id, 'title' => 'Nov', 'client_name' => 'Andi']);
-        $notice = new SocialPostDecided($link, SocialPostDecided::APPROVED, 'Rani');
 
-        expect($notice->via($user))->toContain('mail');
+        foreach ([SocialPostDecided::APPROVED, SocialPostDecided::REVISE] as $d) {
+            expect((new SocialPostDecided($link, $d, 'Rani'))->via($user))->toBe(['database']);
+        }
+        expect((new SocialPostDecided($link, SocialPostDecided::BLOCKED, 'Rani'))->via($user))->toContain('mail');
+    });
 
-        $this->actingAs($user)->patchJson('/api/v1/me/notification-settings', ['approval_decided' => false])->assertOk();
+    it('a Space opened: bell only', function () {
+        $user = User::factory()->create();
+        $space = \App\Models\Space::factory()->for($user)->create();
 
-        expect($notice->via($user->fresh()))->not->toContain('mail');
+        expect((new SpaceOpened($space))->via($user))->toBe(['database']);
     });
 });
 
@@ -127,8 +138,8 @@ describe('token scopes (MCP)', function () {
         app('auth')->forgetGuards();
 
         bearer($this, $read)->getJson('/api/v1/me/notification-settings')->assertOk();
-        bearer($this, $read)->patchJson('/api/v1/me/notification-settings', ['weekly_digest' => false])->assertForbidden();
-        bearer($this, $draft)->patchJson('/api/v1/me/notification-settings', ['weekly_digest' => false])
-            ->assertOk()->assertJsonPath('data.weekly_digest', false);
+        bearer($this, $read)->patchJson('/api/v1/me/notification-settings', ['problems_email' => false])->assertForbidden();
+        bearer($this, $draft)->patchJson('/api/v1/me/notification-settings', ['problems_email' => false])
+            ->assertOk()->assertJsonPath('data.problems_email', false);
     });
 });

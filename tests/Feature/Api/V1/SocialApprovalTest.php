@@ -522,7 +522,7 @@ it('approves every post of a long plan: past the time budget the rest are sent b
     }
 });
 
-it('tells the owner when a client asks for changes, and respects the switch', function () {
+it('tells the owner when a client asks for changes — always in the bell', function () {
     Notification::fake();
     $post = heldPost('client');
     $link = linkFor($post);
@@ -533,14 +533,15 @@ it('tells the owner when a client asks for changes, and respects the switch', fu
     Notification::assertSentTo($post->user, SocialPostDecided::class,
         fn ($n, $channels) => $n->decision === 'revise' && in_array('database', $channels, true));
 
-    // Both switches off: the next one goes nowhere (no channel, nothing recorded).
+    // v10.8: the bell has no switches — old bell/email preferences change nothing.
     $post->user->notificationPreferences()->create(['type' => 'social.post.decision', 'email_enabled' => false, 'bell_enabled' => false]);
     $other = heldPost('client', $post->user);
     $link->posts()->attach($other->id);
     asApprover($this)->postJson("/api/v1/a/{$link->token}/posts/{$other->ulid}/decision", [
         'name' => 'Andi', 'decision' => 'revise', 'reason' => 'Lagi.',
     ])->assertOk();
-    Notification::assertNotSentTo($post->user, SocialPostDecided::class, fn ($n) => $n->post?->is($other));
+    Notification::assertSentTo($post->user, SocialPostDecided::class,
+        fn ($n, $channels) => $n->post?->is($other) && $channels === ['database']);
 });
 
 it('puts a request for changes on the owners to-do list', function () {

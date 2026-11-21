@@ -194,6 +194,28 @@ class User extends Authenticatable implements FilamentUser
         return $this->hasMany(Transfer::class);
     }
 
+    /**
+     * The five push switches (v10.8), each default on: approved, changes,
+     * post_problem, channel, credits. Kept in social_settings.push_events.
+     *
+     * @return array<string, bool>
+     */
+    public function pushEvents(): array
+    {
+        $saved = (array) (($this->social_settings ?? [])['push_events'] ?? []);
+        $out = [];
+        foreach (\App\Notifications\NotificationChannels::PUSH_EVENTS as $event) {
+            $out[$event] = (bool) ($saved[$event] ?? true);
+        }
+
+        return $out;
+    }
+
+    public function pushWants(string $event): bool
+    {
+        return $this->pushEnabled() && ($this->pushEvents()[$event] ?? false);
+    }
+
     /** The "Push notifications" switch (users.push_enabled, default on). */
     public function pushEnabled(): bool
     {
