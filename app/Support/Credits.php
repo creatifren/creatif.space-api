@@ -557,10 +557,10 @@ final class Credits
         }
     }
 
-    /** One tap on AI reply suggestions (CREDITS_PER_SUGGESTION, default 300). */
+    /** One tap on AI reply suggestions, or one "Reply all" draft (CREDITS_PER_SUGGESTION, default 100). */
     public static function perSuggestion(): int
     {
-        return max(0, (int) config('services.inbox.credits_per_suggestion', 300));
+        return max(0, (int) config('services.inbox.credits_per_suggestion', 100));
     }
 
     /**

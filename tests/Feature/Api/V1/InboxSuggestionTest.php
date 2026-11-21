@@ -18,10 +18,11 @@ beforeEach(function () {
     config([
         'services.social.provider' => 'outstand',
         'services.inbox.enabled' => true,
-        'services.inbox.credits_per_suggestion' => 300,
+        'services.inbox.credits_per_suggestion' => 100,
         'services.ai.key' => 'sk-ant-test',
         'services.ai.base_url' => 'https://ai.test/v1',
         'services.ai.model' => 'claude-opus-5-5',
+        'services.ai.model_standard' => 'claude-sonnet-5-5',
     ]);
     Cache::flush();
     Workspace::forget();
@@ -60,7 +61,7 @@ function sgWorld(bool $pro = true): array
     return [$user, $thread, $comment];
 }
 
-it('gives three suggestions for a DM and takes 300 Credits', function () {
+it('gives three suggestions for a DM on the Standard model and takes 100 Credits', function () {
     Http::fake(['ai.test/*' => Http::response(['content' => [['type' => 'text', 'text' => "1. Kami buka jam 7 pagi!\n2. Jam 7, sampai ketemu!\n3. \"Besok buka jam 7 ya.\""]]])]);
     [$user, $thread] = sgWorld();
     $before = Credits::total($user);
@@ -68,11 +69,11 @@ it('gives three suggestions for a DM and takes 300 Credits', function () {
     $this->actingAs($user)->postJson("/api/v1/inbox/feed/dm_{$thread->ulid}/suggestions")
         ->assertOk()
         ->assertJsonPath('data.suggestions', ['Kami buka jam 7 pagi!', 'Jam 7, sampai ketemu!', 'Besok buka jam 7 ya.'])
-        ->assertJsonPath('data.credits', 300);
+        ->assertJsonPath('data.credits', 100);
 
-    expect(Credits::total($user))->toBe($before - 300)
-        ->and(Credits::spendThisCycle($user)['ai'])->toBe(300);
-    Http::assertSent(fn ($r) => str_contains($r['messages'][0]['content'], 'Them: Buka jam berapa besok?'));
+    expect(Credits::total($user))->toBe($before - 100)
+        ->and(Credits::spendThisCycle($user)['ai'])->toBe(100);
+    Http::assertSent(fn ($r) => $r['model'] === 'claude-sonnet-5-5' && str_contains($r['messages'][0]['content'], 'Them: Buka jam berapa besok?'));
 });
 
 it('works for a comment too', function () {
@@ -119,4 +120,33 @@ it('answers 404 for another workspace', function () {
     Subscription::factory()->for($other)->create();
 
     $this->actingAs($other)->postJson("/api/v1/inbox/feed/dm_{$thread->ulid}/suggestions")->assertNotFound();
+});
+
+it('Reply all with AI: one draft each, Credits only for what was written', function () {
+    Http::fakeSequence('ai.test/*')
+        ->push(['content' => [['type' => 'text', 'text' => 'Kami buka jam 7 pagi!']]])
+        ->push(['error' => 'overloaded'], 529);
+    [$user, $thread, $comment] = sgWorld();
+    $before = Credits::total($user);
+
+    $this->actingAs($user)->postJson('/api/v1/inbox/feed/drafts', ['items' => ["dm_{$thread->ulid}", "comment_{$comment->ulid}"]])
+        ->assertOk()
+        ->assertJsonPath('data.drafts.0.reply', 'Kami buka jam 7 pagi!')
+        ->assertJsonPath('data.drafts.1.reply', null)
+        ->assertJsonPath('data.credits', 100);
+
+    expect(Credits::total($user))->toBe($before - 100);
+});
+
+it('Reply all with AI: Pro/Max only, at most 20, own workspace only', function () {
+    Http::fake();
+    [$free, $thread] = sgWorld(pro: false);
+    $this->actingAs($free)->postJson('/api/v1/inbox/feed/drafts', ['items' => ["dm_{$thread->ulid}"]])
+        ->assertStatus(402)->assertJsonPath('feature', 'ai_reply_suggestions');
+
+    [$pro] = sgWorld();
+    $this->actingAs($pro)->postJson('/api/v1/inbox/feed/drafts', ['items' => array_map(fn ($i) => 'dm_'.str_pad((string) $i, 26, '0', STR_PAD_LEFT), range(1, 21))])
+        ->assertUnprocessable();
+    $this->actingAs($pro)->postJson('/api/v1/inbox/feed/drafts', ['items' => ["dm_{$thread->ulid}"]])->assertNotFound();
+    Http::assertNothingSent();
 });

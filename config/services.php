@@ -134,8 +134,8 @@ return [
         'enabled' => (bool) env('INBOX_ENABLED', true),
         // Credits one Inbox reply costs (DM, comment reply, private reply). 0 = free.
         'credits_per_reply' => (int) env('CREDITS_PER_REPLY', 0),
-        // AI reply suggestions: Credits per tap (3 suggestions). Backlog #2, Rizal 20 Nov.
-        'credits_per_suggestion' => (int) env('CREDITS_PER_SUGGESTION', 300),
+        // AI reply suggestions: Credits per tap (3 suggestions) and per "Reply all" draft. Rizal 21 Nov: 100.
+        'credits_per_suggestion' => (int) env('CREDITS_PER_SUGGESTION', 100),
     ],
 
     // Social posting — Post for Me relays posts to the nine platforms. One
@@ -169,6 +169,8 @@ return [
         'key' => env('ANTHROPIC_API_KEY'),
         'base_url' => env('ANTHROPIC_BASE_URL', 'https://api.anthropic.com/v1'),
         'model' => env('ANTHROPIC_MODEL', 'claude-opus-5-5'),
+        // Standard tier (Rizal 21 Nov): reply suggestions + "Reply all with AI"; caption Standard later.
+        'model_standard' => env('ANTHROPIC_MODEL_STANDARD', 'claude-sonnet-5-5'),
     ],
 
     /*
