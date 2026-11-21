@@ -314,6 +314,7 @@ describe('rule 3 — features gated off on Free', function () {
         v2Assert402($this->actingAs(v2Free())->postJson('/api/v1/social-captions/assist', ['mode' => $mode, 'caption' => 'x']), 'ai_caption');
         $pro = v2Pro();
         \App\Support\Credits::grant($pro, 1_000, 'Test'); // no quality = standard, 30 Credits (21 Nov)
+        $pro->forceFill(['social_settings' => ['caption_style' => ['tone' => 'casual', 'emoji' => 'off', 'hashtags' => 'none', 'examples' => []]]])->save(); // v10.9.2
         $this->actingAs($pro)->postJson('/api/v1/social-captions/assist', ['mode' => $mode, 'caption' => 'Kopi pagi di Senja, buka jam 7.'])->assertOk();
     })->with(['rewrite', 'hashtags']);
 
