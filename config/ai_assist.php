@@ -17,6 +17,9 @@ return [
     // Non-whitespace characters the caption needs before AI may touch it.
     'min_chars' => (int) env('AI_ASSIST_MIN_CHARS', 10),
 
+    // Longest caption AI takes (Instagram's own limit) — keeps a tap's cost in line with its price (21 Nov).
+    'max_chars' => (int) env('AI_ASSIST_MAX_CHARS', 2200),
+
     // Credits per use by tier (Rizal 21 Nov): Standard = Sonnet, Extra = Opus.
     'credits' => [
         'standard' => (int) env('AI_ASSIST_CREDITS_STANDARD', 30),

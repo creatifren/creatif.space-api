@@ -37,7 +37,7 @@ it('both modes ask Claude (Messages API) with the mode prompt and the caption as
         ->assertJsonPath('data.text', $answer);
 
     Http::assertSent(fn (HttpRequest $r) => $r->url() === 'https://ai.test/v1/messages'
-        && $r['model'] === 'm' && $r['max_tokens'] === 1024
+        && $r['model'] === 'm' && $r['max_tokens'] === \App\Http\Controllers\Api\V1\CaptionAssistController::maxTokens($mode, CA_CAPTION)
         && str_starts_with($r['system'], $prompt)
         && $r['messages'] === [['role' => 'user', 'content' => CA_CAPTION]]
         && $r->hasHeader('x-api-key', 'k')
@@ -159,4 +159,35 @@ it('no quality is charged as standard (the free Opus path is closed)', function 
 
     expect(\App\Support\Credits::total($user))->toBe($before - 30);
     Http::assertSent(fn (HttpRequest $r) => $r['model'] === 'sonnet');
+});
+
+it('keeps a tap\'s cost in line with its price: output room follows the caption, 2,200 characters at most (21 Nov)', function () {
+    expect(\App\Http\Controllers\Api\V1\CaptionAssistController::maxTokens('hashtags', str_repeat('a', 2000)))->toBe(200)
+        ->and(\App\Http\Controllers\Api\V1\CaptionAssistController::maxTokens('rewrite', 'short caption here'))->toBe(256)
+        ->and(\App\Http\Controllers\Api\V1\CaptionAssistController::maxTokens('rewrite', str_repeat('a', 1500)))->toBe(650)
+        ->and(\App\Http\Controllers\Api\V1\CaptionAssistController::maxTokens('rewrite', str_repeat('a', 9000)))->toBe(1024);
+
+    Http::fake(['*' => Http::response(['content' => [['type' => 'text', 'text' => 'ok']]])]);
+    $this->actingAs(captionUser())
+        ->postJson('/api/v1/social-captions/assist', ['mode' => 'rewrite', 'caption' => str_repeat('kopi ', 441)])
+        ->assertUnprocessable()
+        ->assertJsonPath('errors.caption.0', 'AI works on captions up to 2200 characters — shorten it first.');
+    Http::assertNothingSent();
+});
+
+it('logs the tokens each answer used, with its cost and price in Credits', function () {
+    \Illuminate\Support\Facades\Log::spy();
+    Http::fake(['ai.test/v1/messages' => Http::response([
+        'content' => [['type' => 'text', 'text' => 'Better caption']],
+        'usage' => ['input_tokens' => 100, 'output_tokens' => 200],
+    ])]);
+    $this->actingAs(captionUser())
+        ->postJson('/api/v1/social-captions/assist', ['mode' => 'rewrite', 'caption' => CA_CAPTION])
+        ->assertOk();
+
+    \Illuminate\Support\Facades\Log::shouldHaveReceived('info')->withArgs(fn ($m, $ctx = []) => $m === 'ai usage'
+        && $ctx['feature'] === 'caption_rewrite_standard' && $ctx['in'] === 100 && $ctx['out'] === 200);
+    expect(\App\Support\AiUsage::dollars('claude-sonnet-5-5', 100, 200))->toBe(0.0022)
+        ->and(\App\Support\AiUsage::dollars('claude-opus-5-5', 1_000_000, 0))->toBe(4.0)
+        ->and(\App\Support\AiUsage::dollars('m', 1, 1))->toBeNull();
 });

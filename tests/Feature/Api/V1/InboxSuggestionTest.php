@@ -170,3 +170,11 @@ it('writes in the Reply style: workspace default, then the client\'s own', funct
 
     $this->actingAs($user)->patchJson("/api/v1/client-labels/{$label}", ['reply_style' => ['tone' => 'loud', 'address' => 'polite', 'emoji' => 'off']])->assertStatus(422);
 });
+
+it('sends at most the newest 4,000 characters of a thread to the AI (21 Nov)', function () {
+    $long = str_repeat('a', 3000)."\n".str_repeat('b', 3000);
+    $clip = \App\Support\ReplyAi::clip($long);
+    expect(mb_strlen($clip))->toBe(\App\Support\ReplyAi::MAX_CONTEXT)
+        ->and(str_ends_with($clip, 'bbb'))->toBeTrue()
+        ->and(\App\Support\ReplyAi::clip('short'))->toBe('short');
+});

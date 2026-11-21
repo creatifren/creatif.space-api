@@ -44,6 +44,15 @@ class ReplyAi
         return ($caption !== '' ? 'Brand post: '.mb_substr($caption, 0, 1000)."\n" : '').'Them (comment): '.mb_substr($text, 0, 1000);
     }
 
+    /** At most this many characters of a thread go to the AI: the newest part (AI cost per tap, 21 Nov). */
+    public const MAX_CONTEXT = 4000;
+
+    /** The newest MAX_CONTEXT characters of a context. */
+    public static function clip(string $context): string
+    {
+        return mb_strlen($context) > self::MAX_CONTEXT ? mb_substr($context, -self::MAX_CONTEXT) : $context;
+    }
+
     /**
      * Up to $count short replies; [] when the AI did not answer.
      *
@@ -59,6 +68,7 @@ class ReplyAi
             .', in the language they wrote in. Friendly, natural, no hashtags, no made-up facts, prices or promises. '
             .($count === 1 ? 'Reply with the reply only, without quotes.' : "Reply with the {$count} replies only, one per line, without numbers or quotes.")
             .$style;
+        $model = (string) ($c['model_standard'] ?: $c['model']);
 
         try {
             $response = Http::withHeaders([
@@ -67,10 +77,10 @@ class ReplyAi
             ])
                 ->timeout(30)
                 ->post(rtrim((string) $c['base_url'], '/').'/messages', [
-                    'model' => $c['model_standard'] ?: $c['model'],
-                    'max_tokens' => 200 * $count,
+                    'model' => $model,
+                    'max_tokens' => 150 * $count,
                     'system' => $prompt,
-                    'messages' => [['role' => 'user', 'content' => $context]],
+                    'messages' => [['role' => 'user', 'content' => self::clip($context)]],
                 ]);
         } catch (ConnectionException) {
             return [];
@@ -79,6 +89,7 @@ class ReplyAi
         if (! $response->successful()) {
             return [];
         }
+        AiUsage::log($count === 1 ? 'reply_all_item' : 'reply_suggestions', $model, $response->json('usage'));
 
         $text = collect((array) $response->json('content'))->where('type', 'text')->pluck('text')->implode('');
         $lines = $count === 1 ? [trim($text)] : (preg_split('/\R+/u', $text) ?: []);
@@ -101,6 +112,7 @@ class ReplyAi
         $system = 'You write one short private direct message from a brand to a person who just commented on its post. '
             .'Follow the brand\'s note for what to send. Write in the language of the comment. Friendly, natural, no hashtags, '
             .'no made-up facts, prices or promises beyond the note. Reply with the message only, without quotes.'.$style;
+        $model = (string) ($c['model_standard'] ?: $c['model']);
 
         try {
             $response = Http::withHeaders([
@@ -109,10 +121,10 @@ class ReplyAi
             ])
                 ->timeout(30)
                 ->post(rtrim((string) $c['base_url'], '/').'/messages', [
-                    'model' => $c['model_standard'] ?: $c['model'],
-                    'max_tokens' => 400,
+                    'model' => $model,
+                    'max_tokens' => 300,
                     'system' => $system,
-                    'messages' => [['role' => 'user', 'content' => 'Brand note: '.mb_substr($note, 0, 1000)."\n".$context]],
+                    'messages' => [['role' => 'user', 'content' => 'Brand note: '.mb_substr($note, 0, 1000)."\n".self::clip($context)]],
                 ]);
         } catch (ConnectionException) {
             return null;
@@ -120,6 +132,7 @@ class ReplyAi
         if (! $response->successful()) {
             return null;
         }
+        AiUsage::log('auto_dm_ai', $model, $response->json('usage'));
         $text = trim(collect((array) $response->json('content'))->where('type', 'text')->pluck('text')->implode(''), " \t\n\"'“”");
 
         return $text === '' ? null : mb_substr($text, 0, 1000);
