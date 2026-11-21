@@ -157,7 +157,7 @@ it('writes in the Reply style: workspace default, then the client\'s own', funct
     Http::fake(['ai.test/*' => Http::response(['content' => [['type' => 'text', 'text' => "A\nB\nC"]]])]);
     [$user, $thread] = sgWorld();
 
-    $this->actingAs($user)->patchJson('/api/v1/social-settings', ['reply_style' => ['tone' => 'playful', 'address' => 'friendly', 'emoji' => 'more', 'examples' => ['Halo kak! Jam 7 udah buka ya', '']]])
+    $this->actingAs($user)->patchJson('/api/v1/me/social-settings', ['reply_style' => ['tone' => 'playful', 'address' => 'friendly', 'emoji' => 'more', 'examples' => ['Halo kak! Jam 7 udah buka ya', '']]])
         ->assertOk()->assertJsonPath('data.reply_style.tone', 'playful')->assertJsonPath('data.reply_style.examples', ['Halo kak! Jam 7 udah buka ya']);
     $this->actingAs($user)->postJson("/api/v1/inbox/feed/dm_{$thread->ulid}/suggestions")->assertOk();
     Http::assertSent(fn ($r) => str_contains($r['system'], 'playful and upbeat') && str_contains($r['system'], 'Halo kak! Jam 7 udah buka ya'));
