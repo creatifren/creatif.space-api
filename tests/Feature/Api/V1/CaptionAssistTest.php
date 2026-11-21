@@ -191,3 +191,28 @@ it('logs the tokens each answer used, with its cost and price in Credits', funct
         ->and(\App\Support\AiUsage::dollars('claude-opus-5-5', 1_000_000, 0))->toBe(4.0)
         ->and(\App\Support\AiUsage::dollars('m', 1, 1))->toBeNull();
 });
+
+it('prices Improve with AI by caption length; Add hashtags stays flat (prototype v10.9)', function (string $mode, string $quality, int $len, int $price) {
+    expect(\App\Http\Controllers\Api\V1\CaptionAssistController::price($mode, $quality, str_repeat('a', $len)))->toBe($price);
+})->with([
+    'rewrite standard 500' => ['rewrite', 'standard', 500, 30],
+    'rewrite standard 501' => ['rewrite', 'standard', 501, 75],
+    'rewrite standard 1200' => ['rewrite', 'standard', 1200, 75],
+    'rewrite standard 1201' => ['rewrite', 'standard', 1201, 150],
+    'rewrite extra 400' => ['rewrite', 'extra', 400, 100],
+    'rewrite extra 900' => ['rewrite', 'extra', 900, 150],
+    'rewrite extra 2200' => ['rewrite', 'extra', 2200, 300],
+    'hashtags standard 2000' => ['hashtags', 'standard', 2000, 30],
+    'hashtags extra 2000' => ['hashtags', 'extra', 2000, 100],
+]);
+
+it('charges the length price and says so', function () {
+    Http::fake(['ai.test/v1/messages' => Http::response(['content' => [['type' => 'text', 'text' => 'Better caption']]])]);
+    $user = captionUser();
+    $before = \App\Support\Credits::total($user);
+    $this->actingAs($user)
+        ->postJson('/api/v1/social-captions/assist', ['mode' => 'rewrite', 'caption' => str_repeat('kopi ', 150)])
+        ->assertOk()
+        ->assertJsonPath('data.credits', 75);
+    expect(\App\Support\Credits::total($user))->toBe($before - 75);
+});
