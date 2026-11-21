@@ -143,17 +143,6 @@ describe('SendWeeklyDigests', function () {
             ->and(WeeklyDigest::timezone($plain))->toBe(config('app.timezone'));
     });
 
-    it('honours the weekly_digest setting', function () {
-        $user = wdUser();
-        wdPost($user, 'published', 'published', '2026-11-12 10:00');
-        $this->actingAs($user)->patchJson('/api/v1/me/notification-settings', ['weekly_digest' => false])->assertOk();
-
-        wdAt('08:00', 'Indian/Maldives');
-        (new SendWeeklyDigests)->handle();
-
-        Notification::assertNotSentTo($user, WeeklyDigestMail::class);
-    });
-
     it('skips internal accounts, staff, and accounts that are not active', function () {
         $internal = wdUser(['email' => 'team@creatif.space']);
         $staff = wdUser(['is_staff' => true]);
@@ -191,9 +180,9 @@ describe('SendWeeklyDigests', function () {
         Notification::assertSentToTimes($user, WeeklyDigestMail::class, 2);
     });
 
-    it('is scheduled hourly', function () {
+    it('is no longer scheduled (v10.8: no digest email)', function () {
         $events = collect(app(Schedule::class)->events())
             ->filter(fn ($e) => str_contains((string) $e->description, SendWeeklyDigests::class));
-        expect($events)->toHaveCount(1)->and($events->first()->expression)->toBe('0 * * * *');
+        expect($events)->toHaveCount(0);
     });
 });

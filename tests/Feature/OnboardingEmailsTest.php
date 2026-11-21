@@ -197,12 +197,11 @@ describe('day-2 connect nudge', function () {
         }
     });
 
-    it('runs hourly from the scheduler', function () {
+    it('is no longer scheduled (v10.8: no connect-channel email)', function () {
         $events = collect(app(\Illuminate\Console\Scheduling\Schedule::class)->events())
             ->filter(fn ($e) => str_contains((string) $e->description, SendConnectNudges::class));
 
-        expect($events)->toHaveCount(1)
-            ->and($events->first()->expression)->toBe('0 * * * *');
+        expect($events)->toHaveCount(0);
     });
 });
 
