@@ -195,14 +195,18 @@ class User extends Authenticatable implements FilamentUser
     }
 
     /**
-     * @return HasMany<NotificationPreference, $this>
+     * Phones registered for push (FCM).
+     *
+     * @return HasMany<DeviceToken, $this>
      */
-    /** Phones registered for push (FCM). */
     public function deviceTokens(): HasMany
     {
         return $this->hasMany(DeviceToken::class);
     }
 
+    /**
+     * @return HasMany<NotificationPreference, $this>
+     */
     public function notificationPreferences(): HasMany
     {
         return $this->hasMany(NotificationPreference::class);

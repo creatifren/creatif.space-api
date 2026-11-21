@@ -14,7 +14,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
  * @property string $token
  * @property string $platform
  * @property string|null $app_version
- * @property \Illuminate\Support\Carbon|null $last_seen_at
+ * @property \Carbon\CarbonInterface|null $last_seen_at
  */
 class DeviceToken extends Model
 {
