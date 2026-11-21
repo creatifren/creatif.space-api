@@ -25,19 +25,20 @@ use Illuminate\Support\Str;
  * @property string|null $approver_name
  * @property bool $report_email
  * @property bool $is_demo sample data (App\Support\SampleData)
+ * @property array<string, mixed>|null $reply_style v10.6 own Reply style (null = the workspace default)
  */
 class ClientLabel extends Model implements WorkspaceOwned
 {
     use HasSampleFlag;
 
-    protected $fillable = ['user_id', 'name', 'initials', 'color', 'approver_email', 'approver_name', 'report_email'];
+    protected $fillable = ['user_id', 'name', 'initials', 'color', 'approver_email', 'approver_name', 'report_email', 'reply_style'];
 
     /** The colour presets the app offers; any #RRGGBB is accepted. */
     public const COLORS = ['#C4A27A', '#3E6A8A', '#2F4A3E', '#A34A3C', '#7A5AA8', '#C9822B'];
 
     protected function casts(): array
     {
-        return ['report_email' => 'boolean'];
+        return ['report_email' => 'boolean', 'reply_style' => 'array'];
     }
 
     protected static function booted(): void

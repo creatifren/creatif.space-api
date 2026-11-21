@@ -44,7 +44,7 @@ class InboxSuggestionController extends Controller
         $price = Credits::perSuggestion();
         $parts = Credits::chargeAi($user, $price, 'AI reply suggestions');
 
-        $suggestions = ReplyAi::write($context, 3);
+        $suggestions = ReplyAi::write($context, 3, \App\Support\ReplyStyle::prompt(\App\Support\ReplyStyle::forAccount($row->account)));
         if ($suggestions === []) {
             Credits::returnAi($user, $parts, 'AI reply suggestions · no answer');
             abort(502, 'The AI did not answer — try again. Your Credits were not used.');
@@ -71,7 +71,7 @@ class InboxSuggestionController extends Controller
             $row = $this->resolve($request, $item);
             Gate::authorize('reply', $row);
             if (! $row->account->is_demo && ($context = ReplyAi::context($row)) !== '') {
-                $rows[$item] = $context;
+                $rows[$item] = [$context, \App\Support\ReplyStyle::prompt(\App\Support\ReplyStyle::forAccount($row->account))];
             }
         }
         abort_if($rows === [], 422, 'There is nothing to answer here.');
@@ -81,8 +81,8 @@ class InboxSuggestionController extends Controller
 
         $drafts = [];
         $missed = 0;
-        foreach ($rows as $item => $context) {
-            $reply = ReplyAi::write($context, 1)[0] ?? null;
+        foreach ($rows as $item => [$context, $style]) {
+            $reply = ReplyAi::write($context, 1, $style)[0] ?? null;
             if ($reply === null) {
                 $missed++;
             }

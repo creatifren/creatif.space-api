@@ -151,3 +151,22 @@ it('Reply all with AI: Pro/Max only, at most 20, own workspace only', function (
     $this->actingAs($pro)->postJson('/api/v1/inbox/feed/drafts', ['items' => ["dm_{$thread->ulid}"]])->assertNotFound();
     Http::assertNothingSent();
 });
+
+/* v10.6 Reply style: the workspace default, a client's own style over it. */
+it('writes in the Reply style: workspace default, then the client\'s own', function () {
+    Http::fake(['ai.test/*' => Http::response(['content' => [['type' => 'text', 'text' => "A\nB\nC"]]])]);
+    [$user, $thread] = sgWorld();
+
+    $this->actingAs($user)->patchJson('/api/v1/me/social-settings', ['reply_style' => ['tone' => 'playful', 'address' => 'friendly', 'emoji' => 'more', 'examples' => ['Halo kak! Jam 7 udah buka ya', '']]])
+        ->assertOk()->assertJsonPath('data.reply_style.tone', 'playful')->assertJsonPath('data.reply_style.examples', ['Halo kak! Jam 7 udah buka ya']);
+    $this->actingAs($user)->postJson("/api/v1/inbox/feed/dm_{$thread->ulid}/suggestions")->assertOk();
+    Http::assertSent(fn ($r) => str_contains($r['system'], 'playful and upbeat') && str_contains($r['system'], 'Halo kak! Jam 7 udah buka ya'));
+
+    $label = $this->actingAs($user)->postJson('/api/v1/client-labels', ['name' => 'Kopi Senja', 'account_ids' => [$thread->account->ulid]])->assertCreated()->json('data.id');
+    $this->actingAs($user)->patchJson("/api/v1/client-labels/{$label}", ['reply_style' => ['tone' => 'formal', 'address' => 'polite', 'emoji' => 'off']])
+        ->assertOk()->assertJsonPath('data.reply_style.tone', 'formal');
+    $this->actingAs($user)->postJson("/api/v1/inbox/feed/dm_{$thread->ulid}/suggestions")->assertOk();
+    Http::assertSent(fn ($r) => str_contains($r['system'], 'formal and courteous') && str_contains($r['system'], 'Use no emoji.'));
+
+    $this->actingAs($user)->patchJson("/api/v1/client-labels/{$label}", ['reply_style' => ['tone' => 'loud', 'address' => 'polite', 'emoji' => 'off']])->assertStatus(422);
+});

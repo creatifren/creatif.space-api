@@ -49,7 +49,7 @@ class ReplyAi
      *
      * @return list<string>
      */
-    public static function write(string $context, int $count): array
+    public static function write(string $context, int $count, string $style = ''): array
     {
         $c = config('services.ai');
         $prompt = 'You help a social media manager answer their audience on behalf of a brand. '
@@ -57,7 +57,8 @@ class ReplyAi
                 ? 'Write exactly 1 short reply to the last message from the other person'
                 : "Write exactly {$count} different short replies to the last message from the other person")
             .', in the language they wrote in. Friendly, natural, no hashtags, no made-up facts, prices or promises. '
-            .($count === 1 ? 'Reply with the reply only, without quotes.' : "Reply with the {$count} replies only, one per line, without numbers or quotes.");
+            .($count === 1 ? 'Reply with the reply only, without quotes.' : "Reply with the {$count} replies only, one per line, without numbers or quotes.")
+            .$style;
 
         try {
             $response = Http::withHeaders([
@@ -94,12 +95,12 @@ class ReplyAi
      * v10.5 Auto DM "Written by AI": one private DM to someone who commented,
      * following the brand's note. Null when the AI did not answer.
      */
-    public static function dm(string $note, string $context): ?string
+    public static function dm(string $note, string $context, string $style = ''): ?string
     {
         $c = config('services.ai');
         $system = 'You write one short private direct message from a brand to a person who just commented on its post. '
             .'Follow the brand\'s note for what to send. Write in the language of the comment. Friendly, natural, no hashtags, '
-            .'no made-up facts, prices or promises beyond the note. Reply with the message only, without quotes.';
+            .'no made-up facts, prices or promises beyond the note. Reply with the message only, without quotes.'.$style;
 
         try {
             $response = Http::withHeaders([
