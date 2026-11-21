@@ -2,6 +2,7 @@
 
 namespace App\Notifications;
 
+use App\Enums\NotificationType;
 use App\Exceptions\PlanFeatureRequired;
 use Carbon\CarbonImmutable;
 use Illuminate\Bus\Queueable;
@@ -13,7 +14,8 @@ use Illuminate\Notifications\Notification;
  * After a downgrade to Free, kept files stay 30 days (/terms). This is the
  * warning 7 days and 1 day before the first of them goes: how many, how
  * much, when, and the two ways to keep them — upgrade, or download.
- * Always mailed: it is about losing files.
+ * A problem that needs the owner (v10.8): bell, and email while "Problems
+ * that need you" is on.
  */
 class KeptFilesGoingSoon extends Notification implements ShouldQueue
 {
@@ -31,7 +33,21 @@ class KeptFilesGoingSoon extends Notification implements ShouldQueue
      */
     public function via(object $notifiable): array
     {
-        return ['mail'];
+        return NotificationChannels::for($notifiable, NotificationType::StorageQuota);
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    public function toArray(object $notifiable): array
+    {
+        return [
+            'type' => NotificationType::StorageQuota->value,
+            'kind' => 'kept_files_going_soon',
+            'files' => $this->files,
+            'bytes' => $this->bytes,
+            'deletes_at' => $this->deletesAt->toIso8601String(),
+        ];
     }
 
     public function toMail(object $notifiable): MailMessage

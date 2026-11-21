@@ -77,7 +77,7 @@ const ARGS: Record<string, Record<string, unknown>> = {
   send_blog_post_for_approval: { post_id: ID, approver_email: 'client@example.com' },
   set_post_spaces: { post_id: ID, space_ids: [ID] },
   get_notification_settings: {},
-  update_notification_settings: { weekly_digest: false },
+  update_notification_settings: { problems_email: false },
   create_insight_share_link: { from: '2026-10-01', to: '2026-10-31' },
   revoke_insight_share_link: { share_id: ID },
 };

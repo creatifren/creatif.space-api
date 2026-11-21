@@ -65,8 +65,8 @@ destructive; `send_approval_reminder`, `decide_approval`,
 | `list_spaces` | List Spaces | yes | no | no | Reads the user's Spaces. |
 | `create_space_from_files` | Create a draft Space from library files | no | no | no | Creates a private draft Space. |
 | `publish_space` | Publish a Space | no | yes | yes | Makes a Space public on the web (preview, then confirm). |
-| `get_notification_settings` | Get the user’s email notification settings | yes | no | no | Reads the user's email preferences. |
-| `update_notification_settings` | Turn creatif.space emails on or off | no | no | no | Changes the user's own email preferences. |
+| `get_notification_settings` | Get the user’s notification settings | yes | no | no | Reads the user's email and push preferences. |
+| `update_notification_settings` | Turn creatif.space emails or push notifications on or off | no | no | no | Changes the user's own email and push preferences. |
 | `send_feedback` | Send feedback to the creatif.space team | no | no | no | Sends the user's feedback to creatif.space only. |
 | `list_clients` | List clients | yes | no | no | Reads the user's own client labels. |
 | `list_hashtag_sets` | List hashtag sets | yes | no | no | Reads the user's own saved hashtag sets. |

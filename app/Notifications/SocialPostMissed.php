@@ -29,7 +29,13 @@ class SocialPostMissed extends Notification implements ShouldQueue
      */
     public function via(object $notifiable): array
     {
-        return NotificationChannels::for($notifiable, NotificationType::SocialPostFailed);
+        return [...NotificationChannels::for($notifiable, NotificationType::SocialPostFailed), ...NotificationChannels::push($notifiable, 'post_problem')];
+    }
+
+    /** @return array{title: string, body: string, url: string} */
+    public function toPush(object $notifiable): array
+    {
+        return ['title' => 'A post missed its time', 'body' => 'It didn’t go out — tap to reschedule.', 'url' => '/post/'.$this->post->ulid];
     }
 
     public function toMail(object $notifiable): MailMessage

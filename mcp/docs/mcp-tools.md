@@ -67,8 +67,8 @@
 | [`create_content_plan`](#create_content_plan) | Create a Content Plan and email the approver | `approve` | no | no |
 | [`get_account_summary`](#get_account_summary) | Get an account summary | `read` | yes | no |
 | [`retry_post`](#retry_post) | Retry a failed post | `publish` | no | yes |
-| [`get_notification_settings`](#get_notification_settings) | Get the user’s email notification settings | `read` | yes | no |
-| [`update_notification_settings`](#update_notification_settings) | Turn creatif.space emails on or off | `draft` | no | no |
+| [`get_notification_settings`](#get_notification_settings) | Get the user’s notification settings | `read` | yes | no |
+| [`update_notification_settings`](#update_notification_settings) | Turn creatif.space emails or push notifications on or off | `draft` | no | no |
 | [`schedule_posts`](#schedule_posts) | Schedule several drafts at once | `publish` | no | yes |
 | [`list_failed_posts`](#list_failed_posts) | List failed posts | `read` | yes | no |
 | [`get_onboarding`](#get_onboarding) | Get the setup checklist | `read` | yes | no |
@@ -1392,17 +1392,17 @@ Errors → next step: not_failed → nothing failed: get_post shows each channel
 
 ## get_notification_settings
 
-**Get the user’s email notification settings** · scope `read` · read-only yes · destructive no · idempotent yes · open world no
+**Get the user’s notification settings** · scope `read` · read-only yes · destructive no · idempotent yes · open world no
 
 Shows which creatif.space emails the user gets.
 
-Returns which creatif.space emails the user gets: post_missed_or_failed (“Post missed / failed”), approval_decided and weekly_digest (true = on; all default on).
+Returns the user’s notification switches: problems_email (the only email switch), push (phone push, master) and push_events (approved, changes, post_problem, channel, credits). true = on; all default on.
 
-When to use: when the user asks which emails they get, or before changing one with update_notification_settings.
+When to use: when the user asks which notifications or emails they get, or before changing one with update_notification_settings.
 
-Example: get_notification_settings {} → { settings: { post_missed_or_failed: true, publish_failed: true, approval_decided: true, weekly_digest: false, timezone: "Asia/Jakarta" }, meaning }
+Example: get_notification_settings {} → { settings: { problems_email: true, push: true, push_events: { approved: true, changes: true, post_problem: true, channel: true, credits: false }, timezone: "Asia/Jakarta" }, meaning }
 
-Read-only. Email only: the in-app bell is not part of these. Account and storage emails cannot be turned off and are not listed.
+Read-only. The in-app bell always gets everything and has no switches. Account emails that need action cannot be turned off. There are no digest or per-approval emails.
 
 Errors → next step: scope_missing → reconnect and allow "read"; unauthorized → reconnect creatif.space; upstream_unavailable → call again in a minute; plan_required (402) → a plan limit, or a feature this account's plan does not include (on some plans: posts scheduled at most 7 days ahead, at most 10 queued posts, approval links for one client); tell the user it is not available on their plan, and do not retry; forbidden (403) → this seat or connection may not do this (e.g. a viewer, or a permission the connection was not given): the workspace owner or an editor can, or the user does it in creatif.space; do not retry; not_found (404) → the id is not in this workspace: take a fresh id from the matching list tool and call again.
 
@@ -1410,27 +1410,26 @@ No input.
 
 ## update_notification_settings
 
-**Turn creatif.space emails on or off** · scope `draft` · read-only no · destructive no · idempotent yes · open world no
+**Turn creatif.space emails or push notifications on or off** · scope `draft` · read-only no · destructive no · idempotent yes · open world no
 
 Turns a creatif.space email on or off for the user, such as failed posts, approvals or the weekly digest.
 
-Turns the user’s post_missed_or_failed (“Post missed / failed”), approval_decided or weekly_digest email on or off, or sets the weekly digest’s timezone, and returns all settings.
+Turns the "Problems that need you" email (problems_email), phone push (push) or one push event on or off, or sets the timezone, and returns all settings.
 
-When to use: when the user asks to stop or start one of these emails (e.g. "stop the weekly summary", "tell me when a post misses its time"). To only see them, use get_notification_settings.
+When to use: when the user asks to stop or start an email or a push (e.g. "stop the problem emails", "don’t push me when a client approves"). To only see them, use get_notification_settings.
 
-Example: update_notification_settings { "post_missed_or_failed": true } → { settings: { post_missed_or_failed: true, publish_failed: true, approval_decided: true, weekly_digest: false } }
+Example: update_notification_settings { "push_events": { "approved": false } } → { settings: { problems_email: true, push: true, push_events: { approved: false, … } } }
 
-Give at least one switch as true or false, x post_missed_or_failed and publish_failed are one switch here: give one of them. Only change what the user asked for. Email only: the in-app bell stays. Account and storage emails cannot be turned off.
+Give at least one switch as true or false. Only change what the user asked for. The in-app bell always gets everything and has no switches. Account emails that need action cannot be turned off. There are no digest or per-approval emails.
 
-Errors → next step: invalid_input → pass at least one of post_missed_or_failed, approval_decided, weekly_digest as true/false, or a valid IANA timezone; scope_missing → reconnect and allow "draft"; unauthorized → reconnect creatif.space; upstream_unavailable → call again in a minute; plan_required (402) → a plan limit, or a feature this account's plan does not include (on some plans: posts scheduled at most 7 days ahead, at most 10 queued posts, approval links for one client); tell the user it is not available on their plan, and do not retry; forbidden (403) → this seat or connection may not do this (e.g. a viewer, or a permission the connection was not given): the workspace owner or an editor can, or the user does it in creatif.space; do not retry; not_found (404) → the id is not in this workspace: take a fresh id from the matching list tool and call again.
+Errors → next step: invalid_input → pass at least one of problems_email, push, push_events.<event> as true/false, or a valid IANA timezone; scope_missing → reconnect and allow "draft"; unauthorized → reconnect creatif.space; upstream_unavailable → call again in a minute; plan_required (402) → a plan limit, or a feature this account's plan does not include (on some plans: posts scheduled at most 7 days ahead, at most 10 queued posts, approval links for one client); tell the user it is not available on their plan, and do not retry; forbidden (403) → this seat or connection may not do this (e.g. a viewer, or a permission the connection was not given): the workspace owner or an editor can, or the user does it in creatif.space; do not retry; not_found (404) → the id is not in this workspace: take a fresh id from the matching list tool and call again.
 
 | Input | Type | Required | Description |
 |---|---|---|---|
-| `post_missed_or_failed` | boolean | no | “Post missed / failed”: email when a scheduled post misses its time or fails to publish |
-| `publish_failed` | boolean | no | The same switch as post_missed_or_failed (older name) |
-| `approval_decided` | boolean | no | Email when a client approves or asks for changes |
-| `weekly_digest` | boolean | no | The Monday 08:00 weekly summary email |
-| `timezone` | string or null | no | IANA timezone for the weekly digest, e.g. "Europe/London"; null resets it. Omit it unless the user asked to change the timezone |
+| `problems_email` | boolean | no | The "Problems that need you" email: failed / missed / held posts, channel problems, Credits or storage low, kept files about to go |
+| `push` | boolean | no | Push notifications on the user’s phones (master switch) |
+| `push_events` | object { approved, changes, post_problem, channel, credits } | no | One or more push events: approved, changes, post_problem, channel, credits |
+| `timezone` | string or null | no | IANA timezone, e.g. "Europe/London"; null resets it. Omit it unless the user asked to change the timezone |
 
 ## schedule_posts
 

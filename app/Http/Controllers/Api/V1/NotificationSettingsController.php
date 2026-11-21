@@ -5,40 +5,30 @@ namespace App\Http\Controllers\Api\V1;
 use App\Enums\NotificationType;
 use App\Http\Controllers\Controller;
 use App\Models\User;
+use App\Notifications\NotificationChannels;
 use App\Support\WeeklyDigest;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
 /**
- * GET / PATCH /api/v1/me/notification-settings — the three emails a user
- * can turn off, as plain switches (MCP get_notification_settings /
- * update_notification_settings):
+ * GET / PATCH /api/v1/me/notification-settings — prototype v10.8 (Rizal
+ * 21 Nov 2026): the bell gets everything (no switches), email only what
+ * needs action, push only the important ones.
  *
- * - publish_failed:   "Post missed / failed" — a scheduled post missed its
- *                     time (SocialPostMissed) or failed to publish
- *                     (SocialPostFailed); one email per post
- * - approval_decided: a client approved or asked for changes (SocialPostDecided)
- * - weekly_digest:    Monday's summary of the week (WeeklyDigest)
- *
- * Each is the email switch of that type's row in notification
- * preferences, so this and Settings → Notifications never disagree, and
- * the notifications read the same switch when they send. Default on. The
- * in-app bell is not changed here.
- *
- * timezone is where the weekly digest's Monday 08:00 is (IANA; null
- * resets it to the latest Content Plan's zone, else the app's).
+ * - problems_email: "Problems that need you" — a post failed, missed or
+ *   held, a channel needs attention, Credits or storage running low, kept
+ *   files about to go. Stored as the email switch of social.post.failed
+ *   (publish_failed is the same switch, older name). Default on.
+ *   Billing emails are always on and not listed.
+ * - push: the master switch for push on the person's phones (default on).
+ * - push_events: approved, changes, post_problem, channel, credits —
+ *   each default on (users.social_settings.push_events).
+ * - timezone: kept for scheduling (IANA; null resets it).
  *
  * Not /me/notifications: that path is already the bell's list.
  */
 class NotificationSettingsController extends Controller
 {
-    /** @var array<string, NotificationType> */
-    public const SETTINGS = [
-        'publish_failed' => NotificationType::SocialPostFailed,
-        'approval_decided' => NotificationType::SocialPostDecision,
-        'weekly_digest' => NotificationType::WeeklyDigest,
-    ];
-
     public function show(Request $request): JsonResponse
     {
         return response()->json(['data' => self::settings($request->user())]);
@@ -46,45 +36,63 @@ class NotificationSettingsController extends Controller
 
     public function update(Request $request): JsonResponse
     {
-        $rules = array_fill_keys(array_keys(self::SETTINGS), ['sometimes', 'boolean']);
-        $rules['timezone'] = ['sometimes', 'nullable', 'string', 'timezone:all'];
-        $rules['push'] = ['sometimes', 'boolean'];
+        $rules = [
+            'problems_email' => ['sometimes', 'boolean'],
+            'publish_failed' => ['sometimes', 'boolean'],
+            'push' => ['sometimes', 'boolean'],
+            'push_events' => ['sometimes', 'array'],
+            'timezone' => ['sometimes', 'nullable', 'string', 'timezone:all'],
+        ];
+        foreach (NotificationChannels::PUSH_EVENTS as $event) {
+            $rules["push_events.{$event}"] = ['sometimes', 'boolean'];
+        }
         $validated = $request->validate($rules);
 
         if ($validated === []) {
             return response()->json([
-                'message' => 'Send at least one of: '.implode(', ', [...array_keys(self::SETTINGS), 'timezone', 'push']).'.',
+                'message' => 'Send at least one of: problems_email, push, push_events, timezone.',
                 'errors' => ['settings' => ['Send at least one setting.']],
             ], 422);
         }
 
+        /** @var User $user */
         $user = $request->user();
-        if (array_key_exists('timezone', $validated)) {
-            $user->forceFill(['timezone' => $validated['timezone']])->save();
-            unset($validated['timezone']);
-        }
-        if (array_key_exists('push', $validated)) {
-            $user->forceFill(['push_enabled' => (bool) $validated['push']])->save();
-            unset($validated['push']);
-        }
-        foreach ($validated as $name => $on) {
+        $problems = $validated['problems_email'] ?? $validated['publish_failed'] ?? null;
+        if ($problems !== null) {
             $user->notificationPreferences()->updateOrCreate(
-                ['type' => self::SETTINGS[$name]->value],
-                ['email_enabled' => (bool) $on],
+                ['type' => NotificationType::SocialPostFailed->value],
+                ['email_enabled' => (bool) $problems],
             );
         }
+        if (array_key_exists('timezone', $validated)) {
+            $user->forceFill(['timezone' => $validated['timezone']]);
+        }
+        if (array_key_exists('push', $validated)) {
+            $user->forceFill(['push_enabled' => (bool) $validated['push']]);
+        }
+        if (isset($validated['push_events'])) {
+            $events = array_intersect_key((array) $validated['push_events'], array_flip(NotificationChannels::PUSH_EVENTS));
+            $settings = $user->social_settings ?? [];
+            $settings['push_events'] = array_map('boolval', [...$user->pushEvents(), ...$events]);
+            $user->forceFill(['social_settings' => $settings]);
+        }
+        $user->save();
 
-        return response()->json(['data' => self::settings($user->load('notificationPreferences'))]);
+        return response()->json(['data' => self::settings($user->fresh()?->load('notificationPreferences') ?? $user)]);
     }
 
-    /** @return array<string, bool|string> */
+    /** @return array<string, mixed> */
     public static function settings(User $user): array
     {
+        $problems = NotificationChannels::problemsEmail($user);
+
         return [
-            ...array_map(fn (NotificationType $type) => $user->wants($type, 'email'), self::SETTINGS),
-            'timezone' => WeeklyDigest::timezone($user),
-            // Push on this person's phones (Android app): one switch, on by default.
+            'problems_email' => $problems,
+            // Older name of the same switch (MCP clients before v10.8).
+            'publish_failed' => $problems,
             'push' => $user->pushEnabled(),
+            'push_events' => $user->pushEvents(),
+            'timezone' => WeeklyDigest::timezone($user),
         ];
     }
 }

@@ -5,7 +5,6 @@ namespace App\Notifications;
 use App\Enums\NotificationType;
 use App\Models\SocialApprovalLink;
 use App\Models\SocialPost;
-use App\Notifications\Channels\PushChannel;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Notifications\Messages\MailMessage;
@@ -47,18 +46,26 @@ class SocialPostDecided extends Notification implements ShouldQueue
      */
     public function via(object $notifiable): array
     {
+        /* v10.8: held or blocked = a problem that needs the owner (email +
+           push "post has a problem"); approved / changes requested = bell
+           + push only, never an email. */
         if (in_array($this->decision, [self::BLOCKED, self::HELD], true)) {
-            return ['mail', 'database'];
+            return [...NotificationChannels::for($notifiable, NotificationType::SocialPostFailed), ...NotificationChannels::push($notifiable, 'post_problem')];
         }
-        $via = NotificationChannels::for($notifiable, NotificationType::SocialPostDecision);
 
-        /* Push (approved / changes requested) follows the bell switch of the same type. */
-        return in_array('database', $via, true) ? [...$via, ...PushChannel::when($notifiable)] : $via;
+        return ['database', ...NotificationChannels::push($notifiable, $this->decision === self::REVISE ? 'changes' : 'approved')];
     }
 
     /** @return array{title: string, body: string, url: string} */
     public function toPush(object $notifiable): array
     {
+        if (in_array($this->decision, [self::BLOCKED, self::HELD], true)) {
+            return [
+                'title' => $this->decision === self::HELD ? 'Approved — goes out closer to its date' : 'An approved post couldn’t go out',
+                'body' => $this->reason ?? "{$this->by} approved a post that is waiting on you",
+                'url' => $this->post !== null ? '/post/'.$this->post->ulid : '/post?view=approvals',
+            ];
+        }
         if ($this->decision === self::REVISE) {
             return [
                 'title' => 'Changes requested',

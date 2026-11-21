@@ -1,6 +1,5 @@
 <?php
 
-use App\Enums\NotificationType;
 use App\Models\DeviceToken;
 use App\Models\SocialApprovalLink;
 use App\Models\SocialPost;
@@ -121,7 +120,7 @@ describe('PushChannel', function () {
             && $r['message']['data']['url'] === '/post/'.$post->ulid);
     });
 
-    it('approved / changes requested push; the bell switch off silences the push too', function () {
+    it('approved / changes requested push; its own push switch silences it (v10.8)', function () {
         pushOn();
         Http::fake([
             'oauth2.googleapis.com/*' => Http::response(['access_token' => 'ya29.test']),
@@ -139,8 +138,9 @@ describe('PushChannel', function () {
             ->and($approved->toPush($user))->toBe(['title' => 'Approved', 'body' => 'Dewi approved 3 posts', 'url' => '/post?view=approvals'])
             ->and((new SocialPostDecided($link, SocialPostDecided::REVISE, 'Dewi', 1, $post))->toPush($user)['url'])->toBe('/post/'.$post->ulid);
 
-        $user->notificationPreferences()->create(['type' => NotificationType::SocialPostDecision->value, 'email_enabled' => true, 'bell_enabled' => false]);
-        expect((new SocialPostDecided($link, SocialPostDecided::APPROVED, 'Dewi'))->via($user->fresh()))->not->toContain(PushChannel::class);
+        $this->actingAs($user)->patchJson('/api/v1/me/notification-settings', ['push_events' => ['approved' => false]])->assertOk();
+        expect((new SocialPostDecided($link, SocialPostDecided::APPROVED, 'Dewi'))->via($user->fresh()))->not->toContain(PushChannel::class)
+            ->and((new SocialPostDecided($link, SocialPostDecided::REVISE, 'Dewi'))->via($user->fresh()))->toContain(PushChannel::class);
     });
 
     it('a phone FCM no longer knows (UNREGISTERED) is forgotten', function () {
@@ -153,5 +153,21 @@ describe('PushChannel', function () {
         $user->notify(new SocialPostFailed(SocialPost::factory()->for($user)->create()));
 
         expect($user->deviceTokens()->count())->toBe(0);
+    });
+});
+
+describe('v10.8 pushes', function () {
+    it('channel, Credits and Auto DM paused push behind their own switches', function () {
+        pushOn();
+        $user = pushUser();
+        $acc = \App\Models\SocialAccount::factory()->for($user)->create();
+        expect((new \App\Notifications\ChannelNeedsAttention($acc))->via($user))->toContain(PushChannel::class)
+            ->and((new \App\Notifications\AutoDmPaused('01POST', 100))->via($user))->toBe(['database', PushChannel::class])
+            ->and((new \App\Notifications\AutoDmPaused('01POST', 100))->toPush($user)['url'])->toBe('/post/01POST');
+
+        $this->actingAs($user)->patchJson('/api/v1/me/notification-settings', ['push_events' => ['credits' => false, 'channel' => false]])->assertOk();
+        $user = $user->fresh();
+        expect((new \App\Notifications\ChannelNeedsAttention($acc))->via($user))->not->toContain(PushChannel::class)
+            ->and((new \App\Notifications\AutoDmPaused('01POST', 100))->via($user))->toBe(['database']);
     });
 });

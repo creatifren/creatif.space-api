@@ -37,6 +37,9 @@ enum NotificationType: string
     // v10.5: a post's Auto DM paused because Credits ran out — money, bell only.
     case AutoDmPaused = 'auto_dm.paused';
 
+    // v10.8: a monthly report went to a client — bell only.
+    case ClientReportSent = 'report.sent';
+
     /**
      * The types a user may switch off — what Settings → Notifications shows.
      *

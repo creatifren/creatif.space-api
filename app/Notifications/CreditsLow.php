@@ -63,7 +63,13 @@ class CreditsLow extends Notification implements ShouldQueue
      */
     public function via(object $notifiable): array
     {
-        return NotificationChannels::for($notifiable, NotificationType::CreditsLow);
+        return [...NotificationChannels::for($notifiable, NotificationType::CreditsLow), ...NotificationChannels::push($notifiable, 'credits')];
+    }
+
+    /** @return array{title: string, body: string, url: string} */
+    public function toPush(object $notifiable): array
+    {
+        return ['title' => 'Credits running low', 'body' => $this->percent().'% of your monthly Credits left — scheduled posts stop when they run out.', 'url' => '/credits'];
     }
 
     public function toMail(object $notifiable): MailMessage

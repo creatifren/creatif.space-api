@@ -28,7 +28,8 @@ class SubscriptionStarted extends Notification implements ShouldQueue
      */
     public function via(object $notifiable): array
     {
-        return NotificationChannels::for($notifiable, NotificationType::BillingReminder);
+        /* v10.8: a confirmation, not a problem — bell only (receipts come from the payment provider). */
+        return ['database'];
     }
 
     public function toMail(object $notifiable): MailMessage

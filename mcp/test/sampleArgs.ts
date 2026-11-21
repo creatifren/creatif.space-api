@@ -60,7 +60,7 @@ export const ARGS: Record<string, Record<string, unknown>> = {
   reply_to_conversation: { conversation_id: `comment_${ULID}`, text: 'Thank you!' },
   get_insight_summary: { period: { month: '2026-10' } },
   list_top_posts: { period: { month: '2026-10' } },
-  update_notification_settings: { weekly_digest: false },
+  update_notification_settings: { problems_email: false },
 };
 
 /** Arguments for one tool: the hand-written ones, else sampled from its schema. */
