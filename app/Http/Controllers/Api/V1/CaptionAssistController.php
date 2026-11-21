@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Api\V1;
 
 use App\Http\Controllers\Controller;
+use App\Support\Credits;
 use App\Support\PlanQuota;
 use App\Support\Workspace;
 use Illuminate\Http\Client\ConnectionException;
@@ -22,6 +23,12 @@ use Illuminate\Validation\ValidationException;
  * The answer comes back as a suggestion — the caption is never written here.
  *
  * Pro and Max (plans v2: feature `ai_caption`, hashtags included).
+ *
+ * Two tiers (Rizal 21 Nov, prototype v10.5): `quality=standard` = Sonnet
+ * (services.ai.model_standard), 30 Credits; `quality=extra` = Opus
+ * (services.ai.model), 100 Credits (ai_assist.credits). Credits back
+ * when the AI does not answer. No `quality` = the old path (Opus, no
+ * Credits) until the app sends it.
  */
 class CaptionAssistController extends Controller
 {
@@ -40,7 +47,9 @@ class CaptionAssistController extends Controller
         $validated = $request->validate([
             'mode' => ['required', 'in:rewrite,hashtags'],
             'caption' => ['required', 'string', 'max:5000'],
+            'quality' => ['sometimes', 'in:standard,extra'],
         ]);
+        $quality = $validated['quality'] ?? null;
 
         $min = max(1, (int) config('ai_assist.min_chars', 20));
         if (mb_strlen((string) preg_replace('/\s+/u', '', $validated['caption'])) < $min) {
@@ -51,7 +60,17 @@ class CaptionAssistController extends Controller
 
         $config = config('services.ai');
         abort_unless($config['key'] && $config['base_url'] && $config['model'], 503, 'AI is not set up.');
+        $model = $quality === 'standard' ? (($config['model_standard'] ?? null) ?: $config['model']) : $config['model'];
 
+        $price = $quality === null ? 0 : (int) config("ai_assist.credits.{$quality}", $quality === 'extra' ? 100 : 30);
+        $label = ($validated['mode'] === 'rewrite' ? 'Improve with AI' : 'Add hashtags').' · '.ucfirst((string) $quality);
+        $parts = Credits::chargeAi($request->user(), $price, $label, 'quality');
+        $fail = function () use ($request, $parts, $label): never {
+            Credits::returnAi($request->user(), $parts, $label.' · no answer');
+            abort(502, 'The AI did not answer — try again.');
+        };
+
+        $response = null;
         try {
             $response = Http::withHeaders([
                 'x-api-key' => $config['key'],
@@ -59,7 +78,7 @@ class CaptionAssistController extends Controller
             ])
                 ->timeout(30)
                 ->post(rtrim($config['base_url'], '/').'/messages', [
-                    'model' => $config['model'],
+                    'model' => $model,
                     'max_tokens' => 1024,
                     'system' => self::PROMPTS[$validated['mode']],
                     'messages' => [
@@ -67,15 +86,20 @@ class CaptionAssistController extends Controller
                     ],
                 ]);
         } catch (ConnectionException) {
-            abort(502, 'The AI did not answer — try again.');
+            // handled below: no response
         }
 
+        if ($response === null) {
+            $fail();
+        }
         $text = trim(collect((array) $response->json('content'))
             ->where('type', 'text')
             ->pluck('text')
             ->implode(''));
-        abort_if($response->failed() || $text === '', 502, 'The AI did not answer — try again.');
+        if ($response->failed() || $text === '') {
+            $fail();
+        }
 
-        return response()->json(['data' => ['text' => $text]]);
+        return response()->json(['data' => ['text' => $text, 'credits' => $price]]);
     }
 }
