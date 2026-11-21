@@ -21,6 +21,7 @@ function captionUser(): User
 {
     $user = User::factory()->create();
     Subscription::factory()->for($user)->create();
+    \App\Support\Credits::grant($user, 1_000, 'Test');
 
     return $user;
 }
@@ -133,7 +134,7 @@ it('charges by tier and picks the model', function (string $quality, string $mod
     'extra' => ['extra', 'm', 100],
 ]);
 
-it('gives the tier Credits back when the AI fails, and no quality stays free', function () {
+it('gives the tier Credits back when the AI fails; no quality = standard (30)', function () {
     Http::fake(['ai.test/v1/messages' => Http::response(['error' => 'x'], 529)]);
     $user = captionUser();
     \App\Support\Credits::grant($user, 1_000, 'Test');
@@ -144,4 +145,18 @@ it('gives the tier Credits back when the AI fails, and no quality stays free', f
     $this->actingAs($user)->postJson('/api/v1/social-captions/assist', ['mode' => 'hashtags', 'caption' => CA_CAPTION])->assertStatus(502);
 
     expect(\App\Support\Credits::total($user))->toBe($before);
+});
+
+it('no quality is charged as standard (the free Opus path is closed)', function () {
+    config(['services.ai.model_standard' => 'sonnet']);
+    Http::fake(['ai.test/v1/messages' => Http::response(['content' => [['type' => 'text', 'text' => 'Better caption']]])]);
+    $user = captionUser();
+    \App\Support\Credits::renewMonthly($user);
+    $before = \App\Support\Credits::total($user);
+
+    $this->actingAs($user)->postJson('/api/v1/social-captions/assist', ['mode' => 'rewrite', 'caption' => CA_CAPTION])
+        ->assertOk()->assertJsonPath('data.credits', 30);
+
+    expect(\App\Support\Credits::total($user))->toBe($before - 30);
+    Http::assertSent(fn (HttpRequest $r) => $r['model'] === 'sonnet');
 });
