@@ -71,7 +71,7 @@ class Fcm
                 ['message' => [
                     'token' => $token,
                     'notification' => ['title' => $title, 'body' => $body],
-                    'data' => (object) $data,
+                    'data' => $data === [] ? new \stdClass : $data,
                     'android' => ['priority' => 'high', 'notification' => ['channel_id' => 'default']],
                 ]],
             );
