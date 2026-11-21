@@ -656,6 +656,9 @@ Route::middleware(['auth:sanctum,mcp', EnforceTokenScope::class, EnsureNotPendin
         Route::post('/feed/{item}/suggestions', InboxSuggestionController::class)
             ->middleware('throttle:20,1')
             ->name('api.v1.inbox.feed.suggestions');
+        Route::post('/feed/drafts', [InboxSuggestionController::class, 'drafts'])
+            ->middleware('throttle:10,1')
+            ->name('api.v1.inbox.feed.drafts');
     });
     // P6 (Builder A): Inbox › Feedback — client notes from approval links.
     // Not the relay's, so it stays on when INBOX_ENABLED is off.

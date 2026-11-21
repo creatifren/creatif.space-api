@@ -5,35 +5,26 @@ namespace App\Http\Controllers\Api\V1;
 use App\Http\Controllers\Controller;
 use App\Models\SocialComment;
 use App\Models\SocialConversation;
-use App\Models\SocialMessage;
 use App\Support\Credits;
 use App\Support\Inbox;
 use App\Support\PlanQuota;
-use Illuminate\Http\Client\ConnectionException;
+use App\Support\ReplyAi;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Gate;
-use Illuminate\Support\Facades\Http;
 
 /**
- * AI reply suggestions (backlog #2, Rizal 20 Nov): Pro and Max, 300 Credits
- * per tap (services.inbox.credits_per_suggestion), three short replies to
- * a DM thread or a comment. Nothing is sent: the user picks one, edits it
- * and replies through the normal reply path. An AI failure gives the
- * Credits back. Same Claude setup as the caption assist (services.ai).
+ * AI replies for Engage (backlog #2; Rizal 21 Nov: 100 Credits, Standard
+ * model). Pro and Max. Nothing is sent: the user checks each reply and sends
+ * it through the normal reply path. Credits come back for any reply the AI
+ * could not write.
  *
- * POST /inbox/feed/{item}/suggestions — item = dm_<ulid> | comment_<ulid>.
+ * POST /inbox/feed/{item}/suggestions — 3 replies for one thread (item = dm_<ulid> | comment_<ulid>).
+ * POST /inbox/feed/drafts {items: [...]} — "Reply all with AI": 1 draft each, up to 20.
  */
 class InboxSuggestionController extends Controller
 {
-    private const ANTHROPIC_VERSION = '2023-06-01';
-
-    private const COUNT = 3;
-
-    private const PROMPT = 'You help a social media manager answer their audience on behalf of a brand. '
-        .'Write exactly 3 different short replies to the last message from the other person, in the language they wrote in. '
-        .'Friendly, natural, no hashtags, no made-up facts, prices or promises. '
-        .'Reply with the 3 replies only, one per line, without numbers or quotes.';
+    public const MAX_DRAFTS = 20;
 
     public function __invoke(Request $request, string $item): JsonResponse
     {
@@ -45,43 +36,15 @@ class InboxSuggestionController extends Controller
         if ($row->account->is_demo) {
             return response()->json(['message' => 'Sample conversations are not answered.'], 422);
         }
+        abort_unless(ReplyAi::ready(), 503, 'AI is not set up.');
 
-        $config = config('services.ai');
-        abort_unless($config['key'] && $config['base_url'] && $config['model'], 503, 'AI is not set up.');
-
-        $context = $this->context($row);
+        $context = ReplyAi::context($row);
         abort_if($context === '', 422, 'There is nothing to answer yet.');
 
         $price = Credits::perSuggestion();
         $parts = Credits::chargeAi($user, $price, 'AI reply suggestions');
 
-        $suggestions = [];
-        try {
-            $response = Http::withHeaders([
-                'x-api-key' => $config['key'],
-                'anthropic-version' => self::ANTHROPIC_VERSION,
-            ])
-                ->timeout(30)
-                ->post(rtrim($config['base_url'], '/').'/messages', [
-                    'model' => $config['model'],
-                    'max_tokens' => 600,
-                    'system' => self::PROMPT,
-                    'messages' => [['role' => 'user', 'content' => $context]],
-                ]);
-
-            if ($response->successful()) {
-                $text = collect((array) $response->json('content'))->where('type', 'text')->pluck('text')->implode('');
-                $suggestions = collect(preg_split('/\R+/u', $text) ?: [])
-                    ->map(fn ($l) => trim((string) preg_replace('/^\s*(?:\d+[.)]|[-*•])\s*/u', '', (string) $l), " \t\"'“”"))
-                    ->filter()
-                    ->take(self::COUNT)
-                    ->values()
-                    ->all();
-            }
-        } catch (ConnectionException) {
-            $suggestions = [];
-        }
-
+        $suggestions = ReplyAi::write($context, 3);
         if ($suggestions === []) {
             Credits::returnAi($user, $parts, 'AI reply suggestions · no answer');
             abort(502, 'The AI did not answer — try again. Your Credits were not used.');
@@ -90,6 +53,52 @@ class InboxSuggestionController extends Controller
         return response()->json(['data' => [
             'suggestions' => $suggestions,
             'credits' => $price,
+        ]]);
+    }
+
+    public function drafts(Request $request): JsonResponse
+    {
+        $user = $request->user();
+        PlanQuota::requireAiReplySuggestions($user, 'items');
+        $data = $request->validate([
+            'items' => ['required', 'array', 'min:1', 'max:'.self::MAX_DRAFTS],
+            'items.*' => ['required', 'string', 'distinct', 'max:40'],
+        ]);
+        abort_unless(ReplyAi::ready(), 503, 'AI is not set up.');
+
+        $rows = [];
+        foreach ($data['items'] as $item) {
+            $row = $this->resolve($request, $item);
+            Gate::authorize('reply', $row);
+            if (! $row->account->is_demo && ($context = ReplyAi::context($row)) !== '') {
+                $rows[$item] = $context;
+            }
+        }
+        abort_if($rows === [], 422, 'There is nothing to answer here.');
+
+        $price = Credits::perSuggestion();
+        $parts = Credits::chargeAi($user, $price * count($rows), 'Reply all with AI · '.count($rows).' replies', 'items');
+
+        $drafts = [];
+        $missed = 0;
+        foreach ($rows as $item => $context) {
+            $reply = ReplyAi::write($context, 1)[0] ?? null;
+            if ($reply === null) {
+                $missed++;
+            }
+            $drafts[] = ['item' => $item, 'reply' => $reply];
+        }
+
+        if ($missed > 0) {
+            // Give back the missed replies, Top-up first (it was taken last).
+            $back = $price * $missed;
+            $topup = min($back, $parts[1]);
+            Credits::returnAi($user, [$back - $topup, $topup], "Reply all with AI · {$missed} not written");
+        }
+
+        return response()->json(['data' => [
+            'drafts' => $drafts,
+            'credits' => $price * (count($rows) - $missed),
         ]]);
     }
 
@@ -105,29 +114,9 @@ class InboxSuggestionController extends Controller
         }
 
         if ($row === null) {
-            abort(response()->json(['message' => 'No conversation with that id in this workspace.', 'code' => 'not_found'], 404));
+            abort(response()->json(['message' => 'No conversation with that id in this workspace.', 'code' => 'not_found', 'item' => $item], 404));
         }
 
         return $row;
-    }
-
-    /** The thread as plain lines: the last 10 DMs, or the post caption + the comment. */
-    private function context(SocialConversation|SocialComment $row): string
-    {
-        if ($row instanceof SocialConversation) {
-            return $row->messages()->latest('id')->limit(10)->get(['direction', 'content'])
-                ->reverse()
-                ->filter(fn (SocialMessage $m) => trim((string) $m->content) !== '')
-                ->map(fn (SocialMessage $m) => ($m->direction === SocialMessage::OUT ? 'Brand: ' : 'Them: ').mb_substr((string) $m->content, 0, 1000))
-                ->implode("\n");
-        }
-
-        $text = trim((string) $row->text);
-        if ($text === '') {
-            return '';
-        }
-        $caption = trim((string) ($row->post->caption ?? ''));
-
-        return ($caption !== '' ? 'Brand post: '.mb_substr($caption, 0, 1000)."\n" : '').'Them (comment): '.mb_substr($text, 0, 1000);
     }
 }
