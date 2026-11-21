@@ -70,7 +70,11 @@ class CaptionStyle
         return is_array($s) ? $s : null;
     }
 
-    /** Store (or clear, with null) a client's own style. */
+    /**
+     * Store (or clear, with null) a client's own style.
+     *
+     * @param  array<string, mixed>|null  $style
+     */
     public static function setForClient(ClientLabel $label, ?array $style): void
     {
         $owner = Workspace::owner(User::query()->findOrFail($label->user_id));
