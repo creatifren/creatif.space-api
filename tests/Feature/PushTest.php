@@ -22,7 +22,7 @@ function pushKey(): string
     $key = openssl_pkey_new(['private_key_bits' => 2048, 'private_key_type' => OPENSSL_KEYTYPE_RSA]);
     openssl_pkey_export($key, $pem);
 
-    return json_encode(['project_id' => 'creatif-space-test', 'client_email' => 'fcm@creatif-space-test.iam.gserviceaccount.com', 'private_key' => $pem]);
+    return json_encode(['project_id' => 'creatif-space-test', 'client_email' => 'fcm@creatif-space.test', 'private_key' => $pem]);
 }
 
 function pushOn(): void
