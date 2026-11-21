@@ -12,7 +12,7 @@ beforeEach(fn () => config(['services.ai' => [
 /*
  * The only AI path (Rizal, 13 Nov): "Improve with AI" (rewrite) and "Add
  * hashtags" on a caption the user already wrote. Pro and Max (plans v2,
- * feature `ai_caption`). At least ai_assist.min_chars (20) non-whitespace
+ * feature `ai_caption`). At least ai_assist.min_chars (10) non-whitespace
  * characters, else 422.
  */
 const CA_CAPTION = 'Kopi pagi di Senja, buka jam 7.';
@@ -66,22 +66,22 @@ it('defaults to Claude Opus 5.5 on api.anthropic.com', function () {
         ->toContain("env('ANTHROPIC_API_KEY')");
 });
 
-it('needs at least 20 non-whitespace characters: 422 with a clear message, nothing sent', function (string $mode) {
+it('needs at least 10 non-whitespace characters: 422 with a clear message, nothing sent', function (string $mode) {
     // One fake for the whole test: a second Http::fake would not replace the first.
     Http::fake(['*' => Http::response(['content' => [['type' => 'text', 'text' => 'ok']]])]);
     $user = captionUser();
 
-    // 19 letters, padded with spaces and newlines: still too short.
+    // 9 letters, padded with spaces and newlines: still too short.
     $res = $this->actingAs($user)
-        ->postJson('/api/v1/social-captions/assist', ['mode' => $mode, 'caption' => "  abcdefghij \n klmnopqrs  "])
+        ->postJson('/api/v1/social-captions/assist', ['mode' => $mode, 'caption' => "  abcde \n fghi  "])
         ->assertUnprocessable()
         ->assertJsonValidationErrors('caption');
-    expect($res->json('errors.caption.0'))->toBe('Write at least 20 characters of your caption first — AI improves and adds hashtags to what you wrote.');
+    expect($res->json('errors.caption.0'))->toBe('Write at least 10 characters of your caption first — AI improves and adds hashtags to what you wrote.');
     Http::assertNothingSent();
 
-    // Exactly 20 is enough.
+    // Exactly 10 is enough.
     $this->actingAs($user)
-        ->postJson('/api/v1/social-captions/assist', ['mode' => $mode, 'caption' => 'abcdefghij klmnopqrst'])
+        ->postJson('/api/v1/social-captions/assist', ['mode' => $mode, 'caption' => 'abcde fghij'])
         ->assertOk();
 })->with(['rewrite', 'hashtags']);
 
