@@ -358,6 +358,11 @@ class InboxStore
         $comment->commented_at ??= now();
         $comment->save();
 
+        // v10.5 Auto DM on comment: a new comment on a post with a rule.
+        if ($comment->wasRecentlyCreated && $comment->social_post_id !== null) {
+            \App\Jobs\SendAutoDm::dispatch($comment->id);
+        }
+
         return $comment;
     }
 

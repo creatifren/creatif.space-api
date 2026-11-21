@@ -89,4 +89,38 @@ class ReplyAi
             ->values()
             ->all();
     }
+
+    /**
+     * v10.5 Auto DM "Written by AI": one private DM to someone who commented,
+     * following the brand's note. Null when the AI did not answer.
+     */
+    public static function dm(string $note, string $context): ?string
+    {
+        $c = config('services.ai');
+        $system = 'You write one short private direct message from a brand to a person who just commented on its post. '
+            .'Follow the brand\'s note for what to send. Write in the language of the comment. Friendly, natural, no hashtags, '
+            .'no made-up facts, prices or promises beyond the note. Reply with the message only, without quotes.';
+
+        try {
+            $response = Http::withHeaders([
+                'x-api-key' => $c['key'],
+                'anthropic-version' => self::ANTHROPIC_VERSION,
+            ])
+                ->timeout(30)
+                ->post(rtrim((string) $c['base_url'], '/').'/messages', [
+                    'model' => $c['model_standard'] ?: $c['model'],
+                    'max_tokens' => 400,
+                    'system' => $system,
+                    'messages' => [['role' => 'user', 'content' => 'Brand note: '.mb_substr($note, 0, 1000)."\n".$context]],
+                ]);
+        } catch (ConnectionException) {
+            return null;
+        }
+        if (! $response->successful()) {
+            return null;
+        }
+        $text = trim(collect((array) $response->json('content'))->where('type', 'text')->pluck('text')->implode(''), " \t\n\"'“”");
+
+        return $text === '' ? null : mb_substr($text, 0, 1000);
+    }
 }
