@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Api\V1;
 
 use App\Http\Controllers\Controller;
 use App\Support\AiUsage;
+use App\Support\CaptionStyle;
 use App\Support\Credits;
 use App\Support\PlanQuota;
 use App\Support\Workspace;
@@ -27,7 +28,8 @@ use Illuminate\Validation\ValidationException;
  *
  * Two tiers (Rizal 21 Nov, prototype v10.5): `quality=standard` = Sonnet
  * (services.ai.model_standard), 30 Credits; `quality=extra` = Opus
- * (services.ai.model), 100 Credits (ai_assist.credits). Credits back
+ * (services.ai.model), 100 Credits (ai_assist.credits); "Improve with AI" on
+ * a longer caption costs more (ai_assist.rewrite_bands, v10.9). Credits back
  * when the AI does not answer. No `quality` = standard (Rizal 21 Nov: the
  * old free Opus path is closed now that the app sends it, app #331).
  */
@@ -44,6 +46,27 @@ class CaptionAssistController extends Controller
      * Output room in proportion to the caption (AI cost per tap, 21 Nov):
      * a rewrite is about as long as what was written; hashtags are short.
      */
+    /**
+     * Credits for one use: "Add hashtags" flat; "Improve with AI" by caption
+     * length (ai_assist.rewrite_bands — up to 500 / 1,200 / 2,200 characters).
+     */
+    public static function price(string $mode, string $quality, string $caption): int
+    {
+        $flat = (int) config("ai_assist.credits.{$quality}", $quality === 'extra' ? 100 : 30);
+        if ($mode !== 'rewrite') {
+            return $flat;
+        }
+        $len = mb_strlen($caption);
+        foreach ((array) config('ai_assist.rewrite_bands', []) as $upTo => $prices) {
+            if ($len <= (int) $upTo) {
+                return is_array($prices) ? (int) $prices[$quality === 'extra' ? 1 : 0] : $flat;
+            }
+        }
+        $last = collect((array) config('ai_assist.rewrite_bands', []))->filter()->last();
+
+        return is_array($last) ? (int) $last[$quality === 'extra' ? 1 : 0] : $flat;
+    }
+
     public static function maxTokens(string $mode, string $caption): int
     {
         if ($mode === 'hashtags') {
@@ -62,6 +85,9 @@ class CaptionAssistController extends Controller
             'mode' => ['required', 'in:rewrite,hashtags'],
             'caption' => ['required', 'string', 'max:'.(int) config('ai_assist.max_chars', 2200)],
             'quality' => ['sometimes', 'in:standard,extra'],
+            // v10.9.2: the accounts the post goes to — a client's own Caption style wins.
+            'account_ids' => ['sometimes', 'array', 'max:100'],
+            'account_ids.*' => ['string', 'max:26'],
         ], [
             'caption.max' => 'AI works on captions up to :max characters — shorten it first.',
         ]);
@@ -74,11 +100,24 @@ class CaptionAssistController extends Controller
             ]);
         }
 
+        // v10.9.2 (Rizal 21 Nov): Improve with AI follows a Caption style and waits until one is set.
+        $style = null;
+        if ($validated['mode'] === 'rewrite') {
+            if (CaptionStyle::default($request->user()) === null) {
+                return response()->json([
+                    'message' => 'Set your caption style first — Preferences › Caption style.',
+                    'code' => 'caption_style_required',
+                    'errors' => ['caption_style' => ['Set your caption style first — Preferences › Caption style.']],
+                ], 422);
+            }
+            $style = CaptionStyle::forAccounts($request->user(), array_values($validated['account_ids'] ?? []));
+        }
+
         $config = config('services.ai');
         abort_unless($config['key'] && $config['base_url'] && $config['model'], 503, 'AI is not set up.');
         $model = $quality === 'standard' ? (($config['model_standard'] ?? null) ?: $config['model']) : $config['model'];
 
-        $price = (int) config("ai_assist.credits.{$quality}", $quality === 'extra' ? 100 : 30);
+        $price = self::price($validated['mode'], $quality, $validated['caption']);
         $label = ($validated['mode'] === 'rewrite' ? 'Improve with AI' : 'Add hashtags').' · '.ucfirst($quality);
         $parts = Credits::chargeAi($request->user(), $price, $label, 'quality');
         $fail = function () use ($request, $parts, $label): never {
@@ -96,7 +135,7 @@ class CaptionAssistController extends Controller
                 ->post(rtrim($config['base_url'], '/').'/messages', [
                     'model' => $model,
                     'max_tokens' => self::maxTokens($validated['mode'], $validated['caption']),
-                    'system' => self::PROMPTS[$validated['mode']],
+                    'system' => self::PROMPTS[$validated['mode']].CaptionStyle::prompt($style),
                     'messages' => [
                         ['role' => 'user', 'content' => $validated['caption']],
                     ],

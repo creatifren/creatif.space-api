@@ -21,9 +21,18 @@ return [
     'max_chars' => (int) env('AI_ASSIST_MAX_CHARS', 2200),
 
     // Credits per use by tier (Rizal 21 Nov): Standard = Sonnet, Extra = Opus.
+    // "Add hashtags" always costs these; "Improve with AI" up to 500 characters too.
     'credits' => [
         'standard' => (int) env('AI_ASSIST_CREDITS_STANDARD', 30),
         'extra' => (int) env('AI_ASSIST_CREDITS_EXTRA', 100),
+    ],
+
+    // "Improve with AI" by caption length (Rizal 21 Nov, prototype v10.9):
+    // up to N characters => [standard, extra]. The first band is `credits`.
+    'rewrite_bands' => [
+        500 => null,
+        1200 => [75, 150],
+        2200 => [150, 300],
     ],
 
 ];
