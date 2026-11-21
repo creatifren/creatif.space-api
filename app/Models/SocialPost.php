@@ -173,14 +173,18 @@ class SocialPost extends Model implements WorkspaceOwned
     }
 
     /**
-     * @return HasMany<SocialPostTarget, $this>
+     * v10.5 Auto DMs this post's rule sent.
+     *
+     * @return HasMany<SocialAutoDm, $this>
      */
-    /** v10.5 Auto DMs this post's rule sent. @return HasMany<SocialAutoDm, $this> */
     public function autoDms(): HasMany
     {
         return $this->hasMany(SocialAutoDm::class);
     }
 
+    /**
+     * @return HasMany<SocialPostTarget, $this>
+     */
     public function targets(): HasMany
     {
         return $this->hasMany(SocialPostTarget::class);

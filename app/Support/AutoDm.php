@@ -52,7 +52,7 @@ class AutoDm
         $account = $comment->account;
         if ($account === null || $account->is_demo || $comment->parent_comment_id !== null
             || ! in_array($comment->network, self::NETWORKS, true)
-            || ! self::matches((string) ($rule['keyword'] ?? ''), (string) $comment->text)) {
+            || ! self::matches($rule['keyword'], (string) $comment->text)) {
             return null;
         }
         $owner = Workspace::owner($post->user);
@@ -76,7 +76,7 @@ class AutoDm
             return null; // this person already got this post's DM
         }
 
-        $mode = (string) ($rule['mode'] ?? 'fixed');
+        $mode = $rule['mode'];
         $price = self::price($mode);
         $label = 'Auto DM · @'.($comment->author_username ?? 'someone');
 
@@ -91,8 +91,8 @@ class AutoDm
         }
 
         $text = $mode === 'ai'
-            ? ReplyAi::dm((string) ($rule['message'] ?? ''), ReplyAi::context($comment))
-            : trim((string) ($rule['message'] ?? ''));
+            ? ReplyAi::dm($rule['message'], ReplyAi::context($comment))
+            : trim($rule['message']);
 
         $error = null;
         if ($text === null || $text === '') {
