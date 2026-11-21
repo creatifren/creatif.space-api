@@ -520,6 +520,21 @@ describe('comments', function () {
             ->assertStatus(409)->assertJsonPath('code', 'already_replied');
     });
 
+    it('falls back to top level on any 400 (Facebook may refuse the instagram block without naming comment_id)', function () {
+        $account = inboxAccount();
+        $comment = inboxComment($account);
+        Http::fake([INBOX_API.'/conversations' => Http::sequence()
+            ->push(['error' => ['code' => 'bad_request', 'message' => 'Unsupported field for this network']], 400)
+            ->push(['data' => ['id' => 'conv_fb', 'messageId' => 'pm_2']], 201)]);
+
+        $this->actingAs($account->user)->postJson("/api/v1/inbox/comments/{$comment->ulid}/private-reply", ['content' => 'hi'])->assertOk();
+
+        Http::assertSentCount(2);
+        $sent = Http::recorded()->map(fn ($pair) => $pair[0]->data())->values();
+        expect($sent[1])->toMatchArray(['comment_id' => $comment->comment_id, 'content' => 'hi'])
+            ->and($sent[1])->not->toHaveKey('instagram');
+    });
+
     it('uses only the configured private reply shape', function () {
         config(['services.outstand.private_reply_shape' => 'top_level']);
         $account = inboxAccount();

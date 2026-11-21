@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Api\V1;
 
 use App\Http\Controllers\Controller;
+use App\Support\AiUsage;
 use App\Support\Credits;
 use App\Support\PlanQuota;
 use App\Support\Workspace;
@@ -39,6 +40,19 @@ class CaptionAssistController extends Controller
         'hashtags' => 'Suggest 5 to 10 relevant hashtags for this social media caption, in its language. Reply with the hashtags only, space-separated.',
     ];
 
+    /**
+     * Output room in proportion to the caption (AI cost per tap, 21 Nov):
+     * a rewrite is about as long as what was written; hashtags are short.
+     */
+    public static function maxTokens(string $mode, string $caption): int
+    {
+        if ($mode === 'hashtags') {
+            return 200;
+        }
+
+        return max(256, min(1024, intdiv(mb_strlen($caption), 3) + 150));
+    }
+
     public function __invoke(Request $request): JsonResponse
     {
         abort_unless(Workspace::canWrite($request->user()), 403, 'Viewers cannot write captions.');
@@ -46,8 +60,10 @@ class CaptionAssistController extends Controller
 
         $validated = $request->validate([
             'mode' => ['required', 'in:rewrite,hashtags'],
-            'caption' => ['required', 'string', 'max:5000'],
+            'caption' => ['required', 'string', 'max:'.(int) config('ai_assist.max_chars', 2200)],
             'quality' => ['sometimes', 'in:standard,extra'],
+        ], [
+            'caption.max' => 'AI works on captions up to :max characters — shorten it first.',
         ]);
         $quality = $validated['quality'] ?? 'standard';
 
@@ -79,7 +95,7 @@ class CaptionAssistController extends Controller
                 ->timeout(30)
                 ->post(rtrim($config['base_url'], '/').'/messages', [
                     'model' => $model,
-                    'max_tokens' => 1024,
+                    'max_tokens' => self::maxTokens($validated['mode'], $validated['caption']),
                     'system' => self::PROMPTS[$validated['mode']],
                     'messages' => [
                         ['role' => 'user', 'content' => $validated['caption']],
@@ -99,6 +115,7 @@ class CaptionAssistController extends Controller
         if ($response->failed() || $text === '') {
             $fail();
         }
+        AiUsage::log('caption_'.$validated['mode'].'_'.$quality, $model, $response->json('usage'), $price);
 
         return response()->json(['data' => ['text' => $text, 'credits' => $price]]);
     }

@@ -1321,7 +1321,7 @@ class OutstandService implements SocialProvider
      * The docs show comment_id both at the top level and nested under
      * `instagram` (with author_id); `services.outstand.private_reply_shape`
      * picks one, and `auto` tries nested first and falls back to top level
-     * when Outstand rejects the body over the comment id.
+     * when Outstand rejects the body (400/422).
      *
      * @throws ConnectionException
      */
@@ -1346,9 +1346,10 @@ class OutstandService implements SocialProvider
         } else {
             $response = $send($nested);
 
-            if ($shape === 'auto'
-                && in_array($response->status(), [400, 422], true)
-                && str_contains(strtolower($response->body()), 'comment_id')) {
+            // Any 400/422 tries the top-level shape once: Facebook comments
+            // (Auto DM) may refuse the `instagram` block without naming
+            // comment_id (21 Nov).
+            if ($shape === 'auto' && in_array($response->status(), [400, 422], true)) {
                 $response = $send($top);
             }
         }
