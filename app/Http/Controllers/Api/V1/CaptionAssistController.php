@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Api\V1;
 
 use App\Http\Controllers\Controller;
 use App\Support\AiUsage;
+use App\Support\CaptionStyle;
 use App\Support\Credits;
 use App\Support\PlanQuota;
 use App\Support\Workspace;
@@ -84,6 +85,9 @@ class CaptionAssistController extends Controller
             'mode' => ['required', 'in:rewrite,hashtags'],
             'caption' => ['required', 'string', 'max:'.(int) config('ai_assist.max_chars', 2200)],
             'quality' => ['sometimes', 'in:standard,extra'],
+            // v10.9.2: the accounts the post goes to — a client's own Caption style wins.
+            'account_ids' => ['sometimes', 'array', 'max:100'],
+            'account_ids.*' => ['string', 'max:26'],
         ], [
             'caption.max' => 'AI works on captions up to :max characters — shorten it first.',
         ]);
@@ -94,6 +98,19 @@ class CaptionAssistController extends Controller
             throw ValidationException::withMessages([
                 'caption' => "Write at least {$min} characters of your caption first — AI improves and adds hashtags to what you wrote.",
             ]);
+        }
+
+        // v10.9.2 (Rizal 21 Nov): Improve with AI follows a Caption style and waits until one is set.
+        $style = null;
+        if ($validated['mode'] === 'rewrite') {
+            if (CaptionStyle::default($request->user()) === null) {
+                return response()->json([
+                    'message' => 'Set your caption style first — Preferences › Caption style.',
+                    'code' => 'caption_style_required',
+                    'errors' => ['caption_style' => ['Set your caption style first — Preferences › Caption style.']],
+                ], 422);
+            }
+            $style = CaptionStyle::forAccounts($request->user(), array_values($validated['account_ids'] ?? []));
         }
 
         $config = config('services.ai');
@@ -118,7 +135,7 @@ class CaptionAssistController extends Controller
                 ->post(rtrim($config['base_url'], '/').'/messages', [
                     'model' => $model,
                     'max_tokens' => self::maxTokens($validated['mode'], $validated['caption']),
-                    'system' => self::PROMPTS[$validated['mode']],
+                    'system' => self::PROMPTS[$validated['mode']].CaptionStyle::prompt($style),
                     'messages' => [
                         ['role' => 'user', 'content' => $validated['caption']],
                     ],

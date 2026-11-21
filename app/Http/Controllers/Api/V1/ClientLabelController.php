@@ -90,6 +90,9 @@ class ClientLabelController extends Controller
             $fields['reply_style'] = \App\Support\ReplyStyle::clean($validated['reply_style']);
         }
         $clientLabel->update($fields);
+        if (array_key_exists('caption_style', $validated)) {
+            \App\Support\CaptionStyle::setForClient($clientLabel, \App\Support\CaptionStyle::clean($validated['caption_style']));
+        }
 
         ClientBadges::flush();
         if (array_key_exists('account_ids', $validated)) {
@@ -155,6 +158,8 @@ class ClientLabelController extends Controller
             'account_ids.*' => ['string', 'max:26'],
             // v10.6: "Own style for this client" (null = the workspace default).
             ...\App\Support\ReplyStyle::rules('reply_style'),
+            // v10.9.2: own Caption style (null = the workspace default).
+            ...\App\Support\CaptionStyle::rules('caption_style'),
         ];
     }
 
@@ -193,6 +198,7 @@ class ClientLabelController extends Controller
             'approver_name' => $label->approver_name,
             'report_email' => $label->report_email,
             'reply_style' => $label->reply_style,
+            'caption_style' => \App\Support\CaptionStyle::ofClient($label),
             'sample' => (bool) $label->is_demo,
             'accounts' => $label->accounts->map(fn (SocialAccount $a) => [
                 'id' => $a->ulid,

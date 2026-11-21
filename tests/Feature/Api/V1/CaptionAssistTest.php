@@ -22,6 +22,8 @@ function captionUser(): User
     $user = User::factory()->create();
     Subscription::factory()->for($user)->create();
     \App\Support\Credits::grant($user, 1_000, 'Test');
+    // v10.9.2: Improve with AI needs a Caption style first.
+    $user->forceFill(['social_settings' => ['caption_style' => ['tone' => 'semi_formal', 'emoji' => 'a_little', 'hashtags' => 'at_the_end', 'examples' => []]]])->save();
 
     return $user;
 }
@@ -215,4 +217,41 @@ it('charges the length price and says so', function () {
         ->assertOk()
         ->assertJsonPath('data.credits', 75);
     expect(\App\Support\Credits::total($user))->toBe($before - 75);
+});
+
+it('Improve with AI waits for a Caption style; Add hashtags does not (v10.9.2)', function () {
+    Http::fake(['ai.test/v1/messages' => Http::response(['content' => [['type' => 'text', 'text' => 'ok']]])]);
+    $user = captionUser();
+    $user->forceFill(['social_settings' => []])->save();
+    $before = \App\Support\Credits::total($user);
+
+    $this->actingAs($user)->postJson('/api/v1/social-captions/assist', ['mode' => 'rewrite', 'caption' => CA_CAPTION])
+        ->assertUnprocessable()
+        ->assertJsonPath('code', 'caption_style_required')
+        ->assertJsonPath('errors.caption_style.0', 'Set your caption style first — Preferences › Caption style.');
+    Http::assertNothingSent();
+    expect(\App\Support\Credits::total($user))->toBe($before);
+
+    $this->actingAs($user)->postJson('/api/v1/social-captions/assist', ['mode' => 'hashtags', 'caption' => CA_CAPTION])->assertOk();
+});
+
+it('saves a Caption style (default + per client) and writes in it; a client\'s own wins on its accounts', function () {
+    Http::fake(['ai.test/v1/messages' => Http::response(['content' => [['type' => 'text', 'text' => 'ok']]])]);
+    $user = captionUser();
+    $account = \App\Models\SocialAccount::factory()->for($user)->create(['platform' => 'instagram', 'username' => 'kopisenja']);
+
+    $this->actingAs($user)->patchJson('/api/v1/me/social-settings', ['caption_style' => ['tone' => 'playful', 'emoji' => 'more', 'hashtags' => 'none', 'examples' => ['Pagi ini kopi baru dari Aceh!', '']]])
+        ->assertOk()->assertJsonPath('data.caption_style.tone', 'playful')->assertJsonPath('data.caption_style.examples', ['Pagi ini kopi baru dari Aceh!']);
+    $this->actingAs($user)->getJson('/api/v1/me/social-settings')->assertJsonPath('data.caption_style.hashtags', 'none');
+    $this->actingAs($user)->postJson('/api/v1/social-captions/assist', ['mode' => 'rewrite', 'caption' => CA_CAPTION])->assertOk();
+    Http::assertSent(fn (HttpRequest $r) => str_contains($r['system'], 'playful and upbeat') && str_contains($r['system'], 'Add no new hashtags') && str_contains($r['system'], 'Pagi ini kopi baru dari Aceh!'));
+
+    $label = $this->actingAs($user)->postJson('/api/v1/client-labels', ['name' => 'Kopi Senja', 'account_ids' => [$account->ulid]])->assertCreated()->json('data.id');
+    $this->actingAs($user)->patchJson("/api/v1/client-labels/{$label}", ['caption_style' => ['tone' => 'formal', 'emoji' => 'off', 'hashtags' => 'at_the_end']])
+        ->assertOk()->assertJsonPath('data.caption_style.tone', 'formal');
+    $this->actingAs($user)->postJson('/api/v1/social-captions/assist', ['mode' => 'rewrite', 'caption' => CA_CAPTION, 'account_ids' => [$account->ulid]])->assertOk();
+    Http::assertSent(fn (HttpRequest $r) => str_contains($r['system'], 'formal and polished') && str_contains($r['system'], 'Use no emoji.'));
+
+    $this->actingAs($user)->patchJson("/api/v1/client-labels/{$label}", ['caption_style' => null])->assertOk()->assertJsonPath('data.caption_style', null);
+    $this->actingAs($user)->patchJson("/api/v1/client-labels/{$label}", ['caption_style' => ['tone' => 'loud', 'emoji' => 'off', 'hashtags' => 'none']])->assertStatus(422);
 });
