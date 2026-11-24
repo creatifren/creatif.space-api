@@ -56,6 +56,7 @@ use App\Http\Controllers\Api\V1\PlanCalendarController;
 use App\Http\Controllers\Api\V1\PostApprovalAuditController;
 use App\Http\Controllers\Api\V1\ProfileDomainController;
 use App\Http\Controllers\Api\V1\ProfileFontController;
+use App\Http\Controllers\Api\V1\PageReportController;
 use App\Http\Controllers\Api\V1\PublicApprovalController;
 use App\Http\Controllers\Api\V1\PublicHealthController;
 use App\Http\Controllers\Api\V1\PublicInsightController;
@@ -230,6 +231,10 @@ Route::post('/profiles/{handle}/taps', [ProfileDomainController::class, 'tap'])
 Route::get('/public/domains/{host}', [ProfileDomainController::class, 'lookup'])
     ->middleware('throttle:600,1')
     ->name('api.v1.public.domains.show');
+// v10.21 (Builder A): "Report this page" on Free public pages → team inbox.
+Route::post('/public/report-page', PageReportController::class)
+    ->middleware('throttle:5,10')
+    ->name('api.v1.public.report-page');
 
 // v7 Blog: one published post (never a draft or one waiting for approval).
 Route::get('/profiles/{handle}/spaces/{slug}/posts/{post}', [PublicSpaceController::class, 'post'])

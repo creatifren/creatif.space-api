@@ -269,6 +269,31 @@ class PlanQuota
     }
 
     /**
+     * New Spaces made today (UTC), deleted ones included — making and
+     * deleting must not reset the count. Sample Spaces never count.
+     */
+    public static function createdToday(User $user): int
+    {
+        return $user->spaces()->withTrashed()->where('is_demo', false)
+            ->where('created_at', '>=', now()->utc()->startOfDay())->count();
+    }
+
+    public static function dailyLimit(User $user): ?int
+    {
+        return $user->plan()->quota('spaces_daily');
+    }
+
+    /**
+     * Free anti-spam (24 Nov): room for one more new Space today?
+     */
+    public static function canCreateToday(User $user): bool
+    {
+        $limit = static::dailyLimit($user);
+
+        return $limit === null || static::createdToday($user) < $limit;
+    }
+
+    /**
      * Room for one more Space at all?
      */
     public static function canCreate(User $user): bool

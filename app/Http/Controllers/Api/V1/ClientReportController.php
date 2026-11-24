@@ -9,6 +9,7 @@ use App\Models\ClientReport;
 use App\Notifications\ClientReportReady;
 use App\Support\ClientReportBuilder;
 use App\Support\PlanQuota;
+use App\Support\PublicFooter;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Gate;
@@ -184,7 +185,7 @@ class ClientReportController extends Controller
         $data = $this->builder->build($report);
         unset($data['sent_to'], $data['open_count'], $data['notes']);
 
-        return response()->json(['data' => $data]);
+        return response()->json(['data' => [...$data, ...PublicFooter::fields($report->user)]]);
     }
 
     /** Build (if needed) and email one report; marks it sent. */
