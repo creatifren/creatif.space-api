@@ -490,6 +490,9 @@ class PlanQuota
             'active_limit' => static::activeLimit($user),
             'total_used' => static::totalUsed($user),
             'total_limit' => static::totalLimit($user),
+            // v10.21: Free's "N left today" on the New Space sheet.
+            'today_used' => static::createdToday($user),
+            'daily_limit' => static::dailyLimit($user),
             'plan' => $user->plan()->key->value,
         ];
     }

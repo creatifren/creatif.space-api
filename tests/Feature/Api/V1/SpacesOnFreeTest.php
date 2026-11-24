@@ -30,6 +30,16 @@ it('lets Free make 10 new Spaces a day, then refuses the 11th with the prototype
         ->assertJsonPath('errors.title.0', 'You made 10 new Spaces today. Make more tomorrow, or get Pro.');
 });
 
+it('tells the Spaces list how many new Spaces are left today', function () {
+    $user = freeOwner();
+    Space::factory()->count(3)->for($user)->create();
+
+    $this->actingAs($user)->getJson('/api/v1/spaces')->assertOk()
+        ->assertJsonPath('meta.quota.today_used', 3)
+        ->assertJsonPath('meta.quota.daily_limit', 10)
+        ->assertJsonPath('meta.quota.total_limit', null);
+});
+
 it('counts deleted Spaces toward the day, and duplicates too', function () {
     $user = freeOwner();
     Space::factory()->count(10)->for($user)->create()->each->delete();
