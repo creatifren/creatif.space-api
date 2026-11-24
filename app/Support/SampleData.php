@@ -29,8 +29,8 @@ use Throwable;
 
 /**
  * Sample data for every new account (prototype v10, decisions.md, Rizal yes
- * 20 Nov 2026): a new account opens with one client "Kopi Senja" (approver
- * Dewi), two fake accounts ("Demo · Instagram", "Demo · TikTok"), 8 posts
+ * 20 Nov 2026): a new account opens with one client "Morning Coffee" (approver
+ * Alex; renamed from Kopi Senja / Dewi 24 Nov), two fake accounts ("Demo · Instagram", "Demo · TikTok"), 8 posts
  * in every state, an approval link (Week 48), a report (this month), a
  * Gallery and a Blog post waiting for approval, two DMs and two comments
  * (on the sample accounts, so they go with them), and a picture on every
@@ -44,12 +44,12 @@ use Throwable;
  */
 final class SampleData
 {
-    public const CLIENT = 'Kopi Senja';
+    public const CLIENT = 'Morning Coffee';
 
-    public const APPROVER = 'Dewi (owner)';
+    public const APPROVER = 'Alex (owner)';
 
     /** .example never delivers: an address that cannot be mailed even by mistake. */
-    public const APPROVER_EMAIL = 'dewi@kopisenja.example';
+    public const APPROVER_EMAIL = 'alex@morningcoffee.example';
 
     /** Sample rows are hidden while a bearer token (MCP, API key) is being served. */
     public static function hiddenForThisRequest(): bool
@@ -86,7 +86,7 @@ final class SampleData
             $client->forceFill([
                 'user_id' => $user->id,
                 'name' => self::CLIENT,
-                'initials' => 'KS',
+                'initials' => 'MC',
                 'color' => ClientLabel::COLORS[0],
                 'approver_name' => self::APPROVER,
                 'approver_email' => self::APPROVER_EMAIL,
@@ -137,8 +137,8 @@ final class SampleData
                 'is_demo' => true,
             ])->save();
 
-            self::space($user, 'gallery', 'Kopi Senja · Menu photos');
-            $blog = self::space($user, 'blog', 'Kopi Senja · Journal');
+            self::space($user, 'gallery', 'Morning Coffee · Menu photos');
+            $blog = self::space($user, 'blog', 'Morning Coffee · Journal');
             $post = new BlogPost;
             $post->forceFill([
                 'space_id' => $blog->id,
@@ -228,8 +228,8 @@ final class SampleData
     private static function inbox(User $user, SocialAccount $ig, SocialPost $published, CarbonImmutable $now): void
     {
         $dms = [
-            ['rina.eats', 'Rina', 'Hi! Do you take bookings for 8 people this Saturday?', 40, 1],
-            ['budi_wfc', 'Budi', 'Is the wifi good for working? Thinking of coming tomorrow.', 300, 0],
+            ['sarah.eats', 'Sarah', 'Hi! Do you take bookings for 8 people this Saturday?', 40, 1],
+            ['mike_wfh', 'Mike', 'Is the wifi good for working? Thinking of coming tomorrow.', 300, 0],
         ];
         foreach ($dms as [$username, $name, $text, $minutes, $unread]) {
             $conversation = SocialConversation::query()->create([
@@ -258,8 +258,8 @@ final class SampleData
         }
 
         $comments = [
-            ['dewi.ks', 'Congrats! See you Friday.', 90],
-            ['kopi.lover', 'Is the free coffee for any drink?', 30],
+            ['alex.mc', 'Congrats! See you Friday.', 90],
+            ['coffee.lover', 'Is the free coffee for any drink?', 30],
         ];
         foreach ($comments as [$username, $text, $minutes]) {
             SocialComment::query()->create([

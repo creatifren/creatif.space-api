@@ -35,7 +35,7 @@ function sampleUser(): User
 it('seeds one client, two sample accounts, 8 posts, a link, a report, a gallery and a blog post', function () {
     $user = sampleUser();
 
-    expect(ClientLabel::query()->where('user_id', $user->id)->where('is_demo', true)->pluck('name')->all())->toBe(['Kopi Senja'])
+    expect(ClientLabel::query()->where('user_id', $user->id)->where('is_demo', true)->pluck('name')->all())->toBe(['Morning Coffee'])
         ->and(SocialAccount::query()->where('user_id', $user->id)->get()->filter->isSample()->count())->toBe(2)
         ->and(SocialPost::query()->where('user_id', $user->id)->where('is_demo', true)->count())->toBe(8)
         ->and(SocialApprovalLink::query()->where('user_id', $user->id)->where('is_demo', true)->first()?->posts()->count())->toBe(2)
