@@ -36,7 +36,7 @@ class PageReportController extends Controller
         ]);
 
         $path = (string) parse_url($validated['url'], PHP_URL_PATH);
-        $first = explode('/', trim($path, '/'))[0] ?? '';
+        $first = explode('/', trim($path, '/'))[0];
         $handle = $first !== '' && $first !== 'a' ? Handle::query()->where('name', mb_strtolower($first))->first() : null;
         $owner = $handle?->user;
 
