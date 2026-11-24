@@ -217,9 +217,9 @@ it('caps a tester at 3 connected social accounts on Pro, and lifts the cap with 
         ->and($user->social_settings['max_social_accounts'])->toBe(3)
         ->and(\App\Support\PlanQuota::socialAccountsLimit($user))->toBe(3);
 
-    \App\Models\SocialAccount::factory()->count(2)->for($user)->create(['provider' => 'outstand', 'platform' => 'bluesky']);
+    \App\Models\SocialAccount::factory()->count(2)->for($user)->create(['provider' => \App\Models\SocialAccount::currentProvider(), 'platform' => 'bluesky']);
     expect(\App\Support\PlanQuota::canConnectSocialAccount($user))->toBeTrue();
-    \App\Models\SocialAccount::factory()->for($user)->create(['provider' => 'outstand', 'platform' => 'bluesky']);
+    \App\Models\SocialAccount::factory()->for($user)->create(['provider' => \App\Models\SocialAccount::currentProvider(), 'platform' => 'bluesky']);
     expect(\App\Support\PlanQuota::canConnectSocialAccount($user->fresh()))->toBeFalse()
         ->and(\App\Support\PlanQuota::socialAccountsFullMessage($user, 3))->toBe('During testing, each account can connect up to 3 social accounts.')
         ->and(\App\Support\PlanQuota::socialAccountsFullMessage($user, 3))->not->toContain('utstand');
