@@ -97,7 +97,7 @@ describe('list', function () {
             ->assertJsonPath('meta.quota.active_used', 1)
             ->assertJsonPath('meta.quota.active_limit', null)
             ->assertJsonPath('meta.quota.total_used', 2)
-            ->assertJsonPath('meta.quota.total_limit', 15);
+            ->assertJsonPath('meta.quota.total_limit', null); // Spaces on Free: storage only (24 Nov)
     });
 });
 
