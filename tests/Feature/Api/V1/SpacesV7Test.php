@@ -90,6 +90,37 @@ it('keeps featured items first and hidden items off the public gallery', functio
         ->assertJsonPath('data.items.0.title', 'Sunset deck');
 });
 
+it('keeps a Gallery photo crop in the design and shows it on the public page (v10.15)', function () {
+    $user = spacesV7Owner();
+    $gallery = Space::factory()->for($user)->published()->create(['slug' => 'portfolio']);
+    $a = File::factory()->for($user)->create(['width' => 3024, 'height' => 4032]);
+    $b = File::factory()->for($user)->create(['width' => 4032, 'height' => 2688]);
+
+    $res = $this->actingAs($user)->patchJson("/api/v1/spaces/{$gallery->ulid}", ['items' => [
+        ['file_id' => $a->ulid, 'sort_order' => 1, 'title' => 'Latte art', 'crop' => ['ratio' => '1:1', 'zoom' => 1.5, 'x' => 30, 'y' => 70]],
+        ['file_id' => $b->ulid, 'sort_order' => 2, 'title' => 'Sunset deck'],
+    ]])->assertOk()
+        ->assertJsonPath('data.items.0.crop.ratio', '1:1')
+        ->assertJsonPath('data.items.1.crop', null);
+    $aId = $res->json('data.items.0.id');
+
+    $this->actingAs($user)->patchJson("/api/v1/spaces/{$gallery->ulid}", ['items' => [
+        ['id' => $aId, 'file_id' => $a->ulid, 'sort_order' => 1, 'crop' => ['ratio' => '7:3']],
+    ]])->assertStatus(422);
+
+    $this->app['auth']->forgetGuards();
+    $this->getJson('/api/v1/profiles/rizaltester/spaces/portfolio')->assertOk()
+        ->assertJsonPath('data.items.0.width', 3024)
+        ->assertJsonPath('data.items.0.crop.ratio', '1:1')
+        ->assertJsonPath('data.items.0.crop.x', 30)
+        ->assertJsonPath('data.items.1.crop', null);
+
+    // null = back to the original shape.
+    $this->actingAs($user)->patchJson("/api/v1/spaces/{$gallery->ulid}", ['items' => [
+        ['id' => $aId, 'file_id' => $a->ulid, 'sort_order' => 1, 'crop' => null],
+    ]])->assertOk()->assertJsonPath('data.items.0.crop', null);
+});
+
 it('adds a published social post to its Gallery and Blog once', function () {
     $user = spacesV7Owner();
     $gallery = Space::factory()->for($user)->create();

@@ -2,6 +2,7 @@
 
 namespace App\Http\Resources;
 
+use App\Http\Controllers\Api\V1\SpaceController;
 use App\Models\Space;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
@@ -44,6 +45,8 @@ class SpaceResource extends JsonResource
                 'title' => $item->title,
                 'featured' => (bool) $item->featured,
                 'hidden' => (bool) $item->hidden,
+                // v10.15: the shown crop (design.items meta); null = original shape.
+                'crop' => SpaceController::cropOf(((array) ($this->design['items'] ?? []))[$item->ulid] ?? null),
                 'file' => [
                     'name' => $item->file->name,
                     'mime_type' => $item->file->mime_type,
