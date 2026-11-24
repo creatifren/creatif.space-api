@@ -717,7 +717,7 @@ class SpaceController extends Controller
                 }
                 $meta[$ulid] = $m === [] ? (object) [] : $m;
             }
-            $design['items'] = $meta === [] ? (object) [] : $meta;
+            $design['items'] = $meta;
             $space->design = $design;
             $space->save();
         }
