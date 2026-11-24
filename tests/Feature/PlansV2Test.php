@@ -406,7 +406,8 @@ describe('rule 3 — features gated off on Free', function () {
     it('turns every gate on for Pro, Max and Enterprise and off for Free, from the plans table', function () {
         foreach (Plan::all() as $plan) {
             foreach (PlanQuota::FEATURES as $feature) {
-                expect($plan->feature($feature))->toBe($plan->key->value !== 'free', "{$plan->key->value}.{$feature}");
+                // Spaces are on every plan since 24 Nov (v10.21).
+                expect($plan->feature($feature))->toBe($feature === 'spaces' || $plan->key->value !== 'free', "{$plan->key->value}.{$feature}");
             }
         }
     });
@@ -495,7 +496,7 @@ describe('rule 6 — MCP / API keys get the same answers', function () {
         expect($limits['scheduling'])->toBe(['window_days' => 7, 'queued_posts' => ['limit' => 10, 'used' => 3]])
             ->and($limits['approval_clients'])->toBe(['limit' => 1, 'used' => 1])
             ->and($limits['features'])->toMatchArray([
-                'approval_links' => true, 'ai_caption' => false, 'insight' => false, 'spaces' => false,
+                'approval_links' => true, 'ai_caption' => false, 'insight' => false, 'spaces' => true,
                 'alt_text' => false, 'ai_reply_suggestions' => false, 'comment_to_dm' => false,
             ]);
     });
@@ -577,6 +578,7 @@ describe('rule 7 — existing data and the migration', function () {
     });
 
     it('reports existing rows past the limits without changing them', function () {
+        planWith('free', ['spaces' => false]); // the report's Spaces line counts a plan without Spaces
         $user = v2Free();
         Space::factory()->count(2)->for($user)->create(['status' => 'published']);
         v2Queue($user, 12, ['scheduled_at' => now()->addDays(20)]);

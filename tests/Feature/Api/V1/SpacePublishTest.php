@@ -84,7 +84,8 @@ it('reactivates a never-published space to draft without the gate', function () 
 
 it('soft deletes and frees the total slot', function () {
     $user = User::factory()->create();
-    Space::factory()->for($user)->count(10)->create();
+    // Yesterday: today's Free limit (10 new a day, v10.21) is not what this tests.
+    Space::factory()->for($user)->count(10)->create(['created_at' => now()->subDay()]);
 
     // No revoke_access: this test is about the quota slot, and the flag is
     // now refused outright (see SpaceTest) rather than silently ignored.

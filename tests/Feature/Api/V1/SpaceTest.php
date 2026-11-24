@@ -50,9 +50,11 @@ describe('create', function () {
             ->assertUnprocessable();
     });
 
-    it('enforces the 15-space total quota, freed by delete', function () {
+    it('enforces a plan\'s total Space quota, freed by delete', function () {
+        // Free has no total limit since v10.21; a plan that sets one still gets it.
+        planWith('free', [], ['spaces_total' => 15]);
         $user = User::factory()->create();
-        Space::factory()->count(15)->for($user)->create();
+        Space::factory()->count(15)->for($user)->create(['created_at' => now()->subDay()]);
 
         $this->actingAs($user)
             ->postJson('/api/v1/spaces', ['title' => 'One more', 'view_mode' => 'grid'])
