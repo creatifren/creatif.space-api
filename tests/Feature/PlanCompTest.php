@@ -205,3 +205,33 @@ it('the comp ends on its date through the daily expiry job', function () {
 
     expect($user->fresh()->plan()->key->value)->toBe('free');
 });
+
+it('caps a tester at 3 connected social accounts on Pro, and lifts the cap with none (24 Nov 2026)', function () {
+    $user = User::factory()->create(['email' => 'tester@example.test']);
+    $until = now()->addMonth()->toDateString();
+
+    expect(Artisan::call('plan:comp', ['email' => 'tester@example.test', '--plan' => 'pro', '--until' => $until, '--max-accounts' => '3']))->toBe(0)
+        ->and(Artisan::output())->toContain('account cap: 3');
+    $user->refresh();
+    expect($user->plan()->key->value)->toBe('pro')
+        ->and($user->social_settings['max_social_accounts'])->toBe(3)
+        ->and(\App\Support\PlanQuota::socialAccountsLimit($user))->toBe(3);
+
+    \App\Models\SocialAccount::factory()->count(2)->for($user)->create(['provider' => \App\Models\SocialAccount::currentProvider(), 'platform' => 'bluesky']);
+    expect(\App\Support\PlanQuota::canConnectSocialAccount($user))->toBeTrue();
+    \App\Models\SocialAccount::factory()->for($user)->create(['provider' => \App\Models\SocialAccount::currentProvider(), 'platform' => 'bluesky']);
+    expect(\App\Support\PlanQuota::canConnectSocialAccount($user->fresh()))->toBeFalse()
+        ->and(\App\Support\PlanQuota::socialAccountsFullMessage($user, 3))->toBe('During testing, each account can connect up to 3 social accounts.')
+        ->and(\App\Support\PlanQuota::socialAccountsFullMessage($user, 3))->not->toContain('utstand');
+
+    expect(Artisan::call('plan:comp', ['email' => 'tester@example.test', '--plan' => 'pro', '--until' => $until, '--max-accounts' => 'none']))->toBe(0);
+    expect(\App\Support\PlanQuota::socialAccountsCap($user->fresh()))->toBeNull()
+        ->and(\App\Support\PlanQuota::canConnectSocialAccount($user->fresh()))->toBeTrue();
+});
+
+it('refuses a bad --max-accounts and changes nothing', function () {
+    $user = User::factory()->create(['email' => 'tester2@example.test']);
+    expect(Artisan::call('plan:comp', ['email' => 'tester2@example.test', '--plan' => 'pro', '--until' => now()->addMonth()->toDateString(), '--max-accounts' => 'lots']))->toBe(1);
+    expect($user->fresh()->plan()->key->value)->toBe('free')
+        ->and($user->fresh()->social_settings)->toBeNull();
+});

@@ -38,6 +38,11 @@ use Throwable;
  * 4. Idempotent: a rerun finds the comp and nothing to cancel; a new date
  *    or plan moves the same comp.
  *
+ * --max-accounts=N (testers, 24 Nov 2026) caps the account's connected
+ * social accounts at N (users.social_settings.max_social_accounts; the
+ * plan's own quota still applies if lower). --max-accounts=none removes the
+ * cap. Accounts already connected stay; only adding one is refused.
+ *
  * --revoke ends the comp (Free from now) and calls Creem for nothing.
  * Prints one line; never a key, token or checkout link.
  */
@@ -47,7 +52,8 @@ class PlanComp extends Command
         {email : The existing account\'s email address}
         {--plan=pro : pro or max}
         {--until= : Last day of the comp (YYYY-MM-DD, in the future)}
-        {--revoke : End the comp now (back to Free); no Creem call}';
+        {--revoke : End the comp now (back to Free); no Creem call}
+        {--max-accounts= : Cap connected social accounts at N while testing (none = remove the cap)}';
 
     protected $description = 'Give an account a staff-comped plan until a date (cancels its Creem trial/subscription at once, voids open invoices), or revoke it';
 
@@ -59,6 +65,17 @@ class PlanComp extends Command
             $this->error("No account with the email {$email}. Nothing was changed.");
 
             return self::FAILURE;
+        }
+
+        $capLine = '';
+        $capRaw = $this->option('max-accounts');
+        if ($capRaw !== null && $capRaw !== '') {
+            $capRaw = Str::lower((string) $capRaw);
+            if ($capRaw !== 'none' && preg_match('/^\d{1,3}$/', $capRaw) !== 1) {
+                $this->error('--max-accounts must be a number (e.g. 3) or none. Nothing was changed.');
+
+                return self::FAILURE;
+            }
         }
 
         if ($this->option('revoke')) {
@@ -142,6 +159,18 @@ class PlanComp extends Command
             return $open->pluck('number')->all();
         });
 
+        if ($capRaw !== null && $capRaw !== '') {
+            $settings = (array) ($user->social_settings ?? []);
+            if ($capRaw === 'none') {
+                unset($settings['max_social_accounts']);
+                $capLine = ' · account cap: none';
+            } else {
+                $settings['max_social_accounts'] = (int) $capRaw;
+                $capLine = " · account cap: {$capRaw}";
+            }
+            $user->forceFill(['social_settings' => $settings === [] ? null : $settings])->save();
+        }
+
         ProductEvents::planChanged($user->fresh());
 
         $cancelled = $running->pluck('creem_subscription_id')->diff($alreadyEnded)->values();
@@ -151,7 +180,7 @@ class PlanComp extends Command
                 $cancelled->isNotEmpty() ? 'cancelled now, no charge ('.$cancelled->implode(', ').')' : null,
                 $alreadyEnded !== [] ? 'already ended at Creem ('.implode(', ', $alreadyEnded).')' : null,
             ]));
-        $this->line("{$email}: {$plan->name} (staff comp) until {$until->toDateString()} · {$creemLine} · invoices voided: ".($voided === [] ? 'none' : implode(', ', $voided)));
+        $this->line("{$email}: {$plan->name} (staff comp) until {$until->toDateString()} · {$creemLine} · invoices voided: ".($voided === [] ? 'none' : implode(', ', $voided)).$capLine);
 
         return self::SUCCESS;
     }

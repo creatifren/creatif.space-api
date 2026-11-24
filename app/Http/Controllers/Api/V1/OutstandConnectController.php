@@ -8,6 +8,7 @@ use App\Http\Controllers\Controller;
 use App\Models\SocialAccount;
 use App\Models\User;
 use App\Services\OutstandService;
+use App\Support\PlanQuota;
 use App\Support\Workspace;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
@@ -395,11 +396,11 @@ class OutstandConnectController extends Controller
 
         // The same count PlanQuota::canConnectSocialAccount keeps, for N at once.
         $owner = Workspace::owner($user);
-        $limit = $owner->plan()->quota('social_accounts');
+        $limit = PlanQuota::socialAccountsLimit($owner);
         $used = $owner->socialAccounts()->usable()->count();
         if ($limit !== null && $used + count($ids) > $limit) {
             throw ValidationException::withMessages([
-                'page_ids' => "Your plan connects up to {$limit} social accounts. Choose fewer, or upgrade to add more.",
+                'page_ids' => PlanQuota::socialAccountsFullMessage($owner, $limit, true),
             ]);
         }
 
