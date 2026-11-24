@@ -111,7 +111,11 @@ describe('tools/list against the real API (#78 describeTool shape)', () => {
 
 describe('refusals from the real API (#76 envelope)', () => {
   it('402: a plan feature the Free account lacks → plan_required', async () => {
-    const err = envelope((await full.callTool({ name: 'list_spaces', arguments: {} })) as CallToolResult, 'list_spaces');
+    // Spaces are on Free since 24 Nov (v10.21); Insight exports are still Pro and Max.
+    const err = envelope(
+      (await full.callTool({ name: 'get_insight_csv_link', arguments: { from: '2026-10-01', to: '2026-10-31' } })) as CallToolResult,
+      'get_insight_csv_link',
+    );
     expect(err.code).toBe('plan_required');
   });
 

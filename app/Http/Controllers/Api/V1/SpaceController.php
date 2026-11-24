@@ -16,6 +16,7 @@ use App\Models\File;
 use App\Models\SocialPost;
 use App\Models\Space;
 use App\Models\SpaceItem;
+use App\Models\User;
 use App\Support\PlanQuota;
 use App\Support\PostSpaces;
 use App\Support\SpacePublishConfirmation;
@@ -113,6 +114,7 @@ class SpaceController extends Controller
                 'title' => 'All '.PlanQuota::totalLimit($user).' Spaces are created.',
             ])->status(422);
         }
+        $this->requireDailyRoom($user);
 
         $files = isset($validated['file_ids'])
             ? $this->readyFiles($user->id, $validated['file_ids'])
@@ -459,6 +461,7 @@ class SpaceController extends Controller
                 'title' => 'All '.PlanQuota::totalLimit($user).' Spaces are created.',
             ]);
         }
+        $this->requireDailyRoom($user);
 
         $copy = DB::transaction(function () use ($space, $user) {
             $title = $space->title.' (copy)';
@@ -746,4 +749,17 @@ class SpaceController extends Controller
             'y' => max(0.0, min(100.0, (float) ($c['y'] ?? 50))),
         ];
     }
+
+    /**
+     * Free: 10 new Spaces a day (prototype v10.21 toast wording).
+     */
+    private function requireDailyRoom(User $user): void
+    {
+        if (! PlanQuota::canCreateToday($user)) {
+            throw ValidationException::withMessages([
+                'title' => 'You made '.PlanQuota::dailyLimit($user).' new Spaces today. Make more tomorrow, or get Pro.',
+            ]);
+        }
+    }
+
 }

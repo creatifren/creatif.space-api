@@ -70,7 +70,9 @@ class PlanSeeder extends Seeder
                     'client_approvals' => true,
                     'ai_caption' => false,
                     'insight' => false,
-                    'spaces' => false,
+                    // Spaces on every plan (Rizal 24 Nov, prototype v10.21):
+                    // only storage limits them, plus spaces_daily below.
+                    'spaces' => true,
                     'alt_text' => false,
                     'ai_reply_suggestions' => false,
                     'comment_to_dm' => false,
@@ -95,6 +97,8 @@ class PlanSeeder extends Seeder
             // null = no limit. Not zero, which would mean none.
             'spaces_total' => null,
             'spaces_active' => null,
+            // New Spaces a day (UTC). Free only: anti-spam (24 Nov).
+            'spaces_daily' => null,
             'seats' => 1,
             'custom_domains' => 1,
             'social_accounts' => null,
@@ -117,9 +121,11 @@ class PlanSeeder extends Seeder
                 'quotas' => [
                     // Media v2: Free's 1 GB total (config/media.php).
                     'storage_bytes' => (int) config('media.tiers.free.total_bytes'),
-                    'spaces_total' => 15,
-                    // All fifteen may be published — there is no active limit.
+                    // Spaces on Free (24 Nov): no count limit, storage only.
+                    'spaces_total' => null,
                     'spaces_active' => null,
+                    // Anti-spam: at most 10 new Spaces a day (UTC).
+                    'spaces_daily' => 10,
                     'seats' => 1,
                     'custom_domains' => 0,
                     'social_accounts' => 3,

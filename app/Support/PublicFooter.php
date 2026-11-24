@@ -46,10 +46,19 @@ final class PublicFooter
         return 'https://creatif.space/?ref=footer'.($handle ? '&from='.rawurlencode($handle) : '');
     }
 
-    /** @return array{footer: string, footer_url: string} */
+    /**
+     * Pro check badge (Rizal 24 Nov, prototype v10.21): any paid plan.
+     * Says "Pro member on Creatif Space" — never "Verified".
+     */
+    public static function ownerPro(?User $user): bool
+    {
+        return $user !== null && Workspace::owner($user)->plan()->key !== PlanKey::Free;
+    }
+
+    /** @return array{footer: string, footer_url: string, owner_pro: bool} */
     public static function fields(?User $user): array
     {
-        return ['footer' => self::kind($user), 'footer_url' => self::url($user)];
+        return ['footer' => self::kind($user), 'footer_url' => self::url($user), 'owner_pro' => self::ownerPro($user)];
     }
 
     /**

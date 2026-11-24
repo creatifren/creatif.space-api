@@ -112,6 +112,10 @@ class PublicSpaceResource extends JsonResource
             'branding' => ! Workspace::owner($this->user)->plan()->feature('branding_removed'),
             // Footer per plan (Free full · Pro/Max one line · Enterprise none).
             ...PublicFooter::fields($this->user),
+            /* Free anti-spam (24 Nov): a Free owner's Space stays out of
+               search engines for its first 7 days. */
+            'noindex' => PublicFooter::kind($this->user) === PublicFooter::FULL
+                && $this->created_at !== null && $this->created_at->greaterThan(now()->subDays(7)),
             'seo' => $this->seo,
             'visibility' => $this->visibility,
             'published_at' => $this->published_at,

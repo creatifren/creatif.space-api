@@ -323,15 +323,12 @@ describe('rule 3 — features gated off on Free', function () {
         $this->actingAs(v2Pro())->getJson('/api/v1/me/analytics')->assertOk();
     });
 
-    it('refuses creating, editing and publishing Spaces on Free, allows them on Pro', function () {
+    it('lets Free create, edit, publish and duplicate Spaces (v10.21, 24 Nov), and Pro too', function () {
         $free = v2Free();
-        $space = Space::factory()->for($free)->create(['status' => 'draft']);
-
-        v2Assert402($this->actingAs($free)->postJson('/api/v1/spaces', ['title' => 'New']), 'spaces');
-        v2Assert402($this->actingAs($free)->patchJson("/api/v1/spaces/{$space->ulid}", ['title' => 'Edit']), 'spaces');
-        v2Assert402($this->actingAs($free)->postJson("/api/v1/spaces/{$space->ulid}/publish"), 'spaces');
-        v2Assert402($this->actingAs($free)->postJson("/api/v1/spaces/{$space->ulid}/duplicate"), 'spaces');
-        v2Assert402($this->actingAs($free)->postJson("/api/v1/spaces/{$space->ulid}/items", ['items' => []]), 'spaces');
+        $id = $this->actingAs($free)->postJson('/api/v1/spaces', ['title' => 'New'])->assertCreated()->json('data.id');
+        $this->actingAs($free)->patchJson("/api/v1/spaces/{$id}", ['title' => 'Edit'])->assertOk();
+        $this->actingAs($free)->postJson("/api/v1/spaces/{$id}/publish")->assertOk();
+        $this->actingAs($free)->postJson("/api/v1/spaces/{$id}/duplicate")->assertSuccessful();
 
         $pro = v2Pro();
         $id = $this->actingAs($pro)->postJson('/api/v1/spaces', ['title' => 'New'])->assertCreated()->json('data.id');
@@ -409,7 +406,8 @@ describe('rule 3 — features gated off on Free', function () {
     it('turns every gate on for Pro, Max and Enterprise and off for Free, from the plans table', function () {
         foreach (Plan::all() as $plan) {
             foreach (PlanQuota::FEATURES as $feature) {
-                expect($plan->feature($feature))->toBe($plan->key->value !== 'free', "{$plan->key->value}.{$feature}");
+                // Spaces are on every plan since 24 Nov (v10.21).
+                expect($plan->feature($feature))->toBe($feature === 'spaces' || $plan->key->value !== 'free', "{$plan->key->value}.{$feature}");
             }
         }
     });
@@ -498,7 +496,7 @@ describe('rule 6 — MCP / API keys get the same answers', function () {
         expect($limits['scheduling'])->toBe(['window_days' => 7, 'queued_posts' => ['limit' => 10, 'used' => 3]])
             ->and($limits['approval_clients'])->toBe(['limit' => 1, 'used' => 1])
             ->and($limits['features'])->toMatchArray([
-                'approval_links' => true, 'ai_caption' => false, 'insight' => false, 'spaces' => false,
+                'approval_links' => true, 'ai_caption' => false, 'insight' => false, 'spaces' => true,
                 'alt_text' => false, 'ai_reply_suggestions' => false, 'comment_to_dm' => false,
             ]);
     });
@@ -572,7 +570,7 @@ describe('rule 7 — existing data and the migration', function () {
             ->and($free->quota('queued_posts'))->toBe(10)
             ->and($free->quota('approval_clients'))->toBe(1)
             ->and($free->feature('client_approvals'))->toBeTrue()
-            ->and($free->feature('spaces'))->toBeFalse();
+            ->and($free->feature('spaces'))->toBeTrue(); // Spaces on Free since 24 Nov (PlanSeeder::v2)
         $enterprise = Plan::query()->where('key', 'enterprise')->sole();
         expect($enterprise->feature('contact_sales'))->toBeTrue()
             ->and($enterprise->is_active)->toBeTrue()
@@ -580,6 +578,7 @@ describe('rule 7 — existing data and the migration', function () {
     });
 
     it('reports existing rows past the limits without changing them', function () {
+        planWith('free', ['spaces' => false]); // the report's Spaces line counts a plan without Spaces
         $user = v2Free();
         Space::factory()->count(2)->for($user)->create(['status' => 'published']);
         v2Queue($user, 12, ['scheduled_at' => now()->addDays(20)]);

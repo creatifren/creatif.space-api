@@ -118,6 +118,7 @@ return [
     'api.v1.me.domain.destroy' => 'Remove the custom domain',
     'api.v1.me.link-taps' => 'Taps per profile link, last 30 days',
     'api.v1.profiles.taps' => 'Count a tap on a public profile link',
+    'api.v1.public.report-page' => 'Report a public page to the Creatif Space team (no sign-in)',
     'api.v1.public.domains.show' => 'The handle behind a verified custom domain',
     'api.v1.me.report-settings' => 'Get Report emails settings (schedule, sender, per client)',
     'api.v1.me.report-settings.update' => 'Change Report emails settings',

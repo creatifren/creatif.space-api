@@ -45,7 +45,8 @@ function spacesPro(?string $handle = 'studio'): User
 }
 
 describe('plan gate for connected apps', function () {
-    it('answers the standard 402 plan_required on every Spaces route for a Free key', function (string $method, string $uri) {
+    it('answers the standard 402 plan_required on every Spaces route for a plan without Spaces', function (string $method, string $uri) {
+        planWith('free', ['spaces' => false]); // every plan has Spaces since v10.21; the gate stays
         $free = User::factory()->create(); // no subscription = Free
         $space = Space::factory()->for($free)->create(['status' => 'draft']);
         $key = spacesKey($this, $free);
@@ -76,6 +77,7 @@ describe('plan gate for connected apps', function () {
     });
 
     it('audits the refusal like any other token answer', function () {
+        planWith('free', ['spaces' => false]);
         $free = User::factory()->create();
         $key = spacesKey($this, $free, ['read']);
 
