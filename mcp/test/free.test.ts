@@ -283,12 +283,15 @@ describe('connect_guide', () => {
   });
 
   it('plan room states what PlanSeeder says: Free 3, Pro and Max no limit', () => {
-    const seeder = readFileSync(new URL('../../database/seeders/PlanSeeder.php', import.meta.url), 'utf8').split('\n');
-    expect(seeder[124]).toContain("'social_accounts' => 3,");
-    expect(seeder[99]).toContain("'social_accounts' => null,");
-    expect(seeder[94]).toContain('null = no limit');
-    expect(seeder[145]).toContain('$paidQuotas');
-    expect(seeder[156]).toContain('$paidQuotas');
+    // By content, not line number: the seeder grows (24 Nov: spaces_daily).
+    const seeder = readFileSync(new URL('../../database/seeders/PlanSeeder.php', import.meta.url), 'utf8');
+    const free = seeder.slice(seeder.indexOf("'key' => 'free'"), seeder.indexOf("'key' => 'pro'"));
+    const paid = seeder.slice(seeder.indexOf('$paidQuotas = ['), seeder.indexOf('$paidFeatures = ['));
+    expect(free).toContain("'social_accounts' => 3,");
+    expect(paid).toContain("'social_accounts' => null,");
+    expect(paid).toContain('null = no limit');
+    expect(seeder.slice(seeder.indexOf("'key' => 'pro'"), seeder.indexOf("'key' => 'max'"))).toContain('$paidQuotas');
+    expect(seeder.slice(seeder.indexOf("'key' => 'max'"), seeder.indexOf("'key' => 'team'"))).toContain('$paidQuotas');
     const line = 'Room on your plan: Free connects up to 3 social accounts; Pro and Max have no limit.';
     for (const network of CONNECT_NETWORKS) expect(connectGuide({ network }).requirements).toContain(line);
   });

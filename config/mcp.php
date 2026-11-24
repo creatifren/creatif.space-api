@@ -217,8 +217,8 @@ return [
     /*
      * Route name => plan feature a token caller's plan must have, on top of
      * the scope. Past it: the standard 402 plan_required (PlanFeatureRequired).
-     * The app keeps showing a Free user's existing Spaces; connected apps
-     * get Spaces on Pro and Max only.
+     * Spaces are on every plan since 24 Nov (v10.21); the gate stays so a
+     * plan without the feature (none today) still gets the standard 402.
      */
     'route_features' => [
         'api.v1.spaces.index' => 'spaces',
