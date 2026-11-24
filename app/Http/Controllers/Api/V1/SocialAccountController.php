@@ -499,10 +499,10 @@ class SocialAccountController extends Controller
             return;
         }
 
-        $limit = Workspace::owner($user)->plan()->quota('social_accounts');
+        $limit = (int) PlanQuota::socialAccountsLimit($user);
 
         throw ValidationException::withMessages([
-            $field => "Free connects up to {$limit} social accounts. Upgrade to Pro or Max to add more.",
+            $field => PlanQuota::socialAccountsFullMessage($user, $limit),
         ]);
     }
 

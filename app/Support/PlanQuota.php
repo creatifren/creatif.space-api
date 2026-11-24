@@ -409,10 +409,50 @@ class PlanQuota
     public static function canConnectSocialAccount(User $user): bool
     {
         $owner = Workspace::owner($user);
-        $limit = $owner->plan()->quota('social_accounts');
+        $limit = static::socialAccountsLimit($owner);
 
         return $limit === null
             || $owner->socialAccounts()->usable()->count() < $limit;
+    }
+
+    /**
+     * How many social accounts the workspace may have connected: the
+     * plan's quota, lowered by a staff-set cap (testers, 24 Nov 2026:
+     * `social_settings.max_social_accounts`, set with plan:comp
+     * --max-accounts). null = no limit.
+     */
+    public static function socialAccountsLimit(User $user): ?int
+    {
+        $owner = Workspace::owner($user);
+        $plan = $owner->plan()->quota('social_accounts');
+        $cap = static::socialAccountsCap($owner);
+        if ($cap === null) {
+            return $plan;
+        }
+
+        return $plan === null ? $cap : min($plan, $cap);
+    }
+
+    /** The staff-set cap on connected social accounts, or null. */
+    public static function socialAccountsCap(User $user): ?int
+    {
+        $raw = (Workspace::owner($user)->social_settings ?? [])['max_social_accounts'] ?? null;
+
+        return is_int($raw) && $raw >= 0 ? $raw : null;
+    }
+
+    /** The refusal text when no account can be added (the cap reads as a testing limit, no vendor named). */
+    public static function socialAccountsFullMessage(User $user, int $limit, bool $several = false): string
+    {
+        $cap = static::socialAccountsCap($user);
+        if ($cap !== null && $cap === $limit) {
+            return "During testing, each account can connect up to {$limit} social accounts."
+                .($several ? ' Choose fewer.' : '');
+        }
+
+        return $several
+            ? "Your plan connects up to {$limit} social accounts. Choose fewer, or upgrade to add more."
+            : "Free connects up to {$limit} social accounts. Upgrade to Pro or Max to add more.";
     }
 
     /**

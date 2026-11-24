@@ -82,7 +82,7 @@ class CreditsController extends Controller
     {
         $owner = Workspace::owner($user);
         $plan = $owner->plan();
-        $accountsLimit = $plan->quota('social_accounts');
+        $accountsLimit = PlanQuota::socialAccountsLimit($owner);
 
         return [
             'plan' => ['key' => $plan->key->value, 'name' => $plan->name],
