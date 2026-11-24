@@ -2,6 +2,7 @@
 
 namespace App\Http\Resources;
 
+use App\Http\Controllers\Api\V1\SpaceController;
 use App\Models\BlogPost;
 use App\Models\File;
 use App\Models\Space;
@@ -72,6 +73,8 @@ class PublicSpaceResource extends JsonResource
                     'width' => $i->file->width,
                     'height' => $i->file->height,
                     'mime_type' => $i->file->mime_type,
+                    // v10.15: shown crop; downloads stay the whole original.
+                    'crop' => SpaceController::cropOf($itemMeta[$i->ulid] ?? null),
                 ])->all(),
             // v7 Blog: published posts only, newest first.
             'posts' => ($this->type ?? 'gallery') !== 'blog' ? [] : $this->blogPosts()

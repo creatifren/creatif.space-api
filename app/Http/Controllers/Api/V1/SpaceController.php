@@ -224,6 +224,12 @@ class SpaceController extends Controller
             'items.*.title' => ['sometimes', 'nullable', 'string', 'max:160'],
             'items.*.featured' => ['sometimes', 'boolean'],
             'items.*.hidden' => ['sometimes', 'boolean'],
+            // v10.15 gallery: a photo's crop (shown shape only; the file stays whole). null = original shape.
+            'items.*.crop' => ['sometimes', 'nullable', 'array'],
+            'items.*.crop.ratio' => ['required_with:items.*.crop', 'string', 'in:'.implode(',', self::CROP_RATIOS)],
+            'items.*.crop.zoom' => ['sometimes', 'numeric', 'min:1', 'max:3'],
+            'items.*.crop.x' => ['sometimes', 'numeric', 'min:0', 'max:100'],
+            'items.*.crop.y' => ['sometimes', 'numeric', 'min:0', 'max:100'],
             // v7 gallery: "Allow downloads of originals" (press / media kit).
             'allow_downloads' => ['sometimes', 'boolean'],
         ]);
@@ -669,6 +675,8 @@ class SpaceController extends Controller
 
         $existing = $space->items()->get()->keyBy('ulid');
         $keep = [];
+        /** @var array<string, array<string, mixed>|null> $crops */
+        $crops = [];
 
         foreach ($incoming as $row) {
             $file = $files[$row['file_id']];
@@ -690,8 +698,52 @@ class SpaceController extends Controller
             // sure its position fields are current either way.
             $item->fill($attributes)->save();
             $keep[] = $item->id;
+            if (array_key_exists('crop', $row)) {
+                $crops[$item->ulid] = $row['crop'] === null ? null : self::cropOf(['crop' => $row['crop']]);
+            }
         }
 
         $space->items()->whereNotIn('id', $keep)->delete();
+
+        if ($crops !== []) {
+            $design = (array) ($space->design ?? []);
+            $meta = (array) ($design['items'] ?? []);
+            foreach ($crops as $ulid => $crop) {
+                $m = (array) ($meta[$ulid] ?? []);
+                if ($crop === null) {
+                    unset($m['crop']);
+                } else {
+                    $m['crop'] = $crop;
+                }
+                $meta[$ulid] = $m === [] ? (object) [] : $m;
+            }
+            $design['items'] = $meta === [] ? (object) [] : $meta;
+            $space->design = $design;
+            $space->save();
+        }
+    }
+
+    /** v10.15: the shapes a Gallery photo can be cropped to. */
+    public const CROP_RATIOS = ['1:1', '4:5', '3:2', '16:9', '9:16'];
+
+    /**
+     * A stored crop, cleaned for output: null when absent or malformed.
+     *
+     * @return array{ratio: string, zoom: float, x: float, y: float}|null
+     */
+    public static function cropOf(mixed $meta): ?array
+    {
+        $c = is_array($meta) ? ($meta['crop'] ?? null) : (is_object($meta) ? ($meta->crop ?? null) : null);
+        $c = is_object($c) ? (array) $c : $c;
+        if (! is_array($c) || ! in_array($c['ratio'] ?? null, self::CROP_RATIOS, true)) {
+            return null;
+        }
+
+        return [
+            'ratio' => $c['ratio'],
+            'zoom' => max(1.0, min(3.0, (float) ($c['zoom'] ?? 1))),
+            'x' => max(0.0, min(100.0, (float) ($c['x'] ?? 50))),
+            'y' => max(0.0, min(100.0, (float) ($c['y'] ?? 50))),
+        ];
     }
 }
