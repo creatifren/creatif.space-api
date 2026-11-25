@@ -167,3 +167,57 @@ it('says "not read in time" for channels past the time budget, and does not cach
         InsightCollector::$budgetSeconds = 14.0;
     }
 });
+
+it('queues a warm-up that reads every channel when a report comes back partial (QA-10, 25 Nov)', function () {
+    \Illuminate\Support\Facades\Queue::fake();
+    InsightCollector::$budgetSeconds = -1.0;
+    try {
+        $accounts = collect(array_values($this->accounts));
+        $period = InsightPeriod::month(InsightFixture::MONTH);
+        app(InsightCollector::class)->collectCached($this->owner, $accounts, $period);
+
+        \Illuminate\Support\Facades\Queue::assertPushed(\App\Jobs\WarmInsightCache::class, fn ($job) => $job->ownerId === $this->owner->id
+            && $job->accountIds === $accounts->pluck('id')->all()
+            && $job->from === $period->from->toDateString());
+    } finally {
+        InsightCollector::$budgetSeconds = 14.0;
+    }
+});
+
+it('the warm-up keeps a complete answer even with a short request budget (QA-10)', function () {
+    InsightCollector::$budgetSeconds = -1.0;
+    try {
+        $accounts = collect(array_values($this->accounts));
+        $period = InsightPeriod::month(InsightFixture::MONTH);
+        (new \App\Jobs\WarmInsightCache($this->owner->id, $accounts->pluck('id')->all(), $period->kind, $period->from->toDateString(), $period->to->toDateString()))
+            ->handle(app(InsightCollector::class));
+
+        expect(InsightCollector::$budgetSeconds)->toBe(-1.0);
+        $data = app(InsightCollector::class)->collectCached($this->owner, $accounts, $period);
+        expect(collect($data['footnotes'])->pluck('key'))->not->toContain('not_read_in_time');
+    } finally {
+        InsightCollector::$budgetSeconds = 14.0;
+    }
+});
+
+it('answers an expired complete report at once and refreshes it in the queue, but not after new numbers (QA-10)', function () {
+    $accounts = collect(array_values($this->accounts));
+    $period = InsightPeriod::month(InsightFixture::MONTH);
+    $first = app(InsightCollector::class)->collectCached($this->owner, $accounts, $period);
+
+    $this->travel(\App\Support\Insight\InsightCache::TTL_MINUTES + 1)->minutes();
+    \Illuminate\Support\Facades\Queue::fake();
+    InsightCollector::$budgetSeconds = -1.0; // a fresh read would be partial
+    try {
+        $again = app(InsightCollector::class)->collectCached($this->owner, $accounts, $period);
+        expect($again)->toBe($first);
+        \Illuminate\Support\Facades\Queue::assertPushed(\App\Jobs\WarmInsightCache::class);
+
+        // New numbers landed: the old answer is not served.
+        \App\Support\Insight\InsightCache::bump($this->owner->id);
+        $fresh = app(InsightCollector::class)->collectCached($this->owner, $accounts, $period);
+        expect(collect($fresh['footnotes'])->pluck('key'))->toContain('not_read_in_time');
+    } finally {
+        InsightCollector::$budgetSeconds = 14.0;
+    }
+});

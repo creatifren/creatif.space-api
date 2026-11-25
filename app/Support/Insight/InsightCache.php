@@ -53,26 +53,70 @@ final class InsightCache
      * @param  (Closure(array<string, mixed>): bool)|null  $keep  false = do not cache this result
      * @return array<string, mixed>
      */
-    public static function remember(User $owner, Collection $accounts, InsightPeriod $period, Closure $compute, ?Closure $keep = null): array
+    public static function remember(User $owner, Collection $accounts, InsightPeriod $period, Closure $compute, ?Closure $keep = null, ?Closure $warm = null): array
     {
-        $key = implode(':', [
-            'insight',
-            's'.self::SHAPE,
-            $owner->id,
-            'v'.self::version($owner->id),
-            $period->kind,
-            $period->from->toDateString(),
-            $period->to->toDateString(),
-            sha1($accounts->pluck('ulid')->sort()->implode(',')),
-        ]);
+        $version = self::version($owner->id);
+        $key = self::key($owner, $accounts, $period, $version);
 
         $hit = Cache::get($key);
         if (is_array($hit)) {
             return $hit;
         }
 
+        // QA-10 (25 Nov 2026, CS_Builder_31): a complete answer whose 15
+        // minutes ran out while no new numbers landed (same version) is
+        // answered at once; a queued read brings it up to date behind it.
+        $stale = Cache::get(self::staleKey($owner, $accounts, $period));
+        if ($warm !== null && is_array($stale) && ($stale['v'] ?? null) === $version && is_array($stale['value'] ?? null)) {
+            $warm();
+
+            return $stale['value'];
+        }
+
+        $partial = false;
+        $value = self::compute($owner, $accounts, $period, $key, $version, $compute, $keep, $partial);
+
+        // A partial answer (time budget ran out): read every channel in the
+        // queue without the gateway's limit, so the next load is complete.
+        if ($partial && $warm !== null) {
+            $warm();
+        }
+
+        return $value;
+    }
+
+    /**
+     * Compute and keep a fresh answer, whatever is cached (the queued warm-up).
+     *
+     * @param  Collection<int, SocialAccount>  $accounts
+     * @param  Closure(): array<string, mixed>  $compute
+     * @param  (Closure(array<string, mixed>): bool)|null  $keep
+     * @return array<string, mixed>
+     */
+    public static function refresh(User $owner, Collection $accounts, InsightPeriod $period, Closure $compute, ?Closure $keep = null): array
+    {
+        $version = self::version($owner->id);
+        $key = self::key($owner, $accounts, $period, $version);
+        Cache::forget($key);
+        $partial = false;
+
+        return self::compute($owner, $accounts, $period, $key, $version, $compute, $keep, $partial);
+    }
+
+    /** Complete answers are kept this long as the fallback while a fresh one is read. */
+    public const STALE_HOURS = 24;
+
+    /**
+     * @param  Collection<int, SocialAccount>  $accounts
+     * @param  Closure(): array<string, mixed>  $compute
+     * @param  (Closure(array<string, mixed>): bool)|null  $keep
+     * @return array<string, mixed>
+     */
+    private static function compute(User $owner, Collection $accounts, InsightPeriod $period, string $key, int $version, Closure $compute, ?Closure $keep, bool &$partial): array
+    {
+        $staleKey = self::staleKey($owner, $accounts, $period);
         $t0 = microtime(true);
-        $store = function () use ($key, $compute, $keep, $t0): array {
+        $store = function () use ($key, $staleKey, $version, $compute, $keep, $t0, &$partial): array {
             $again = Cache::get($key);
             if (is_array($again)) {
                 return $again;
@@ -85,7 +129,9 @@ final class InsightCache
             $value = $compute();
             if ($keep === null || $keep($value)) {
                 Cache::put($key, $value, now()->addMinutes(self::TTL_MINUTES));
+                Cache::put($staleKey, ['v' => $version, 'value' => $value], now()->addHours(self::STALE_HOURS));
             } else {
+                $partial = true;
                 Cache::put($key.':shared', $value, now()->addSeconds(self::PARTIAL_SHARE_SECONDS));
             }
 
@@ -98,6 +144,35 @@ final class InsightCache
         } catch (\Illuminate\Contracts\Cache\LockTimeoutException) {
             return $store();
         }
+    }
+
+    /** @param  Collection<int, SocialAccount>  $accounts */
+    private static function key(User $owner, Collection $accounts, InsightPeriod $period, int $version): string
+    {
+        return implode(':', [
+            'insight',
+            's'.self::SHAPE,
+            $owner->id,
+            'v'.$version,
+            $period->kind,
+            $period->from->toDateString(),
+            $period->to->toDateString(),
+            sha1($accounts->pluck('ulid')->sort()->implode(',')),
+        ]);
+    }
+
+    /** @param  Collection<int, SocialAccount>  $accounts */
+    private static function staleKey(User $owner, Collection $accounts, InsightPeriod $period): string
+    {
+        return implode(':', [
+            'insight-stale',
+            's'.self::SHAPE,
+            $owner->id,
+            $period->kind,
+            $period->from->toDateString(),
+            $period->to->toDateString(),
+            sha1($accounts->pluck('ulid')->sort()->implode(',')),
+        ]);
     }
 
     public static function version(int $ownerId): int
