@@ -23,3 +23,10 @@ Previous server copy: `/root/d-site.sh.bak-20261119`.
 After the rsync into the non-live colour, `d-site.sh` copies the live colour's `.next/static/` in with
 `--ignore-existing` (hashed names, so nothing is overwritten). A page or tab opened before the switch can
 still load its lazy chunks instead of 404. One generation is kept. Previous copy: `/root/d-site.sh.bak-20261125`.
+
+## Cloudflare purge after a mkt deploy (25 Nov 2026, Rizal "B")
+The cache rule "Marketing HTML cache (QA, Rizal OK 11 Nov)" keeps marketing HTML 2 h at the edge (the Free plan
+minimum). After the blue/green switch, `d-site.sh mkt` purges the zone when `/etc/cs-cf-purge.env` exists
+(root, mode 600, written by Rizal — never printed): `CF_ZONE_ID=<zone id>` and `CF_API_TOKEN=<token with
+Zone › Cache Purge › Purge on creatif.space only>`. Output says `cf-purge: done | failed | skipped`; it never fails
+the deploy. Old chunks stay served for one build (see "Keep old chunks"), so a stale page never 404s its JS.
