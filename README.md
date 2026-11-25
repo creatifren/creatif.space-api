@@ -61,6 +61,7 @@ in [mcp/README.md](mcp/README.md).
 | Spaces | `publish_space` | Publish a draft Space after a preview | Pro / Max |
 | Credits | `get_account_summary` | Onboarding in one call: plan, limits left, Credits, channels, storage | All |
 | Credits | `get_onboarding` | The Get started checklist (connect, draft, send, publish) and the one next step to suggest | All |
+| Posts | `list_pinterest_boards` | A Pinterest channel's boards, so a Pin names its board (`pinterest_board_id` on `draft_post` / `update_post`) | All |
 | Credits | `get_credits` | Plan, limits, Credits, spend this month, days to renewal | All |
 | Engage | `list_conversations` | Comments and DMs, newest first | All |
 | Engage | `reply_to_conversation` | Reply to a comment or DM after a preview | All, may spend Credits |

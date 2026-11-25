@@ -12,6 +12,7 @@ const filters = (what: string, list: string) =>
   ({ what, next: `Call again without channel_ids, or take channel ids from ${list}.` }) satisfies NotFound;
 
 export const NOT_FOUND_FOR: Record<string, NotFound> = {
+  list_pinterest_boards: { what: 'That channel', next: 'Take a Pinterest channel id from list_channels and call again.' },
   list_channels: { what: 'The channel list', next: 'Call list_channels again without cursor to start from the first page.' },
   get_credits: { what: 'This workspace’s Credits', next: 'Tell the user to open creatif.space and check they are in the right workspace, then call again.' },
   get_storage_usage: { what: 'This workspace’s storage', next: 'Tell the user to open creatif.space and check they are in the right workspace, then call again.' },
@@ -95,6 +96,7 @@ export const STATE_TOOL: Record<string, string> = {
   get_credits: 'get_credits',
   get_account_summary: 'get_account_summary',
   get_onboarding: 'get_onboarding',
+  list_pinterest_boards: 'list_channels',
   get_notification_settings: 'get_notification_settings',
   update_notification_settings: 'get_notification_settings',
   send_feedback: 'send_feedback',

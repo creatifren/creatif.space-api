@@ -21,6 +21,7 @@ const ARGS: Record<string, Record<string, unknown>> = {
   draft_post: { caption: 'Hello', channel_ids: [ID] },
   get_account_summary: {},
   get_onboarding: {},
+  list_pinterest_boards: { channel_id: '01JD0000000000000000000000' },
   get_credits: {},
   list_failed_posts: {},
   create_approval_link: { approver_email: 'client@example.com', post_ids: [ID] },

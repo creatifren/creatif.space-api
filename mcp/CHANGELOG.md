@@ -7,6 +7,13 @@ Versions of the remote MCP server at `https://mcp.creatif.space/mcp`
 
 ## Unreleased
 
+Pinterest boards (26 Nov 2026):
+
+67 tools (was 66).
+
+- New: `list_pinterest_boards` — one Pinterest channel's boards, so a Pin names its board.
+- `draft_post` and `update_post` (drafts) take `pinterest_board_id`; the API's `PATCH /social-posts/{id}` now takes `options` on a draft.
+
 Hashtag sets + First comment (v10.2, 20 Nov 2026):
 
 66 tools (was 65).

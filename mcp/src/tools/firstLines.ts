@@ -9,6 +9,7 @@
  */
 
 export const FIRST_LINES: Record<string, string> = {
+  list_pinterest_boards: 'Lists the boards of one Pinterest channel, so a Pin can name the board it goes to.',
   // Start here
   get_onboarding: 'Shows which getting-started steps the user has done and the one next step to suggest to them.',
   get_account_summary: 'Shows the user\'s plan, limits left, Credits, channels and storage in one call, so you know what they can do.',

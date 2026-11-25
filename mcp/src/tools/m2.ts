@@ -2,6 +2,7 @@ import { z } from 'zod';
 import { ToolError } from '../errors.js';
 import { idempotencyKey, V1Error } from '../v1.js';
 import { defineTool, describeTool, type ToolContext } from './define.js';
+import { pinterestBoardInput, pinterestOptionsOn } from './pinterest.js';
 import { shapePost, type V1Post } from './shape.js';
 
 /** A repeat of the same create_approval_link within this window gets the first link back. */
@@ -429,7 +430,7 @@ export const updatePost = defineTool({
   name: 'update_post',
   title: 'Update a post',
   description: describeTool({
-    does: "Changes a draft or a post still waiting for approval: its caption, scheduled time, labels or media. file_ids REPLACES the post’s media — the media not listed is removed from the post.",
+    does: "Changes a draft or a post still waiting for approval: its caption, scheduled time, labels, media or (drafts only) the Pinterest board. file_ids REPLACES the post’s media — the media not listed is removed from the post.",
     when: "to edit an existing draft instead of drafting a new one. Posts already queued to publish, published or otherwise done cannot be changed from here — the user edits those in creatif.space.",
     example: "update_post { \"post_id\": \"01JD…\", \"caption\": \"New caption\", \"add_file_ids\": [\"01JE…\"] }",
     rules: "Media: file_ids REPLACES the post’s media with these library files ([] removes all); add_file_ids keeps the current media and adds these after it (10 items at most). Ids come from list_files, or from confirm_media_upload for a new upload.",
@@ -450,6 +451,7 @@ export const updatePost = defineTool({
     file_ids: z.array(ulid('File')).max(10).optional().describe('Replaces the post’s media with these library files ([] removes all media)'),
     add_file_ids: z.array(ulid('File')).min(1).max(10).optional().describe('Adds these library files after the post’s current media'),
     first_comment: z.string().trim().max(2200).optional().describe('The first comment posted once the post is out (Instagram, Facebook, LinkedIn); "" removes it'),
+    pinterest_board_id: pinterestBoardInput,
   },
   annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: true, openWorldHint: false },
   notFound: { what: 'That post', next: 'Check the post id: find it with list_posts (status draft for drafts) and call again.' },
@@ -460,9 +462,9 @@ export const updatePost = defineTool({
       });
     }
     const changesMedia = args.file_ids !== undefined || args.add_file_ids !== undefined;
-    if (args.caption === undefined && args.scheduled_at === undefined && args.labels === undefined && args.first_comment === undefined && !changesMedia) {
-      throw new ToolError('invalid_input', 'Nothing to change: no field to update was given.', 'Call again with at least one of caption, scheduled_at, labels, file_ids, add_file_ids or first_comment.', {
-        fields: ['caption', 'scheduled_at', 'labels', 'file_ids', 'add_file_ids', 'first_comment'],
+    if (args.caption === undefined && args.scheduled_at === undefined && args.labels === undefined && args.first_comment === undefined && args.pinterest_board_id === undefined && !changesMedia) {
+      throw new ToolError('invalid_input', 'Nothing to change: no field to update was given.', 'Call again with at least one of caption, scheduled_at, labels, file_ids, add_file_ids, first_comment or pinterest_board_id.', {
+        fields: ['caption', 'scheduled_at', 'labels', 'file_ids', 'add_file_ids', 'first_comment', 'pinterest_board_id'],
       });
     }
     // The API decides what may change (drafts and posts waiting for approval
@@ -485,7 +487,15 @@ export const updatePost = defineTool({
         { max: 10, current: keptMedia(current).length, adding: args.add_file_ids.length },
       );
     }
+    if (args.pinterest_board_id !== undefined && current.status !== 'draft') {
+      throw new ToolError('not_editable', 'The Pinterest board can only change on a draft.', 'Tell the user to change the board in creatif.space.', {
+        post_id: args.post_id,
+        status: current.status,
+      });
+    }
+    const options = args.pinterest_board_id !== undefined ? pinterestOptionsOn(current, args.pinterest_board_id) : undefined;
     const { data } = await v1.patch<{ data: V1Post }>(`/social-posts/${encodeURIComponent(args.post_id)}`, {
+      ...(options ? { options } : {}),
       ...(args.caption !== undefined ? { caption: args.caption } : {}),
       ...(args.scheduled_at !== undefined ? { scheduled_at: args.scheduled_at } : {}),
       ...(args.labels !== undefined ? { labels: args.labels } : {}),

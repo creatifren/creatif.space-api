@@ -22,6 +22,7 @@ destructive; `send_approval_reminder`, `decide_approval`,
 |---|---|---|---|---|---|
 | `get_account_summary` | Get an account summary | yes | no | no | Reads the user's plan, limits, Credits, channels and storage. |
 | `get_onboarding` | Get the setup checklist | yes | no | no | Reads which getting-started steps the workspace has done; changes nothing. |
+| `list_pinterest_boards` | List Pinterest boards | yes | no | no | Reads one Pinterest channel's boards; changes nothing. |
 | `list_channels` | List connected channels | yes | no | no | Reads the user's connected social channels (ids needed by every post tool). |
 | `get_connect_link` | Get a link to connect a channel | yes | no | no | Returns a creatif.space link; the user connects the network themselves. |
 | `get_credits` | Get plan, limits and Credits | yes | no | no | Reads plan limits and Credit balance. |

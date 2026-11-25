@@ -107,6 +107,7 @@ export const OUTPUT_SCHEMAS: Record<string, z.ZodRawShape> = {
  */
 export const UNSTRUCTURED = new Set([
   'list_blog_posts',
+  'list_pinterest_boards',
   'get_report_settings',
   'list_client_reports',
   'get_client_report',
