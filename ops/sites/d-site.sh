@@ -7,6 +7,8 @@ if [ "$LIVE" = "$GP" ]; then T=blue; D=/www/wwwroot/$SITE; else T=green; D=/www/
 echo "$(date -u +%T) live port $LIVE -> target $T ($D)"
 bash /root/build-site.sh $S $A $R $SITE
 rsync -a --delete --exclude=.git/ --exclude=.user.ini /root/build-$S/ $D/
+# QA-01 (25 Nov 2026): keep the previous build's hashed chunks so tabs/pages opened before the switch still load (no 404 chunks).
+if [ "$T" = blue ]; then OLD=/www/wwwroot/$SITE-green; else OLD=/www/wwwroot/$SITE; fi; if [ -d "$OLD/.next/static" ]; then rsync -a --ignore-existing "$OLD/.next/static/" "$D/.next/static/"; fi
 find "$D" ! -name .user.ini -exec chown -h www:www {} +
 /opt/creatif-ops/bluegreen.sh $S --to $T --no-build
 # IndexNow (19 Nov 2026): after a live mkt deploy, ping new/changed blog posts (Bing/Yandex/Naver). Never fails the deploy.
