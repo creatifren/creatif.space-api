@@ -95,13 +95,13 @@ it('answers 10 channels × 90 days in under 2 s, and again from the cache withou
         ->and($second->json('data'))->toBe($first->json('data'));
 });
 
-it('keeps an answer 5 minutes, then reads again', function () {
+it('keeps an answer 15 minutes, then reads again', function () {
     $owner = bigWorkspace($this, 2, 30);
     $url = '/api/v1/insight/summary?from=2026-10-06&to=2026-11-04';
 
     $this->actingAs($owner)->getJson($url)->assertOk();
     $calls = $this->feedCalls;
-    $this->travel(4)->minutes();
+    $this->travel(14)->minutes();
     $this->actingAs($owner)->getJson($url)->assertOk();
     expect($this->feedCalls)->toBe($calls);
 

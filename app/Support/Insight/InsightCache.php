@@ -27,7 +27,18 @@ use Illuminate\Support\Facades\Cache;
  */
 final class InsightCache
 {
-    public const TTL_MINUTES = 5;
+    public const TTL_MINUTES = 15;
+
+    /**
+     * QA-10 (25 Nov 2026): an answer with a skipped channel is not kept for
+     * the next reload (QA P1 18 Nov: a later read should be complete), but
+     * readers that waited on the same compute get it, instead of each
+     * walking every feed again.
+     */
+    public const PARTIAL_SHARE_SECONDS = 60;
+
+    /** QA-10: summary, best times and top posts load together; one computes, the others wait for it. */
+    public const LOCK_SECONDS = 60;
 
     /**
      * The collector's answer shape: bump it when collect() returns new
@@ -59,12 +70,34 @@ final class InsightCache
         if (is_array($hit)) {
             return $hit;
         }
-        $value = $compute();
-        if ($keep === null || $keep($value)) {
-            Cache::put($key, $value, now()->addMinutes(self::TTL_MINUTES));
-        }
 
-        return $value;
+        $t0 = microtime(true);
+        $store = function () use ($key, $compute, $keep, $t0): array {
+            $again = Cache::get($key);
+            if (is_array($again)) {
+                return $again;
+            }
+            // Waited behind another reader's compute: take its answer, even partial.
+            $shared = microtime(true) - $t0 > 0.2 ? Cache::get($key.':shared') : null;
+            if (is_array($shared)) {
+                return $shared;
+            }
+            $value = $compute();
+            if ($keep === null || $keep($value)) {
+                Cache::put($key, $value, now()->addMinutes(self::TTL_MINUTES));
+            } else {
+                Cache::put($key.':shared', $value, now()->addSeconds(self::PARTIAL_SHARE_SECONDS));
+            }
+
+            return $value;
+        };
+
+        try {
+            /** @var array<string, mixed> */
+            return Cache::lock($key.':lock', self::LOCK_SECONDS)->block(self::LOCK_SECONDS, $store);
+        } catch (\Illuminate\Contracts\Cache\LockTimeoutException) {
+            return $store();
+        }
     }
 
     public static function version(int $ownerId): int
