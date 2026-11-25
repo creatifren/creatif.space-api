@@ -28,5 +28,5 @@ still load its lazy chunks instead of 404. One generation is kept. Previous copy
 The cache rule "Marketing HTML cache (QA, Rizal OK 11 Nov)" keeps marketing HTML 2 h at the edge (the Free plan
 minimum). After the blue/green switch, `d-site.sh mkt` purges the zone when `/etc/cs-cf-purge.env` exists
 (root, mode 600, written by Rizal — never printed): `CF_ZONE_ID=<zone id>` and `CF_API_TOKEN=<token with
-Zone › Cache Purge › Purge on creatif.space only>`. Output says `cf-purge: done | failed | skipped`; it never fails
+Zone › Cache Purge › Purge on creatif.space only, client IP 187.77.118.58>`; the call is forced to IPv4 (`curl -4`) because the token is IP-bound and the server prefers IPv6. Output says `cf-purge: done | failed | skipped`; it never fails
 the deploy. Old chunks stay served for one build (see "Keep old chunks"), so a stale page never 404s its JS.
