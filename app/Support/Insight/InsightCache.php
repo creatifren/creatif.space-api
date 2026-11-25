@@ -27,7 +27,17 @@ use Illuminate\Support\Facades\Cache;
  */
 final class InsightCache
 {
-    public const TTL_MINUTES = 5;
+    public const TTL_MINUTES = 15;
+
+    /**
+     * QA-10 (25 Nov 2026): an answer with a skipped channel (relay slow or
+     * down for one account) is still kept this long, so a reload does not
+     * walk every feed again for 20–40 s.
+     */
+    public const PARTIAL_TTL_MINUTES = 2;
+
+    /** QA-10: summary, best times and top posts load together; one computes, the others wait for it. */
+    public const LOCK_SECONDS = 60;
 
     /**
      * The collector's answer shape: bump it when collect() returns new
@@ -59,12 +69,25 @@ final class InsightCache
         if (is_array($hit)) {
             return $hit;
         }
-        $value = $compute();
-        if ($keep === null || $keep($value)) {
-            Cache::put($key, $value, now()->addMinutes(self::TTL_MINUTES));
-        }
 
-        return $value;
+        $store = function () use ($key, $compute, $keep): array {
+            $again = Cache::get($key);
+            if (is_array($again)) {
+                return $again;
+            }
+            $value = $compute();
+            $full = $keep === null || $keep($value);
+            Cache::put($key, $value, now()->addMinutes($full ? self::TTL_MINUTES : self::PARTIAL_TTL_MINUTES));
+
+            return $value;
+        };
+
+        try {
+            /** @var array<string, mixed> */
+            return Cache::lock($key.':lock', self::LOCK_SECONDS)->block(self::LOCK_SECONDS, $store);
+        } catch (\Illuminate\Contracts\Cache\LockTimeoutException) {
+            return $store();
+        }
     }
 
     public static function version(int $ownerId): int
