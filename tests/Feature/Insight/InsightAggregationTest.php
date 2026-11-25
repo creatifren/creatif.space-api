@@ -221,3 +221,25 @@ it('answers an expired complete report at once and refreshes it in the queue, bu
         InsightCollector::$budgetSeconds = 14.0;
     }
 });
+
+it('keeps feeds in the cache as plain data, never objects (QA-10: Carbon came back incomplete)', function () {
+    $accounts = collect(array_values($this->accounts));
+    $period = InsightPeriod::month(InsightFixture::MONTH);
+    app(InsightCollector::class)->collectCached($this->owner, $accounts, $period);
+
+    $account = $accounts->first();
+    $key = 'insight:feed:'.$account->id.':'.$period->previous()->from->toDateString().':v'.\App\Support\Insight\InsightCache::version($this->owner->id);
+    $kept = \Illuminate\Support\Facades\Cache::get($key);
+    expect($kept)->toBeArray()->not->toBeEmpty();
+    $hasObject = false;
+    array_walk_recursive($kept, function ($v) use (&$hasObject) {
+        $hasObject = $hasObject || is_object($v);
+    });
+    expect($hasObject)->toBeFalse();
+
+    // Read back from the kept feeds: same numbers.
+    \App\Support\Insight\InsightCache::bump($this->owner->id);
+    \Illuminate\Support\Facades\Cache::put(str_replace(':v'.(\App\Support\Insight\InsightCache::version($this->owner->id) - 1), ':v'.\App\Support\Insight\InsightCache::version($this->owner->id), $key), $kept, now()->addMinutes(5));
+    $again = app(InsightCollector::class)->collect($this->owner, $accounts, $period);
+    expect($again['channels'][0]['current'])->toBe($this->data['channels'][0]['current']);
+});
