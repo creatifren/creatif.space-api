@@ -3,6 +3,7 @@
 namespace App\Http\Resources;
 
 use App\Models\Profile;
+use App\Support\Media\MediaLinks;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
 
@@ -24,7 +25,7 @@ class MyProfileResource extends JsonResource
             'theme' => $this->user->theme,
             // IANA zone the user picked; null = not set (the app's zone applies).
             'timezone' => $this->user->timezone,
-            'avatar_url' => $this->user->avatar_url,
+            'avatar_url' => MediaLinks::fresh($this->user->avatar_url),
             'handle' => $this->user->handle?->name,
             'mode' => $this->mode,
             /* Which layout a new Space starts in. Never public — this is a
@@ -38,7 +39,7 @@ class MyProfileResource extends JsonResource
             'seo' => $this->seo,
             'freelance' => $this->freelance ?? (object) [],
             'categories' => $this->categories ?? [],
-            'cover_url' => $this->cover_url,
+            'cover_url' => MediaLinks::fresh($this->cover_url),
             // v7: Link in bio or Grid, the Contact button, the custom domain.
             'layout' => $this->getAttributes()['layout'] ?? 'link_in_bio',
             'contact' => $this->contact ?? (object) [],

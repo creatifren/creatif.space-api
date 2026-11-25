@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Api\V1;
 
 use App\Enums\SocialPostApproval;
+use App\Support\Media\MediaLinks;
 use App\Enums\SocialPostStatus;
 use App\Enums\UserStatus;
 use App\Exceptions\AccountReconnectRequired;
@@ -644,7 +645,7 @@ class PublicApprovalController extends Controller
         return [
             'id' => $post->ulid,
             'caption' => $post->caption,
-            'media' => $post->media ?? [],
+            'media' => MediaLinks::freshMedia($post->media) ?? [],
             // View-agnostic (Grid / Calendar / Feed): every channel the post
             // goes to, media with kind and aspect, one state, and whether the
             // client may decide on it now.

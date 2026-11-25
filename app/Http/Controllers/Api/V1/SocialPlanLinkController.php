@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Api\V1;
 
 use App\Casts\UtcDateTime;
+use App\Support\Media\MediaLinks;
 use App\Enums\SocialPostStatus;
 use App\Enums\UserStatus;
 use App\Http\Controllers\Controller;
@@ -130,7 +131,7 @@ class SocialPlanLinkController extends Controller
                 'id' => $p->ulid,
                 'caption' => $p->caption,
                 'type' => $p->type,
-                'media' => $p->media ?? [],
+                'media' => MediaLinks::freshMedia($p->media) ?? [],
                 // Each media entry with kind, size and small copies (thumb /
                 // feed / poster), as the approval page gets them.
                 'media_items' => $mediaItems[$p->id] ?? [],

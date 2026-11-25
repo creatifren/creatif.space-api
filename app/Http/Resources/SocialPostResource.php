@@ -3,6 +3,7 @@
 namespace App\Http\Resources;
 
 use App\Models\SocialPost;
+use App\Support\Media\MediaLinks;
 use App\Models\SocialPostTarget;
 use App\Support\ClientBadges;
 use App\Support\Media\PostMediaVariants;
@@ -31,7 +32,7 @@ class SocialPostResource extends JsonResource
             'first_comment' => $this->first_comment,
             'type' => $this->type,
             'labels' => $this->labels ?? [],
-            'media' => $this->media,
+            'media' => MediaLinks::freshMedia($this->media),
             // Small copies per media item (same order; null = not a library
             // file or none made yet): the dashboard draws these, not the original.
             'media_variants' => PostMediaVariants::for($request, $this->resource),
