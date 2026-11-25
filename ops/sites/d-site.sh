@@ -24,7 +24,7 @@ fi
 # /etc/cs-cf-purge.env (root 600: CF_ZONE_ID=…, CF_API_TOKEN=…), written by Rizal. Never fails the deploy.
 if [ "$S" = mkt ] && [ -r /etc/cs-cf-purge.env ]; then
   ( set -a; . /etc/cs-cf-purge.env; set +a
-    OUT=$(curl -s -m 20 -X POST "https://api.cloudflare.com/client/v4/zones/$CF_ZONE_ID/purge_cache" \
+    OUT=$(curl -s -4 -m 20 -X POST "https://api.cloudflare.com/client/v4/zones/$CF_ZONE_ID/purge_cache" \
       -H "Authorization: Bearer $CF_API_TOKEN" -H "Content-Type: application/json" --data '{"purge_everything":true}')
     echo "$OUT" | grep -q '"success":true' && echo "cf-purge: done" || echo "cf-purge: failed"
   ) || echo "cf-purge: skipped (error)"
