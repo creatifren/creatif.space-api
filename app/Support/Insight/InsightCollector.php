@@ -147,12 +147,13 @@ final class InsightCollector
                 // the next request instead of re-reading the same feeds.
                 $feedKey = 'insight:feed:'.$account->id.':'.$previous->from->toDateString().':v'.InsightCache::version($owner->id);
                 $kept = Cache::get($feedKey);
-                if (is_array($kept)) {
-                    $feed = $kept;
+                $feed = is_array($kept) ? self::thawFeed($kept) : null;
+                if ($feed !== null) {
+                    // Kept from an earlier read.
                 } elseif (microtime(true) < $this->deadline) {
                     $feed = $this->feed($account, $previous->from);
                     if ($feed !== null && ! $this->wasCutShort($account->id)) {
-                        Cache::put($feedKey, $feed, now()->addMinutes(InsightCache::TTL_MINUTES));
+                        Cache::put($feedKey, self::freezeFeed($feed), now()->addMinutes(InsightCache::TTL_MINUTES));
                     }
                 } else {
                     $this->skipped[$account->id] = true;
@@ -208,6 +209,36 @@ final class InsightCollector
             ],
             'footnotes' => array_values(array_unique($footnotes, SORT_REGULAR)),
         ];
+    }
+
+    /**
+     * A feed as the cache can keep it: the cache never unserializes objects
+     * (config cache.serializable_classes = false), so a Carbon comes back as
+     * __PHP_Incomplete_Class — times go in as ISO strings (QA-10, 25 Nov).
+     *
+     * @param  list<array<string, mixed>>  $feed
+     * @return list<array<string, mixed>>
+     */
+    private static function freezeFeed(array $feed): array
+    {
+        return array_map(fn (array $p) => ['posted_at' => $p['posted_at']->toIso8601String()] + $p, $feed);
+    }
+
+    /**
+     * @param  array<int|string, mixed>  $kept
+     * @return list<array<string, mixed>>|null  null: an old entry with objects in it (read again)
+     */
+    private static function thawFeed(array $kept): ?array
+    {
+        $feed = [];
+        foreach ($kept as $p) {
+            if (! is_array($p) || ! is_string($p['posted_at'] ?? null)) {
+                return null;
+            }
+            $feed[] = ['posted_at' => CarbonImmutable::parse($p['posted_at'])] + $p;
+        }
+
+        return $feed;
     }
 
     /** Whether feed() stopped before it reached the period's start (out of time or pages). */
