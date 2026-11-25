@@ -3,9 +3,10 @@
 namespace App\Http\Resources;
 
 use App\Models\SocialPost;
-use App\Support\Media\MediaLinks;
+use App\Enums\SocialPostTargetStatus;
 use App\Models\SocialPostTarget;
 use App\Support\ClientBadges;
+use App\Support\Media\MediaLinks;
 use App\Support\Media\PostMediaVariants;
 use App\Support\PostDelivery;
 use App\Support\PostSpaces;
@@ -37,6 +38,9 @@ class SocialPostResource extends JsonResource
             // file or none made yet): the dashboard draws these, not the original.
             'media_variants' => PostMediaVariants::for($request, $this->resource),
             'scheduled_at' => $this->scheduled_at,
+            // QA-12: when it went out — the slot, or (publish now) the first
+            // published account's send time. Null until something published.
+            'published_at' => $this->whenLoaded('targets', fn () => self::publishedAt($this->resource)),
             'status' => $this->status,
             'fail_reason' => $this->fail_reason,
             // Where delivery stands, one definition with ?status= and meta.counts
@@ -117,5 +121,24 @@ class SocialPostResource extends JsonResource
             $target->first_comment_error !== null => 'failed',
             default => 'pending',
         };
+    }
+
+    /** QA-12: the time a post went out, or null while nothing has published. */
+    private static function publishedAt(SocialPost $post): ?string
+    {
+        $done = $post->targets->filter(fn (SocialPostTarget $t) => $t->status === SocialPostTargetStatus::Published);
+        if ($done->isEmpty()) {
+            return null;
+        }
+        if ($post->scheduled_at !== null) {
+            return $post->scheduled_at->toIso8601String();
+        }
+        /** @var \DateTimeInterface|null $at */
+        $at = $done->map(fn (SocialPostTarget $t) => $t->charged_at ?? $t->updated_at)
+            ->filter()
+            ->sortBy(fn (\DateTimeInterface $d) => $d->getTimestamp())
+            ->first();
+
+        return $at?->format(DATE_ATOM);
     }
 }

@@ -137,6 +137,23 @@ describe('creating posts', function () {
             ->assertJsonPath('data.status', 'published');
     });
 
+    it('returns when an immediate post went out (QA-12)', function () {
+        Http::fake([
+            'api.postforme.test/*' => Http::response(['id' => 'post_now', 'status' => 'processed']),
+        ]);
+        $user = premiumUser();
+        $account = SocialAccount::factory()->for($user)->create();
+
+        $id = $this->actingAs($user)
+            ->postJson('/api/v1/social-posts', ['caption' => 'Now.', 'account_ids' => [$account->ulid]])
+            ->assertCreated()
+            ->json('data.id');
+
+        $at = $this->actingAs($user)->getJson('/api/v1/social-posts/'.$id)->assertOk()->json('data.published_at');
+        expect($at)->toBeString()
+            ->and(abs(\Illuminate\Support\Carbon::parse($at)->diffInSeconds(now())))->toBeLessThan(120);
+    });
+
     it("refuses another user's account and sends nothing", function () {
         Http::fake();
         $foreign = SocialAccount::factory()->create();
