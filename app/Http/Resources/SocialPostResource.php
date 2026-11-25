@@ -2,9 +2,9 @@
 
 namespace App\Http\Resources;
 
-use App\Models\SocialPost;
 use App\Enums\SocialPostStatus;
 use App\Enums\SocialPostTargetStatus;
+use App\Models\SocialPost;
 use App\Models\SocialPostTarget;
 use App\Support\ClientBadges;
 use App\Support\Media\MediaLinks;
