@@ -145,7 +145,7 @@ describe('creating posts', function () {
         $account = SocialAccount::factory()->for($user)->create();
 
         $id = $this->actingAs($user)
-            ->postJson('/api/v1/social-posts', ['caption' => 'Now.', 'account_ids' => [$account->ulid]])
+            ->postJson('/api/v1/social-posts', ['caption' => 'Now.', 'account_ids' => [$account->ulid], 'media' => [['url' => 'https://cdn.example.test/photo.jpg']]])
             ->assertCreated()
             ->json('data.id');
 
