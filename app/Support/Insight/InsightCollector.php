@@ -15,6 +15,7 @@ use App\Support\SocialProviders;
 use App\Support\Workspace;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Throwable;
@@ -111,8 +112,18 @@ final class InsightCollector
                 // stay unknown); the analytics already read are cached, so the
                 // next request gets further.
                 $feed = null;
-                if (microtime(true) < $this->deadline) {
+                // QA-10b (25 Nov 2026): a feed read in full is kept per
+                // account, so a report that ran out of time gets further on
+                // the next request instead of re-reading the same feeds.
+                $feedKey = 'insight:feed:'.$account->id.':'.$previous->from->toDateString().':v'.InsightCache::version($owner->id);
+                $kept = Cache::get($feedKey);
+                if (is_array($kept)) {
+                    $feed = $kept;
+                } elseif (microtime(true) < $this->deadline) {
                     $feed = $this->feed($account, $previous->from);
+                    if ($feed !== null && ! isset($this->cutShort[$account->id])) {
+                        Cache::put($feedKey, $feed, now()->addMinutes(InsightCache::TTL_MINUTES));
+                    }
                 } else {
                     $this->skipped[$account->id] = true;
                 }
