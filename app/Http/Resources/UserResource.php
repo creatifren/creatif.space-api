@@ -3,6 +3,7 @@
 namespace App\Http\Resources;
 
 use App\Models\User;
+use App\Support\Media\MediaLinks;
 use App\Support\AccountDeletion;
 use App\Support\PlanQuota;
 use Illuminate\Http\Request;
@@ -27,7 +28,7 @@ class UserResource extends JsonResource
             'handle_changeable_at' => $this->handle?->changeableAt(),
             'name' => $this->name,
             'email' => $this->email,
-            'avatar_url' => $this->avatar_url,
+            'avatar_url' => MediaLinks::fresh($this->avatar_url),
             'locale' => $this->locale,
             'theme' => $this->theme,
             'timezone' => $this->timezone,

@@ -3,6 +3,7 @@
 namespace App\Http\Resources;
 
 use App\Enums\ProfileMode;
+use App\Support\Media\MediaLinks;
 use App\Models\ClientReport;
 use App\Models\Handle;
 use App\Models\Profile;
@@ -54,7 +55,7 @@ class PublicProfileResource extends JsonResource
         return [
             'handle' => $this->name,
             'name' => $this->user?->name,
-            'avatar_url' => $this->user?->avatar_url,
+            'avatar_url' => MediaLinks::fresh($this->user?->avatar_url),
             'mode' => $profile->mode ?? ProfileMode::Portfolio,
             'headline' => $profile->headline,
             'bio' => $profile->bio,
@@ -63,7 +64,7 @@ class PublicProfileResource extends JsonResource
             'appearance' => $profile->appearance ?? (object) [],
             'seo' => $profile->seo,
             'categories' => $profile->categories ?? [],
-            'cover_url' => $profile->cover_url,
+            'cover_url' => MediaLinks::fresh($profile->cover_url),
             // The Portfolio/Freelance switch is the spine: in portfolio mode
             // the freelance block simply does not exist on the public page.
             'freelance' => $freelance ? ($profile->freelance ?? (object) []) : null,

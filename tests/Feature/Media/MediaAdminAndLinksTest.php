@@ -59,3 +59,20 @@ it('lists flagged accounts for staff in Filament', function () {
         ->assertSee($user->email)
         ->assertSee('daily_bytes');
 });
+
+it('signs stored library links again on read (QA-06: no dead links after 24 h)', function () {
+    $user = mediaUser('pro');
+    $file = mediaFile($user);
+    \Illuminate\Support\Carbon::setTestNow(now());
+    $stale = mediaUrl($file).'&X-Amz-Date=20261114T000000Z';
+
+    $fresh = MediaLinks::freshMedia([['url' => $stale, 'thumbnail_url' => $stale], ['url' => 'https://elsewhere.test/a.jpg'], 'x']);
+    expect($fresh[0]['url'])->toBe($file->url())
+        ->and($fresh[0]['thumbnail_url'])->toBe($file->url())
+        ->and($fresh[1]['url'])->toBe('https://elsewhere.test/a.jpg')
+        ->and($fresh[2])->toBe('x')
+        ->and(MediaLinks::fresh($stale))->toBe($file->url())
+        ->and(MediaLinks::fresh('https://elsewhere.test/a.jpg'))->toBe('https://elsewhere.test/a.jpg')
+        ->and(MediaLinks::fresh(null))->toBeNull()
+        ->and(MediaLinks::freshMedia(null))->toBeNull();
+});

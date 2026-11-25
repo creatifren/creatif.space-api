@@ -3,6 +3,7 @@
 namespace App\Jobs;
 
 use App\Enums\NotificationType;
+use App\Support\Media\MediaLinks;
 use App\Http\Controllers\Api\V1\NotificationSettingsController;
 use App\Models\AccountExport;
 use App\Models\File;
@@ -181,7 +182,7 @@ class BuildAccountExport implements ShouldQueue
                 'status' => $p->status->value,
                 'approval' => $p->approval?->value,
                 'labels' => $p->labels ?? [],
-                'media' => collect($p->media ?? [])->map(fn ($m) => ['url' => $m['url']])->values()->all(),
+                'media' => collect(MediaLinks::freshMedia($p->media) ?? [])->map(fn ($m) => ['url' => $m['url']])->values()->all(),
                 'scheduled_at' => $at($p->scheduled_at),
                 'created_at' => $at($p->created_at),
                 'channels' => $p->targets->map(fn (SocialPostTarget $t) => [

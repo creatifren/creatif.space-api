@@ -37,6 +37,52 @@ final class MediaLinks
     }
 
     /**
+     * QA-06 (25 Nov 2026): a stored URL that points at one of our library
+     * files, signed again now. Stored signed links (post media, profile
+     * cover, avatar) die after File::URL_TTL_HOURS; every read gets a fresh
+     * one. Any other URL — or a file that is gone — comes back unchanged.
+     */
+    public static function fresh(?string $url): ?string
+    {
+        if ($url === null || $url === '' || self::fileUlid($url) === null) {
+            return $url;
+        }
+
+        return self::fileFor($url)?->url() ?? $url;
+    }
+
+    /**
+     * Post media with every library link (url, thumbnail_url) signed again
+     * now. One query for the whole list.
+     *
+     * @param  array<int, mixed>|null  $media
+     * @return array<int, mixed>|null
+     */
+    public static function freshMedia(?array $media): ?array
+    {
+        $ulids = self::ulidsIn($media);
+        if ($ulids === []) {
+            return $media;
+        }
+        $files = File::query()->whereIn('ulid', $ulids)->get()->keyBy(fn (File $f) => strtoupper($f->ulid));
+
+        return array_map(function ($entry) use ($files) {
+            if (! is_array($entry)) {
+                return $entry;
+            }
+            foreach (['url', 'thumbnail_url'] as $key) {
+                $url = $entry[$key] ?? null;
+                $ulid = is_string($url) ? self::fileUlid($url) : null;
+                if ($ulid !== null && isset($files[$ulid])) {
+                    $entry[$key] = $files[$ulid]->url();
+                }
+            }
+
+            return $entry;
+        }, $media ?? []);
+    }
+
+    /**
      * File ulids in a post's media (url and video cover).
      *
      * @param  array<int, mixed>|null  $media

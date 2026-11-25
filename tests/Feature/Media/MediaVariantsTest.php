@@ -280,6 +280,7 @@ describe('public payloads', function () {
 
     it('the plan link payload carries the same media_items (media unchanged)', function () {
         $owner = User::factory()->create();
+        \Illuminate\Support\Carbon::setTestNow(now());
         $image = mvFile($owner, mvJpeg(2000, 2000));
         MediaVariants::generate($image);
         $media = [['url' => "https://bucket.r2.test/{$image->path}?X-Amz-Signature=x"]];
@@ -288,13 +289,15 @@ describe('public payloads', function () {
 
         $post = $this->getJson("/api/v1/plan/{$link->token}")->assertOk()->json('data.posts.0');
 
-        expect($post['media'])->toBe($media)
+        // QA-06: library links come back signed again now.
+        expect($post['media'])->toBe([['url' => $image->url()]])
             ->and($post['media_items'][0]['thumb_url'])->toContain('.thumb.')
             ->and($post['media_items'][0]['variants']['feed'])->toMatchArray(['width' => 1080, 'height' => 1080]);
     });
 
     it('the dashboard posts list and a single post carry media_variants aligned with media (one files query for the list)', function () {
         $owner = User::factory()->create();
+        \Illuminate\Support\Carbon::setTestNow(now());
         $image = mvFile($owner, mvJpeg(2000, 2500), attrs: ['width' => 2000, 'height' => 2500]);
         MediaVariants::generate($image);
         $plain = mvFile($owner, mvJpeg(10, 10));
@@ -309,7 +312,8 @@ describe('public payloads', function () {
         $list = $this->actingAs($owner)->getJson('/api/v1/social-posts')->assertOk()->json('data');
         $row = collect($list)->firstWhere('id', $post->ulid);
 
-        expect($row['media'])->toBe($media)
+        // QA-06: library links come back signed again now; others as stored.
+        expect($row['media'])->toBe([['url' => $image->url()], ['url' => $plain->url()], $media[2]])
             ->and($row['media_variants'])->toHaveCount(3)
             ->and($row['media_variants'][0]['thumb'])->toMatchArray(['width' => 480, 'height' => 600])
             ->and($row['media_variants'][0]['thumb']['jpeg'])->toContain('.thumb.jpg')

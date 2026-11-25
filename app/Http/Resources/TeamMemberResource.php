@@ -3,6 +3,7 @@
 namespace App\Http\Resources;
 
 use App\Models\TeamMember;
+use App\Support\Media\MediaLinks;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
 
@@ -22,7 +23,7 @@ class TeamMemberResource extends JsonResource
             // Their real name once they have signed in; before that the
             // email is all anybody knows about them.
             'name' => $this->member?->name,
-            'avatar_url' => $this->member?->avatar_url,
+            'avatar_url' => MediaLinks::fresh($this->member?->avatar_url),
             'role' => $this->role,
             'status' => $this->status,
             'invited_at' => $this->invited_at,
