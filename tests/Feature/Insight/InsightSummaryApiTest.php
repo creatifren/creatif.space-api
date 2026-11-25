@@ -145,7 +145,10 @@ it('keeps an answer for a few minutes instead of walking the feeds again', funct
     InsightFixture::fakeRelay(array_map(fn () => ['oct' => [], 'sep' => []], InsightFixture::posts()));
     $this->actingAs($owner)->getJson('/api/v1/insight/summary?month=2026-10')->assertOk()->assertJsonPath('data.totals.posts', 36);
 
+    // QA-10: once expired, the kept answer comes back at once while the
+    // queued warm-up reads the relay again; the next load has the fresh one.
     $this->travel(InsightSummaryController::CACHE_MINUTES + 1)->minutes();
+    $this->actingAs($owner)->getJson('/api/v1/insight/summary?month=2026-10')->assertOk()->assertJsonPath('data.totals.posts', 36);
     $this->actingAs($owner)->getJson('/api/v1/insight/summary?month=2026-10')->assertOk()->assertJsonPath('data.totals.posts', 0);
 });
 

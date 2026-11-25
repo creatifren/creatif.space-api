@@ -6,6 +6,7 @@ use App\Casts\UtcDateTime;
 use App\Enums\SocialPostApproval;
 use App\Enums\SocialPostTargetStatus;
 use App\Jobs\RefreshFollowerCount;
+use App\Jobs\WarmInsightCache;
 use App\Models\FollowerSnapshot;
 use App\Models\SocialAccount;
 use App\Models\SocialPost;
@@ -85,7 +86,36 @@ final class InsightCollector
     {
         // A report cut short by the time budget is not kept: the next request
         // reads further (the analytics already read are cached by the provider).
-        return InsightCache::remember($owner, $accounts, $period, fn () => $this->collect($owner, $accounts, $period), fn () => $this->skipped === []);
+        return InsightCache::remember(
+            $owner,
+            $accounts,
+            $period,
+            fn () => $this->collect($owner, $accounts, $period),
+            fn () => $this->skipped === [],
+            // QA-10: partial or expired → read it all again in the queue.
+            fn () => WarmInsightCache::dispatch($owner->id, $accounts->pluck('id')->all(), $period->kind, $period->from->toDateString(), $period->to->toDateString()),
+        );
+    }
+
+    /** Seconds the queued warm-up may spend (no gateway in front of the worker). */
+    public const WARM_BUDGET_SECONDS = 110.0;
+
+    /**
+     * Read every channel again with the queue's time budget and keep the
+     * answer (WarmInsightCache).
+     *
+     * @param  Collection<int, SocialAccount>  $accounts
+     * @return array<string, mixed>
+     */
+    public function refreshCached(User $owner, Collection $accounts, InsightPeriod $period): array
+    {
+        $budget = self::$budgetSeconds;
+        self::$budgetSeconds = max($budget, self::WARM_BUDGET_SECONDS);
+        try {
+            return InsightCache::refresh($owner, $accounts, $period, fn () => $this->collect($owner, $accounts, $period), fn () => $this->skipped === []);
+        } finally {
+            self::$budgetSeconds = $budget;
+        }
     }
 
     /**
