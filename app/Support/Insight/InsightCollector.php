@@ -121,7 +121,7 @@ final class InsightCollector
                     $feed = $kept;
                 } elseif (microtime(true) < $this->deadline) {
                     $feed = $this->feed($account, $previous->from);
-                    if ($feed !== null && ! isset($this->cutShort[$account->id])) {
+                    if ($feed !== null && ! $this->wasCutShort($account->id)) {
                         Cache::put($feedKey, $feed, now()->addMinutes(InsightCache::TTL_MINUTES));
                     }
                 } else {
@@ -178,6 +178,12 @@ final class InsightCollector
             ],
             'footnotes' => array_values(array_unique($footnotes, SORT_REGULAR)),
         ];
+    }
+
+    /** Whether feed() stopped before it reached the period's start (out of time or pages). */
+    private function wasCutShort(int $accountId): bool
+    {
+        return isset($this->cutShort[$accountId]);
     }
 
     /**
