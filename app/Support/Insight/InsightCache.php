@@ -30,11 +30,12 @@ final class InsightCache
     public const TTL_MINUTES = 15;
 
     /**
-     * QA-10 (25 Nov 2026): an answer with a skipped channel (relay slow or
-     * down for one account) is still kept this long, so a reload does not
-     * walk every feed again for 20–40 s.
+     * QA-10 (25 Nov 2026): an answer with a skipped channel is not kept for
+     * the next reload (QA P1 18 Nov: a later read should be complete), but
+     * readers that waited on the same compute get it, instead of each
+     * walking every feed again.
      */
-    public const PARTIAL_TTL_MINUTES = 2;
+    public const PARTIAL_SHARE_SECONDS = 60;
 
     /** QA-10: summary, best times and top posts load together; one computes, the others wait for it. */
     public const LOCK_SECONDS = 60;
@@ -70,14 +71,23 @@ final class InsightCache
             return $hit;
         }
 
-        $store = function () use ($key, $compute, $keep): array {
+        $t0 = microtime(true);
+        $store = function () use ($key, $compute, $keep, $t0): array {
             $again = Cache::get($key);
             if (is_array($again)) {
                 return $again;
             }
+            // Waited behind another reader's compute: take its answer, even partial.
+            $shared = microtime(true) - $t0 > 0.2 ? Cache::get($key.':shared') : null;
+            if (is_array($shared)) {
+                return $shared;
+            }
             $value = $compute();
-            $full = $keep === null || $keep($value);
-            Cache::put($key, $value, now()->addMinutes($full ? self::TTL_MINUTES : self::PARTIAL_TTL_MINUTES));
+            if ($keep === null || $keep($value)) {
+                Cache::put($key, $value, now()->addMinutes(self::TTL_MINUTES));
+            } else {
+                Cache::put($key.':shared', $value, now()->addSeconds(self::PARTIAL_SHARE_SECONDS));
+            }
 
             return $value;
         };
