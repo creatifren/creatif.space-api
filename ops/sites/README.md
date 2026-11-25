@@ -18,3 +18,8 @@ After a live marketing deploy, `d-site.sh mkt` pings new/changed `content/blog/*
 last pinged set live in `/root/indexnow-mkt.last` (seeded 19 Nov with 10 posts after a one-off
 `--all` of 81 URLs). Errors print "indexnow: skipped" and never fail the deploy.
 Previous server copy: `/root/d-site.sh.bak-20261119`.
+
+## Keep old chunks (QA-01, live 25 Nov 2026, Rizal yes)
+After the rsync into the non-live colour, `d-site.sh` copies the live colour's `.next/static/` in with
+`--ignore-existing` (hashed names, so nothing is overwritten). A page or tab opened before the switch can
+still load its lazy chunks instead of 404. One generation is kept. Previous copy: `/root/d-site.sh.bak-20261125`.
