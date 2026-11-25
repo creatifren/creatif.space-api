@@ -3,6 +3,7 @@
 namespace App\Http\Resources;
 
 use App\Models\SocialPost;
+use App\Enums\SocialPostStatus;
 use App\Enums\SocialPostTargetStatus;
 use App\Models\SocialPostTarget;
 use App\Support\ClientBadges;
@@ -127,7 +128,10 @@ class SocialPostResource extends JsonResource
     {
         $done = $post->targets->filter(fn (SocialPostTarget $t) => $t->status === SocialPostTargetStatus::Published);
         if ($done->isEmpty()) {
-            return null;
+            // Older relay: the post is marked published while its targets are not.
+            return $post->status === SocialPostStatus::Published
+                ? ($post->scheduled_at ?? $post->updated_at)?->format(DATE_ATOM)
+                : null;
         }
         if ($post->scheduled_at !== null) {
             return $post->scheduled_at->toIso8601String();
