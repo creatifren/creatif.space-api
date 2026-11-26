@@ -461,6 +461,13 @@ class SocialPostController extends Controller
             // Labels are ours alone — never sent to the provider.
             'labels' => ['sometimes', 'nullable', 'array', 'max:10'],
             'labels.*' => ['string', 'max:40'],
+            // Per-channel network options on a draft (e.g. the Pinterest
+            // board), as on create: { <account ulid>: {board_id, title, link} }.
+            'options' => ['sometimes', 'array'],
+            'options.*' => ['array'],
+            'options.*.board_id' => ['sometimes', 'string', 'max:64'],
+            'options.*.title' => ['sometimes', 'string', 'max:100'],
+            'options.*.link' => ['sometimes', 'url:https,http', 'max:2000'],
         ]);
 
         if (array_key_exists('file_ids', $validated)) {
@@ -485,6 +492,32 @@ class SocialPostController extends Controller
                 'message' => 'Connected apps can only change drafts and posts still waiting for approval. Edit this one in creatif.space.',
                 'code' => 'not_editable',
             ], 409);
+        }
+
+        // Network options (Pinterest board, …) change only on a draft: they
+        // ride with the send. Merged into each named channel's configuration.
+        if (array_key_exists('options', $validated)) {
+            if ($socialPost->status !== SocialPostStatus::Draft) {
+                return response()->json([
+                    'message' => 'Channel options (like the Pinterest board) can only change on a draft.',
+                    'code' => 'not_editable',
+                ], 409);
+            }
+            $socialPost->loadMissing('targets.account');
+            $unknown = array_diff(array_keys($validated['options']), $socialPost->targets->map(fn ($t) => $t->account?->ulid)->filter()->all());
+            if ($unknown !== []) {
+                throw ValidationException::withMessages(['options' => 'Options name channels that are not on this post.']);
+            }
+            foreach ($socialPost->targets as $target) {
+                $set = array_intersect_key((array) ($validated['options'][$target->account?->ulid] ?? []), array_flip(['board_id', 'title', 'link']));
+                if ($set !== []) {
+                    $target->update(['configuration' => array_merge($target->configuration ?? [], $set)]);
+                }
+            }
+            unset($validated['options']);
+            if ($validated === []) {
+                return new SocialPostResource($socialPost->load('targets.account'));
+            }
         }
 
         // v10.2: the first comment is ours until the post is out — kept here, never sent with the post.

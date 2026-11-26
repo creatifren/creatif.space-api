@@ -2,7 +2,7 @@
 
 <!-- Generated from the served tool list by `npm run docs:tools` (in mcp/). Do not edit by hand: test/tools-doc.test.ts fails in CI when this file is out of date. -->
 
-66 tools on `https://mcp.creatif.space/mcp`, in the order `tools/list` gives them. Scope is the OAuth permission a tool needs; the hints are its MCP annotations.
+67 tools on `https://mcp.creatif.space/mcp`, in the order `tools/list` gives them. Scope is the OAuth permission a tool needs; the hints are its MCP annotations.
 
 | Tool | Title | Scope | Read-only | Destructive |
 |---|---|---|---|---|
@@ -72,6 +72,7 @@
 | [`schedule_posts`](#schedule_posts) | Schedule several drafts at once | `publish` | no | yes |
 | [`list_failed_posts`](#list_failed_posts) | List failed posts | `read` | yes | no |
 | [`get_onboarding`](#get_onboarding) | Get the setup checklist | `read` | yes | no |
+| [`list_pinterest_boards`](#list_pinterest_boards) | List Pinterest boards | `read` | yes | no |
 
 ## list_channels
 
@@ -169,7 +170,7 @@ When to use: to create any new post; it is always the safe first step. The user 
 
 Example: draft_post { "caption": "Winter set is live", "channel_ids": ["01JD…"], "file_ids": ["01JE…"], "captions_by_channel": { "01JF…": "Shorter for X" } }
 
-Media: library file ids (from list_files, or from confirm_media_upload for a file you just uploaded) and/or public https media URLs, 10 items in all. captions_by_channel overrides the caption for channels that are also in channel_ids. type picks the placement on Facebook, Instagram and Threads. first_comment is posted under the post after it publishes (Instagram, Facebook, LinkedIn); saved hashtags come from list_hashtag_sets.
+Media: library file ids (from list_files, or from confirm_media_upload for a file you just uploaded) and/or public https media URLs, 10 items in all. captions_by_channel overrides the caption for channels that are also in channel_ids. type picks the placement on Facebook, Instagram and Threads. first_comment is posted under the post after it publishes (Instagram, Facebook, LinkedIn); saved hashtags come from list_hashtag_sets. Pinterest: a Pin needs a board — when the Pinterest channel has more than one, ask the user and pass pinterest_board_id (from list_pinterest_boards).
 
 Errors → next step: file_not_ready → call confirm_media_upload for that file, or take ids from list_files; invalid_input → fix what details names (e.g. a captions_by_channel id not in channel_ids, more than 10 media); not_found → take channel ids from list_channels and file ids from list_files; reconnect_required → the user reconnects the channel in creatif.space → Channels; scope_missing → reconnect and allow "draft"; upstream_unavailable → check list_posts before calling again — it may have been saved; plan_required (402) → a plan limit, or a feature this account's plan does not include (on some plans: posts scheduled at most 7 days ahead, at most 10 queued posts, approval links for one client); tell the user it is not available on their plan, and do not retry; forbidden (403) → this seat or connection may not do this (e.g. a viewer, or a permission the connection was not given): the workspace owner or an editor can, or the user does it in creatif.space; do not retry.
 
@@ -182,6 +183,7 @@ Errors → next step: file_not_ready → call confirm_media_upload for that file
 | `captions_by_channel` | object | no | Per-channel caption overrides: { "<channel id>": "caption" } |
 | `type` | "post" \| "reels" \| "story" | no | Placement on Facebook, Instagram and Threads; others post normally |
 | `first_comment` | string | no | Posted as the first comment once the post is out (Instagram, Facebook, LinkedIn; other networks skip it), e.g. a hashtag set |
+| `pinterest_board_id` | string | no | Pinterest only: the board for the Pin (id from list_pinterest_boards). Needed when the Pinterest channel has more than one board. |
 
 ## get_credits
 
@@ -278,7 +280,7 @@ Errors → next step: rate_limited → details.reason reminder_too_soon: a remin
 
 Changes a draft or a post waiting for approval: its caption, time, labels or media.
 
-Changes a draft or a post still waiting for approval: its caption, scheduled time, labels or media. file_ids REPLACES the post’s media — the media not listed is removed from the post.
+Changes a draft or a post still waiting for approval: its caption, scheduled time, labels, media or (drafts only) the Pinterest board. file_ids REPLACES the post’s media — the media not listed is removed from the post.
 
 When to use: to edit an existing draft instead of drafting a new one. Posts already queued to publish, published or otherwise done cannot be changed from here — the user edits those in creatif.space.
 
@@ -297,6 +299,7 @@ Errors → next step: not_editable → details.status says why; tell the user to
 | `file_ids` | array of string | no | Replaces the post’s media with these library files ([] removes all media) |
 | `add_file_ids` | array of string | no | Adds these library files after the post’s current media |
 | `first_comment` | string | no | The first comment posted once the post is out (Instagram, Facebook, LinkedIn); "" removes it |
+| `pinterest_board_id` | string | no | Pinterest only: the board for the Pin (id from list_pinterest_boards). Needed when the Pinterest channel has more than one board. |
 
 ## schedule_post
 
@@ -1490,3 +1493,25 @@ Read-only. Counted across the workspace (the owner and its members), from the da
 Errors → next step: unauthorized → ask the user to reconnect the creatif.space connector; scope_missing → reconnect with "read" allowed; upstream_unavailable → wait a minute and call again; plan_required (402) → a plan limit, or a feature this account's plan does not include (on some plans: posts scheduled at most 7 days ahead, at most 10 queued posts, approval links for one client); tell the user it is not available on their plan, and do not retry; forbidden (403) → this seat or connection may not do this (e.g. a viewer, or a permission the connection was not given): the workspace owner or an editor can, or the user does it in creatif.space; do not retry; not_found (404) → the id is not in this workspace: take a fresh id from the matching list tool and call again.
 
 No input.
+
+## list_pinterest_boards
+
+**List Pinterest boards** · scope `read` · read-only yes · destructive no · idempotent yes · open world no
+
+Lists the boards of one Pinterest channel, so a Pin can name the board it goes to.
+
+Lists the boards of one connected Pinterest channel (id and name).
+
+When to use: before drafting a Pin, or when a send failed with missing_board: a Pin needs a board. Ask the user which board when there is more than one, then pass its id as pinterest_board_id to draft_post (new post) or update_post (existing draft).
+
+Example: list_pinterest_boards { "channel_id": "01JD…" } → { boards: [{ id: "8732…", name: "Recipes" }], next_cursor: null }
+
+Read-only. channel_id is a Pinterest channel id from list_channels. A channel with one board needs no pinterest_board_id. Paged: pass next_cursor back as cursor; null means no more.
+
+Errors → next step: invalid_input → the channel is not a Pinterest channel: take a Pinterest channel id from list_channels; upstream_unavailable → Pinterest did not answer: wait a minute and call again; scope_missing → reconnect and allow "read"; plan_required (402) → a plan limit, or a feature this account's plan does not include (on some plans: posts scheduled at most 7 days ahead, at most 10 queued posts, approval links for one client); tell the user it is not available on their plan, and do not retry; forbidden (403) → this seat or connection may not do this (e.g. a viewer, or a permission the connection was not given): the workspace owner or an editor can, or the user does it in creatif.space; do not retry; not_found (404) → the id is not in this workspace: take a fresh id from the matching list tool and call again.
+
+| Input | Type | Required | Description |
+|---|---|---|---|
+| `channel_id` | string | yes | Pinterest channel id, as returned by list_channels |
+| `limit` | integer | no | At most this many boards per page (1–100, default 50) |
+| `cursor` | string | no | next_cursor from the previous page of this same list (same filters); omit for the first page |

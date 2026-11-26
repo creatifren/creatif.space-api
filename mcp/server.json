@@ -87,6 +87,7 @@
         "list_failed_posts",
         "list_files",
         "list_hashtag_sets",
+        "list_pinterest_boards",
         "list_posts",
         "list_shared_with_me",
         "list_spaces",

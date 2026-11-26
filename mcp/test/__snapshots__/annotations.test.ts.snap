@@ -230,6 +230,12 @@ exports[`tool annotations > match the snapshot 1`] = `
     "openWorld": false,
     "readOnly": true,
   },
+  "list_pinterest_boards": {
+    "destructive": false,
+    "idempotent": true,
+    "openWorld": false,
+    "readOnly": true,
+  },
   "list_posts": {
     "destructive": false,
     "idempotent": true,
