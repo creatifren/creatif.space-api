@@ -7,7 +7,7 @@ use Illuminate\Support\Facades\Log;
 /**
  * One log line per AI answer with the tokens the API reports (AI cost per
  * tap vs its Credits price — Rizal 21 Nov). Read them back with
- * `grep "ai usage" storage/logs/laravel*.log`. Prices per million tokens
+ * `grep "ai usage" storage/logs/ai-*.log` (own channel `ai`, 90 days). Prices per million tokens
  * (input / output, Nov 2026): Sonnet 5.5 $2 / $10, Opus 5.5 $4 / $20;
  * 1 Credit = $0.0001.
  */
@@ -39,7 +39,7 @@ class AiUsage
         $out = (int) ($usage['output_tokens'] ?? 0);
         $usd = self::dollars($model, $in, $out);
 
-        Log::info('ai usage', array_filter([
+        Log::channel('ai')->info('ai usage', array_filter([
             'feature' => $feature,
             'model' => $model,
             'in' => $in,
