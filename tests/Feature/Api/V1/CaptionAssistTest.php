@@ -177,8 +177,10 @@ it('keeps a tap\'s cost in line with its price: output room follows the caption,
     Http::assertNothingSent();
 });
 
-it('logs the tokens each answer used, with its cost and price in Credits', function () {
+it('logs the tokens each answer used, with its cost and price in Credits, on its own channel', function () {
     \Illuminate\Support\Facades\Log::spy();
+    $ai = \Mockery::spy(\Psr\Log\LoggerInterface::class);
+    \Illuminate\Support\Facades\Log::shouldReceive('channel')->with('ai')->andReturn($ai);
     Http::fake(['ai.test/v1/messages' => Http::response([
         'content' => [['type' => 'text', 'text' => 'Better caption']],
         'usage' => ['input_tokens' => 100, 'output_tokens' => 200],
@@ -187,7 +189,7 @@ it('logs the tokens each answer used, with its cost and price in Credits', funct
         ->postJson('/api/v1/social-captions/assist', ['mode' => 'rewrite', 'caption' => CA_CAPTION])
         ->assertOk();
 
-    \Illuminate\Support\Facades\Log::shouldHaveReceived('info')->withArgs(fn ($m, $ctx = []) => $m === 'ai usage'
+    $ai->shouldHaveReceived('info')->withArgs(fn ($m, $ctx = []) => $m === 'ai usage'
         && $ctx['feature'] === 'caption_rewrite_standard' && $ctx['in'] === 100 && $ctx['out'] === 200);
     expect(\App\Support\AiUsage::dollars('claude-sonnet-5-5', 100, 200))->toBe(0.0022)
         ->and(\App\Support\AiUsage::dollars('claude-opus-5-5', 1_000_000, 0))->toBe(4.0)

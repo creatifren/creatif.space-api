@@ -62,6 +62,17 @@ return [
         // Webhook deliveries (which events arrive, what became of them —
         // never content). Its own file and level so a prod LOG_LEVEL of
         // warning/error, which drops `info`, does not hide them.
+        // One line per AI answer (tokens, cost vs Credits price), kept apart
+        // from laravel.log so LOG_LEVEL=warning on the server never drops it
+        // (26 Nov: the AI margin check found no lines). grep storage/logs/ai-*.log
+        'ai' => [
+            'driver' => 'daily',
+            'path' => storage_path('logs/ai.log'),
+            'level' => 'info',
+            'days' => 90,
+            'replace_placeholders' => true,
+        ],
+
         'webhooks' => [
             'driver' => 'daily',
             'tap' => [RedactSensitiveData::class],
