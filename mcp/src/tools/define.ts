@@ -149,7 +149,8 @@ function unsure(err: ToolError, def: ToolDef<z.ZodRawShape>): ToolError {
   if (err.code !== 'upstream_unavailable' && err.code !== 'internal_error') return err;
   const out = new ToolError(
     err.code,
-    err.message,
+    // "nothing was done" is not known here: the request may have reached creatif.space (27 Nov).
+    err.message.replace(/,? so nothing was done\.?$/, '.').replace(/ could not be reached\./, ' did not answer in time; this may still have gone through.'),
     `It is not certain whether ${def.name} went through. Check first (list_posts, get_post, list_files or list_spaces) and call again only if nothing was created or sent.`,
     { ...err.details, retryable: false, verify_first: true },
   );

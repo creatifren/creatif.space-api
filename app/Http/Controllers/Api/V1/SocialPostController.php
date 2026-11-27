@@ -811,6 +811,12 @@ class SocialPostController extends Controller
             return response()->json(['message' => 'Only a draft can be sent from here.'], 422);
         }
 
+        // A send with many photos can take a minute at the relay: it runs to
+        // the end (sent, or Credits back and still a draft) even if the
+        // caller stops waiting — the MCP then answers "still running" (27 Nov).
+        ignore_user_abort(true);
+        set_time_limit(180);
+
         // Approval is kept, whoever sends: a draft that needs its client's
         // yes (or whose client asked for changes) can only be held for the
         // client again — never sent, scheduled, or quietly downgraded to

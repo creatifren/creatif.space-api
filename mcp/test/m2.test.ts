@@ -293,6 +293,25 @@ describe('schedule_post', () => {
     expect(payload(confirmed).post.status).toBe('scheduled');
   });
 
+  it('a send still running (27 Nov, 8 photos): "still running" with where the post is, then the same confirm replays the answer', async () => {
+    let busy = true;
+    const { confirmed, client } = await twoStep('schedule_post', { post_id: POST, scheduled_at: FUTURE }, {
+      [SEND_ROUTE]: () => (busy ? { status: 409, body: { message: 'still running', code: 'idempotency_in_progress' } } : sent({ scheduled_at: FUTURE })),
+      [`GET /social-posts/${POST}`]: () => ({ body: { data: post(POST, { status: 'draft', scheduled_at: FUTURE }) } }),
+    });
+    const out = payload(confirmed);
+    expect(out.error).toBeUndefined();
+    expect(out).toMatchObject({ still_running: true, post_id: POST, status: 'draft', scheduled_at: FUTURE });
+    expect(out.next_step).toMatch(/Do not send it again/);
+
+    busy = false;
+    const done = payload(await client.callTool({ name: 'schedule_post', arguments: { post_id: POST, scheduled_at: FUTURE, confirm: true } }));
+    expect(done.post.status).toBe('scheduled');
+    const sends = app!.v1.calls.filter((c) => `${c.method} ${c.path}` === SEND_ROUTE);
+    expect(sends).toHaveLength(2);
+    expect(sends[0]!.headers.get('idempotency-key')).toBe(sends[1]!.headers.get('idempotency-key'));
+  });
+
   it('refuses a past time before calling V1', async () => {
     const res = await call('schedule_post', { post_id: POST, scheduled_at: '2020-01-01T00:00:00Z', confirm: true }, {});
     expect(payload(res).error.code).toBe('invalid_input');
