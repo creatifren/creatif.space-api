@@ -113,7 +113,7 @@ class SocialPostBatchController extends Controller
         if ($byToken && ! CapTokenSends::reserve($user, $items->count())) {
             $status = CapTokenSends::status($user);
 
-            return self::refuse('daily_send_cap', 'Nothing was scheduled: connected apps can send '.CapTokenSends::DAILY_CAP.' posts a day, and '.$status['remaining'].' are left today.', 429, $status + [
+            return self::refuse('daily_send_cap', 'Nothing was scheduled: connected apps can send '.CapTokenSends::cap().' posts a day, and '.$status['remaining'].' are left today.', 429, $status + [
                 'resets_at' => now('UTC')->addDay()->startOfDay()->toIso8601String(),
             ]);
         }

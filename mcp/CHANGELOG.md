@@ -7,6 +7,8 @@ Versions of the remote MCP server at `https://mcp.creatif.space/mcp`
 
 ## Unreleased
 
+No daily send cap (27 Nov 2026): connected apps and API keys are no longer held to 20 sends a day — every send is paid in Credits. `mcp_daily_sends.cap` / `daily_cap.cap` are null unless `MCP_DAILY_SEND_CAP` is set.
+
 Pinterest boards (26 Nov 2026):
 
 67 tools (was 66).

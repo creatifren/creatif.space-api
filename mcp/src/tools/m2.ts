@@ -23,7 +23,8 @@ export interface SendPreview {
   scheduled_at: string | null;
   targets: { channel_id: string; platform: string; username: string | null; usable: boolean; credits: number }[];
   credits: { price: number; from_topup: number; monthly_balance: number; topup_balance: number; can_afford: boolean };
-  daily_cap: { cap: number; used: number; remaining: number };
+  /** cap / remaining are null when there is no daily cap (the default since 27 Nov). */
+  daily_cap: { cap: number | null; used: number; remaining: number | null };
   /** Signed by the API: user + post + destinations + Credit price, 10 minutes. */
   confirm_token?: string;
   confirm_expires_at?: string;
@@ -138,7 +139,7 @@ const isSent = (r: object): r is { data: V1Post } => 'data' in r;
 function previewResult(p: SendPreview, action: 'publish' | 'schedule', scheduledAt?: string) {
   const blocked: string[] = [];
   if (!p.credits.can_afford) blocked.push('not enough Credits — the user must top up first');
-  if (p.daily_cap.remaining <= 0) blocked.push('the daily limit for sends from connected apps is reached');
+  if (p.daily_cap.remaining !== null && p.daily_cap.remaining <= 0) blocked.push('the daily limit for sends from connected apps is reached');
   const stale = p.targets.filter((t) => !t.usable);
   if (stale.length) blocked.push(`reconnect required for: ${stale.map((t) => `${t.platform} ${t.username ?? ''}`.trim()).join(', ')}`);
 
@@ -152,7 +153,7 @@ function previewResult(p: SendPreview, action: 'publish' | 'schedule', scheduled
     credits_from_topup: p.credits.from_topup,
     monthly_balance: p.credits.monthly_balance,
     topup_balance: p.credits.topup_balance,
-    sends_left_today: p.daily_cap.remaining,
+    ...(p.daily_cap.remaining !== null ? { sends_left_today: p.daily_cap.remaining } : {}),
     ...(blocked.length ? { blocked } : {}),
     next: blocked.length
       ? 'This cannot go out yet — tell the user what is blocking it.'
@@ -514,7 +515,7 @@ export const schedulePost = defineTool({
     does: "Schedules a DRAFT to publish at a future time on its channels, after the user agrees to a preview of channels and Credit cost.",
     when: "when the user wants a draft to go out later; use publish_post to send now, and create_approval_link if a client must approve first. Two steps: call with confirm false (default) to get the preview; show it to the user, and only after they explicitly agree call again with confirm: true.",
     example: "schedule_post { \"post_id\": \"01JD…\", \"scheduled_at\": \"2026-12-01T09:00:00+07:00\" } → preview; then the same call with \"confirm\": true → { post, note }",
-    rules: "The confirm sends exactly what that preview showed (a signed confirm_token kept by the server, valid 10 minutes). Credits are charged when it is scheduled (Monthly Credits first, then the Top-up balance; on every plan); a post more than 30 days ahead is held by Creatif Space and charged when it is sent, about 30 days before its time. On some plans, scheduled_at is at most 7 days ahead and at most 10 posts can be queued; on others, up to 90 days ahead. Connected apps can send at most 20 posts a day.",
+    rules: "The confirm sends exactly what that preview showed (a signed confirm_token kept by the server, valid 10 minutes). Credits are charged when it is scheduled (Monthly Credits first, then the Top-up balance; on every plan); a post more than 30 days ahead is held by Creatif Space and charged when it is sent, about 30 days before its time. On some plans, scheduled_at is at most 7 days ahead and at most 10 posts can be queued; on others, up to 90 days ahead.",
     errors: [
       ["preview_stale", "nothing was sent; show the user the new preview in details.preview and confirm again only if they agree"],
       ["insufficient_credits or quota_exceeded", "pass the message on as it is (nothing was charged); retry only once the user has more Credits"],
@@ -558,7 +559,7 @@ export const publishPost = defineTool({
     does: "Publishes a DRAFT now on its channels — it goes public and cannot be undone — after the user agrees to a preview of channels and Credit cost.",
     when: "only when the user wants it out now; use schedule_post for later and create_approval_link if a client must approve first. Two steps: call with confirm false (default) to get the preview; show it to the user, and only after they explicitly agree call again with confirm: true.",
     example: "publish_post { \"post_id\": \"01JD…\" } → preview; then publish_post { \"post_id\": \"01JD…\", \"confirm\": true } → { post, note }; then get_post for each channel’s link",
-    rules: "The confirm sends exactly what that preview showed (a signed confirm_token kept by the server, valid 10 minutes). Credits are charged (Monthly Credits first, then the Top-up balance; on every plan). Connected apps can send at most 20 posts a day.",
+    rules: "The confirm sends exactly what that preview showed (a signed confirm_token kept by the server, valid 10 minutes). Credits are charged (Monthly Credits first, then the Top-up balance; on every plan).",
     errors: [
       ["preview_stale", "nothing was sent; show the user the new preview in details.preview and confirm again only if they agree"],
       ["insufficient_credits or quota_exceeded", "pass the message on as it is (nothing was charged); retry only once the user has more Credits"],

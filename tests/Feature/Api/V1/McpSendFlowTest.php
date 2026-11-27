@@ -60,7 +60,7 @@ describe('GET /social-posts/{post}/send-preview', function () {
             ->assertJsonPath('data.sendable', true)
             ->assertJsonCount(2, 'data.targets')
             ->assertJsonPath('data.credits.can_afford', true)
-            ->assertJsonPath('data.daily_cap.cap', CapTokenSends::DAILY_CAP);
+            ->assertJsonPath('data.daily_cap.cap', null);
 
         $targets = collect($response->json('data.targets'));
         expect($response->json('data.credits.price'))->toBe($targets->sum('credits'))
@@ -93,11 +93,26 @@ describe('GET /social-posts/{post}/send-preview', function () {
 });
 
 describe('daily send cap for bearer-token callers', function () {
-    it('allows the cap, then answers 429 daily_send_cap', function () {
+    it('has no cap by default: sends past 20 a day go through', function () {
         Http::fake(['api.postforme.test/*' => Http::response(['id' => 'post_x', 'status' => 'scheduled'])]);
         $user = User::factory()->create();
         Credits::grant($user, 1_000_000, 'Test');
-        Cache::put('token-sends:'.$user->id.':'.now('UTC')->toDateString(), CapTokenSends::DAILY_CAP - 1, 3600);
+        Cache::put('token-sends:'.$user->id.':'.now('UTC')->toDateString(), 50, 3600);
+
+        $post = draftFor($user);
+        $this->actingAs($user)->withToken('cs_live_test')
+            ->postJson("/api/v1/social-posts/{$post->ulid}/send", ['confirm_token' => previewToken($this, $user, $post)])
+            ->assertOk();
+
+        expect(CapTokenSends::status($user))->toBe(['cap' => null, 'used' => 51, 'remaining' => null]);
+    });
+
+    it('with a cap set, allows the cap, then answers 429 daily_send_cap', function () {
+        config(['services.mcp.daily_send_cap' => 20]);
+        Http::fake(['api.postforme.test/*' => Http::response(['id' => 'post_x', 'status' => 'scheduled'])]);
+        $user = User::factory()->create();
+        Credits::grant($user, 1_000_000, 'Test');
+        Cache::put('token-sends:'.$user->id.':'.now('UTC')->toDateString(), 19, 3600);
 
         $first = draftFor($user);
         $this->actingAs($user)->withToken('cs_live_test')
@@ -115,10 +130,11 @@ describe('daily send cap for bearer-token callers', function () {
     });
 
     it('never caps the app (cookie session, no bearer)', function () {
+        config(['services.mcp.daily_send_cap' => 20]);
         Http::fake(['api.postforme.test/*' => Http::response(['id' => 'post_x', 'status' => 'scheduled'])]);
         $user = User::factory()->create();
         Credits::grant($user, 1_000_000, 'Test');
-        Cache::put('token-sends:'.$user->id.':'.now('UTC')->toDateString(), CapTokenSends::DAILY_CAP, 3600);
+        Cache::put('token-sends:'.$user->id.':'.now('UTC')->toDateString(), 20, 3600);
 
         $post = draftFor($user);
         $this->actingAs($user)->postJson("/api/v1/social-posts/{$post->ulid}/send")->assertOk();

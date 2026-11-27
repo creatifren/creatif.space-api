@@ -72,7 +72,7 @@ async function previewAll(ctx: ToolContext, posts: Item[]) {
 
   const blocked: string[] = [];
   if (total > balance) blocked.push(`not enough Credits for all of them: ${total} needed, ${balance} available — the user must top up first, or schedule fewer`);
-  if (sendsLeft < posts.length) blocked.push(`connected apps have ${sendsLeft} sends left today, fewer than ${posts.length}`);
+  if (sendsLeft !== null && sendsLeft < posts.length) blocked.push(`connected apps have ${sendsLeft} sends left today, fewer than ${posts.length}`);
   for (const p of previews) {
     const stale = p.targets.filter((t) => !t.usable);
     if (stale.length) blocked.push(`${p.post_id}: reconnect required for ${stale.map((t) => `${t.platform} ${t.username ?? ''}`.trim()).join(', ')}`);
@@ -91,7 +91,7 @@ async function previewAll(ctx: ToolContext, posts: Item[]) {
       })),
       total_credit_cost: total,
       credits_available: balance,
-      sends_left_today: sendsLeft,
+      ...(sendsLeft !== null ? { sends_left_today: sendsLeft } : {}),
       ...(blocked.length ? { blocked } : {}),
       next: blocked.length
         ? 'These cannot go out yet — tell the user what is blocking them. Nothing was scheduled.'
@@ -107,7 +107,7 @@ export const schedulePosts = defineTool({
     does: 'Schedules up to 10 DRAFTS to publish publicly on their channels, each at its own time, after the user agrees to one preview of every post, its channels and the total Credit cost. All or none: if one is refused, none stays scheduled and no Credits are kept.',
     when: 'when the user wants a set of drafts (a planned week) to go out later; for one draft use schedule_post, to send now publish_post. Two steps: call with confirm false (default) to get the preview; show it to the user, and only after they explicitly agree call again with the same posts and confirm: true.',
     example: 'schedule_posts { "posts": [{ "post_id": "01JD…", "scheduled_at": "2026-11-20T09:00:00+07:00" }, { "post_id": "01JE…", "scheduled_at": "2026-11-21T09:00:00+07:00" }] } → { confirmation_required: true, posts, total_credit_cost }; then with "confirm": true → { scheduled: [...] }',
-    rules: 'The confirm schedules exactly what that preview showed. Credits are charged when they are scheduled (Monthly Credits first, then the Top-up balance; on every plan). Every post counts against the 20 sends a day connected apps may make. confirm: true without a current preview of the same posts and times (shown in the last 10 minutes) returns a preview again and schedules nothing. Drafts waiting for approval cannot be scheduled here.',
+    rules: 'The confirm schedules exactly what that preview showed. Credits are charged when they are scheduled (Monthly Credits first, then the Top-up balance; on every plan). confirm: true without a current preview of the same posts and times (shown in the last 10 minutes) returns a preview again and schedules nothing. Drafts waiting for approval cannot be scheduled here.',
     errors: [
       ['preview_stale', 'nothing was scheduled: channels or Credits changed since the preview; show the user the new preview in details.preview and confirm again only if they agree'],
       ['batch_failed', 'nothing was scheduled: details.failed_post_id was refused (details.reason) and the others were taken back; fix that post or leave it out, preview again'],

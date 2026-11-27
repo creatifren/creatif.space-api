@@ -23,7 +23,7 @@ return [
         'read' => 'Read your channels, posts, files, Spaces, Credits balance, Engage inbox (comments and DMs) and Insight numbers',
         'draft' => 'Save draft posts and draft Spaces, and upload media to your library (never sends, schedules or publishes them)',
         'approve' => 'Create client approval links for your posts (Free: one client, posts up to 7 days ahead)',
-        'publish' => 'Schedule and publish your drafts (at most 20 a day), publish your Spaces, and reply to comments and DMs, spending Credits',
+        'publish' => 'Schedule and publish your drafts, publish your Spaces, and reply to comments and DMs, spending Credits',
         // The approver side: posts other people sent you for approval.
         'approvals:decide' => 'Approve or request changes on posts sent to you',
     ],
@@ -114,7 +114,7 @@ return [
         // `publish`; the MCP server checks that before it calls.
         'api.v1.social-posts.update' => 'draft',
         'api.v1.social-posts.send-preview' => 'read',
-        // CapTokenSends holds bearer callers to 20 sends a day.
+        // CapTokenSends counts bearer sends; no cap unless MCP_DAILY_SEND_CAP is set.
         'api.v1.social-posts.send' => 'publish',
         // get_notification_settings / update_notification_settings: the
         // user's own three email switches.

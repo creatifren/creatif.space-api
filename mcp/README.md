@@ -155,9 +155,10 @@ upgrade link), `file_too_large`, `unsupported_format`, `upload_limit`,
 or foreign id in a post); another workspace's id is `not_found`.
 
 `schedule_post` / `publish_post` without `confirm: true` only return a preview
-(channels, Credit cost, sends left today, anything blocking). Sends from a bearer
-token are capped at **20 per user per UTC day**, enforced in Laravel
-(`CapTokenSends`, 429 `daily_send_cap`); the app's cookie session is never capped.
+(channels, Credit cost, anything blocking). Sends from a bearer token are
+counted per user per UTC day (`CapTokenSends`) but **not capped** — every send
+is paid in Credits (Rizal 27 Nov). A cap can be set with `MCP_DAILY_SEND_CAP`
+(then 429 `daily_send_cap`); the app's cookie session is never counted.
 
 **confirm_token.** The send preview returns a `confirm_token` signed by the API
 (HMAC with the app key; bound to user + post + target ids + Credit price; valid
@@ -366,7 +367,7 @@ Every tool turns an API 429 into the same envelope:
 - **`message`:** the API's own text.
 - **`retry_after_seconds`:** taken from the body's `retry_after`, else the `Retry-After` header (the token limit in `EnforceTokenScope` sends only the header), else 60.
 
-Two 429s keep their own codes: `upload_limit` (uploads paused for today) and `daily_cap_reached` (20 sends a day from connected apps). `test/ratelimit.test.ts` sends a 429 to every tool.
+Two 429s keep their own codes: `upload_limit` (uploads paused for today) and `daily_cap_reached` (only if a daily send cap is set; none by default). `test/ratelimit.test.ts` sends a 429 to every tool.
 
 ## Idempotency (double submit)
 
