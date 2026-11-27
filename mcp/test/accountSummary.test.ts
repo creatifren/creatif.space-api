@@ -47,7 +47,6 @@ describe('get_account_summary', () => {
     const out = payload(await run(base));
     expect(out.plan).toEqual({ key: 'free', name: 'Free' });
     expect(out.limits).toEqual({
-      monthly_posts: { used: 12, limit: 30, left: 18 },
       connected_accounts: { used: 2, limit: 3, left: 1 },
       queued_posts: { used: 4, limit: 10, left: 6 },
       approval_clients: { used: 0, limit: 1, left: 1 },

@@ -405,7 +405,6 @@ export const getCredits = defineTool({
       plan: limits.plan ?? { key: data.plan },
       credits: { ...(limits.credits as object | undefined), committed },
       price_per_send: limits.price_per_send,
-      monthly_posts: limits.monthly_posts,
       connected_accounts: limits.connected_accounts,
       scheduling: limits.scheduling,
       approval_clients: limits.approval_clients,

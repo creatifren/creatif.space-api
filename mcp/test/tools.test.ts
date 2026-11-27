@@ -249,7 +249,6 @@ describe('get_credits', () => {
       plan: limits.plan,
       credits: { ...limits.credits, committed: { sends: 300, sends_monthly: 600 } },
       price_per_send: limits.price_per_send,
-      monthly_posts: limits.monthly_posts,
       connected_accounts: limits.connected_accounts,
       scheduling: limits.scheduling,
       approval_clients: limits.approval_clients,
