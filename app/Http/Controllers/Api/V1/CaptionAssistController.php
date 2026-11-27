@@ -27,9 +27,9 @@ use Illuminate\Validation\ValidationException;
  * Pro and Max (plans v2: feature `ai_caption`, hashtags included).
  *
  * Two tiers (Rizal 21 Nov, prototype v10.5): `quality=standard` = Sonnet
- * (services.ai.model_standard), 30 Credits; `quality=extra` = Opus
- * (services.ai.model), 100 Credits (ai_assist.credits); "Improve with AI" on
- * a longer caption costs more (ai_assist.rewrite_bands, v10.9). Credits back
+ * (services.ai.model_standard), `quality=extra` = Opus (services.ai.model).
+ * "Add hashtags" costs ai_assist.credits (30 / 100); "Improve with AI" costs
+ * by caption length (ai_assist.rewrite_bands: 50/100, 100/150, 150/300 — v10.24). Credits back
  * when the AI does not answer. No `quality` = standard (Rizal 21 Nov: the
  * old free Opus path is closed now that the app sends it, app #331).
  */

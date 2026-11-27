@@ -132,7 +132,7 @@ it('charges by tier and picks the model', function (string $quality, string $mod
     expect(\App\Support\Credits::total($user))->toBe($before - $price);
     Http::assertSent(fn (HttpRequest $r) => $r['model'] === $model);
 })->with([
-    'standard' => ['standard', 'sonnet', 30],
+    'standard' => ['standard', 'sonnet', 50],
     'extra' => ['extra', 'm', 100],
 ]);
 
@@ -157,9 +157,9 @@ it('no quality is charged as standard (the free Opus path is closed)', function 
     $before = \App\Support\Credits::total($user);
 
     $this->actingAs($user)->postJson('/api/v1/social-captions/assist', ['mode' => 'rewrite', 'caption' => CA_CAPTION])
-        ->assertOk()->assertJsonPath('data.credits', 30);
+        ->assertOk()->assertJsonPath('data.credits', 50);
 
-    expect(\App\Support\Credits::total($user))->toBe($before - 30);
+    expect(\App\Support\Credits::total($user))->toBe($before - 50);
     Http::assertSent(fn (HttpRequest $r) => $r['model'] === 'sonnet');
 });
 
@@ -199,9 +199,9 @@ it('logs the tokens each answer used, with its cost and price in Credits, on its
 it('prices Improve with AI by caption length; Add hashtags stays flat (prototype v10.9)', function (string $mode, string $quality, int $len, int $price) {
     expect(\App\Http\Controllers\Api\V1\CaptionAssistController::price($mode, $quality, str_repeat('a', $len)))->toBe($price);
 })->with([
-    'rewrite standard 500' => ['rewrite', 'standard', 500, 30],
-    'rewrite standard 501' => ['rewrite', 'standard', 501, 75],
-    'rewrite standard 1200' => ['rewrite', 'standard', 1200, 75],
+    'rewrite standard 500' => ['rewrite', 'standard', 500, 50],
+    'rewrite standard 501' => ['rewrite', 'standard', 501, 100],
+    'rewrite standard 1200' => ['rewrite', 'standard', 1200, 100],
     'rewrite standard 1201' => ['rewrite', 'standard', 1201, 150],
     'rewrite extra 400' => ['rewrite', 'extra', 400, 100],
     'rewrite extra 900' => ['rewrite', 'extra', 900, 150],
@@ -217,8 +217,8 @@ it('charges the length price and says so', function () {
     $this->actingAs($user)
         ->postJson('/api/v1/social-captions/assist', ['mode' => 'rewrite', 'caption' => str_repeat('kopi ', 150)])
         ->assertOk()
-        ->assertJsonPath('data.credits', 75);
-    expect(\App\Support\Credits::total($user))->toBe($before - 75);
+        ->assertJsonPath('data.credits', 100);
+    expect(\App\Support\Credits::total($user))->toBe($before - 100);
 });
 
 it('Improve with AI waits for a Caption style; Add hashtags does not (v10.9.2)', function () {
