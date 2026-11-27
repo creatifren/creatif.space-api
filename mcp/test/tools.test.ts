@@ -240,7 +240,6 @@ describe('get_credits', () => {
       features: { approval_links: true, analytics: false, delivery_history: false, branding_removed: false, ai_caption: false, insight: false, spaces: false },
       credits: { monthly: 2400, monthly_amount: 3000, topup: 0, total: 2400, resets_at: '2026-12-01T00:00:00+00:00' },
       price_per_send: { default: 300, by_platform: { x: 300, x_link: 2000 } },
-      mcp_daily_sends: { cap: 20, used: 3, remaining: 17 },
       urls: { billing: 'https://creatif.space/settings?section=subscription', top_up: 'https://creatif.space/credits' },
     };
     const res = await call('get_credits', {}, {
@@ -255,7 +254,6 @@ describe('get_credits', () => {
       scheduling: limits.scheduling,
       approval_clients: limits.approval_clients,
       features: limits.features,
-      mcp_daily_sends: limits.mcp_daily_sends,
       urls: limits.urls,
       renewal: { resets_at: '2026-12-01T00:00:00+00:00', days_until: expect.any(Number) },
     });

@@ -29,7 +29,6 @@ const previewOf = (id: string, extra: { price?: number; usable?: boolean; balanc
       scheduled_at: null,
       targets: [{ channel_id: IG, platform: 'instagram', username: 'studio', usable: extra.usable ?? true, credits: extra.price ?? 15 }],
       credits: { price: extra.price ?? 15, from_topup: 0, monthly_balance: extra.balance ?? 300, topup_balance: 0, can_afford: true },
-      daily_cap: { cap: 20, used: 3, remaining: extra.remaining ?? 17 },
       confirm_token: `tok-${id.slice(-1)}-${++n}`,
       confirm_expires_at: new Date(Date.now() + 600_000).toISOString(),
     },
@@ -53,7 +52,7 @@ describe('schedule_posts', () => {
   it('preview: every post with its time, channels and cost, the total, and nothing sent', async () => {
     const client = await open(routes());
     const out = payload(await client.callTool({ name: 'schedule_posts', arguments: { posts: POSTS } }));
-    expect(out).toMatchObject({ confirmation_required: true, total_credit_cost: 30, credits_available: 300, sends_left_today: 17 });
+    expect(out).toMatchObject({ confirmation_required: true, total_credit_cost: 30, credits_available: 300 });
     expect(out.posts).toEqual([
       { post_id: P1, scheduled_at: T1, channels: [{ channel_id: IG, platform: 'instagram', username: 'studio', credits: 15 }], credit_cost: 15 },
       { post_id: P2, scheduled_at: T2, channels: [{ channel_id: IG, platform: 'instagram', username: 'studio', credits: 15 }], credit_cost: 15 },
@@ -132,11 +131,10 @@ describe('schedule_posts', () => {
     expect(out.scheduled).toHaveLength(2);
   });
 
-  it('maps the API refusals: not_schedulable, insufficient_credits, daily_cap_reached', async () => {
+  it('maps the API refusals: not_schedulable, insufficient_credits', async () => {
     for (const [status, code, ours] of [
       [409, 'not_schedulable', 'not_schedulable'],
       [422, 'not_enough_credits', 'insufficient_credits'],
-      [429, 'daily_send_cap', 'daily_cap_reached'],
     ] as const) {
       const client = await open(routes({ 'POST /social-posts/send-batch': () => ({ status, body: { message: 'Nothing was scheduled.', code } }) }));
       await client.callTool({ name: 'schedule_posts', arguments: { posts: POSTS } });
@@ -147,7 +145,7 @@ describe('schedule_posts', () => {
     }
   });
 
-  it('the preview says what blocks the batch: total Credits, sends left today, a channel to reconnect', async () => {
+  it('the preview says what blocks the batch: total Credits, a channel to reconnect (never a daily limit)', async () => {
     const client = await open(
       routes({
         [`GET /social-posts/${P1}/send-preview`]: () => previewOf(P1, { price: 200, balance: 250, remaining: 1 }),
@@ -158,7 +156,6 @@ describe('schedule_posts', () => {
     expect(out.total_credit_cost).toBe(300);
     expect(out.blocked).toEqual([
       'not enough Credits for all of them: 300 needed, 250 available — the user must top up first, or schedule fewer',
-      'connected apps have 1 sends left today, fewer than 2',
       `${P2}: reconnect required for instagram studio`,
     ]);
   });

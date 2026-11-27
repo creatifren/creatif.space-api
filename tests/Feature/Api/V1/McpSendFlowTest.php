@@ -7,7 +7,6 @@ use App\Models\SocialPost;
 use App\Models\Subscription;
 use App\Models\User;
 use App\Support\Credits;
-use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Http;
 
 /*
@@ -60,7 +59,7 @@ describe('GET /social-posts/{post}/send-preview', function () {
             ->assertJsonPath('data.sendable', true)
             ->assertJsonCount(2, 'data.targets')
             ->assertJsonPath('data.credits.can_afford', true)
-            ->assertJsonPath('data.daily_cap.cap', null);
+            ->assertJsonMissingPath('data.daily_cap');
 
         $targets = collect($response->json('data.targets'));
         expect($response->json('data.credits.price'))->toBe($targets->sum('credits'))
@@ -92,54 +91,7 @@ describe('GET /social-posts/{post}/send-preview', function () {
     });
 });
 
-describe('daily send cap for bearer-token callers', function () {
-    it('has no cap by default: sends past 20 a day go through', function () {
-        Http::fake(['api.postforme.test/*' => Http::response(['id' => 'post_x', 'status' => 'scheduled'])]);
-        $user = User::factory()->create();
-        Credits::grant($user, 1_000_000, 'Test');
-        Cache::put('token-sends:'.$user->id.':'.now('UTC')->toDateString(), 50, 3600);
-
-        $post = draftFor($user);
-        $this->actingAs($user)->withToken('cs_live_test')
-            ->postJson("/api/v1/social-posts/{$post->ulid}/send", ['confirm_token' => previewToken($this, $user, $post)])
-            ->assertOk();
-
-        expect(CapTokenSends::status($user))->toBe(['cap' => null, 'used' => 51, 'remaining' => null]);
-    });
-
-    it('with a cap set, allows the cap, then answers 429 daily_send_cap', function () {
-        config(['services.mcp.daily_send_cap' => 20]);
-        Http::fake(['api.postforme.test/*' => Http::response(['id' => 'post_x', 'status' => 'scheduled'])]);
-        $user = User::factory()->create();
-        Credits::grant($user, 1_000_000, 'Test');
-        Cache::put('token-sends:'.$user->id.':'.now('UTC')->toDateString(), 19, 3600);
-
-        $first = draftFor($user);
-        $this->actingAs($user)->withToken('cs_live_test')
-            ->postJson("/api/v1/social-posts/{$first->ulid}/send", ['confirm_token' => previewToken($this, $user, $first)])
-            ->assertOk();
-
-        $second = draftFor($user);
-        $this->actingAs($user)->withToken('cs_live_test')
-            ->postJson("/api/v1/social-posts/{$second->ulid}/send", ['confirm_token' => previewToken($this, $user, $second)])
-            ->assertStatus(429)
-            ->assertJsonPath('code', 'daily_send_cap');
-
-        expect($second->fresh()->status->value)->toBe('draft')
-            ->and(CapTokenSends::status($user)['remaining'])->toBe(0);
-    });
-
-    it('never caps the app (cookie session, no bearer)', function () {
-        config(['services.mcp.daily_send_cap' => 20]);
-        Http::fake(['api.postforme.test/*' => Http::response(['id' => 'post_x', 'status' => 'scheduled'])]);
-        $user = User::factory()->create();
-        Credits::grant($user, 1_000_000, 'Test');
-        Cache::put('token-sends:'.$user->id.':'.now('UTC')->toDateString(), 20, 3600);
-
-        $post = draftFor($user);
-        $this->actingAs($user)->postJson("/api/v1/social-posts/{$post->ulid}/send")->assertOk();
-    });
-
+describe('bearer-token send counting (internal, never a limit)', function () {
     it('does not count a failed send or a hold for approval', function () {
         Http::fake();
         $user = User::factory()->create(); // no Credits → the send is refused

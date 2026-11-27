@@ -30,7 +30,6 @@ const sendPreview = (token: string) => ({
       post_id: POST, sendable: true, status: 'draft', scheduled_at: null,
       targets: [{ channel_id: IG, platform: 'instagram', username: 'studio', usable: true, credits: 15 }],
       credits: { price: 15, from_topup: 0, monthly_balance: 300, topup_balance: 0, can_afford: true },
-      daily_cap: { cap: 20, used: 0, remaining: 20 },
       confirm_token: token, confirm_expires_at: new Date(Date.now() + 600_000).toISOString(),
     },
   },

@@ -43,7 +43,6 @@ export const OUTPUT_SCHEMAS: Record<string, z.ZodRawShape> = {
     scheduling: opt(loose({})),
     approval_clients: opt(loose({})),
     features: opt(loose({})),
-    mcp_daily_sends: opt(loose({})),
     urls: opt(loose({})),
     spend: opt(loose({ since: opt(str), total: opt(z.number()) })),
     renewal: opt(loose({ resets_at: str, days_until: z.number() })),

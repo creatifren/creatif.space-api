@@ -163,18 +163,13 @@ it('refuses a batch the Credits do not cover, before the first charge', function
     Http::assertNothingSent();
 });
 
-it('counts every post against the connected-app daily cap when one is set, all or none', function () {
-    config(['services.mcp.daily_send_cap' => 20]);
+it('has no daily cap: 21 posts from a connected app in a day all go out', function () {
     sbRelay();
     $user = sbUser();
-    $posts = array_map(fn () => sbDraft($user), range(1, 10));
-    sbSend($this, $user, sbItems($this, $user, $posts))->assertOk();
-    $more = array_map(fn () => sbDraft($user), range(1, 10));
-    sbSend($this, $user, sbItems($this, $user, $more))->assertOk();
-
-    $last = [sbDraft($user)];
-    sbSend($this, $user, sbItems($this, $user, $last))->assertStatus(429)->assertJsonPath('code', 'daily_send_cap')->assertJsonPath('remaining', 0);
-    expect($last[0]->fresh()->status->value)->toBe('draft');
+    foreach ([10, 10, 1] as $n) {
+        $posts = array_map(fn () => sbDraft($user), range(1, $n));
+        sbSend($this, $user, sbItems($this, $user, $posts))->assertOk();
+    }
 });
 
 it('takes at most 10 posts, each once, and only the caller\'s own', function () {

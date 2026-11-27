@@ -129,13 +129,9 @@ describe('API 429 → rate_limited on every tool', () => {
     expect(error).toMatchObject({ code: 'rate_limited', message: 'creatif.space is rate limiting these requests.', details: { retry_after_seconds: 60 } });
   });
 
-  it('specific 429s keep their own codes: upload_limit and the daily send cap', async () => {
+  it('a specific 429 keeps its own code: upload_limit', async () => {
     app = await startApp({ routes: all429({ body: { message: 'Upload limit reached, try again tomorrow', reason: 'upload_limit' } }) });
     expect(payload(await (await app.connect(TOKEN)).callTool({ name: 'request_media_upload', arguments: ARGS.request_media_upload! })).error.code).toBe('upload_limit');
-    await app.close();
-
-    app = await startApp({ routes: all429({ body: { message: 'Daily limit reached.', code: 'daily_send_cap', cap: 20, resets_at: '2026-11-13T00:00:00Z' } }) });
-    expect(payload(await (await app.connect(TOKEN)).callTool({ name: 'publish_post', arguments: ARGS.publish_post! })).error.code).toBe('daily_cap_reached');
   });
 });
 

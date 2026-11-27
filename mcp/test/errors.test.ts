@@ -111,11 +111,6 @@ describe('API answers → tool errors (any tool)', () => {
     expect(e).toMatchObject({ code: 'quota_exceeded', details: { resets_at: '2026-12-01' } });
   });
 
-  it('daily_send_cap → daily_cap_reached with cap and reset', async () => {
-    const e = await fail('get_post', { post_id: POST }, { [GET_POST]: v1(429, { code: 'daily_send_cap', message: 'Daily limit reached.', cap: 20, resets_at: 'tomorrow' }) });
-    expect(e).toMatchObject({ code: 'daily_cap_reached', details: { cap: 20, resets_at: 'tomorrow' } });
-  });
-
   it('draft_only → forbidden, do it in creatif.space', async () => {
     const e = await fail('get_post', { post_id: POST }, { [GET_POST]: v1(403, { code: 'draft_only', message: 'Connected apps can only draft.' }) });
     expect(e).toMatchObject({ code: 'forbidden', details: { reason: 'draft_only' } });
@@ -262,7 +257,6 @@ describe('tool-specific errors', () => {
       post_id: POST, sendable: true, status: 'draft', scheduled_at: null,
       targets: [{ channel_id: IG, platform: 'instagram', username: 'studio', usable: true, credits: 15 }],
       credits: { price: 15, from_topup: 0, monthly_balance: 300, topup_balance: 0, can_afford: true },
-      daily_cap: { cap: 20, used: 0, remaining: 20 },
       confirm_token: 't.sig', confirm_expires_at: new Date(Date.now() + 600_000).toISOString(),
     };
     app = await startApp({

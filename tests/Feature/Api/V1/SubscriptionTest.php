@@ -30,7 +30,7 @@ it('sells only Pro and Max at the approved USD prices; lists Free, and Enterpris
         ->and($rows['max']['price_monthly'])->toBe(1499)
         ->and($rows['max']['price_yearly'])->toBe(14990)
         ->and($rows['free']['quotas']['spaces_total'])->toBeNull()
-        ->and($rows['free']['quotas']['spaces_daily'])->toBe(10)
+        ->and($rows['free']['quotas']['spaces_daily'])->toBeNull()
         ->and($rows['pro']['quotas']['spaces_daily'])->toBeNull()
         ->and($rows['free']['quotas']['social_posts_monthly'])->toBe(10)
         ->and($rows['pro']['quotas']['social_posts_monthly'])->toBe(150)

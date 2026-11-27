@@ -114,7 +114,6 @@ return [
         // `publish`; the MCP server checks that before it calls.
         'api.v1.social-posts.update' => 'draft',
         'api.v1.social-posts.send-preview' => 'read',
-        // CapTokenSends counts bearer sends; no cap unless MCP_DAILY_SEND_CAP is set.
         'api.v1.social-posts.send' => 'publish',
         // get_notification_settings / update_notification_settings: the
         // user's own three email switches.

@@ -278,9 +278,10 @@ class PlanQuota
             ->where('created_at', '>=', now()->utc()->startOfDay())->count();
     }
 
+    /** No daily limit on new Spaces on any plan (Rizal 27 Nov: storage is the limit). */
     public static function dailyLimit(User $user): ?int
     {
-        return $user->plan()->quota('spaces_daily');
+        return null;
     }
 
     /**
