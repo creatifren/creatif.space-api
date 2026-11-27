@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { ToolError } from '../errors.js';
-import { idempotencyKey, V1Error } from '../v1.js';
+import { idempotencyKey, V1Error, V1Unavailable } from '../v1.js';
 import { defineTool, describeTool, type ToolContext } from './define.js';
 import { pinterestBoardInput, pinterestOptionsOn } from './pinterest.js';
 import { shapePost, type V1Post } from './shape.js';
@@ -92,6 +92,26 @@ export async function preview(ctx: ToolContext, postId: string, scheduledAt?: st
   return data;
 }
 
+/** A send with 8 photos can take longer than a normal call (27 Nov: ~1 minute on Instagram). */
+const SEND_TIMEOUT_MS = 50_000;
+
+/** Where the post is now, while its confirmed send is still running. */
+async function stillSending(ctx: ToolContext, postId: string, action: 'publish' | 'schedule') {
+  let post: { status: string; scheduled_at: string | null } = { status: 'unknown', scheduled_at: null };
+  try {
+    const { data } = await ctx.v1.get<{ data: V1Post }>(`/social-posts/${encodeURIComponent(postId)}`);
+    post = { status: data.status, scheduled_at: data.scheduled_at };
+  } catch {
+    /* status unknown for now */
+  }
+  return {
+    still_running: true,
+    post_id: postId,
+    ...post,
+    next_step: `The ${action === 'schedule' ? 'scheduling' : 'publish'} was accepted and is still going through (media upload to the networks can take a minute; the Credits are already held). Do not send it again or make a new preview. Wait about a minute, then call ${action === 'schedule' ? 'schedule_post' : 'publish_post'} again with the same post and confirm: true to get the final answer — it is never sent twice — or check get_post.`,
+  };
+}
+
 /**
  * The confirmed send: with the remembered preview's token, or not at all.
  * No preview on record (never shown, expired, already used) → a fresh
@@ -104,7 +124,7 @@ async function confirmedSend(
   action: 'publish' | 'schedule',
   body: Record<string, unknown>,
   scheduledAt?: string,
-): Promise<{ data: V1Post } | (ReturnType<typeof previewResult> & { note: string })> {
+): Promise<{ data: V1Post } | (ReturnType<typeof previewResult> & { note: string }) | Awaited<ReturnType<typeof stillSending>>> {
   const user = ctx.auth.extra.userUlid;
   const token = previewTokens.take(user, postId);
   if (!token) {
@@ -114,10 +134,16 @@ async function confirmedSend(
   try {
     const res = await ctx.v1.post<{ data: V1Post }>(`/social-posts/${encodeURIComponent(postId)}/send`, { ...body, confirm_token: token }, {
       idempotencyKey: idempotencyKey('send', user, postId, token, JSON.stringify(body)),
+      timeoutMs: SEND_TIMEOUT_MS,
     });
     previewTokens.forget(user, postId);
     return res;
   } catch (e) {
+    // Slow to answer (media still uploading to the networks), or this same confirm is still running: it is going
+    // through. The preview stays (take() keeps it) so the same confirm replays the answer (same Idempotency-Key, never a second send).
+    if (e instanceof V1Unavailable || (e instanceof V1Error && e.body?.code === 'idempotency_in_progress')) {
+      return stillSending(ctx, postId, action);
+    }
     if (e instanceof V1Error && e.status === 409 && e.body?.code === 'preview_stale') {
       previewTokens.forget(user, postId);
       const fresh = previewResult(await preview(ctx, postId, scheduledAt), action, scheduledAt);
