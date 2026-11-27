@@ -1364,7 +1364,7 @@ Gets the workspace at a glance in one call: plan, limits left, Credits, channels
 
 When to use: at the start of a conversation or when onboarding a user, to know what they can do before planning. For Credits per send and this month’s spend, use get_credits; for which files will be deleted, get_storage_usage; for channel ids to post to, list_channels.
 
-Example: get_account_summary {} → { plan: { key: "free", name }, limits: { monthly_posts: { used, limit, left }, connected_accounts, queued_posts, approval_clients, schedule_window_days }, credits: { left, monthly, topup, resets_at }, channels: { connected, needs_reconnect, reconnect: [...] }, storage: { used_bytes, quota_bytes, percent_used }, failed_posts: 2, approvals: { waiting: 3, changes_requested: 1 }, next_steps }
+Example: get_account_summary {} → { plan: { key: "free", name }, limits: { connected_accounts, queued_posts, approval_clients, schedule_window_days }, credits: { left, monthly, topup, resets_at }, channels: { connected, needs_reconnect, reconnect: [...] }, storage: { used_bytes, quota_bytes, percent_used }, failed_posts: 2, approvals: { waiting: 3, changes_requested: 1 }, next_steps }
 
 Read-only. limit null means no limit (left null); limits depend on the plan (on some plans: 3 channels, up to 7 days ahead, 10 queued posts, one approval client). connected counts channels that can be posted to now; a disconnected copy of an account that is also connected is not counted as needing a reconnect (hidden_duplicates counts them, as list_channels does). failed_posts is the list_failed_posts count; approvals counts the user’s posts waiting for approval and those sent back with changes (up to 100 each).
 

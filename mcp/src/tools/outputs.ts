@@ -38,7 +38,6 @@ export const OUTPUT_SCHEMAS: Record<string, z.ZodRawShape> = {
     plan: opt(loose({ key: opt(str), name: opt(str) })),
     credits: opt(loose({})),
     price_per_send: opt(loose({})),
-    monthly_posts: opt(loose({})),
     connected_accounts: opt(loose({})),
     scheduling: opt(loose({})),
     approval_clients: opt(loose({})),
