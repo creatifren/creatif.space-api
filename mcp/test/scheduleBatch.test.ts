@@ -173,4 +173,33 @@ describe('schedule_posts', () => {
     expect(payload(res).error.code).toBe('scope_missing');
     expect(app!.v1.calls).toEqual([]);
   });
+  it('a batch still running (27 Nov): where each post is now, not "nothing was done"; the same confirm then replays the answer', async () => {
+    let busy = true;
+    const client = await open(
+      routes({
+        'POST /social-posts/send-batch': () =>
+          busy
+            ? { status: 409, body: { message: 'still running', code: 'idempotency_in_progress' } }
+            : { body: { data: { scheduled: [post(P1, { status: 'scheduled' }), post(P2, { status: 'scheduled' })] } } },
+        [`GET /social-posts/${P1}`]: () => ({ body: { data: post(P1, { status: 'scheduled', scheduled_at: T1 }) } }),
+        [`GET /social-posts/${P2}`]: () => ({ body: { data: post(P2, { status: 'draft', scheduled_at: null }) } }),
+      }),
+    );
+    await client.callTool({ name: 'schedule_posts', arguments: { posts: POSTS } });
+    const out = payload(await client.callTool({ name: 'schedule_posts', arguments: { posts: POSTS, confirm: true } }));
+    expect(out.error).toBeUndefined();
+    expect(out.still_running).toBe(true);
+    expect(out.posts).toEqual([
+      { post_id: P1, status: 'scheduled', scheduled_at: T1 },
+      { post_id: P2, status: 'draft', scheduled_at: null },
+    ]);
+    expect(out.next_step).toMatch(/same posts and confirm: true/);
+
+    busy = false;
+    const done = payload(await client.callTool({ name: 'schedule_posts', arguments: { posts: POSTS, confirm: true } }));
+    expect(done.scheduled.map((p: { id: string }) => p.id)).toEqual([P1, P2]);
+    const keys = batchCalls().map((c) => c.headers.get('idempotency-key'));
+    expect(keys).toHaveLength(2);
+    expect(keys[0]).toBe(keys[1]);
+  });
 });

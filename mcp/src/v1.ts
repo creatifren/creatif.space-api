@@ -60,8 +60,8 @@ export class V1Client {
    * replays its answer to a repeat (publish, schedule, retry, approval
    * link create).
    */
-  post<T = unknown>(path: string, body: unknown, opts: { idempotencyKey?: string } = {}): Promise<T> {
-    return this.request<T>('POST', path, body, undefined, false, opts.idempotencyKey ? { 'Idempotency-Key': opts.idempotencyKey } : {});
+  post<T = unknown>(path: string, body: unknown, opts: { idempotencyKey?: string; timeoutMs?: number } = {}): Promise<T> {
+    return this.request<T>('POST', path, body, undefined, false, opts.idempotencyKey ? { 'Idempotency-Key': opts.idempotencyKey } : {}, opts.timeoutMs);
   }
 
   /** A GET whose success body is not JSON (e.g. a CSV export): the raw text. Errors are still JSON. */
@@ -69,7 +69,7 @@ export class V1Client {
     return this.request<string>('GET', path, undefined, query, true);
   }
 
-  private async request<T>(method: string, path: string, body?: unknown, query?: Query, raw = false, headers: Record<string, string> = {}): Promise<T> {
+  private async request<T>(method: string, path: string, body?: unknown, query?: Query, raw = false, headers: Record<string, string> = {}, timeoutMs = 20_000): Promise<T> {
     const url = new URL(this.baseUrl + path);
     for (const [k, v] of Object.entries(query ?? {})) {
       if (v !== undefined && v !== null && v !== '') url.searchParams.set(k, String(v));
@@ -88,7 +88,7 @@ export class V1Client {
           ...headers,
         },
         ...(body !== undefined ? { body: JSON.stringify(body) } : {}),
-        signal: AbortSignal.timeout(20_000),
+        signal: AbortSignal.timeout(timeoutMs),
       });
     } catch (e) {
       throw new V1Unavailable((e as Error).message);

@@ -52,7 +52,8 @@ class IdempotencyKey
             return $replay;
         }
 
-        $lock = Cache::lock($slot.':lock', 60);
+        // Held for as long as a slow request may run (a 10-post batch, 27 Nov); released when it ends.
+        $lock = Cache::lock($slot.':lock', 300);
         if (! $lock->get()) {
             return response()->json([
                 'message' => 'A request with this Idempotency-Key is still running. Try again in a moment to get its result.',
