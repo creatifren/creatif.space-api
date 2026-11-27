@@ -32,6 +32,12 @@ use Throwable;
  * enough (SocialPostRelay::sendOrHold). If one is refused on the way, the ones already handed over
  * are recalled (taken back from the relay, Credits returned) and put back
  * to draft as they were: nothing stays scheduled.
+ *
+ * The relay is called once per post, so a full batch can take a minute. It
+ * runs to the end even if the caller stops waiting (the MCP answers "still
+ * running" and asks again; the Idempotency-Key replays this answer), so a
+ * time limit never cuts it off between "time set" and "sent" (27 Nov: a
+ * draft was left with its time filled in).
  */
 class SocialPostBatchController extends Controller
 {
@@ -113,6 +119,10 @@ class SocialPostBatchController extends Controller
         if ($byToken) {
             CapTokenSends::reserve($user, $items->count());
         }
+
+        // Finish (or roll back) the whole batch, whoever is still listening.
+        ignore_user_abort(true);
+        set_time_limit(300);
 
         // 2. Send one by one; on a refusal, take back the ones already sent.
         $was = $posts->map(fn (SocialPost $p) => $p->scheduled_at);

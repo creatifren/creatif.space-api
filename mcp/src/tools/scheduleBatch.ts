@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto';
 import { z } from 'zod';
 import { ToolError, type ErrorCode } from '../errors.js';
-import { idempotencyKey, V1Error } from '../v1.js';
+import { idempotencyKey, V1Error, V1Unavailable } from '../v1.js';
 import { defineTool, describeTool, type ToolContext } from './define.js';
 import { preview, type SendPreview } from './m2.js';
 import { shapePost, type V1Post } from './shape.js';
@@ -19,6 +19,8 @@ import { shapePost, type V1Post } from './shape.js';
 
 const MAX = 10;
 const TTL_MS = 10 * 60_000;
+/** The API hands each post to the relay in turn: 10 posts on 2 networks can take a minute (27 Nov). Past this the call answers "still running" (under the AI client's own tool timeout). */
+const BATCH_TIMEOUT_MS = 50_000;
 
 const item = z.object({
   post_id: z.string().trim().min(10).max(26).describe('A draft’s id (list_posts status "draft", or draft_post)'),
@@ -60,6 +62,29 @@ export const batchPreviews = new BatchPreviews();
 
 const keyOf = (user: string, posts: Item[]) =>
   `${user}:${createHash('sha256').update(JSON.stringify(posts.map((p) => [p.post_id, Date.parse(p.scheduled_at)]))).digest('hex')}`;
+
+/**
+ * The confirm did not come back in time (or the same confirm is still running): the API carries on, all or none,
+ * so say where each post is now instead of "nothing was done". Calling the same confirm again replays the answer.
+ */
+async function whereNow(ctx: ToolContext, posts: Item[]) {
+  const state = await Promise.all(
+    posts.map(async (p) => {
+      try {
+        const { data } = await ctx.v1.get<{ data: V1Post }>(`/social-posts/${encodeURIComponent(p.post_id)}`);
+        return { post_id: p.post_id, status: data.status, scheduled_at: data.scheduled_at };
+      } catch {
+        return { post_id: p.post_id, status: 'unknown', scheduled_at: null };
+      }
+    }),
+  );
+  return {
+    still_running: true,
+    posts: state,
+    next_step:
+      'The batch is still being sent (one post at a time) and finishes on its own: all scheduled, or all back to draft. Wait about a minute, then call schedule_posts again with the same posts and confirm: true to get the final answer — the same confirm is never sent twice. Do not schedule these posts one by one meanwhile.',
+  };
+}
 
 async function previewAll(ctx: ToolContext, posts: Item[]) {
   const previews: SendPreview[] = [];
@@ -103,7 +128,7 @@ export const schedulePosts = defineTool({
   description: describeTool({
     does: 'Schedules up to 10 DRAFTS to publish publicly on their channels, each at its own time, after the user agrees to one preview of every post, its channels and the total Credit cost. All or none: if one is refused, none stays scheduled and no Credits are kept.',
     when: 'when the user wants a set of drafts (a planned week) to go out later; for one draft use schedule_post, to send now publish_post. Two steps: call with confirm false (default) to get the preview; show it to the user, and only after they explicitly agree call again with the same posts and confirm: true.',
-    example: 'schedule_posts { "posts": [{ "post_id": "01JD…", "scheduled_at": "2026-11-20T09:00:00+07:00" }, { "post_id": "01JE…", "scheduled_at": "2026-11-21T09:00:00+07:00" }] } → { confirmation_required: true, posts, total_credit_cost }; then with "confirm": true → { scheduled: [...] }',
+    example: 'schedule_posts { "posts": [{ "post_id": "01JD…", "scheduled_at": "2026-11-20T09:00:00+07:00" }, { "post_id": "01JE…", "scheduled_at": "2026-11-21T09:00:00+07:00" }] } → { confirmation_required: true, posts, total_credit_cost }; then with "confirm": true → { scheduled: [...] }, or { still_running: true, posts: [{ post_id, status, scheduled_at }] } when the batch takes longer — call the same confirm again a minute later for the final answer',
     rules: 'The confirm schedules exactly what that preview showed. Credits are charged when they are scheduled (Monthly Credits first, then the Top-up balance; on every plan). confirm: true without a current preview of the same posts and times (shown in the last 10 minutes) returns a preview again and schedules nothing. Drafts waiting for approval cannot be scheduled here.',
     errors: [
       ['preview_stale', 'nothing was scheduled: channels or Credits changed since the preview; show the user the new preview in details.preview and confirm again only if they agree'],
@@ -145,6 +170,7 @@ export const schedulePosts = defineTool({
       // One key per confirm: a retried request is replayed, never a second batch.
       const { data } = await ctx.v1.post<{ data: { scheduled: V1Post[] } }>('/social-posts/send-batch', body, {
         idempotencyKey: idempotencyKey('send-batch', ctx.auth.extra.userUlid, JSON.stringify(body)),
+        timeoutMs: BATCH_TIMEOUT_MS,
       });
       batchPreviews.forget(key);
       return {
@@ -152,6 +178,11 @@ export const schedulePosts = defineTool({
         next_step: `All ${data.scheduled.length} are scheduled. Use get_post or list_posts status "scheduled" to follow delivery.`,
       };
     } catch (e) {
+      // Too slow to answer, or this same confirm is still running: keep the preview (a repeat replays the answer).
+      if (e instanceof V1Unavailable || (e instanceof V1Error && e.body?.code === 'idempotency_in_progress')) {
+        batchPreviews.remember(key, tokens);
+        return whereNow(ctx, posts);
+      }
       if (!(e instanceof V1Error) || !e.body?.code) throw e;
       batchPreviews.forget(key);
       const body = e.body as Record<string, unknown>;
