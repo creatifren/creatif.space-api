@@ -88,7 +88,6 @@ export const retryPost = defineTool({
       ['preview_stale', 'nothing was sent; show the user the new preview in details.preview and confirm again only if they agree'],
       ['insufficient_credits or quota_exceeded', 'pass the message on as it is (nothing was charged)'],
       ['reconnect_required', 'the user reconnects the channel in creatif.space → Channels'],
-      ['daily_cap_reached', 'retry from creatif.space or wait for details.resets_at'],
       ['not_found', 'take ids from list_posts'],
       ['scope_missing', 'reconnect and allow "publish"'],
       ['upstream_unavailable', 'check get_post before calling again — it may have gone out'],

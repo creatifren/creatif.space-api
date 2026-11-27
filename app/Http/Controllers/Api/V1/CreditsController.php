@@ -5,7 +5,6 @@ namespace App\Http\Controllers\Api\V1;
 use App\Exceptions\NotEnoughCredits;
 use App\Exceptions\PlanFeatureRequired;
 use App\Http\Controllers\Controller;
-use App\Http\Middleware\CapTokenSends;
 use App\Models\CreditPurchase;
 use App\Models\SocialPost;
 use App\Models\User;
@@ -133,7 +132,6 @@ class CreditsController extends Controller
                 'default' => Credits::perSend(),
                 'by_platform' => Credits::perSendByPlatform(),
             ],
-            'mcp_daily_sends' => CapTokenSends::status($user),
             'urls' => [
                 'billing' => PlanFeatureRequired::billingUrl(),
                 'top_up' => NotEnoughCredits::topUpUrl(),

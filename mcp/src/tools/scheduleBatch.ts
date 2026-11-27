@@ -68,11 +68,9 @@ async function previewAll(ctx: ToolContext, posts: Item[]) {
   const total = previews.reduce((n, p) => n + p.credits.price, 0);
   const last = previews.at(-1)!;
   const balance = last.credits.monthly_balance + last.credits.topup_balance;
-  const sendsLeft = last.daily_cap.remaining;
 
   const blocked: string[] = [];
   if (total > balance) blocked.push(`not enough Credits for all of them: ${total} needed, ${balance} available — the user must top up first, or schedule fewer`);
-  if (sendsLeft !== null && sendsLeft < posts.length) blocked.push(`connected apps have ${sendsLeft} sends left today, fewer than ${posts.length}`);
   for (const p of previews) {
     const stale = p.targets.filter((t) => !t.usable);
     if (stale.length) blocked.push(`${p.post_id}: reconnect required for ${stale.map((t) => `${t.platform} ${t.username ?? ''}`.trim()).join(', ')}`);
@@ -91,7 +89,6 @@ async function previewAll(ctx: ToolContext, posts: Item[]) {
       })),
       total_credit_cost: total,
       credits_available: balance,
-      ...(sendsLeft !== null ? { sends_left_today: sendsLeft } : {}),
       ...(blocked.length ? { blocked } : {}),
       next: blocked.length
         ? 'These cannot go out yet — tell the user what is blocking them. Nothing was scheduled.'
@@ -113,7 +110,6 @@ export const schedulePosts = defineTool({
       ['batch_failed', 'nothing was scheduled: details.failed_post_id was refused (details.reason) and the others were taken back; fix that post or leave it out, preview again'],
       ['not_schedulable', 'nothing was scheduled: details.refused names each post that is not a draft or waits for approval; leave them out and preview again'],
       ['insufficient_credits', 'nothing was scheduled: the user tops up, or schedules fewer posts'],
-      ['daily_cap_reached', 'nothing was scheduled: fewer posts, or tomorrow (UTC)'],
       ['plan_required', 'pass the message to the user as it is (window or queue limit), do not retry'],
       ['invalid_input', 'a post is listed twice (details.post_ids): list each draft once and call again'],
       ['not_found', 'take draft ids from list_posts status "draft"'],
@@ -175,7 +171,6 @@ export const schedulePosts = defineTool({
         batch_failed: ['batch_failed', 'Tell the user nothing was scheduled and why (details.reason, details.failed_post_id). Fix or leave out that post, then preview again.'],
         not_schedulable: ['not_schedulable', 'Leave out the posts in details.refused (or fix them), then preview again.'],
         not_enough_credits: ['insufficient_credits', 'Tell the user: top up Credits, or schedule fewer posts.'],
-        daily_send_cap: ['daily_cap_reached', 'Schedule fewer posts, or the rest tomorrow (UTC).'],
         not_found: ['not_found', 'Take draft ids from list_posts with status "draft", then call again.'],
       };
       const mapped = typeof code === 'string' ? MAP[code] : undefined;

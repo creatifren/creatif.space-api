@@ -29,7 +29,6 @@ const previewBody = (extra: Record<string, unknown> = {}) => ({
     scheduled_at: null,
     targets: [{ channel_id: IG, platform: 'instagram', username: 'studio', usable: true, credits: 15 }],
     credits: { price: 15, from_topup: 0, monthly_balance: 300, topup_balance: 0, can_afford: true },
-    daily_cap: { cap: 20, used: 3, remaining: 17 },
     confirm_token: 'tok1.sig',
     confirm_expires_at: new Date(Date.now() + 600_000).toISOString(),
     ...extra,
@@ -279,7 +278,6 @@ describe('schedule_post', () => {
       action: 'schedule',
       scheduled_at: FUTURE,
       credit_cost: 15,
-      sends_left_today: 17,
       channels: [{ channel_id: IG, platform: 'instagram', username: 'studio', credits: 15 }],
     });
     expect(out.blocked).toBeUndefined();
@@ -313,24 +311,14 @@ describe('publish_post', () => {
       [`GET /social-posts/${POST}/send-preview`]: () => ({
         body: previewBody({
           credits: { price: 15, from_topup: 15, monthly_balance: 0, topup_balance: 0, can_afford: false },
-          daily_cap: { cap: 20, used: 20, remaining: 0 },
           targets: [{ channel_id: IG, platform: 'instagram', username: 'studio', usable: false, credits: 15 }],
         }),
       }),
     });
     const out = payload(res);
     expect(out.confirmation_required).toBe(true);
-    expect(out.blocked).toHaveLength(3);
+    expect(out.blocked).toHaveLength(2);
     expect(out.next).toMatch(/cannot go out yet/);
-  });
-
-  it('no daily cap (null, the default since 27 Nov): nothing blocked, no sends_left_today', async () => {
-    const res = await call('publish_post', { post_id: POST }, {
-      [`GET /social-posts/${POST}/send-preview`]: () => ({ body: previewBody({ daily_cap: { cap: null, used: 57, remaining: null } }) }),
-    });
-    const out = payload(res);
-    expect(out.blocked ?? []).toHaveLength(0);
-    expect(JSON.stringify(out)).not.toMatch(/sends_left_today|daily limit/);
   });
 
   it('refuses a post that is not a draft', async () => {
@@ -346,16 +334,6 @@ describe('publish_post', () => {
     });
     expect(app!.v1.calls[1]).toMatchObject({ method: 'POST', path: `/social-posts/${POST}/send`, body: { confirm_token: 'tok1.sig' } });
     expect(payload(confirmed).post.status).toBe('published');
-  });
-
-  it('maps the daily cap to daily_cap_reached', async () => {
-    const { confirmed: res } = await twoStep('publish_post', { post_id: POST }, {
-      [SEND_ROUTE]: () => ({
-        status: 429,
-        body: { message: 'Connected apps can send 20 posts a day.', code: 'daily_send_cap', cap: 20, resets_at: 'z' },
-      }),
-    });
-    expect(payload(res).error).toMatchObject({ code: 'daily_cap_reached', details: { cap: 20, resets_at: 'z' } });
   });
 
   it('maps a short balance to insufficient_credits', async () => {

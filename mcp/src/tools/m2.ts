@@ -23,8 +23,6 @@ export interface SendPreview {
   scheduled_at: string | null;
   targets: { channel_id: string; platform: string; username: string | null; usable: boolean; credits: number }[];
   credits: { price: number; from_topup: number; monthly_balance: number; topup_balance: number; can_afford: boolean };
-  /** cap / remaining are null when there is no daily cap (the default since 27 Nov). */
-  daily_cap: { cap: number | null; used: number; remaining: number | null };
   /** Signed by the API: user + post + destinations + Credit price, 10 minutes. */
   confirm_token?: string;
   confirm_expires_at?: string;
@@ -139,7 +137,6 @@ const isSent = (r: object): r is { data: V1Post } => 'data' in r;
 function previewResult(p: SendPreview, action: 'publish' | 'schedule', scheduledAt?: string) {
   const blocked: string[] = [];
   if (!p.credits.can_afford) blocked.push('not enough Credits — the user must top up first');
-  if (p.daily_cap.remaining !== null && p.daily_cap.remaining <= 0) blocked.push('the daily limit for sends from connected apps is reached');
   const stale = p.targets.filter((t) => !t.usable);
   if (stale.length) blocked.push(`reconnect required for: ${stale.map((t) => `${t.platform} ${t.username ?? ''}`.trim()).join(', ')}`);
 
@@ -153,7 +150,6 @@ function previewResult(p: SendPreview, action: 'publish' | 'schedule', scheduled
     credits_from_topup: p.credits.from_topup,
     monthly_balance: p.credits.monthly_balance,
     topup_balance: p.credits.topup_balance,
-    ...(p.daily_cap.remaining !== null ? { sends_left_today: p.daily_cap.remaining } : {}),
     ...(blocked.length ? { blocked } : {}),
     next: blocked.length
       ? 'This cannot go out yet — tell the user what is blocking it.'
@@ -522,7 +518,6 @@ export const schedulePost = defineTool({
       ["plan_required", "details.feature schedule_window or queue_limit — pass the message on as it is"],
       ["not_draft", "list_posts status \"draft\", or draft_post"],
       ["invalid_input", "scheduled_at must be in the future"],
-      ["daily_cap_reached", "send from creatif.space or wait for details.resets_at"],
       ["reconnect_required", "the user reconnects the channel"],
       ["scope_missing", "reconnect and allow \"publish\""],
     ],
@@ -565,7 +560,6 @@ export const publishPost = defineTool({
       ["insufficient_credits or quota_exceeded", "pass the message on as it is (nothing was charged); retry only once the user has more Credits"],
       ["plan_required", "pass the message on as it is"],
       ["not_draft", "list_posts status \"draft\", or draft_post"],
-      ["daily_cap_reached", "send from creatif.space or wait for details.resets_at"],
       ["reconnect_required", "the user reconnects the channel"],
       ["scope_missing", "reconnect and allow \"publish\""],
       ["upstream_unavailable", "check get_post before calling again — it may have gone out"],

@@ -1,6 +1,5 @@
 <?php
 
-use App\Http\Middleware\CapTokenSends;
 use App\Services\Analytics;
 use App\Services\ErrorTracking;
 use Illuminate\Log\Events\MessageLogged;
@@ -128,8 +127,7 @@ describe('throttles (numbers as in the PR body)', function () {
         expect($actual)->toBe($limits);
     });
 
-    it('limits every MCP token to mcp.rate_limit_per_minute (120) and has no daily send cap by default (Rizal 27 Nov)', function () {
-        expect(config('mcp.rate_limit_per_minute'))->toBe(120)
-            ->and(CapTokenSends::cap())->toBeNull();
+    it('limits every MCP token to mcp.rate_limit_per_minute (120)', function () {
+        expect(config('mcp.rate_limit_per_minute'))->toBe(120);
     });
 });

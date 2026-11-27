@@ -7,7 +7,7 @@ Versions of the remote MCP server at `https://mcp.creatif.space/mcp`
 
 ## Unreleased
 
-No daily send cap (27 Nov 2026): connected apps and API keys are no longer held to 20 sends a day — every send is paid in Credits. `mcp_daily_sends.cap` / `daily_cap.cap` are null unless `MCP_DAILY_SEND_CAP` is set.
+Unlimited like the app (27 Nov 2026): no daily send limit for connected apps or API keys (every send is paid in Credits). `get_credits` drops `mcp_daily_sends`; send previews drop `sends_left_today`; the `daily_cap_reached` error is gone.
 
 Pinterest boards (26 Nov 2026):
 

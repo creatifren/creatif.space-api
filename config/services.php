@@ -165,11 +165,6 @@ return [
     // Claude (Anthropic Messages API) for the composer's caption help (Rizal, 19 Nov: Opus now,
     // Sonnet after ~1,000 users, Haiku when volume is large).
     // The model is a setting (ANTHROPIC_MODEL): switching needs no code.
-    // Sends a day from connected apps / API keys; null = no cap (Rizal 27 Nov).
-    'mcp' => [
-        'daily_send_cap' => env('MCP_DAILY_SEND_CAP'),
-    ],
-
     'ai' => [
         'key' => env('ANTHROPIC_API_KEY'),
         'base_url' => env('ANTHROPIC_BASE_URL', 'https://api.anthropic.com/v1'),

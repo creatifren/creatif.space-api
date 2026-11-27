@@ -383,8 +383,8 @@ export const getCredits = defineTool({
   title: 'Get plan, limits and Credits',
   description: describeTool({
     does: "Gets the workspace’s creatif.space plan, its limits and its Credits — everything that decides what can be sent.",
-    when: "before schedule_post or publish_post when the user asks what they can afford or why something was refused. It returns, as set on the plan: plan name; this month’s posts vs the plan’s monthly figure; connected channels used vs allowed; scheduling (days ahead allowed, queued posts — scheduled or waiting for approval — used vs allowed); approval clients used vs allowed; features (approval links, analytics, the app’s Improve with AI / Add hashtags, Spaces…); Credits (Monthly, when they reset, Top-up balance, total, committed to scheduled posts); the Credits each send uses, by platform; sends from connected apps today (no daily cap unless one is set: cap and remaining are then null); this month’s Credit spend by action (publish, reply, ai); and the days until the Monthly Credits renew.",
-    example: "get_credits {} → { plan: { key: \"free\" }, credits: { monthly, topup, resets_at, committed }, price_per_send, scheduling, approval_clients, mcp_daily_sends, spend: { since, by_action: { publish, reply, ai }, total }, renewal: { resets_at, days_until } }",
+    when: "before schedule_post or publish_post when the user asks what they can afford or why something was refused. It returns, as set on the plan: plan name; this month’s posts vs the plan’s monthly figure; connected channels used vs allowed; scheduling (days ahead allowed, queued posts — scheduled or waiting for approval — used vs allowed); approval clients used vs allowed; features (approval links, analytics, the app’s Improve with AI / Add hashtags, Spaces…); Credits (Monthly, when they reset, Top-up balance, total, committed to scheduled posts); the Credits each send uses, by platform; this month’s Credit spend by action (publish, reply, ai); and the days until the Monthly Credits renew.",
+    example: "get_credits {} → { plan: { key: \"free\" }, credits: { monthly, topup, resets_at, committed }, price_per_send, scheduling, approval_clients, spend: { since, by_action: { publish, reply, ai }, total }, renewal: { resets_at, days_until } }",
     rules: "Every plan can use this server: sending spends Credits. Some plans schedule up to 7 days ahead, hold up to 10 queued posts and have approval links for one client; others schedule up to 90 days ahead (scheduling.window_days); null means no limit.",
     errors: [
       ["unauthorized", "ask the user to reconnect the creatif.space connector"],
@@ -410,7 +410,6 @@ export const getCredits = defineTool({
       scheduling: limits.scheduling,
       approval_clients: limits.approval_clients,
       features: limits.features,
-      mcp_daily_sends: limits.mcp_daily_sends,
       urls: limits.urls,
       spend: spendThisMonth(limits.spend as SpendBlock | undefined),
       renewal: renewal((limits.credits as { resets_at?: string } | undefined)?.resets_at),

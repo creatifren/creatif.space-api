@@ -125,7 +125,7 @@ class PlanSeeder extends Seeder
                     'spaces_total' => null,
                     'spaces_active' => null,
                     // Anti-spam: at most 10 new Spaces a day (UTC).
-                    'spaces_daily' => 10,
+                    'spaces_daily' => null, // no daily limit (Rizal 27 Nov)
                     'seats' => 1,
                     'custom_domains' => 0,
                     'social_accounts' => 3,

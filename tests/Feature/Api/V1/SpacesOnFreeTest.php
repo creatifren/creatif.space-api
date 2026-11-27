@@ -18,34 +18,14 @@ function freeOwner(string $handle = 'rani'): User
     return $user;
 }
 
-it('lets Free make 10 new Spaces a day, then refuses the 11th with the prototype wording', function () {
+it('has no daily limit on Free either (Rizal 27 Nov: storage is the limit)', function () {
     $user = freeOwner();
-    Space::factory()->count(9)->for($user)->create();
-    Space::factory()->for($user)->create(['created_at' => now()->subDay()]); // yesterday: not counted
-    Space::factory()->for($user)->create(['is_demo' => true]); // sample: never counted
+    Space::factory()->count(12)->for($user)->create();
 
-    $this->actingAs($user)->postJson('/api/v1/spaces', ['title' => 'Tenth'])->assertCreated();
-    $this->actingAs($user)->postJson('/api/v1/spaces', ['title' => 'Eleventh'])
-        ->assertUnprocessable()
-        ->assertJsonPath('errors.title.0', 'You made 10 new Spaces today. Make more tomorrow, or get Pro.');
-});
-
-it('tells the Spaces list how many new Spaces are left today', function () {
-    $user = freeOwner();
-    Space::factory()->count(3)->for($user)->create();
-
+    $this->actingAs($user)->postJson('/api/v1/spaces', ['title' => 'Thirteenth'])->assertCreated();
     $this->actingAs($user)->getJson('/api/v1/spaces')->assertOk()
-        ->assertJsonPath('meta.quota.today_used', 3)
-        ->assertJsonPath('meta.quota.daily_limit', 10)
+        ->assertJsonPath('meta.quota.daily_limit', null)
         ->assertJsonPath('meta.quota.total_limit', null);
-});
-
-it('counts deleted Spaces toward the day, and duplicates too', function () {
-    $user = freeOwner();
-    Space::factory()->count(10)->for($user)->create()->each->delete();
-    $space = Space::factory()->for($user)->create(['created_at' => now()->subDays(2)]);
-
-    $this->actingAs($user)->postJson("/api/v1/spaces/{$space->ulid}/duplicate")->assertUnprocessable();
 });
 
 it('has no daily limit on Pro', function () {

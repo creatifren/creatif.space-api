@@ -155,10 +155,8 @@ upgrade link), `file_too_large`, `unsupported_format`, `upload_limit`,
 or foreign id in a post); another workspace's id is `not_found`.
 
 `schedule_post` / `publish_post` without `confirm: true` only return a preview
-(channels, Credit cost, anything blocking). Sends from a bearer token are
-counted per user per UTC day (`CapTokenSends`) but **not capped** — every send
-is paid in Credits (Rizal 27 Nov). A cap can be set with `MCP_DAILY_SEND_CAP`
-(then 429 `daily_send_cap`); the app's cookie session is never counted.
+(channels, Credit cost, anything blocking). Sends from a connected app are not
+limited, the same as in the app: Credits are what a send is checked against.
 
 **confirm_token.** The send preview returns a `confirm_token` signed by the API
 (HMAC with the app key; bound to user + post + target ids + Credit price; valid
@@ -220,7 +218,7 @@ the model should do now; `details` is never empty (it always has `tool`) and a
 checks both for every error path). Bad arguments and unknown tool names, which
 the SDK answers itself, get the same envelope. Codes: `reconnect_required`,
 `scope_missing`, `plan_required`, `not_found`, `unknown_tool`, `invalid_input`,
-`unauthorized`, `forbidden`, `rate_limited`, `daily_cap_reached`,
+`unauthorized`, `forbidden`, `rate_limited`,
 `insufficient_credits`, `quota_exceeded`, `preview_stale`, `not_editable`,
 `not_draft`, `not_approvable`, `not_a_plan`, `link_inactive`, `approval_required`, `storage_full`,
 `file_too_large`, `unsupported_format`, `upload_limit`, `upload_incomplete`,
@@ -367,7 +365,7 @@ Every tool turns an API 429 into the same envelope:
 - **`message`:** the API's own text.
 - **`retry_after_seconds`:** taken from the body's `retry_after`, else the `Retry-After` header (the token limit in `EnforceTokenScope` sends only the header), else 60.
 
-Two 429s keep their own codes: `upload_limit` (uploads paused for today) and `daily_cap_reached` (only if a daily send cap is set; none by default). `test/ratelimit.test.ts` sends a 429 to every tool.
+One 429 keeps its own code: `upload_limit` (uploads paused for today). `test/ratelimit.test.ts` sends a 429 to every tool.
 
 ## Idempotency (double submit)
 

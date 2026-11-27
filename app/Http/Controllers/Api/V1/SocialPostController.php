@@ -12,7 +12,6 @@ use App\Exceptions\AccountReconnectRequired;
 use App\Exceptions\NeedsPublishTime;
 use App\Exceptions\PlanFeatureRequired;
 use App\Http\Controllers\Controller;
-use App\Http\Middleware\CapTokenSends;
 use App\Http\Resources\SocialPostResource;
 use App\Models\Activity;
 use App\Models\File;
@@ -785,7 +784,6 @@ class SocialPostController extends Controller
                 'topup_balance' => Credits::balance($user),
                 'can_afford' => PlanQuota::canPostSocial($user, $destinations),
             ],
-            'daily_cap' => CapTokenSends::status($user),
             // A send through a connected app or API key must bring this back
             // (10 minutes; bound to these destinations and this price).
             ...($socialPost->status === SocialPostStatus::Draft ? [

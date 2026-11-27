@@ -12,7 +12,6 @@ export type ErrorCode =
   | 'unauthorized'
   | 'forbidden'
   | 'rate_limited'
-  | 'daily_cap_reached'
   | 'insufficient_credits'
   | 'quota_exceeded'
   | 'preview_stale'
@@ -225,14 +224,6 @@ function classify(e: unknown, notFound: NotFound, stateTool?: string): ToolError
       message,
       'Tell the user this message as it is: this month’s Credits are used up until resets_at; they can top up (link included) or wait. Nothing was charged. Do not retry before one of those.',
       { charged: false, ...pick(body, ['needed', 'available', 'resets_at', 'topup_url']) },
-    );
-  }
-  if (code === 'daily_send_cap') {
-    return new ToolError(
-      'daily_cap_reached',
-      message,
-      'The daily limit for sends from connected apps is reached. Tell the user they can send it from creatif.space, or retry after details.resets_at. Do not retry today.',
-      { cap: body.cap ?? 20, resets_at: body.resets_at },
     );
   }
   if (code === 'draft_only' || code === 'not_available') {

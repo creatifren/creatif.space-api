@@ -81,7 +81,7 @@ describe('GET /credits limits (get_credits)', function () {
             ->and($limits['credits']['monthly_amount'])->toBe(Credits::monthlyAmount($user))
             ->and($limits['credits']['total'])->toBe(Credits::total($user))
             ->and($limits['price_per_send']['default'])->toBe(Credits::perSend())
-            ->and($limits['mcp_daily_sends'])->toBe(['cap' => null, 'used' => 0, 'remaining' => null])
+            ->and($limits)->not->toHaveKey('mcp_daily_sends')
             ->and($limits['urls']['top_up'])->toBe('https://creatif.space/credits');
     });
 
