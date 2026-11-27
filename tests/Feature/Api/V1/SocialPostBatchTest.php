@@ -163,7 +163,8 @@ it('refuses a batch the Credits do not cover, before the first charge', function
     Http::assertNothingSent();
 });
 
-it('counts every post against the 20 connected-app sends a day, all or none', function () {
+it('counts every post against the connected-app daily cap when one is set, all or none', function () {
+    config(['services.mcp.daily_send_cap' => 20]);
     sbRelay();
     $user = sbUser();
     $posts = array_map(fn () => sbDraft($user), range(1, 10));

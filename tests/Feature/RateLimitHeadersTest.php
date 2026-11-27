@@ -1,6 +1,5 @@
 <?php
 
-use App\Http\Middleware\CapTokenSends;
 use App\Models\SocialAccount;
 use App\Models\SocialApprovalLink;
 use App\Models\SocialPost;
@@ -62,17 +61,18 @@ it('sends them on the per-token limit', function () {
     rlAssertHeaders(bearer($this, $key)->getJson('/api/v1/me')->assertJsonPath('error', 'rate_limited'), '2');
 });
 
-it('sends them on the connected-app daily send cap', function () {
+it('sends them on the connected-app daily send cap (when one is set)', function () {
+    config(['services.mcp.daily_send_cap' => 20]);
     $this->travelTo(now('UTC')->startOfDay()->addHours(23));
     $user = User::factory()->create();
-    Cache::put('token-sends:'.$user->id.':'.now('UTC')->toDateString(), CapTokenSends::DAILY_CAP, 3600);
+    Cache::put('token-sends:'.$user->id.':'.now('UTC')->toDateString(), 20, 3600);
     $post = SocialPost::factory()->for($user)->create(['status' => 'draft', 'provider_post_id' => null, 'scheduled_at' => null]);
 
     $response = $this->actingAs($user)->withToken('cs_live_test')
         ->postJson("/api/v1/social-posts/{$post->ulid}/send", ['confirm_token' => 'x'])
         ->assertJsonPath('code', 'daily_send_cap');
 
-    rlAssertHeaders($response, (string) CapTokenSends::DAILY_CAP, 3600);
+    rlAssertHeaders($response, '20', 3600);
 });
 
 it('sends them on the upload caps without revealing the internal number', function () {

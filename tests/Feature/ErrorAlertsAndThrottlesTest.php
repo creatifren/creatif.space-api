@@ -128,8 +128,8 @@ describe('throttles (numbers as in the PR body)', function () {
         expect($actual)->toBe($limits);
     });
 
-    it('limits every MCP token to mcp.rate_limit_per_minute (120) and connected-app sends to 20 a day', function () {
+    it('limits every MCP token to mcp.rate_limit_per_minute (120) and has no daily send cap by default (Rizal 27 Nov)', function () {
         expect(config('mcp.rate_limit_per_minute'))->toBe(120)
-            ->and(CapTokenSends::DAILY_CAP)->toBe(20);
+            ->and(CapTokenSends::cap())->toBeNull();
     });
 });

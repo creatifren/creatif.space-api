@@ -101,11 +101,12 @@ it('sends from a real API key only with a current preview\'s confirm_token', fun
     Http::assertNothingSent();
 });
 
-it('caps an API key at 20 sends a day', function () {
+it('caps an API key at the daily send cap when one is set', function () {
+    config(['services.mcp.daily_send_cap' => 20]);
     $user = User::factory()->create();
     Credits::grant($user, 1_000_000, 'Test');
     $key = m2Key($this, $user, ['read', 'publish']);
-    Cache::put('token-sends:'.$user->id.':'.now('UTC')->toDateString(), CapTokenSends::DAILY_CAP, 3600);
+    Cache::put('token-sends:'.$user->id.':'.now('UTC')->toDateString(), 20, 3600);
 
     $post = m2Draft($user);
     bearer($this, $key)->postJson("/api/v1/social-posts/{$post->ulid}/send")

@@ -324,6 +324,15 @@ describe('publish_post', () => {
     expect(out.next).toMatch(/cannot go out yet/);
   });
 
+  it('no daily cap (null, the default since 27 Nov): nothing blocked, no sends_left_today', async () => {
+    const res = await call('publish_post', { post_id: POST }, {
+      [`GET /social-posts/${POST}/send-preview`]: () => ({ body: previewBody({ daily_cap: { cap: null, used: 57, remaining: null } }) }),
+    });
+    const out = payload(res);
+    expect(out.blocked ?? []).toHaveLength(0);
+    expect(JSON.stringify(out)).not.toMatch(/sends_left_today|daily limit/);
+  });
+
   it('refuses a post that is not a draft', async () => {
     const res = await call('publish_post', { post_id: POST }, {
       [`GET /social-posts/${POST}/send-preview`]: () => ({ body: previewBody({ sendable: false, status: 'published' }) }),
